@@ -143,7 +143,7 @@ struct SendFlowHardwareScreen: View {
                     }
                     .padding(.top, 8)
 
-                    AccountSection
+                    SendFlowHardwareAccountSection(metadata: metadata)
                         .padding(.vertical)
 
                     Divider()
@@ -191,7 +191,10 @@ struct SendFlowHardwareScreen: View {
                     if case let .tapSigner(ts) = metadata.hardwareMetadata {
                         SignTapSignerTransactionSection(ts)
                     } else {
-                        SignTransactionSection
+                        SendFlowHardwareSignTransactionSection(
+                            exportTransaction: { confirmationState = .init(.exportTxn) },
+                            importSignature: { confirmationState = .init(.importSignature) }
+                        )
                     }
 
                     Spacer()
@@ -210,6 +213,11 @@ struct SendFlowHardwareScreen: View {
             .padding(.horizontal)
             .background(Color.background)
             .sheet(item: $sheetState, content: SheetContent)
+            .confirmationDialog(
+                confirmationDialogTitle,
+                isPresented: confirmationDialogIsPresented,
+                actions: ConfirmationDialogView
+            )
             .alert(
                 alertTitle,
                 isPresented: showingAlert,
@@ -269,6 +277,25 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
+    func importPastedSignature() {
+        let code = UIPasteboard.general.string ?? ""
+        guard !code.isEmpty else {
+            alertState = .init(.pasteError("No text found on the clipboard."))
+            return
+        }
+
+        do {
+            let (txnRecord, parsed) = try parseSignedImport(code)
+            let route = parsed.sendConfirmRoute(
+                id: txnRecord.walletId(),
+                details: txnRecord.confirmDetails()
+            )
+            app.pushRoute(route)
+        } catch {
+            alertState = .init(.pasteError(error.localizedDescription))
+        }
+    }
+
     func handleScanned(_: NfcMessage?, _ txn: NfcMessage?) {
         Log.debug("handleScanned")
         guard let txn else { return }
@@ -297,76 +324,6 @@ struct SendFlowHardwareScreen: View {
         let db = Database().unsignedTransactions()
         let record = try db.getTxThrow(txId: parsed.txId())
         return (record, parsed)
-    }
-
-    var AccountSection: some View {
-        VStack {
-            HStack {
-                BitcoinShieldIcon(width: 24, color: .orange)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(metadata.identOrFingerprint())
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-
-                    Text(metadata.name)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                }
-                .padding(.leading, 8)
-
-                Spacer()
-            }
-        }
-    }
-
-    var SignTransactionSection: some View {
-        VStack(spacing: 17) {
-            HStack {
-                Text("Sign Transaction")
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-
-                Spacer()
-            }
-
-            HStack {
-                Button(action: {
-                    confirmationState = .init(.exportTxn)
-                }) {
-                    Label("Export Transaction", systemImage: "square.and.arrow.up")
-                        .padding(.horizontal, 18)
-                        .padding(.vertical)
-                        .foregroundColor(.midnightBlue)
-                        .background(.btnPrimary)
-                        .cornerRadius(10)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-
-                Spacer()
-
-                Button(action: {
-                    confirmationState = .init(.importSignature)
-                }) {
-                    Label("Import Signature", systemImage: "square.and.arrow.down")
-                        .padding(.horizontal, 18)
-                        .padding(.vertical)
-                        .foregroundColor(.midnightBlue)
-                        .background(.btnPrimary)
-                        .cornerRadius(10)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-            }
-            .confirmationDialog(
-                confirmationDialogTitle,
-                isPresented: confirmationDialogIsPresented,
-                actions: ConfirmationDialogView
-            )
-        }
     }
 
     func SignTapSignerTransactionSection(_ ts: TapSigner) -> some View {
@@ -419,58 +376,22 @@ struct SendFlowHardwareScreen: View {
     @ViewBuilder
     func ConfirmationDialogView() -> some View {
         switch confirmationState?.item {
-        case .exportTxn: ExportTransactionDialog
-        case .importSignature: ImportTransactionDialog
+        case .exportTxn:
+            SendFlowHardwareExportTransactionDialog(
+                exportQr: { sheetState = .init(.exportQr) },
+                exportNfc: { app.nfcWriter.writeToTag(data: details.psbtBytes()) },
+                shareTransaction: {
+                    ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
+                }
+            )
+        case .importSignature:
+            SendFlowHardwareImportTransactionDialog(
+                scanQr: { app.sheetState = .init(.qr) },
+                importFile: { isPresentingFilePicker = true },
+                pasteSignature: importPastedSignature,
+                scanNfc: { app.nfcReader.scan() }
+            )
         case .none: EmptyView()
-        }
-    }
-
-    @ViewBuilder
-    var ExportTransactionDialog: some View {
-        Button("QR Code") {
-            sheetState = .init(.exportQr)
-        }
-
-        Button("NFC") {
-            app.nfcWriter.writeToTag(data: details.psbtBytes())
-        }
-
-        Button("More...") {
-            ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
-        }
-    }
-
-    @ViewBuilder
-    var ImportTransactionDialog: some View {
-        Button("QR") {
-            app.sheetState = .init(.qr)
-        }
-
-        Button("File") {
-            isPresentingFilePicker = true
-        }
-
-        Button("Paste") {
-            let code = UIPasteboard.general.string ?? ""
-            guard !code.isEmpty else {
-                alertState = .init(.pasteError("No text found on the clipboard."))
-                return
-            }
-
-            do {
-                let (txnRecord, parsed) = try parseSignedImport(code)
-                let route = parsed.sendConfirmRoute(
-                    id: txnRecord.walletId(),
-                    details: txnRecord.confirmDetails()
-                )
-                app.pushRoute(route)
-            } catch {
-                alertState = .init(.pasteError(error.localizedDescription))
-            }
-        }
-
-        Button("NFC") {
-            app.nfcReader.scan()
         }
     }
 

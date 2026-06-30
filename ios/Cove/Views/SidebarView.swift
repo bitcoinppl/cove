@@ -35,7 +35,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            SidebarHeader(scanNfc: app.closeSidebarAndScanNfc)
 
             ScrollView(.vertical) {
                 LazyVStack(spacing: 12) {
@@ -46,75 +46,14 @@ struct SidebarView: View {
             }
             .scrollIndicators(.hidden)
 
-            footer
+            SidebarFooter(
+                addWallet: app.closeSidebarAndOpenNewWallet,
+                openSettings: app.closeSidebarAndOpenSettings
+            )
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(.midnightBlue)
-    }
-
-    private var header: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top) {
-                Image(.icon)
-                    .resizable()
-                    .frame(width: 65, height: 65)
-                    .clipShape(Circle())
-
-                Spacer()
-
-                Button(action: app.closeSidebarAndScanNfc) {
-                    Image(systemName: "wave.3.right")
-                }
-                .foregroundStyle(.white)
-            }
-
-            Divider()
-                .overlay(Color(.white))
-                .opacity(0.50)
-                .padding(.vertical, 22)
-
-            HStack {
-                Text("My Wallets")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.white)
-
-                Spacer()
-            }
-            .padding(.bottom, 16)
-        }
-    }
-
-    private var footer: some View {
-        VStack(spacing: 32) {
-            Divider()
-                .overlay(.coveLightGray)
-                .opacity(0.50)
-
-            Button(action: app.closeSidebarAndOpenNewWallet) {
-                HStack(spacing: 20) {
-                    Image(systemName: "wallet.bifold")
-                    Text("Add Wallet")
-                        .font(.callout)
-                    Spacer()
-                }
-                .foregroundColor(.white)
-                .contentShape(Rectangle())
-            }
-
-            Button(action: app.closeSidebarAndOpenSettings) {
-                HStack(spacing: 22) {
-                    Image(systemName: "gear")
-                    Text("Settings")
-                        .font(.callout)
-                    Spacer()
-                }
-                .foregroundColor(.white)
-                .contentShape(Rectangle())
-            }
-        }
-        .padding(.top, 20)
     }
 
     private func walletButton(_ wallet: WalletMetadata) -> some View {
@@ -148,6 +87,84 @@ struct SidebarView: View {
                 app.closeSidebarAndOpenWalletSettings(wallet.id)
             }
         }
+    }
+}
+
+private struct SidebarHeader: View {
+    let scanNfc: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top) {
+                Image(.icon)
+                    .resizable()
+                    .frame(width: 65, height: 65)
+                    .clipShape(Circle())
+
+                Spacer()
+
+                Button(action: scanNfc) {
+                    Image(systemName: "wave.3.right")
+                }
+                .foregroundStyle(.white)
+            }
+
+            Divider()
+                .overlay(Color(.white))
+                .opacity(0.50)
+                .padding(.vertical, 22)
+
+            HStack {
+                Text("My Wallets")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+
+                Spacer()
+            }
+            .padding(.bottom, 16)
+        }
+    }
+}
+
+private struct SidebarFooter: View {
+    let addWallet: () -> Void
+    let openSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 32) {
+            Divider()
+                .overlay(.coveLightGray)
+                .opacity(0.50)
+
+            Button(action: addWallet) {
+                sidebarActionLabel(
+                    title: "Add Wallet",
+                    systemImage: "wallet.bifold",
+                    spacing: 20
+                )
+            }
+
+            Button(action: openSettings) {
+                sidebarActionLabel(
+                    title: "Settings",
+                    systemImage: "gear",
+                    spacing: 22
+                )
+            }
+        }
+        .padding(.top, 20)
+    }
+
+    private func sidebarActionLabel(title: String, systemImage: String, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            Image(systemName: systemImage)
+            Text(title)
+                .font(.callout)
+            Spacer()
+        }
+        .foregroundColor(.white)
+        .contentShape(Rectangle())
     }
 }
 

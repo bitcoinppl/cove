@@ -97,26 +97,6 @@ struct SelectedWalletScreen: View {
         manager.rust.labelManager()
     }
 
-    func transactionsCard(transactions: [CoveCore.Transaction]) -> some View {
-        TransactionsCardView(
-            transactions: transactions,
-            unsignedTransactions: manager.unsignedTransactions,
-            metadata: manager.walletMetadata
-        )
-        .ignoresSafeArea()
-        .background(Color.coveBg)
-    }
-
-    @ViewBuilder
-    var Loading: some View {
-        Spacer()
-        ProgressView()
-            .padding(.top, screenHeight / 6)
-            .tint(.primary)
-        Spacer()
-        Spacer()
-    }
-
     func DisplayErrorAlert(_ alert: WalletErrorAlert) -> Alert {
         switch alert {
         case .nodeConnectionFailed:
@@ -141,18 +121,6 @@ struct SelectedWalletScreen: View {
                 ),
                 secondaryButton: .cancel()
             )
-        }
-    }
-
-    @ViewBuilder
-    var Transactions: some View {
-        switch manager.loadState {
-        case .loading:
-            Loading
-        case let .scanning(txns):
-            transactionsCard(transactions: txns)
-        case let .loaded(txns):
-            transactionsCard(transactions: txns)
         }
     }
 
@@ -272,33 +240,6 @@ struct SelectedWalletScreen: View {
         return .white
     }
 
-    var titleContent: some View {
-        HStack(spacing: 10) {
-            if case .cold = metadata.walletType {
-                BitcoinShieldIcon(width: 13, color: toolbarTextColor)
-            }
-
-            Text(metadata.name)
-                .foregroundStyle(toolbarTextColor)
-                .font(.callout)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 28)
-        .contentShape(Rectangle())
-        .contentShape(
-            .contextMenuPreview,
-            RoundedRectangle(cornerRadius: 8)
-        )
-        .contextMenu {
-            Button("Change Name") {
-                showRenameFromTitleMenu()
-            }
-        }
-    }
-
     @ToolbarContentBuilder
     var MainToolBar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -356,43 +297,36 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    var MainContent: some View {
-        VStack(spacing: 0) {
-            WalletBalanceHeaderView(
-                balance: manager.balance.spendable(),
-                balancePresentation: manager.balancePresentation,
-                metadata: manager.walletMetadata,
-                updater: updater,
-                showReceiveSheet: showReceiveSheet
-            )
-            .clipped()
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .global).maxY
-            } action: { _, headerBottom in
-                let navBarThreshold = safeAreaInsets.top + 50
-                let hysteresis: CGFloat = 10
+    private func handleHeaderBottomChanged(_ headerBottom: CGFloat) {
+        let navBarThreshold = safeAreaInsets.top + 50
+        let hysteresis: CGFloat = 10
 
-                if !shouldShowNavBar, headerBottom < navBarThreshold - hysteresis {
-                    shouldShowNavBar = true
-                    app.isPastHeader = true
-                } else if shouldShowNavBar, headerBottom > navBarThreshold + hysteresis {
-                    shouldShowNavBar = false
-                    app.isPastHeader = false
-                }
-            }
-
-            if !cloudBackupManager.isConfigured {
-                VerifyReminder(
-                    walletId: manager.walletMetadata.id, isVerified: manager.walletMetadata.verified
-                )
-            }
-
-            Transactions
-                .environment(manager)
+        if !shouldShowNavBar, headerBottom < navBarThreshold - hysteresis {
+            shouldShowNavBar = true
+            app.isPastHeader = true
+        } else if shouldShowNavBar, headerBottom > navBarThreshold + hysteresis {
+            shouldShowNavBar = false
+            app.isPastHeader = false
         }
-        .background(Color.coveBg)
+    }
+
+    private func selectedWalletMainContent() -> some View {
+        SelectedWalletMainContent(
+            manager: manager,
+            screenHeight: screenHeight,
+            cloudBackupIsConfigured: cloudBackupManager.isConfigured,
+            updater: updater,
+            showReceiveSheet: showReceiveSheet,
+            headerBottomChanged: handleHeaderBottomChanged
+        )
         .toolbar { MainToolBar }
-        .navigationTitleView { titleContent }
+        .navigationTitleView {
+            SelectedWalletTitleContent(
+                metadata: metadata,
+                toolbarTextColor: toolbarTextColor,
+                changeName: showRenameFromTitleMenu
+            )
+        }
         .adaptiveToolbarStyle(
             showNavBar: shouldShowNavBar,
             reduceTransparency: reduceTransparency
@@ -506,7 +440,7 @@ struct SelectedWalletScreen: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                MainContent
+                selectedWalletMainContent()
                     .background(
                         VStack(spacing: 0) {
                             Color.midnightBlue

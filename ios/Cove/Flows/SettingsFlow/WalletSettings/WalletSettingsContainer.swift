@@ -35,7 +35,25 @@ struct WalletSettingsContainer: View {
         }
     }
 
-    var LoadingOrError: some View {
+    var body: some View {
+        WalletManagerHost(walletId: id, loading: {
+            WalletSettingsLoadingOrError(error: error) {
+                app.trySelectLatestOrNewWallet()
+            }
+        }, onError: { error in
+            self.error = "Failed to get wallet \(error.localizedDescription)"
+            Log.error(self.error!)
+        }) { manager in
+            WalletSettingsRoute(manager: manager, route: route)
+        }
+    }
+}
+
+private struct WalletSettingsLoadingOrError: View {
+    let error: String?
+    let recover: () -> Void
+
+    var body: some View {
         Group {
             if let error {
                 Text(error)
@@ -47,18 +65,7 @@ struct WalletSettingsContainer: View {
             guard let error else { return }
             Log.error(error)
             try? await Task.sleep(for: .seconds(5))
-            app.trySelectLatestOrNewWallet()
-        }
-    }
-
-    var body: some View {
-        WalletManagerHost(walletId: id, loading: {
-            LoadingOrError
-        }, onError: { error in
-            self.error = "Failed to get wallet \(error.localizedDescription)"
-            Log.error(self.error!)
-        }) { manager in
-            WalletSettingsRoute(manager: manager, route: route)
+            recover()
         }
     }
 }

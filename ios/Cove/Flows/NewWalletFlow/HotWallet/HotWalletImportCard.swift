@@ -79,7 +79,34 @@ struct HotWalletImportCard: View {
 
     @FocusState.Binding var focusField: ImportFieldNumber?
 
-    var MainContent: some View {
+    var body: some View {
+        GroupBox {
+            HotWalletImportCardContent(
+                numberOfWords: numberOfWords,
+                onPasteMnemonic: onPasteMnemonic,
+                tabIndex: $tabIndex,
+                enteredWords: $enteredWords,
+                filteredSuggestions: $filteredSuggestions,
+                focusField: $focusField
+            )
+        }
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+        .cornerRadius(10)
+        .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 100)
+    }
+}
+
+private struct HotWalletImportCardContent: View {
+    let numberOfWords: NumberOfBip39Words
+    var onPasteMnemonic: ((String) -> Void)?
+
+    @Binding var tabIndex: Int
+    @Binding var enteredWords: [[String]]
+    @Binding var filteredSuggestions: [String]
+
+    @FocusState.Binding var focusField: ImportFieldNumber?
+
+    var body: some View {
         VStack(spacing: 0) {
             TabView(selection: $tabIndex) {
                 ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
@@ -99,15 +126,6 @@ struct HotWalletImportCard: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    var body: some View {
-        GroupBox {
-            MainContent
-        }
-        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-        .cornerRadius(10)
-        .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 100)
     }
 }
 
@@ -238,7 +256,103 @@ private struct AutocompleteField: View {
                         .padding(.trailing, 5)
                 }
 
-                textField
+                TextField("", text: $text)
+                    .accessibilityIdentifier("hotWalletImport.word.\(number)")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(textColor)
+                    .frame(alignment: .trailing)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .keyboardType(.asciiCapable)
+                    .focused($focusField, equals: ImportFieldNumber(number))
+                    .tint(colorScheme == .dark ? .white : .black)
+                    .onChange(of: isFocused) {
+                        if !isFocused {
+                            showSuggestions = false
+                            return
+                        }
+
+                        filteredSuggestions = autocomplete.autocomplete(
+                            word: text,
+                            allWords: allEnteredWords
+                        )
+                    }
+                    .onChange(of: focusField) { _, _ in
+                        if text == "" { return }
+
+                        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
+                            state = .valid
+                        } else {
+                            state = .invalid
+                        }
+                    }
+                    .introspect(.textField, on: .iOS(.v18, .v26)) { textField in
+                        // only set up handler once, capturing original delegate
+                        if returnHandler == nil {
+                            let handler = TextFieldReturnHandler(
+                                onReturn: { [self] in submitFocusField() },
+                                onPasteMnemonic: onPasteMnemonic,
+                                originalDelegate: textField.delegate
+                            )
+                            returnHandler = handler
+                            textField.delegate = handler
+                        }
+                    }
+                    .onChange(of: text, initial: true) { oldText, newText in
+                        text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                        // handle programmatic text changes (e.g., paste)
+                        if oldText == newText {
+                            if !newText.isEmpty {
+                                state = autocomplete.isValidWord(
+                                    word: newText,
+                                    allWords: allEnteredWords
+                                ) ? .valid : .invalid
+                            }
+                            return
+                        }
+
+                        filteredSuggestions = autocomplete.autocomplete(
+                            word: newText,
+                            allWords: allEnteredWords
+                        )
+
+                        // initial set to typing
+                        if newText.count > oldText.count { state = .typing }
+
+                        // erasing, reset state to typing
+                        if oldText.count > newText.count, !filteredSuggestions.contains(newText) {
+                            return state = .typing
+                        }
+
+                        // set to valid if it matches a word
+                        if filteredSuggestions.contains(newText) { state = .valid }
+
+                        // empty is always initial, or typing
+                        if newText.isEmpty, isFocused { return state = .typing }
+                        if newText.isEmpty, !isFocused { return state = .initial }
+
+                        // invalid, no words match
+                        if filteredSuggestions.isEmpty { return state = .invalid }
+
+                        // if only one suggestion left and if we added a letter (not backspace)
+                        // then auto select the first selection, because we want auto selection
+                        // but also allow the user to fix a wrong word
+                        if let word = filteredSuggestions.last,
+                           filteredSuggestions.count == 1, oldText.count < newText.count
+                        {
+                            state = .valid
+                            filteredSuggestions = []
+
+                            if text != word {
+                                text = word
+                            }
+
+                            submitFocusField()
+                            return
+                        }
+                    }
                     .offset(y: state == .typing ? -4 : 0)
             }
         }
@@ -298,99 +412,6 @@ private struct AutocompleteField: View {
                 tabIndex = Int(nextFieldNumber / groupsOf)
             }
         }
-    }
-
-    var textField: some View {
-        TextField("", text: $text)
-            .accessibilityIdentifier("hotWalletImport.word.\(number)")
-            .font(.subheadline)
-            .fontWeight(.bold)
-            .foregroundColor(textColor)
-            .frame(alignment: .trailing)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .keyboardType(.asciiCapable)
-            .focused($focusField, equals: ImportFieldNumber(number))
-            .tint(colorScheme == .dark ? .white : .black)
-            .onChange(of: isFocused) {
-                if !isFocused {
-                    showSuggestions = false
-                    return
-                }
-
-                filteredSuggestions = autocomplete.autocomplete(
-                    word: text, allWords: allEnteredWords
-                )
-            }
-            .onChange(of: focusField) { _, _ in
-                if text == "" { return }
-
-                if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
-                    state = .valid
-                } else {
-                    state = .invalid
-                }
-            }
-            .introspect(.textField, on: .iOS(.v18, .v26)) { textField in
-                // only set up handler once, capturing original delegate
-                if returnHandler == nil {
-                    let handler = TextFieldReturnHandler(
-                        onReturn: { [self] in submitFocusField() },
-                        onPasteMnemonic: onPasteMnemonic,
-                        originalDelegate: textField.delegate
-                    )
-                    returnHandler = handler
-                    textField.delegate = handler
-                }
-            }
-            .onChange(of: text, initial: true) { oldText, newText in
-                text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                // handle programmatic text changes (e.g., paste)
-                if oldText == newText {
-                    if !newText.isEmpty {
-                        state = autocomplete.isValidWord(word: newText, allWords: allEnteredWords) ? .valid : .invalid
-                    }
-                    return
-                }
-
-                filteredSuggestions = autocomplete.autocomplete(
-                    word: newText, allWords: allEnteredWords
-                )
-
-                // initial set to typing
-                if newText.count > oldText.count { state = .typing }
-
-                // erasing, reset state to typing
-                if oldText.count > newText.count, !filteredSuggestions.contains(newText) { return state = .typing }
-
-                // set to valid if it matches a word
-                if filteredSuggestions.contains(newText) { state = .valid }
-
-                // empty is always initial, or typing
-                if newText.isEmpty, isFocused { return state = .typing }
-                if newText.isEmpty, !isFocused { return state = .initial }
-
-                // invalid, no words match
-                if filteredSuggestions.isEmpty { return state = .invalid }
-
-                // if only one suggestion left and if we added a letter (not backspace)
-                // then auto select the first selection, because we want auto selection
-                // but also allow the user to fix a wrong word
-                if let word = filteredSuggestions.last,
-                   filteredSuggestions.count == 1, oldText.count < newText.count
-                {
-                    state = .valid
-                    filteredSuggestions = []
-
-                    if text != word {
-                        text = word
-                    }
-
-                    submitFocusField()
-                    return
-                }
-            }
     }
 }
 

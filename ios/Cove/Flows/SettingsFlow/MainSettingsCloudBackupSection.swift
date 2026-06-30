@@ -16,19 +16,43 @@ struct MainSettingsCloudBackupSection: View {
                         onEnable()
                     }
                 case .enabling:
-                    cloudBackupEnablingRow
+                    MainSettingsCloudBackupEnablingRow()
                 case .restoring:
-                    cloudBackupRestoringRow
+                    MainSettingsCloudBackupRestoringRow()
                 case let .failed(failure):
                     cloudBackupErrorContent(message: failure.message)
                 case .configured:
-                    cloudBackupEnabledRow
+                    MainSettingsCloudBackupEnabledRow(
+                        status: manager.settingsRowStatus,
+                        onOpenDetail: onOpenDetail
+                    )
                 }
             }
         }
     }
 
-    private var cloudBackupEnablingRow: some View {
+    private func cloudBackupErrorContent(message: String) -> some View {
+        Group {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Image(systemName: "exclamationmark.icloud")
+                        .foregroundStyle(Color.statusError)
+                    Text("Cloud Backup Error")
+                }
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            SettingsRow(title: "Review", symbol: "arrow.right") {
+                onOpenDetail()
+            }
+        }
+    }
+}
+
+struct MainSettingsCloudBackupEnablingRow: View {
+    var body: some View {
         HStack {
             SettingsIcon(symbol: "icloud.and.arrow.up")
             Text("Setting up cloud backup...")
@@ -38,10 +62,15 @@ struct MainSettingsCloudBackupSection: View {
             ProgressView()
         }
     }
+}
 
-    private var cloudBackupEnabledRow: some View {
+struct MainSettingsCloudBackupEnabledRow: View {
+    let status: CloudBackupSettingsRowStatus
+    let onOpenDetail: () -> Void
+
+    var body: some View {
         HStack {
-            cloudBackupEnabledStatus
+            MainSettingsCloudBackupEnabledStatus(status: status)
             Spacer()
             settingsChevron
         }
@@ -51,9 +80,19 @@ struct MainSettingsCloudBackupSection: View {
         }
     }
 
-    @ViewBuilder
-    private var cloudBackupEnabledStatus: some View {
-        switch manager.settingsRowStatus {
+    private var settingsChevron: some View {
+        Image(systemName: "chevron.right")
+            .foregroundColor(Color(UIColor.tertiaryLabel))
+            .font(.footnote)
+            .fontWeight(.semibold)
+    }
+}
+
+struct MainSettingsCloudBackupEnabledStatus: View {
+    let status: CloudBackupSettingsRowStatus
+
+    var body: some View {
+        switch status {
         case .disabled, .disabling, .settingUp, .restoring:
             cloudBackupStatusContent(
                 symbol: "icloud",
@@ -177,38 +216,14 @@ struct MainSettingsCloudBackupSection: View {
             }
         }
     }
+}
 
-    private var cloudBackupRestoringRow: some View {
+struct MainSettingsCloudBackupRestoringRow: View {
+    var body: some View {
         HStack {
             ProgressView()
                 .padding(.trailing, 8)
             Text("Restoring from cloud backup...")
         }
-    }
-
-    private func cloudBackupErrorContent(message: String) -> some View {
-        Group {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "exclamationmark.icloud")
-                        .foregroundStyle(Color.statusError)
-                    Text("Cloud Backup Error")
-                }
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            SettingsRow(title: "Review", symbol: "arrow.right") {
-                onOpenDetail()
-            }
-        }
-    }
-
-    private var settingsChevron: some View {
-        Image(systemName: "chevron.right")
-            .foregroundColor(Color(UIColor.tertiaryLabel))
-            .font(.footnote)
-            .fontWeight(.semibold)
     }
 }

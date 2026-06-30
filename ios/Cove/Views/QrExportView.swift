@@ -85,7 +85,14 @@ struct QrExportView: View {
                 .frame(maxWidth: 200)
             }
 
-            QrContent
+            QrExportContent(
+                error: error,
+                qrs: qrs,
+                currentIndex: $currentIndex,
+                density: $density,
+                startedAt: startedAt,
+                animationInterval: animationInterval
+            )
         }
         .onChange(of: selectedFormat) { _, _ in
             Task { await generateQrCodes() }
@@ -96,117 +103,6 @@ struct QrExportView: View {
         .task {
             await generateQrCodes()
         }
-    }
-
-    @ViewBuilder
-    var QrContent: some View {
-        if let error {
-            Text(error)
-                .font(.footnote)
-                .foregroundStyle(.red)
-                .padding(.top, 8)
-        } else if qrs.isEmpty {
-            ProgressView()
-                .padding(.top, 20)
-        } else {
-            AnimatedQrView
-        }
-    }
-
-    var AnimatedQrView: some View {
-        VStack {
-            // .id() forces TimelineView recreation when interval changes
-            TimelineView(.periodic(from: startedAt, by: animationInterval)) { context in
-                let index = abs(Int(context.date.distance(to: startedAt) / animationInterval) % qrs.count)
-                qrs[index]
-                    .frame(maxWidth: .infinity)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 11)
-                    .onChange(of: index) { _, newIndex in
-                        currentIndex = newIndex
-                    }
-            }
-            .id(animationInterval)
-
-            if qrs.count > 1 {
-                HStack(alignment: .center, spacing: 8) {
-                    MinusButtonMinimal
-                    ProgressIndicator
-                    PlusButtonMinimal
-                }
-                .padding(.horizontal, 9)
-            } else {
-                DensityButtons
-                    .padding(.horizontal, 9)
-            }
-        }
-    }
-
-    var ProgressIndicator: some View {
-        HStack(spacing: 4) {
-            ForEach(0 ..< qrs.count, id: \.self) { index in
-                Rectangle()
-                    .fill(Color.blue)
-                    .opacity(index == currentIndex ? 1 : 0.3)
-                    .frame(height: 12)
-                    .cornerRadius(2)
-            }
-        }
-    }
-
-    var canDecreaseDensity: Bool {
-        density.canDecrease()
-    }
-
-    var canIncreaseDensity: Bool {
-        density.canIncrease() && qrs.count > 1
-    }
-
-    var MinusButtonMinimal: some View {
-        Button { density = density.decrease() } label: {
-            Image(systemName: "minus")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.secondary.opacity(canDecreaseDensity ? 1 : 0.3))
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .disabled(!canDecreaseDensity)
-    }
-
-    var PlusButtonMinimal: some View {
-        Button { density = density.increase() } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.secondary.opacity(canIncreaseDensity ? 1 : 0.3))
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .disabled(!canIncreaseDensity)
-    }
-
-    var DensityButtons: some View {
-        HStack(spacing: 0) {
-            Button { density = density.decrease() } label: {
-                Image(systemName: "minus")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 32, height: 32)
-                    .foregroundStyle(Color.secondary.opacity(canDecreaseDensity ? 1 : 0.3))
-            }
-            .disabled(!canDecreaseDensity)
-
-            Divider()
-                .frame(height: 20)
-
-            Button { density = density.increase() } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 32, height: 32)
-                    .foregroundStyle(Color.secondary.opacity(canIncreaseDensity ? 1 : 0.3))
-            }
-            .disabled(!canIncreaseDensity)
-        }
-        .background(Color.secondary.opacity(0.15))
-        .cornerRadius(50)
     }
 
     func generateQrCodes() async {

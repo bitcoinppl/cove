@@ -186,52 +186,6 @@ struct MainSettingsScreen: View {
         )
     }
 
-    var GeneralSection: some View {
-        Section(header: Text("General")) {
-            SettingsRow(title: "Network", route: .network, symbol: "network")
-            SettingsRow(title: "Appearance", route: .appearance, symbol: "sun.max.fill")
-            SettingsRow(
-                title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted"
-            )
-            SettingsRow(
-                title: "Block Explorer", route: .blockExplorer, symbol: "safari"
-            )
-            SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
-        }
-    }
-
-    @ViewBuilder
-    var BackupSection: some View {
-        if isBetaEnabled, isBetaImportExportEnabled, !auth.isInDecoyMode() {
-            Section(header: HStack(spacing: 6) {
-                Text("Backup")
-                Text("BETA")
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.statusWarning, in: Capsule())
-            }) {
-                SettingsRow(title: "Export All", symbol: "square.and.arrow.up") {
-                    if auth.type != .none {
-                        sheetState = .init(.backupExportAuth)
-                    } else {
-                        sheetState = .init(.backupExport)
-                    }
-                }
-
-                SettingsRow(title: "Import All", symbol: "square.and.arrow.down") {
-                    sheetState = .init(.backupImport)
-                }
-
-                SettingsRow(title: "Verify Backup", symbol: "checkmark.shield") {
-                    sheetState = .init(.backupVerify)
-                }
-            }
-        }
-    }
-
     var betaToggle: Binding<Bool> {
         Binding(
             get: { isBetaEnabled },
@@ -265,21 +219,25 @@ struct MainSettingsScreen: View {
         sheetState != nil || alertState != nil
     }
 
-    @ViewBuilder
-    var BetaToggleSection: some View {
-        if isBetaEnabled, !auth.isInDecoyMode() {
-            Section {
-                Toggle("Beta Features", isOn: betaToggle)
-                Toggle("Enable Beta Import Export", isOn: betaImportExportToggle)
-            } footer: {
-                Text("Disable to hide experimental features")
-            }
+    private var shouldShowBackupSection: Bool {
+        isBetaEnabled && isBetaImportExportEnabled && !auth.isInDecoyMode()
+    }
+
+    private var shouldShowBetaToggleSection: Bool {
+        isBetaEnabled && !auth.isInDecoyMode()
+    }
+
+    private func exportAllBackups() {
+        if auth.type != .none {
+            sheetState = .init(.backupExportAuth)
+        } else {
+            sheetState = .init(.backupExport)
         }
     }
 
     var body: some View {
         Form {
-            GeneralSection
+            MainSettingsGeneralSection()
             WalletSettingsSection()
             MainSettingsSecuritySection(
                 canUseBiometrics: canUseBiometrics(),
@@ -290,7 +248,12 @@ struct MainSettingsScreen: View {
             ) {
                 sheetState = .init(.changePin)
             }
-            BackupSection
+            MainSettingsBackupSection(
+                isVisible: shouldShowBackupSection,
+                exportAll: exportAllBackups,
+                importAll: { sheetState = .init(.backupImport) },
+                verifyBackup: { sheetState = .init(.backupVerify) }
+            )
             MainSettingsCloudBackupSection(
                 isVisible: !auth.isInDecoyMode(),
                 onEnable: {
@@ -300,7 +263,11 @@ struct MainSettingsScreen: View {
                     app.pushRoute(Route.settings(.cloudBackup))
                 }
             )
-            BetaToggleSection
+            MainSettingsBetaToggleSection(
+                isVisible: shouldShowBetaToggleSection,
+                betaToggle: betaToggle,
+                betaImportExportToggle: betaImportExportToggle
+            )
 
             Section {
                 SettingsRow(title: "About", route: .about, symbol: "info.circle")

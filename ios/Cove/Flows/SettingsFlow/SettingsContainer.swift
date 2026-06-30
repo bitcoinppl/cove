@@ -24,28 +24,6 @@ struct SettingsContainer: View {
         )
     }
 
-    var FiatCurrencyPicker: some View {
-        SettingsPicker(selection:
-            Binding(
-                get: { app.selectedFiatCurrency },
-                set: {
-                    app.dispatch(action: .changeFiatCurrency($0))
-                }
-            ))
-            .navigationTitle("Currency")
-    }
-
-    var AppearancePicker: some View {
-        SettingsPicker(selection:
-            Binding(
-                get: { app.colorSchemeSelection },
-                set: {
-                    app.dispatch(action: .changeColorScheme($0))
-                }
-            ))
-            .navigationTitle("Appearance")
-    }
-
     var body: some View {
         Group {
             switch route {
@@ -54,13 +32,29 @@ struct SettingsContainer: View {
             case .network:
                 SettingsPicker(selection: selectedNetwork)
             case .appearance:
-                AppearancePicker
+                SettingsContainerPicker(
+                    title: "Appearance",
+                    selection: Binding(
+                        get: { app.colorSchemeSelection },
+                        set: {
+                            app.dispatch(action: .changeColorScheme($0))
+                        }
+                    )
+                )
             case .node:
                 NodeSelectionView()
             case .blockExplorer:
                 BlockExplorerSettingsView()
             case .fiatCurrency:
-                FiatCurrencyPicker
+                SettingsContainerPicker(
+                    title: "Currency",
+                    selection: Binding(
+                        get: { app.selectedFiatCurrency },
+                        set: {
+                            app.dispatch(action: .changeFiatCurrency($0))
+                        }
+                    )
+                )
             case let .wallet(id: walletId, route: route):
                 WalletSettingsContainer(id: walletId, route: route)
             case .allWallets:
@@ -101,6 +95,16 @@ struct SettingsContainer: View {
                 Text("Switching to \(network) will take you to a wallet on that network.")
             }
         }
+    }
+}
+
+private struct SettingsContainerPicker<T: SettingsEnum>: View where T.AllCases: RandomAccessCollection {
+    let title: String
+    @Binding var selection: T
+
+    var body: some View {
+        SettingsPicker(selection: $selection)
+            .navigationTitle(title)
     }
 }
 

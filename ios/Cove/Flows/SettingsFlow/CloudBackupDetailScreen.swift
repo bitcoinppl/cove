@@ -42,7 +42,17 @@ struct CloudBackupDetailScreen: View {
 
     var body: some View {
         Form {
-            formContent
+            CloudBackupDetailFormContent(
+                manager: manager,
+                isVerifying: isVerifying,
+                hasVerificationResult: hasVerificationResult,
+                isCancelled: isCancelled,
+                isPasskeyMissing: isPasskeyMissing,
+                isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
+                shouldShowLoadingState: shouldShowLoadingState,
+                onRecreate: { showRecreateConfirmation = true },
+                onReinitialize: { showReinitializeConfirmation = true }
+            )
         }
         .navigationTitle("Cloud Backup")
         .navigationBarTitleDisplayMode(.inline)
@@ -89,31 +99,55 @@ struct CloudBackupDetailScreen: View {
             )
         }
     }
+}
 
-    @ViewBuilder
-    private var formContent: some View {
+struct CloudBackupDetailFormContent: View {
+    let manager: CloudBackupManager
+    let isVerifying: Bool
+    let hasVerificationResult: Bool
+    let isCancelled: Bool
+    let isPasskeyMissing: Bool
+    let isUnsupportedPasskeyProvider: Bool
+    let shouldShowLoadingState: Bool
+    let onRecreate: () -> Void
+    let onReinitialize: () -> Void
+
+    var body: some View {
         if isUnsupportedPasskeyProvider {
             UnsupportedPasskeyProviderContent(manager: manager)
         } else if isPasskeyMissing {
             MissingPasskeyContent(manager: manager)
             DisableCloudBackupSection(manager: manager, detail: manager.detail)
         } else {
-            pendingUploadConfirmationSection
+            CloudBackupPendingUploadConfirmationSection(manager: manager)
 
-            backupStatusContent
+            CloudBackupStatusSection(
+                manager: manager,
+                isVerifying: isVerifying,
+                hasVerificationResult: hasVerificationResult,
+                isCancelled: isCancelled,
+                shouldShowLoadingState: shouldShowLoadingState
+            )
             VerificationSection(
                 manager: manager,
-                onRecreate: { showRecreateConfirmation = true },
-                onReinitialize: { showReinitializeConfirmation = true }
+                onRecreate: onRecreate,
+                onReinitialize: onReinitialize
             )
             if manager.detail != nil {
                 DisableCloudBackupSection(manager: manager, detail: manager.detail)
             }
         }
     }
+}
 
-    @ViewBuilder
-    private var backupStatusContent: some View {
+struct CloudBackupStatusSection: View {
+    let manager: CloudBackupManager
+    let isVerifying: Bool
+    let hasVerificationResult: Bool
+    let isCancelled: Bool
+    let shouldShowLoadingState: Bool
+
+    var body: some View {
         if isVerifying, !hasVerificationResult {
             Section {
                 VStack {
@@ -143,9 +177,12 @@ struct CloudBackupDetailScreen: View {
             }
         }
     }
+}
 
-    @ViewBuilder
-    private var pendingUploadConfirmationSection: some View {
+struct CloudBackupPendingUploadConfirmationSection: View {
+    let manager: CloudBackupManager
+
+    var body: some View {
         switch manager.verificationState {
         case .awaitingUploadConfirmation:
             if case .blocked = manager.syncState {
