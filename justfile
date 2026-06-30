@@ -100,7 +100,7 @@ mobile-artifact-fetch-ios-core ref:
 # Build Android debug APK
 [group('build')]
 build-android:
-    just xtask build-android debug && just say "done android"
+    just xtask build-android debug --connected-device && just say "done android"
 
 alias ba := build-android
 

@@ -1,5 +1,6 @@
 use crate::common::{
-    command_exists, print_error, print_info, print_success, trim_generated_trailing_whitespace,
+    command_exists, print_error, print_info, print_success, print_warning,
+    trim_generated_trailing_whitespace,
 };
 use color_eyre::{
     eyre::{Context, ContextCompat},
@@ -38,6 +39,12 @@ pub enum BuildProfile {
     Custom(&'static str),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AndroidBuildTargets {
+    All,
+    ConnectedDevice,
+}
+
 impl BuildProfile {
     pub fn from_str(s: &str) -> Self {
         match s {
@@ -73,7 +80,50 @@ fn get_abi_mapping() -> HashMap<&'static str, &'static str> {
     map
 }
 
-pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
+fn target_for_abi(abi: &str) -> Option<&'static str> {
+    match abi.trim() {
+        "arm64-v8a" => Some("aarch64-linux-android"),
+        "armeabi-v7a" => Some("armv7-linux-androideabi"),
+        "x86_64" => Some("x86_64-linux-android"),
+        _ => None,
+    }
+}
+
+fn connected_device_target(sh: &Shell) -> Result<&'static str> {
+    if !command_exists("adb") {
+        print_error("adb not found. Please install Android SDK platform-tools");
+        color_eyre::eyre::bail!("adb command not found");
+    }
+
+    let abi = cmd!(sh, "adb shell getprop ro.product.cpu.abi")
+        .read()
+        .wrap_err("Failed to read connected Android device ABI")?;
+    let abi = abi.trim();
+
+    if abi.is_empty() {
+        color_eyre::eyre::bail!("Connected Android device did not report a CPU ABI");
+    }
+
+    let target = target_for_abi(abi).ok_or_else(|| {
+        color_eyre::eyre::eyre!("Unsupported connected Android device ABI: {abi}")
+    })?;
+    print_info(&format!("Connected Android device ABI {abi} maps to Rust target {target}"));
+
+    Ok(target)
+}
+
+fn resolve_targets(sh: &Shell, build_targets: AndroidBuildTargets) -> Result<Vec<&'static str>> {
+    match build_targets {
+        AndroidBuildTargets::All => Ok(ANDROID_TARGETS.to_vec()),
+        AndroidBuildTargets::ConnectedDevice => Ok(vec![connected_device_target(sh)?]),
+    }
+}
+
+pub fn build_android(
+    profile: BuildProfile,
+    build_targets: AndroidBuildTargets,
+    verbose: bool,
+) -> Result<()> {
     let sh = Shell::new()?;
 
     // check for cargo-ndk
@@ -89,14 +139,27 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     sh.create_dir(BINDINGS_DIR).wrap_err("Failed to create bindings directory")?;
 
     let abi_mapping = get_abi_mapping();
+    let targets = resolve_targets(&sh, build_targets)?;
     let build_flag = profile.cargo_flag();
     let build_type = profile.target_dir_name();
 
     // set Android min SDK version
     sh.set_var("CFLAGS", CFLAGS_VALUE);
 
+    for abi in abi_mapping.values() {
+        let abi_dir = format!("{}/{}", JNI_LIBS_DIR, abi);
+        if sh.path_exists(&abi_dir) {
+            sh.remove_path(&abi_dir)
+                .wrap_err_with(|| format!("Failed to remove stale ABI directory {}", abi_dir))?;
+        }
+    }
+
+    if matches!(build_targets, AndroidBuildTargets::ConnectedDevice) {
+        print_warning("Only building native Rust library for the connected Android device ABI");
+    }
+
     // build for each target
-    for target in ANDROID_TARGETS {
+    for target in &targets {
         println!(
             "{}",
             format!("Building for target: {} with build type: {}", target, build_type)
@@ -172,7 +235,7 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
 
     // generate UniFFI bindings
     println!("{}", "Generating Kotlin bindings...".blue().bold());
-    let first_target = ANDROID_TARGETS[0];
+    let first_target = targets.first().context("Android build needs at least one Rust target")?;
     let dynamic_lib_path = format!("./target/{}/{}/{}", first_target, build_type, LIB_NAME);
 
     if !sh.path_exists(&dynamic_lib_path) {
@@ -206,6 +269,28 @@ pub fn build_android(profile: BuildProfile, verbose: bool) -> Result<()> {
 
     print_success("Android build completed successfully!");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::target_for_abi;
+
+    #[test]
+    fn maps_supported_android_abis_to_rust_targets() {
+        assert_eq!(target_for_abi("arm64-v8a"), Some("aarch64-linux-android"));
+        assert_eq!(target_for_abi("armeabi-v7a"), Some("armv7-linux-androideabi"));
+        assert_eq!(target_for_abi("x86_64"), Some("x86_64-linux-android"));
+    }
+
+    #[test]
+    fn trims_device_abi_output() {
+        assert_eq!(target_for_abi("arm64-v8a\r\n"), Some("aarch64-linux-android"));
+    }
+
+    #[test]
+    fn rejects_unsupported_android_abis() {
+        assert_eq!(target_for_abi("x86"), None);
+    }
 }
 
 pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
