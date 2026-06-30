@@ -20,9 +20,9 @@ use crate::{
 };
 
 use super::{
-    DeferredSender, Error, Message, MessageSender, RustWalletManager, SingleOrMany,
-    WalletActor, WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletScanStatus,
-    WalletSnapshot, downgrade_and_notify_if_needed,
+    DeferredSender, Error, Message, MessageSender, RustWalletManager, SingleOrMany, WalletActor,
+    WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletScanStatus, WalletSnapshot,
+    downgrade_and_notify_if_needed,
 };
 
 fn start_discovery_scanner(

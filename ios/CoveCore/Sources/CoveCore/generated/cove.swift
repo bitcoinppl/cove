@@ -9115,7 +9115,10 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func getUnsignedTransactions() throws  -> [UnsignedTransaction]
 
-    func initialLoadState()  -> WalletLoadState
+    /**
+     * Returns the bootstrap wallet snapshot used before reconcile messages arrive
+     */
+    func initialState()  -> WalletInitialState
 
     /**
      * Send entry point for unsigned hot wallet PSBTs
@@ -9658,10 +9661,13 @@ open func getUnsignedTransactions()throws  -> [UnsignedTransaction]  {
 })
 }
 
-open func initialLoadState() -> WalletLoadState  {
-    return try!  FfiConverterTypeWalletLoadState_lift(try! rustCall() {
+    /**
+     * Returns the bootstrap wallet snapshot used before reconcile messages arrive
+     */
+open func initialState() -> WalletInitialState  {
+    return try!  FfiConverterTypeWalletInitialState_lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_method_rustwalletmanager_initial_load_state(
+    uniffi_cove_fn_method_rustwalletmanager_initial_state(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -16699,6 +16705,80 @@ public func FfiConverterTypeUnsupportedDbVersion_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeUnsupportedDbVersion_lower(_ value: UnsupportedDbVersion) -> RustBuffer {
     return FfiConverterTypeUnsupportedDbVersion.lower(value)
+}
+
+
+public struct WalletInitialState {
+    public var metadata: WalletMetadata
+    public var ledgerState: WalletLedgerState
+    public var loadState: WalletLoadState
+    public var scanStatus: WalletScanStatus
+    public var balancePresentation: BalancePresentation
+    public var balance: Balance
+    public var unsignedTransactions: [UnsignedTransaction]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(metadata: WalletMetadata, ledgerState: WalletLedgerState, loadState: WalletLoadState, scanStatus: WalletScanStatus, balancePresentation: BalancePresentation, balance: Balance, unsignedTransactions: [UnsignedTransaction]) {
+        self.metadata = metadata
+        self.ledgerState = ledgerState
+        self.loadState = loadState
+        self.scanStatus = scanStatus
+        self.balancePresentation = balancePresentation
+        self.balance = balance
+        self.unsignedTransactions = unsignedTransactions
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension WalletInitialState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletInitialState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletInitialState {
+        return
+            try WalletInitialState(
+                metadata: FfiConverterTypeWalletMetadata.read(from: &buf),
+                ledgerState: FfiConverterTypeWalletLedgerState.read(from: &buf),
+                loadState: FfiConverterTypeWalletLoadState.read(from: &buf),
+                scanStatus: FfiConverterTypeWalletScanStatus.read(from: &buf),
+                balancePresentation: FfiConverterTypeBalancePresentation.read(from: &buf),
+                balance: FfiConverterTypeBalance.read(from: &buf),
+                unsignedTransactions: FfiConverterSequenceTypeUnsignedTransaction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WalletInitialState, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletMetadata.write(value.metadata, into: &buf)
+        FfiConverterTypeWalletLedgerState.write(value.ledgerState, into: &buf)
+        FfiConverterTypeWalletLoadState.write(value.loadState, into: &buf)
+        FfiConverterTypeWalletScanStatus.write(value.scanStatus, into: &buf)
+        FfiConverterTypeBalancePresentation.write(value.balancePresentation, into: &buf)
+        FfiConverterTypeBalance.write(value.balance, into: &buf)
+        FfiConverterSequenceTypeUnsignedTransaction.write(value.unsignedTransactions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletInitialState_lift(_ buf: RustBuffer) throws -> WalletInitialState {
+    return try FfiConverterTypeWalletInitialState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletInitialState_lower(_ value: WalletInitialState) -> RustBuffer {
+    return FfiConverterTypeWalletInitialState.lower(value)
 }
 
 
@@ -34792,6 +34872,8 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case DatabaseCorruption(id: WalletId, error: String
     )
+    case PendingUnsignedTransactionsLoadError(String
+    )
     case ReceiveAddressError(String
     )
 
@@ -34919,7 +35001,10 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 32: return .ReceiveAddressError(
+        case 32: return .PendingUnsignedTransactionsLoadError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 33: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -35086,8 +35171,13 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(error, into: &buf)
 
 
-        case let .ReceiveAddressError(v1):
+        case let .PendingUnsignedTransactionsLoadError(v1):
             writeInt(&buf, Int32(32))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .ReceiveAddressError(v1):
+            writeInt(&buf, Int32(33))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -39867,6 +39957,16 @@ public func sendFlowAlertStateFromAddressError(error: AddressError, address: Str
     )
 })
 }
+/**
+ * Returns provisional presentation values for loading screens before a wallet manager is available
+ */
+public func balancePresentationProvisional() -> BalancePresentation  {
+    return try!  FfiConverterTypeBalancePresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_balance_presentation_provisional(uniffiCallStatus
+    )
+})
+}
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
     return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
         uniffiCallStatus in
@@ -40263,6 +40363,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_balance_presentation_provisional() != 4257) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 56420) {
@@ -41030,7 +41133,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 35895) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 13212) {

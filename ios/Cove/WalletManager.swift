@@ -95,28 +95,11 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
-    private static func initialStateOrShutdown(_ rust: RustWalletManager) throws -> WalletInitialState {
-        do {
-            return try rust.initialState()
-        } catch {
-            rust.shutdown()
-            throw error
-        }
-    }
-
-    private static func previewInitialState(_ rust: RustWalletManager) -> WalletInitialState {
-        do {
-            return try rust.initialState()
-        } catch {
-            preconditionFailure("Preview wallet initial state failed: \(error.localizedDescription)")
-        }
-    }
-
     init(id: WalletId) throws {
-        self.id = id
         let rust = try RustWalletManager(id: id)
-        let initialState = try Self.initialStateOrShutdown(rust)
+        let initialState = rust.initialState()
 
+        self.id = initialState.metadata.id
         self.rust = rust
         self.loadState = initialState.loadState
         self.scanStatus = initialState.scanStatus
@@ -155,7 +138,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     init(xpub: String) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
-        let initialState = try Self.initialStateOrShutdown(rust)
+        let initialState = rust.initialState()
 
         self.rust = rust
         self.loadState = initialState.loadState
@@ -182,7 +165,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             backup: backup,
             birthday: birthday
         )
-        let initialState = try Self.initialStateOrShutdown(rust)
+        let initialState = rust.initialState()
 
         self.rust = rust
         self.loadState = initialState.loadState
@@ -427,26 +410,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         case let .availableTransactions(txns):
             switch self.loadState {
             case .loading:
-                self.loadState = .scanning(txns)
+                self.loadState = loadStateForTransactions(txns)
             case let .scanning(current) where txns.count >= current.count:
-                self.loadState = .scanning(txns)
+                self.loadState = loadStateForTransactions(txns)
             case .scanning:
                 break
             case let .loaded(current) where txns.count >= current.count:
-                self.loadState = .scanning(txns)
+                self.loadState = loadStateForTransactions(txns)
             case .loaded:
                 break
             }
 
         case let .updatedTransactions(txns):
-            switch self.loadState {
-            case .scanning, .loading:
-                self.loadState = .scanning(txns)
-            case .loaded:
-                self.loadState = ledgerState.initialScanComplete
-                    ? .loaded(txns)
-                    : .scanning(txns)
-            }
+            self.loadState = loadStateForTransactions(txns)
 
         case let .transactionUpdated(transaction):
             replaceTransactionInLoadState(transaction)
@@ -458,7 +434,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             transactionConfirmations[update.txId] = update.confirmations
 
         case let .scanComplete(txns):
-            self.loadState = ledgerState.initialScanComplete ? .loaded(txns) : .scanning(txns)
+            self.loadState = loadStateForTransactions(txns)
             notifyInitialScanLifecycleChanged()
 
         case let .walletBalanceChanged(balance):
@@ -535,16 +511,28 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     )
 
     private func reconcileLoadStateWithLedgerState() {
-        if ledgerState.initialScanComplete, !scanStatus.isActive,
-           case let .scanning(txns) = loadState
-        {
-            loadState = .loaded(txns)
-        } else if ledgerState.initialScanIncomplete,
-                  scanStatus.isActive,
-                  case let .loaded(txns) = loadState
-        {
-            loadState = .scanning(txns)
+        switch loadState {
+        case .loading:
+            break
+        case let .scanning(txns), let .loaded(txns):
+            loadState = loadStateForTransactions(txns)
         }
+    }
+
+    private func loadStateForTransactions(_ transactions: [CoveCore.Transaction]) -> WalletLoadState {
+        if scanStatus.isActive {
+            return .scanning(transactions)
+        }
+
+        if ledgerState.initialScanComplete {
+            return .loaded(transactions)
+        }
+
+        if transactions.isEmpty {
+            return .loading
+        }
+
+        return .scanning(transactions)
     }
 
     private func setWalletMetadata(_ metadata: WalletMetadata) {
@@ -600,7 +588,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             }
 
         self.rust = rust
-        let initialState = Self.previewInitialState(rust)
+        let initialState = rust.initialState()
         self.loadState = initialState.loadState
         self.scanStatus = initialState.scanStatus
         self.ledgerState = initialState.ledgerState

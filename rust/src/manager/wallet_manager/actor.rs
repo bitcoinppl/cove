@@ -1231,9 +1231,8 @@ mod tests {
 
         let (sender, receiver) = flume::bounded(100);
         let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let actor = super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+            .expect("actor is created");
         let addr = spawn_actor(actor);
 
         (addr, receiver)

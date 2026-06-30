@@ -336,9 +336,9 @@ fun SelectedWalletScreen(
 
                 val hasTransactions =
                     when (val loadState = manager.loadState) {
+                        is WalletLoadState.Loading -> unsignedTransactions.isNotEmpty()
                         is WalletLoadState.Scanning -> loadState.v1.isNotEmpty() || unsignedTransactions.isNotEmpty()
                         is WalletLoadState.Loaded -> loadState.v1.isNotEmpty() || unsignedTransactions.isNotEmpty()
-                        else -> false
                     }
 
                 val isVerified = manager.isVerified

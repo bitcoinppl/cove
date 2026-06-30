@@ -164,13 +164,7 @@ class AppManager private constructor() : FfiReconcile {
 
     fun walletMetadata(id: WalletId): WalletMetadata? {
         cachedWalletManager(id)?.walletMetadata?.let { return it }
-        wallets.firstOrNull { it.id == id }?.let { return it }
-
-        return runCatching {
-            database.wallets().all().firstOrNull { it.id == id }
-        }.onFailure {
-            Log.w(tag, "Unable to reload wallet metadata for $id", it)
-        }.getOrNull()
+        return wallets.firstOrNull { it.id == id }
     }
 
     /**

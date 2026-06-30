@@ -308,7 +308,7 @@ private fun SelectedWalletLoadingScreen(
 ) {
     val primaryText = MaterialTheme.colorScheme.onSurface
     val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
-    val canGoBack = app.rust.canGoBack()
+    val canGoBack = app.canGoBack()
 
     ForceLightStatusBarIcons()
 

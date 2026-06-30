@@ -25,7 +25,7 @@ struct SelectedWalletContainer: View {
                 if let metadata = app.walletMetadata(id: id) {
                     SelectedWalletLoadingScreen(metadata: metadata)
                 } else {
-                    FullPageLoadingView(title: "Loading wallet...")
+                    FullPageLoadingView(title: String(localized: "Loading wallet..."))
                 }
             },
             onError: handleManagerError
@@ -141,6 +141,9 @@ private struct SelectedWalletLoadingScreen: View {
                     .font(.callout)
             }
             .contentShape(Rectangle())
+            .accessibilityLabel(
+                Text(canGoBack ? String(localized: "Back") : String(localized: "Menu"))
+            )
         }
 
         ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -152,6 +155,7 @@ private struct SelectedWalletLoadingScreen: View {
                         .adaptiveToolbarItemStyle(isPastHeader: false)
                         .font(.callout)
                 }
+                .accessibilityLabel(Text(String(localized: "QR Code")))
 
                 Button(action: {}) {
                     Image(systemName: "ellipsis.circle")
@@ -159,6 +163,7 @@ private struct SelectedWalletLoadingScreen: View {
                         .font(.callout)
                 }
                 .disabled(true)
+                .accessibilityLabel(Text(String(localized: "More")))
             }
         }
     }
