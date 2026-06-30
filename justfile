@@ -161,13 +161,22 @@ ui-manual:
 [working-directory('android')]
 android-ui-manual:
     set -e
+    STAY_AWAKE_SETTING="$(adb shell settings get global stay_on_while_plugged_in | tr -d '\r')"
 
     cleanup() {
+        if [ "$STAY_AWAKE_SETTING" = "null" ]; then
+            adb shell settings delete global stay_on_while_plugged_in >/dev/null 2>&1 || true
+        else
+            adb shell settings put global stay_on_while_plugged_in "$STAY_AWAKE_SETTING" >/dev/null 2>&1 || true
+        fi
         adb uninstall org.bitcoinppl.cove.uitest.test >/dev/null 2>&1 || true
         adb uninstall org.bitcoinppl.cove.uitest >/dev/null 2>&1 || true
     }
 
     trap cleanup EXIT
+    adb shell settings put global stay_on_while_plugged_in 7 >/dev/null
+    adb shell input keyevent KEYCODE_WAKEUP >/dev/null
+    adb shell wm dismiss-keyguard >/dev/null
 
     ./gradlew :app:connectedUiTestDebugAndroidTest \
         -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest

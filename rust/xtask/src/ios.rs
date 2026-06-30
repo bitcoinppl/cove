@@ -6,7 +6,7 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, path::Path};
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
@@ -52,6 +52,7 @@ const IOS_CONNECTED_DEVICE_FILTER: &str = "state == \"connected\"";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
 const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
+const IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS: usize = 1;
 
 #[derive(Debug, Clone, Copy)]
 pub enum IosBuildType {
@@ -810,24 +811,31 @@ fn boot_simulator(sh: &Shell, device: &str) -> Result<()> {
 }
 
 fn simulator_is_booted(sh: &Shell, device: &str) -> Result<bool> {
-    let output = cmd!(sh, "xcrun simctl list devices booted")
-        .read()
-        .wrap_err("Failed to list booted simulators")?;
+    Ok(simulator_state(sh, device)?.is_some_and(|state| state == "Booted"))
+}
 
-    Ok(output.lines().any(|line| simulator_line_matches_device(line, device)))
+fn simulator_state(sh: &Shell, device: &str) -> Result<Option<String>> {
+    let output =
+        cmd!(sh, "xcrun simctl list devices").read().wrap_err("Failed to list simulators")?;
+
+    Ok(output
+        .lines()
+        .find(|line| simulator_line_matches_device(line, device))
+        .and_then(simulator_state_from_line))
+}
+
+fn simulator_state_from_line(line: &str) -> Option<String> {
+    line.rsplit_once(" (").map(|(_, state)| state.trim().trim_end_matches(')').to_string())
 }
 
 fn simulator_line_matches_device(line: &str, device: &str) -> bool {
     let line = line.trim_start();
 
-    line.starts_with(&format!("{device} (")) && line.contains("(Booted)")
+    line.starts_with(&format!("{device} ("))
 }
 
 fn reset_simulator_state(sh: &Shell, device: &str) -> Result<()> {
-    cmd!(sh, "xcrun simctl shutdown {device}")
-        .quiet()
-        .run()
-        .wrap_err_with(|| format!("Failed to shut down simulator '{device}'"))?;
+    shutdown_simulator_for_erase(sh, device)?;
 
     cmd!(sh, "xcrun simctl erase {device}")
         .quiet()
@@ -835,6 +843,70 @@ fn reset_simulator_state(sh: &Shell, device: &str) -> Result<()> {
         .wrap_err_with(|| format!("Failed to erase simulator '{device}'"))?;
 
     Ok(())
+}
+
+fn shutdown_simulator_for_erase(sh: &Shell, device: &str) -> Result<()> {
+    if simulator_state(sh, device)?.as_deref() == Some("Shutdown") {
+        return Ok(());
+    }
+
+    let output = cmd!(sh, "xcrun simctl shutdown {device}")
+        .quiet()
+        .ignore_status()
+        .output()
+        .wrap_err_with(|| format!("Failed to shut down simulator '{device}'"))?;
+
+    if output.status.success() {
+        wait_for_simulator_shutdown(sh, device)?;
+
+        return Ok(());
+    }
+
+    let stdout = String::from_utf8(output.stdout).wrap_err("Failed to parse simctl stdout")?;
+    let stderr = String::from_utf8(output.stderr).wrap_err("Failed to parse simctl stderr")?;
+
+    if simctl_shutdown_already_shutdown(&stdout, &stderr) {
+        wait_for_simulator_shutdown(sh, device)?;
+
+        return Ok(());
+    }
+
+    if wait_for_simulator_shutdown(sh, device).is_ok() {
+        return Ok(());
+    }
+
+    Err(eyre!("simctl shutdown exited with status {}", output.status)).with_context(|| {
+        format!(
+            "Failed to shut down simulator '{device}'\nstdout:\n{}\nstderr:\n{}",
+            non_empty_output(&stdout, "<empty>"),
+            non_empty_output(&stderr, "<empty>"),
+        )
+    })?;
+
+    Ok(())
+}
+
+fn wait_for_simulator_shutdown(sh: &Shell, device: &str) -> Result<()> {
+    let deadline = SystemTime::now() + Duration::from_secs(90);
+
+    while SystemTime::now() < deadline {
+        if simulator_state(sh, device)?.as_deref() == Some("Shutdown") {
+            return Ok(());
+        }
+
+        std::thread::sleep(Duration::from_millis(250));
+    }
+
+    if simulator_state(sh, device)?.as_deref() == Some("Shutdown") {
+        return Ok(());
+    }
+
+    color_eyre::eyre::bail!("Timed out waiting for simulator '{device}' to shut down");
+}
+
+fn simctl_shutdown_already_shutdown(stdout: &str, stderr: &str) -> bool {
+    stdout.contains("Unable to shutdown device in current state: Shutdown")
+        || stderr.contains("Unable to shutdown device in current state: Shutdown")
 }
 
 fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Result<()> {
@@ -850,31 +922,85 @@ fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Resul
 
     if verbose {
         test_cmd.run().wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
-    } else {
+        print_success(&format!("iOS UI test passed: {test}"));
+
+        return Ok(());
+    }
+
+    for attempt in 0..=IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS {
+        if attempt > 0 {
+            print_info(&format!(
+                "Retrying iOS UI test {test} after Xcode test runner bootstrap failure"
+            ));
+            reset_simulator_state(sh, device)?;
+            boot_simulator(sh, device)?;
+        }
+
+        let test_cmd = cmd!(
+            sh,
+            "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+        );
+
         let output = test_cmd
             .quiet()
             .ignore_status()
             .output()
             .wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
 
-        if !output.status.success() {
-            let stdout =
-                String::from_utf8(output.stdout).wrap_err("Failed to parse xcodebuild stdout")?;
-            let stderr =
-                String::from_utf8(output.stderr).wrap_err("Failed to parse xcodebuild stderr")?;
+        if output.status.success() {
+            print_success(&format!("iOS UI test passed: {test}"));
 
-            Err(eyre!("xcodebuild exited with status {}", output.status)).with_context(|| {
-                format!(
-                    "Failed to run iOS UI test {test}\nstdout:\n{}\nstderr:\n{}",
-                    non_empty_output(&stdout, "<empty>"),
-                    non_empty_output(&stderr, "<empty>"),
-                )
-            })?;
+            return Ok(());
         }
+
+        let failure = XcodebuildFailure::from_output(output)?;
+
+        if failure.is_test_runner_bootstrap_failure() && attempt < IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS {
+            continue;
+        }
+
+        return fail_ios_ui_test(test, failure);
     }
 
-    print_success(&format!("iOS UI test passed: {test}"));
-    Ok(())
+    unreachable!("iOS UI test retry loop should return from every branch")
+}
+
+struct XcodebuildFailure {
+    status: std::process::ExitStatus,
+    stdout: String,
+    stderr: String,
+}
+
+impl XcodebuildFailure {
+    fn from_output(output: std::process::Output) -> Result<Self> {
+        Ok(Self {
+            status: output.status,
+            stdout: String::from_utf8(output.stdout)
+                .wrap_err("Failed to parse xcodebuild stdout")?,
+            stderr: String::from_utf8(output.stderr)
+                .wrap_err("Failed to parse xcodebuild stderr")?,
+        })
+    }
+
+    fn is_test_runner_bootstrap_failure(&self) -> bool {
+        xcodebuild_test_runner_bootstrap_failed(&self.stdout)
+            || xcodebuild_test_runner_bootstrap_failed(&self.stderr)
+    }
+}
+
+fn xcodebuild_test_runner_bootstrap_failed(output: &str) -> bool {
+    output.contains("Early unexpected exit, operation never finished bootstrapping")
+        && output.contains("while preparing to run tests")
+}
+
+fn fail_ios_ui_test(test: &str, failure: XcodebuildFailure) -> Result<()> {
+    Err(eyre!("xcodebuild exited with status {}", failure.status)).with_context(|| {
+        format!(
+            "Failed to run iOS UI test {test}\nstdout:\n{}\nstderr:\n{}",
+            non_empty_output(&failure.stdout, "<empty>"),
+            non_empty_output(&failure.stderr, "<empty>"),
+        )
+    })
 }
 
 fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
@@ -1078,6 +1204,7 @@ fn parse_device_detail(output: &str, prefix: &str) -> Result<String> {
 mod tests {
     use super::{
         ensure_aasa_webcredentials_app, normalize_pem_text, simulator_line_matches_device,
+        simulator_state_from_line,
     };
 
     const VALID_PEM: &str = "\
@@ -1103,11 +1230,22 @@ ABC123
     }
 
     #[test]
-    fn simulator_line_does_not_match_shutdown_device() {
-        assert!(!simulator_line_matches_device(
+    fn simulator_line_matches_exact_shutdown_device_name() {
+        assert!(simulator_line_matches_device(
             "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown)",
             "iPhone 17",
         ));
+    }
+
+    #[test]
+    fn simulator_state_from_line_trims_shutdown_state() {
+        assert_eq!(
+            simulator_state_from_line(
+                "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown) "
+            )
+            .as_deref(),
+            Some("Shutdown"),
+        );
     }
 
     #[test]

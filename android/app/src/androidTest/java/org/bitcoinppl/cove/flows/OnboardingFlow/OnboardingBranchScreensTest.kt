@@ -360,6 +360,7 @@ class OnboardingBranchScreensTest {
                 providerHint = null,
                 warningMessage = null,
                 errorMessage = null,
+                onBack = { selected = "back" },
                 onRestore = { selected = "restore" },
                 onSkip = { selected = "skip" },
             )
@@ -408,6 +409,7 @@ class OnboardingBranchScreensTest {
                 providerHint = null,
                 warningMessage = "Cloud storage may be unavailable.",
                 errorMessage = null,
+                onBack = { selected = "back-warning" },
                 onRestore = { selected = "restore-warning" },
                 onSkip = { selected = "skip-warning" },
             )
@@ -428,6 +430,7 @@ class OnboardingBranchScreensTest {
                 providerHint = null,
                 warningMessage = null,
                 errorMessage = "Passkey verification failed.",
+                onBack = { selected = "back-error" },
                 onRestore = { selected = "restore-error" },
                 onSkip = { selected = "skip-error" },
             )
