@@ -58,12 +58,13 @@ impl RustSendFlowManager {
                 }
 
                 if me.selected_fee_rate().and_then(|fee| fee.total_fee).is_none() {
-                    match me.build_psbt(Some(address_for_psbt), Some(amount), fee_rate).await {
-                        Ok(psbt) => {
-                            if !me.finalize_snapshot_matches(&snapshot) {
-                                return;
-                            }
+                    let psbt = me.build_psbt(Some(address_for_psbt), Some(amount), fee_rate).await;
+                    if !me.finalize_snapshot_matches(&snapshot) {
+                        return;
+                    }
 
+                    match psbt {
+                        Ok(psbt) => {
                             let total_fee = match psbt.fee() {
                                 Ok(total_fee) => total_fee,
                                 Err(error) => {
