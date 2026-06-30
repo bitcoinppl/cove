@@ -119,32 +119,7 @@ private struct DeviceRestoreContent: View {
     }
 
     private var restoringHeroIcon: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.btnGradientLight.opacity(0.12), lineWidth: 1)
-                .frame(width: 118, height: 118)
-
-            Circle()
-                .stroke(Color.btnGradientLight.opacity(0.18), lineWidth: 1)
-                .frame(width: 86, height: 86)
-
-            Circle()
-                .stroke(Color.btnGradientLight.opacity(0.34), lineWidth: 1)
-                .frame(width: 58, height: 58)
-
-            Circle()
-                .fill(Color.duskBlue.opacity(0.42))
-                .frame(width: 58, height: 58)
-
-            Circle()
-                .stroke(Color.btnGradientLight.opacity(0.7), lineWidth: 1.3)
-                .frame(width: 58, height: 58)
-
-            Image(systemName: "icloud.and.arrow.down")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(Color.btnGradientLight)
-        }
-        .frame(width: 118, height: 118)
+        OnboardingStatusHero(systemImage: "icloud.and.arrow.down", iconSize: 22)
     }
 
     @ViewBuilder
