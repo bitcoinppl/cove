@@ -60,6 +60,10 @@ impl RustSendFlowManager {
                 if me.selected_fee_rate().and_then(|fee| fee.total_fee).is_none() {
                     match me.build_psbt(Some(address_for_psbt), Some(amount), fee_rate).await {
                         Ok(psbt) => {
+                            if !me.finalize_snapshot_matches(&snapshot) {
+                                return;
+                            }
+
                             let total_fee = match psbt.fee() {
                                 Ok(total_fee) => total_fee,
                                 Err(error) => {
@@ -371,6 +375,26 @@ mod tests {
         set_finalize_snapshot_state(&manager, address, selected_fee_rate);
 
         manager.state.lock().amount_sats = Some(20_000);
+
+        assert!(!manager.finalize_snapshot_matches(&snapshot));
+    }
+
+    #[test]
+    fn finalize_snapshot_rejects_changed_fee_choice() {
+        let manager = manager_for_finalize();
+        let address = Arc::new(Address::preview_new());
+        let selected_fee_rate = Arc::new(selected_fee_without_total());
+        let snapshot = finalize_snapshot(address.clone(), selected_fee_rate.clone());
+        set_finalize_snapshot_state(&manager, address, selected_fee_rate);
+
+        let selected = Arc::new(FeeRateOptionWithTotalFee {
+            fee_speed: FeeSpeed::Custom { duration_mins: 20 },
+            fee_rate: FeeRateOption::new(FeeSpeed::Custom { duration_mins: 20 }, 2.0).fee_rate,
+            total_fee: None,
+        });
+        let options =
+            FeeRateOptionsWithTotalFee::without_totals(FeeRateOptions::_ffi_preview_new());
+        manager.state.lock().fee_selection = Some(FeeSelection::new(Arc::new(options), selected));
 
         assert!(!manager.finalize_snapshot_matches(&snapshot));
     }
