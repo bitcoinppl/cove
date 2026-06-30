@@ -228,6 +228,9 @@ struct TransactionSentDetailsSection: View {
 }
 
 struct TransactionDetailsLockControl: View {
+    private static let buttonMinWidth: CGFloat = 82
+    private static let symbolFrameSize: CGFloat = 14
+
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
     let lockStateLoadError: String?
@@ -269,20 +272,34 @@ struct TransactionDetailsLockControl: View {
                 if isUpdating {
                     ProgressView()
                         .controlSize(.mini)
+                        .frame(
+                            width: Self.symbolFrameSize,
+                            height: Self.symbolFrameSize
+                        )
                 } else {
                     Image(systemName: systemImage)
                         .font(.caption2.weight(.semibold))
+                        .frame(
+                            width: Self.symbolFrameSize,
+                            height: Self.symbolFrameSize
+                        )
                 }
 
                 Text(buttonTitle)
                     .font(.caption)
                     .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .contentTransition(.identity)
             }
+            .frame(minWidth: Self.buttonMinWidth, alignment: .leading)
             .foregroundStyle(Color.secondary.opacity(isUpdating ? 0.72 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isUpdating)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 
     private var lockStateButtonText: String {

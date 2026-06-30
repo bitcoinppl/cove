@@ -284,6 +284,10 @@ struct ConfirmedTransactionView: View {
     let metadata: WalletMetadata
     let index: Int
 
+    private var lockState: TransactionLockState? {
+        manager.transactionLockStates[txn.id()]
+    }
+
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
             return privateShow(
@@ -333,6 +337,15 @@ struct ConfirmedTransactionView: View {
         navigate(Route.transactionDetails(id: metadata.id, txId: txId))
     }
 
+    private func refreshLockState() async {
+        do {
+            _ = try await manager.transactionLockState(for: txn.id())
+        } catch {
+            Log.error("Failed to load transaction lock state for \(txn.id()): \(error)")
+            await manager.clearTransactionLockState(for: txn.id())
+        }
+    }
+
     var label: String {
         if metadata.showLabels { return txn.label() }
         return txn.sentAndReceived().label()
@@ -355,6 +368,8 @@ struct ConfirmedTransactionView: View {
                 Text(privateShow(txn.confirmedAtFmt()))
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                TransactionLockBadge(lockState: lockState)
             }
 
             Spacer()
@@ -373,6 +388,9 @@ struct ConfirmedTransactionView: View {
         .onTapGesture {
             goToTransactionDetails()
         }
+        .task(id: txn.id().description) {
+            await refreshLockState()
+        }
     }
 }
 
@@ -383,6 +401,10 @@ struct UnconfirmedTransactionView: View {
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
     let index: Int
+
+    private var lockState: TransactionLockState? {
+        manager.transactionLockStates[txn.id()]
+    }
 
     func privateShow(_ text: String, placeholder: String = "••••••") -> String {
         if !metadata.sensitiveVisible {
@@ -439,6 +461,15 @@ struct UnconfirmedTransactionView: View {
         navigate(Route.transactionDetails(id: metadata.id, txId: txId))
     }
 
+    private func refreshLockState() async {
+        do {
+            _ = try await manager.transactionLockState(for: txn.id())
+        } catch {
+            Log.error("Failed to load transaction lock state for \(txn.id()): \(error)")
+            await manager.clearTransactionLockState(for: txn.id())
+        }
+    }
+
     var body: some View {
         HStack {
             TxnIcon(
@@ -452,6 +483,8 @@ struct UnconfirmedTransactionView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.primary.opacity(0.4))
+
+                TransactionLockBadge(lockState: lockState)
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -466,6 +499,46 @@ struct UnconfirmedTransactionView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             goToTransactionDetails()
+        }
+        .task(id: txn.id().description) {
+            await refreshLockState()
+        }
+    }
+}
+
+private struct TransactionLockBadge: View {
+    let lockState: TransactionLockState?
+
+    var body: some View {
+        if let title = lockState?.transactionRowBadgeTitle {
+            Label {
+                Text(title)
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: "lock.fill")
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.orange.opacity(0.14))
+            .clipShape(Capsule())
+            .accessibilityLabel(title)
+        }
+    }
+}
+
+private extension TransactionLockState {
+    var transactionRowBadgeTitle: String? {
+        switch self {
+        case .locked:
+            String(localized: "UTXOs locked")
+        case .mixed:
+            String(localized: "Some UTXOs locked")
+        case .none, .unlocked:
+            nil
         }
     }
 }

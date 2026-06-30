@@ -16,7 +16,6 @@ struct TransactionDetailsView: View {
 
     @State private var initialOffset: Double? = nil
     @State private var currentOffset: Double = 0
-    @State private var lockState: TransactionLockState? = nil
     @State private var isUpdatingLockState = false
     @State private var lockStateError: String? = nil
     @State private var lockStateLoadError: String? = nil
@@ -31,6 +30,10 @@ struct TransactionDetailsView: View {
     /// read from cache (observable), fallback to initial details
     var transactionDetails: TransactionDetails {
         manager.transactionDetails[txId] ?? initialDetails
+    }
+
+    var lockState: TransactionLockState? {
+        manager.transactionLockStates[txId]
     }
 
     var numberOfConfirmations: Int? {
@@ -223,12 +226,9 @@ struct TransactionDetailsView: View {
 
     func refreshTransactionLockState() async {
         do {
-            let state = try await manager.transactionLockState(for: initialDetails.txId())
+            _ = try await manager.transactionLockState(for: initialDetails.txId())
             await MainActor.run {
-                withAnimation {
-                    lockState = state
-                    lockStateLoadError = nil
-                }
+                lockStateLoadError = nil
             }
         } catch {
             Log.error("Error refreshing transaction lock state: \(error)")
@@ -240,11 +240,8 @@ struct TransactionDetailsView: View {
 
     func toggleTransactionLockState() async {
         do {
-            let state = try await manager.toggleTransactionLockState(for: initialDetails.txId())
+            _ = try await manager.toggleTransactionLockState(for: initialDetails.txId())
             await MainActor.run {
-                withAnimation {
-                    lockState = state
-                }
                 isUpdatingLockState = false
             }
         } catch {

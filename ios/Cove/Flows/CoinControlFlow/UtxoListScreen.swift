@@ -39,6 +39,7 @@ struct UtxoListScreen: View {
                             showLockedSelectionAlert = true
                         }
                     )
+                    .selectionDisabled(!utxo.spendable)
                     .listRowBackground(Color.secondarySystemGroupedBackground)
                     .contextMenu {
                         Button(action: {

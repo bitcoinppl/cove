@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.Schedule
@@ -38,8 +39,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
@@ -52,11 +55,14 @@ import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Transaction
+import org.bitcoinppl.cove_core.TransactionLockState
 import org.bitcoinppl.cove_core.UnsignedTransaction
 import org.bitcoinppl.cove_core.types.SentAndReceived
 import org.bitcoinppl.cove_core.types.TransactionDirection
+import org.bitcoinppl.cove_core.types.TxId
 
 private const val SCROLL_THRESHOLD_INDEX = 5
+private const val TAG = "TransactionsRows"
 
 enum class TransactionType { SENT, RECEIVED }
 
@@ -195,6 +201,7 @@ internal fun ConfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val txId = transaction.v1.id()
+    val lockState = transactionLockStateForRow(txId, manager)
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -255,6 +262,8 @@ internal fun ConfirmedTransactionWidget(
                 minimumScaleFactor = 0.90f,
                 fontWeight = FontWeight.Normal,
             )
+
+            TransactionLockBadge(lockState)
         }
 
         Column(horizontalAlignment = Alignment.End) {
@@ -295,6 +304,7 @@ internal fun UnconfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val txId = transaction.v1.id()
+    val lockState = transactionLockStateForRow(txId, manager)
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
@@ -349,6 +359,8 @@ internal fun UnconfirmedTransactionWidget(
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
+
+            TransactionLockBadge(lockState)
         }
 
         Column(horizontalAlignment = Alignment.End) {
@@ -371,6 +383,64 @@ internal fun UnconfirmedTransactionWidget(
                 fontWeight = FontWeight.Normal,
             )
         }
+    }
+}
+
+@Composable
+private fun transactionLockStateForRow(
+    txId: TxId,
+    manager: WalletManager,
+): TransactionLockState? {
+    val lockState = manager.transactionLockStates[txId]
+
+    LaunchedEffect(manager.id, txId) {
+        try {
+            manager.transactionLockState(txId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "failed to load transaction lock state", e)
+            manager.clearTransactionLockState(txId)
+        }
+    }
+
+    return lockState
+}
+
+@Composable
+private fun TransactionLockBadge(lockState: TransactionLockState?) {
+    val textRes =
+        when (lockState) {
+            TransactionLockState.LOCKED -> R.string.label_transaction_utxos_locked
+            TransactionLockState.MIXED -> R.string.label_transaction_utxos_some_locked
+            TransactionLockState.NONE, TransactionLockState.UNLOCKED, null -> return
+        }
+    val text = stringResource(textRes)
+
+    Row(
+        modifier =
+            Modifier
+                .padding(top = 2.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(CoveColor.WarningOrange.copy(alpha = 0.14f))
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            tint = CoveColor.WarningOrange,
+            modifier = Modifier.size(11.dp),
+        )
+        Text(
+            text = text,
+            color = CoveColor.WarningOrange,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

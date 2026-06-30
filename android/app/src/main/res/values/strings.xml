@@ -105,6 +105,8 @@
     <string name="snackbar_transaction_lock_update_error">Unable to update transaction lock.</string>
     <string name="snackbar_transaction_lock_load_error">Unable to load transaction lock state.</string>
     <string name="snackbar_label_refresh_failed">Changes saved, but the transaction list may need manual refresh.</string>
+    <string name="label_transaction_utxos_locked">UTXOs locked</string>
+    <string name="label_transaction_utxos_some_locked">Some UTXOs locked</string>
     <string name="label_transaction_lock_updating">Updating...</string>
     <string name="btn_lock">Lock</string>
     <string name="btn_unlock">Unlock</string>

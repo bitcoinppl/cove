@@ -118,8 +118,8 @@ fun TransactionDetailsScreen(
     val transactionDetails = manager.transactionDetailsCache[txId] ?: details
 
     val numberOfConfirmations = manager.transactionConfirmations[txId]?.toInt()
+    val lockState = manager.transactionLockStates[txId]
     var isRefreshing by remember { mutableStateOf(false) }
-    var lockState by remember { mutableStateOf<TransactionLockState?>(null) }
     var isUpdatingLockState by remember { mutableStateOf(false) }
     var lockStateLoadFailed by remember { mutableStateOf(false) }
 
@@ -140,7 +140,7 @@ fun TransactionDetailsScreen(
 
     suspend fun refreshTransactionLockState(showSnackbar: Boolean) {
         try {
-            lockState = manager.transactionLockState(txId)
+            manager.transactionLockState(txId)
             lockStateLoadFailed = false
         } catch (e: CancellationException) {
             throw e
@@ -167,7 +167,7 @@ fun TransactionDetailsScreen(
         isUpdatingLockState = true
         scope.launch {
             try {
-                lockState = manager.toggleTransactionLockState(txId)
+                manager.toggleTransactionLockState(txId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
