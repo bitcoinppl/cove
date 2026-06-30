@@ -11,6 +11,11 @@ struct SentDetailsExpandedView: View {
     let manager: WalletManager
     let transactionDetails: TransactionDetails
     let numberOfConfirmations: Int?
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let lockStateLoadError: String?
+    let retryLockState: () -> Void
+    let toggleLockState: () -> Void
 
     @State private var showingPriceInfo = false
 
@@ -22,49 +27,62 @@ struct SentDetailsExpandedView: View {
         VStack(alignment: .leading, spacing: 12) {
             Divider().padding(.vertical, 18)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Sent to")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
-
-                Menu {
-                    if let address = transactionDetails.address() {
-                        Button("Copy", systemImage: "doc.on.doc") {
-                            UIPasteboard.general.string = address.unformatted()
-                        }
-                    }
-                } label: {
-                    Text(transactionDetails.addressSpacedOut() ?? "Address unavailable")
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sent to")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
                         .multilineTextAlignment(.leading)
-                }
-                .fontWeight(.semibold)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
 
-                if transactionDetails.isConfirmed() {
-                    HStack(spacing: 0) {
-                        Group {
-                            Text(transactionDetails.blockNumberFmt() ?? "")
-                            Text("|")
-
-                            if let numberOfConfirmations {
-                                Group {
-                                    Text(ThousandsFormatter(numberOfConfirmations).fmt())
-                                        .contentTransition(.numericText())
-
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 10))
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(.green)
-                                        .padding(.leading, 3)
-                                }
+                    Menu {
+                        if let address = transactionDetails.address() {
+                            Button("Copy", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = address.unformatted()
                             }
                         }
-                        .padding(.horizontal, 2)
+                    } label: {
+                        Text(transactionDetails.addressSpacedOut() ?? "Address unavailable")
+                            .multilineTextAlignment(.leading)
                     }
-                    .font(.caption).foregroundStyle(.tertiary)
+                    .fontWeight(.semibold)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                    if transactionDetails.isConfirmed() {
+                        HStack(spacing: 0) {
+                            Group {
+                                Text(transactionDetails.blockNumberFmt() ?? "")
+                                Text("|")
+
+                                if let numberOfConfirmations {
+                                    Group {
+                                        Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                                            .contentTransition(.numericText())
+
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 10))
+                                            .fontWeight(.bold)
+                                            .foregroundStyle(.green)
+                                            .padding(.leading, 3)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                        }
+                        .font(.caption).foregroundStyle(.tertiary)
+                    }
                 }
+
+                Spacer()
+
+                TransactionDetailsLockControl(
+                    lockState: lockState,
+                    isUpdatingLockState: isUpdatingLockState,
+                    lockStateLoadError: lockStateLoadError,
+                    retryLockState: retryLockState,
+                    toggleLockState: toggleLockState
+                )
+                .padding(.top, 1)
             }
 
             // MARK: - Fiat Price Section

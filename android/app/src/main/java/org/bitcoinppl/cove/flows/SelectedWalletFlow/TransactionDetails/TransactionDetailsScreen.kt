@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -12,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -20,14 +22,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.NorthEast
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -515,15 +523,6 @@ fun TransactionDetailsScreen(
                         showStroke = capsuleConfig.third,
                     )
 
-                    TransactionLockControls(
-                        state = lockState,
-                        loadFailed = lockStateLoadFailed,
-                        updating = isUpdatingLockState,
-                        color = sub,
-                        onRetry = ::retryTransactionLockState,
-                        onToggle = ::toggleTransactionLockState,
-                    )
-
                     Spacer(Modifier.height(32.dp))
 
                     // show confirmation indicator if < 3 confirmations
@@ -562,6 +561,16 @@ fun TransactionDetailsScreen(
                             totalSpentFiatFmt = totalSpentFiatFmt,
                             historicalFiatFmt = historicalFiatFmt,
                             metadata = metadata,
+                            lockControl = {
+                                TransactionLockControls(
+                                    state = lockState,
+                                    loadFailed = lockStateLoadFailed,
+                                    updating = isUpdatingLockState,
+                                    color = sub,
+                                    onRetry = ::retryTransactionLockState,
+                                    onToggle = ::toggleTransactionLockState,
+                                )
+                            },
                         )
                     }
 
@@ -632,7 +641,6 @@ private fun TransactionLockControls(
 
     when {
         loadFailed -> {
-            Spacer(Modifier.height(12.dp))
             TransactionLockLoadError(
                 color = color,
                 onRetry = onRetry,
@@ -640,7 +648,6 @@ private fun TransactionLockControls(
         }
 
         actionState != null -> {
-            Spacer(Modifier.height(12.dp))
             TransactionLockAction(
                 state = actionState,
                 updating = updating,
@@ -658,38 +665,45 @@ private fun TransactionLockAction(
     color: Color,
     onToggle: () -> Unit,
 ) {
-    val stateText =
-        when (state) {
-            TransactionLockState.LOCKED -> stringResource(R.string.label_transaction_lock_state_locked)
-            TransactionLockState.MIXED -> stringResource(R.string.label_transaction_lock_state_mixed)
-            TransactionLockState.UNLOCKED -> stringResource(R.string.label_transaction_lock_state_unlocked)
-            TransactionLockState.NONE -> ""
-        }
     val buttonText =
         when (state) {
-            TransactionLockState.LOCKED -> stringResource(R.string.btn_unlock_transaction)
-            TransactionLockState.MIXED, TransactionLockState.UNLOCKED -> stringResource(R.string.btn_lock_transaction)
+            TransactionLockState.LOCKED -> stringResource(R.string.btn_unlock)
+            TransactionLockState.MIXED, TransactionLockState.UNLOCKED -> stringResource(R.string.btn_lock)
             TransactionLockState.NONE -> ""
         }
     val updatingText = stringResource(R.string.label_transaction_lock_updating)
+    val icon = if (state == TransactionLockState.LOCKED) Icons.Filled.LockOpen else Icons.Filled.Lock
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .clickable(enabled = !updating, onClick = onToggle)
+                .padding(vertical = 4.dp),
+    ) {
+        if (updating) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(12.dp),
+                strokeWidth = 1.5.dp,
+                color = color.copy(alpha = 0.72f),
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color.copy(alpha = 0.72f),
+                modifier = Modifier.size(12.dp),
+            )
+        }
+
+        Spacer(Modifier.width(6.dp))
+
         Text(
-            text = stateText,
-            color = color,
+            text = if (updating) updatingText else buttonText,
+            color = color.copy(alpha = if (updating) 0.72f else 1f),
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
-        TextButton(
-            onClick = onToggle,
-            enabled = !updating,
-        ) {
-            Text(
-                text = if (updating) updatingText else buttonText,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
     }
 }
 
@@ -698,19 +712,27 @@ private fun TransactionLockLoadError(
     color: Color,
     onRetry: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .clickable(onClick = onRetry)
+                .padding(vertical = 4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = null,
+            tint = color.copy(alpha = 0.72f),
+            modifier = Modifier.size(12.dp),
+        )
+
+        Spacer(Modifier.width(6.dp))
+
         Text(
-            text = stringResource(R.string.label_transaction_lock_load_failed),
+            text = stringResource(R.string.btn_retry),
             color = color,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
-        TextButton(onClick = onRetry) {
-            Text(
-                text = stringResource(R.string.btn_retry),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
     }
 }
