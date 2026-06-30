@@ -25,9 +25,10 @@ impl RustSendFlowManager {
         };
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
-        let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
-
-        if amount >= max_send_without_fees_and_small_utxo {
+        if let Some(max_send_without_fees_and_small_utxo) =
+            self.max_send_minus_fees_and_small_utxo()
+            && amount >= max_send_without_fees_and_small_utxo
+        {
             debug!(
                 "setting coin control to max amount close to max {} {}",
                 amount.as_sats(),

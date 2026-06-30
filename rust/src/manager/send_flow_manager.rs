@@ -786,12 +786,18 @@ mod tests {
         state.address = Some(Arc::new(Address::preview_new()));
     }
 
-    fn set_coin_control_mode(manager: &super::RustSendFlowManager) {
-        let utxo_list = Arc::new(UtxoList::from(preview_new_utxo_list(1, 0)));
+    fn set_coin_control_mode_with_total(manager: &super::RustSendFlowManager, total_sats: u64) {
+        let mut utxos = preview_new_utxo_list(1, 0);
+        utxos[0].amount = Arc::new(super::Amount::from_sat(total_sats));
+        let utxo_list = Arc::new(UtxoList::from(utxos));
 
         let mut state = manager.state.lock();
         state.metadata.selected_unit = super::BitcoinUnit::Sat;
         state.mode = super::EnterMode::coin_control_max(utxo_list);
+    }
+
+    fn set_coin_control_mode(manager: &super::RustSendFlowManager) {
+        set_coin_control_mode_with_total(manager, 10_000);
     }
 
     fn next_reconcile_message(manager: &super::RustSendFlowManager) -> super::Message {
@@ -868,6 +874,20 @@ mod tests {
         assert!(
             manager.handle_coin_control_entered_amount_changed("300".to_string(), true).is_some()
         );
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(300));
+        assert!(
+            matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
+        );
+    }
+
+    #[test]
+    fn coin_control_amount_change_preserves_amount_when_snap_threshold_unavailable() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 1_500);
+
+        assert!(manager.handle_coin_control_amount_changed(300.0).is_some());
 
         let state = manager.state.lock();
         assert_eq!(state.amount_sats, Some(300));
