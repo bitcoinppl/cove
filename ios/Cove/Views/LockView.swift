@@ -133,11 +133,19 @@ struct LockView<Content: View>: View {
 
                     switch (screen, lockType, isBiometricAvailable) {
                     case (_, .biometric, false):
-                        PermissionsNeeded
+                        LockPermissionsNeededView()
                     case (_, .biometric, true):
-                        BiometricView
+                        LockBiometricView(
+                            lockType: lockType,
+                            unlock: tryUnlockingView,
+                            showPin: { screen = .pin }
+                        )
                     case (.biometric, .both, true):
-                        BiometricView
+                        LockBiometricView(
+                            lockType: lockType,
+                            unlock: tryUnlockingView,
+                            showPin: { screen = .pin }
+                        )
                     case (_, .pin, _):
                         numberPadPinView
                     case (.biometric, .both, false):
@@ -183,54 +191,6 @@ struct LockView<Content: View>: View {
         )
     }
 
-    var PermissionsNeeded: some View {
-        VStack(spacing: 20) {
-            Text(
-                "Cove needs permissions to FaceID to unlock your wallet. Please open settings and enable FaceID."
-            )
-            .font(.callout)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 50)
-
-            Button("Open Settings") {
-                let url = URL(string: UIApplication.openSettingsURLString)!
-                UIApplication.shared.open(url)
-            }
-        }
-    }
-
-    var BiometricView: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 6) {
-                Image(systemName: "faceid")
-                    .font(.largeTitle)
-
-                Text("Tap to Unlock")
-                    .font(.caption2)
-                    .foregroundStyle(.gray)
-            }
-            .frame(width: 100, height: 100)
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
-            .contentShape(.rect)
-            .onTapGesture { tryUnlockingView() }
-
-            if lockType == .both {
-                Button(action: { screen = .pin }) {
-                    Text("Enter Cove PIN")
-                        .frame(width: 100, height: 40)
-                        .background(
-                            .ultraThinMaterial,
-                            in: .rect(cornerRadius: 10)
-                        )
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-            }
-        }
-        .frame(maxHeight: .infinity)
-    }
-
     private func bioMetricUnlock() async throws -> Bool {
         // Lock Context
         let context = LAContext()
@@ -265,6 +225,62 @@ struct LockView<Content: View>: View {
                 await MainActor.run { auth.isUsingBiometrics = false }
             }
         }
+    }
+}
+
+private struct LockPermissionsNeededView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(
+                "Cove needs permissions to FaceID to unlock your wallet. Please open settings and enable FaceID."
+            )
+            .font(.callout)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 50)
+
+            Button("Open Settings") {
+                let url = URL(string: UIApplication.openSettingsURLString)!
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+}
+
+private struct LockBiometricView: View {
+    let lockType: AuthType
+    let unlock: () -> Void
+    let showPin: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 6) {
+                Image(systemName: "faceid")
+                    .font(.largeTitle)
+
+                Text("Tap to Unlock")
+                    .font(.caption2)
+                    .foregroundStyle(.gray)
+            }
+            .frame(width: 100, height: 100)
+            .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
+            .contentShape(.rect)
+            .onTapGesture(perform: unlock)
+
+            if lockType == .both {
+                Button(action: showPin) {
+                    Text("Enter Cove PIN")
+                        .frame(width: 100, height: 40)
+                        .background(
+                            .ultraThinMaterial,
+                            in: .rect(cornerRadius: 10)
+                        )
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
 }
 

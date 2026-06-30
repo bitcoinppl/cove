@@ -105,7 +105,34 @@ struct TransactionDetailsLabelView: View {
         .foregroundStyle(.secondary)
     }
 
-    var AddLabel: some View {
+    var body: some View {
+        Group {
+            if isEditing {
+                TransactionDetailsEditingLabelField(
+                    label: label ?? "Add label",
+                    editingLabel: $editingLabel,
+                    isFocused: $isFocused
+                )
+            } else {
+                if let label {
+                    TxnLabel(label)
+                } else {
+                    TransactionDetailsAddLabelButton(setEditing: setEditing)
+                }
+            }
+        }
+        .font(.footnote)
+        .onChange(of: isFocused, initial: false) { old, new in
+            // lost focused
+            if old, !new { saveLabel() }
+        }
+    }
+}
+
+private struct TransactionDetailsAddLabelButton: View {
+    let setEditing: () -> Void
+
+    var body: some View {
         Button(action: setEditing) {
             HStack {
                 Image(systemName: "plus.circle.fill")
@@ -117,39 +144,26 @@ struct TransactionDetailsLabelView: View {
         }
         .foregroundStyle(.secondary)
     }
+}
 
-    var EditingLabel: some View {
+private struct TransactionDetailsEditingLabelField: View {
+    let label: String
+    @Binding var editingLabel: String
+    let isFocused: FocusState<Bool>.Binding
+
+    var body: some View {
         HStack {
             Spacer()
 
             Image(systemName: "square.and.pencil")
 
-            TextField(label ?? "Add label", text: $editingLabel)
+            TextField(label, text: $editingLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize()
-                .focused($isFocused)
+                .focused(isFocused)
                 .offset(y: 1.2)
 
             Spacer()
-        }
-    }
-
-    var body: some View {
-        Group {
-            if isEditing {
-                EditingLabel
-            } else {
-                if let label {
-                    TxnLabel(label)
-                } else {
-                    AddLabel
-                }
-            }
-        }
-        .font(.footnote)
-        .onChange(of: isFocused, initial: false) { old, new in
-            // lost focused
-            if old, !new { saveLabel() }
         }
     }
 }

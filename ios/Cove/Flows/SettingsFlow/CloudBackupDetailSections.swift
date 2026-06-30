@@ -231,7 +231,7 @@ struct HeaderSection: View {
     var body: some View {
         Section {
             VStack(spacing: 8) {
-                headerIcon
+                CloudBackupHeaderIcon(syncHealth: syncHealth)
                     .font(.largeTitle)
 
                 Text(cloudBackupDetailHeaderTitle(syncHealth: syncHealth))
@@ -243,15 +243,23 @@ struct HeaderSection: View {
                         .foregroundStyle(.secondary)
                 }
 
-                syncHealthLabel
+                CloudBackupSyncHealthLabel(syncHealth: syncHealth)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
         }
     }
 
-    @ViewBuilder
-    private var headerIcon: some View {
+    private func formatDate(_ timestamp: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+private struct CloudBackupHeaderIcon: View {
+    let syncHealth: CloudSyncHealth
+
+    var body: some View {
         let image = Image(systemName: cloudBackupDetailHeaderIconName(syncHealth: syncHealth))
 
         switch syncHealth {
@@ -271,30 +279,21 @@ struct HeaderSection: View {
                 .foregroundColor(.statusWarning)
         }
     }
+}
 
-    @ViewBuilder
-    private var syncHealthLabel: some View {
+private struct CloudBackupSyncHealthLabel: View {
+    let syncHealth: CloudSyncHealth
+
+    var body: some View {
         switch syncHealth {
         case .unknown:
-            HStack(spacing: 4) {
-                ProgressView()
-                    .controlSize(.mini)
-                Text("Checking iCloud sync status...")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            CloudBackupSyncProgressLabel(title: "Checking iCloud sync status...")
         case .allUploaded:
             Label("All files synced to iCloud", systemImage: "checkmark.circle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusSuccess)
         case .uploading:
-            HStack(spacing: 4) {
-                ProgressView()
-                    .controlSize(.mini)
-                Text("Syncing to iCloud...")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            CloudBackupSyncProgressLabel(title: "Syncing to iCloud...")
         case let .failed(message):
             Label("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
@@ -313,10 +312,19 @@ struct HeaderSection: View {
                 .foregroundStyle(Color.statusWarning)
         }
     }
+}
 
-    private func formatDate(_ timestamp: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        return date.formatted(date: .abbreviated, time: .shortened)
+private struct CloudBackupSyncProgressLabel: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(title)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
 

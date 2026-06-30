@@ -298,39 +298,6 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    var KeyboardAutoCompleteView: some View {
-        HStack {
-            ForEach(filteredSuggestions, id: \.self) { word in
-                Spacer()
-                Button(word, action: { selectWordInKeyboard(word) })
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                // only show divider in the middle
-                if filteredSuggestions.count > 1, filteredSuggestions.last != word {
-                    Divider()
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    var ImportButton: some View {
-        Button("Import wallet") {
-            importWallet()
-        }
-        .accessibilityIdentifier("hotWalletImport.import")
-        .font(.subheadline)
-        .fontWeight(.medium)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .padding(.vertical, 20)
-        .background(Color.btnPrimary)
-        .foregroundColor(.midnightBlue)
-        .cornerRadius(10)
-    }
-
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
@@ -355,72 +322,30 @@ struct HotWalletImportScreen: View {
             let bottomSafeArea = geometry.safeAreaInsets.bottom
 
             ZStack(alignment: .bottom) {
-                MainContent
+                HotWalletImportMainContent(
+                    keyboardIsShowing: keyboardObserver.keyboardIsShowing,
+                    isCompactLayout: isMiniDeviceOrLargeText(sizeCategory),
+                    numberOfWords: numberOfWords,
+                    tabIndex: $tabIndex,
+                    enteredWords: $enteredWords,
+                    filteredSuggestions: $filteredSuggestions,
+                    focusField: $focusField,
+                    onPasteMnemonic: handlePasteMnemonic,
+                    importWallet: importWallet
+                )
 
                 if keyboardObserver.keyboardIsShowing, focusField != nil, !filteredSuggestions.isEmpty {
-                    KeyboardToolbar
-                        .offset(y: -(keyboardObserver.keyboardHeight - bottomSafeArea))
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.2), value: filteredSuggestions.isEmpty)
+                    HotWalletImportKeyboardToolbar(
+                        filteredSuggestions: filteredSuggestions,
+                        accessoryHeight: accessoryHeight,
+                        selectWord: selectWordInKeyboard
+                    )
+                    .offset(y: -(keyboardObserver.keyboardHeight - bottomSafeArea))
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: filteredSuggestions.isEmpty)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-        }
-    }
-
-    private var KeyboardToolbar: some View {
-        HStack {
-            ForEach(filteredSuggestions, id: \.self) { word in
-                Spacer()
-                Button(word) { selectWordInKeyboard(word) }
-                    .foregroundColor(.primary)
-                Spacer()
-
-                if filteredSuggestions.count > 1, filteredSuggestions.last != word {
-                    Divider()
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: accessoryHeight)
-        .background(.regularMaterial)
-        .modifier(KeyboardToolbarShapeModifier())
-    }
-
-    var Card: some View {
-        HotWalletImportCard(
-            numberOfWords: numberOfWords,
-            onPasteMnemonic: handlePasteMnemonic,
-            tabIndex: $tabIndex,
-            enteredWords: $enteredWords,
-            filteredSuggestions: $filteredSuggestions,
-            focusField: $focusField
-        )
-    }
-
-    var MainContent: some View {
-        VStack {
-            if !keyboardObserver.keyboardIsShowing {
-                Spacer()
-            }
-
-            if isMiniDeviceOrLargeText(sizeCategory) {
-                ScrollView {
-                    Card
-                        .frame(idealHeight: 300)
-                }
-                .scrollIndicators(.hidden)
-            } else {
-                Card
-            }
-
-            if numberOfWords == .twentyFour {
-                DotMenuView(selected: tabIndex, size: 5, total: 2)
-            }
-
-            Spacer()
-
-            ImportButton
         }
         .animation(.easeInOut(duration: 0.25), value: keyboardObserver.keyboardIsShowing)
         .padding()
@@ -665,7 +590,7 @@ struct HotWalletImportScreen: View {
     }
 }
 
-private struct KeyboardToolbarShapeModifier: ViewModifier {
+struct KeyboardToolbarShapeModifier: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content

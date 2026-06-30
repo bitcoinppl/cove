@@ -59,112 +59,6 @@ struct EnterAmountView: View {
         exceedsBalance ? .statusWarning : .primary
     }
 
-    private var btcTextField: some View {
-        TextField("", text: $enteringBtcAmount)
-            .font(.system(size: 48, weight: .bold))
-            .foregroundColor(amountTextColor)
-            .multilineTextAlignment(.center)
-            .keyboardType(.decimalPad)
-            .minimumScaleFactor(0.01)
-            .lineLimit(1)
-            .scrollDisabled(true)
-            .offset(x: offset)
-            .padding(.horizontal, 30)
-            .focused($focusField, equals: .amount)
-            .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
-    }
-
-    private var fiatTextField: some View {
-        TextField("", text: $enteringFiatAmount)
-            .font(.system(size: 48, weight: .bold))
-            .foregroundColor(amountTextColor)
-            .multilineTextAlignment(.center)
-            .keyboardType(.decimalPad)
-            .minimumScaleFactor(0.01)
-            .lineLimit(1)
-            .scrollDisabled(true)
-            .offset(x: offset)
-            .padding(.horizontal, 30)
-            .focused($focusField, equals: .amount)
-            .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
-    }
-
-    private var unitSelector: some View {
-        HStack(spacing: 0) {
-            if metadata.fiatOrBtc == .btc {
-                Button(action: { showingMenu.toggle() }) {
-                    Text(manager.unit)
-                        .padding(.vertical, 10)
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .padding(.top, 2)
-                        .padding(.leading, 4)
-                }
-                .foregroundStyle(.primary)
-            }
-        }
-        .popover(isPresented: $showingMenu) {
-            unitPopoverContent
-        }
-    }
-
-    private var unitPopoverContent: some View {
-        VStack(alignment: .center, spacing: 0) {
-            Button(action: {
-                manager.dispatch(action: .updateUnit(.sat))
-                showingMenu = false
-            }) {
-                Text("sats")
-                    .frame(maxWidth: .infinity)
-                    .padding(12)
-                    .background(Color.clear)
-            }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-
-            Divider()
-
-            Button(action: {
-                manager.dispatch(action: .updateUnit(.btc))
-                showingMenu = false
-            }) {
-                Text("btc")
-                    .frame(maxWidth: .infinity)
-                    .padding(12)
-                    .background(Color.clear)
-            }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .frame(minWidth: 120, maxWidth: 200)
-        .presentationCompactAdaptation(.popover)
-        .foregroundStyle(.primary.opacity(0.8))
-        .contentShape(Rectangle())
-    }
-
-    private var secondaryAmountRow: some View {
-        HStack(spacing: 4) {
-            Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc)
-                .contentTransition(.numericText())
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            if metadata.fiatOrBtc == .fiat {
-                Text(manager.unit)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .onTapGesture {
-            if metadata.fiatOrBtc == .btc, app.prices == nil { return }
-            manager.dispatch(action: .toggleFiatOrBtc)
-        }
-    }
-
     private func handleBtcAmountChange(oldValue: String, newValue: String) {
         Log.debug("onChangeBTC \(oldValue) -> \(newValue) (\(sendFlowManager.enteringBtcAmount))")
 
@@ -212,14 +106,48 @@ struct EnterAmountView: View {
         previouslyExceeded = newValue
     }
 
+    private func selectSats() {
+        manager.dispatch(action: .updateUnit(.sat))
+        showingMenu = false
+    }
+
+    private func selectBtc() {
+        manager.dispatch(action: .updateUnit(.btc))
+        showingMenu = false
+    }
+
+    private func toggleSecondaryAmount() {
+        if metadata.fiatOrBtc == .btc, app.prices == nil { return }
+        manager.dispatch(action: .toggleFiatOrBtc)
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
                 switch metadata.fiatOrBtc {
-                case .btc: btcTextField
-                case .fiat: fiatTextField
+                case .btc:
+                    EnterAmountTextField(
+                        text: $enteringBtcAmount,
+                        amountTextColor: amountTextColor,
+                        offset: offset,
+                        focusField: $focusField
+                    )
+                case .fiat:
+                    EnterAmountTextField(
+                        text: $enteringFiatAmount,
+                        amountTextColor: amountTextColor,
+                        offset: offset,
+                        focusField: $focusField
+                    )
                 }
-                unitSelector
+
+                EnterAmountUnitSelector(
+                    unit: manager.unit,
+                    isPresented: $showingMenu,
+                    showsSelector: metadata.fiatOrBtc == .btc,
+                    selectSats: selectSats,
+                    selectBtc: selectBtc
+                )
             }
             .onChange(of: enteringBtcAmount, initial: false) { oldValue, newValue in
                 handleBtcAmountChange(oldValue: oldValue, newValue: newValue)
@@ -270,7 +198,125 @@ struct EnterAmountView: View {
                 handleExceedsBalanceChange(newValue: newValue)
             }
 
-            secondaryAmountRow
+            EnterAmountSecondaryAmountRow(
+                amount: metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc,
+                unit: manager.unit,
+                showsUnit: metadata.fiatOrBtc == .fiat,
+                toggleAmountUnit: toggleSecondaryAmount
+            )
         }
+    }
+}
+
+private struct EnterAmountTextField: View {
+    @Binding var text: String
+
+    let amountTextColor: Color
+    let offset: CGFloat
+    let focusField: FocusState<SendFlowPresenter.FocusField?>.Binding
+
+    var body: some View {
+        TextField("", text: $text)
+            .font(.system(size: 48, weight: .bold))
+            .foregroundColor(amountTextColor)
+            .multilineTextAlignment(.center)
+            .keyboardType(.decimalPad)
+            .minimumScaleFactor(0.01)
+            .lineLimit(1)
+            .scrollDisabled(true)
+            .offset(x: offset)
+            .padding(.horizontal, 30)
+            .focused(focusField, equals: .amount)
+            .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
+    }
+}
+
+private struct EnterAmountUnitSelector: View {
+    let unit: String
+    @Binding var isPresented: Bool
+    let showsSelector: Bool
+    let selectSats: () -> Void
+    let selectBtc: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if showsSelector {
+                Button(action: { isPresented.toggle() }) {
+                    Text(unit)
+                        .padding(.vertical, 10)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .padding(.top, 2)
+                        .padding(.leading, 4)
+                }
+                .foregroundStyle(.primary)
+            }
+        }
+        .popover(isPresented: $isPresented) {
+            EnterAmountUnitPopoverContent(
+                selectSats: selectSats,
+                selectBtc: selectBtc
+            )
+        }
+    }
+}
+
+private struct EnterAmountUnitPopoverContent: View {
+    let selectSats: () -> Void
+    let selectBtc: () -> Void
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 0) {
+            Button(action: selectSats) {
+                Text("sats")
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background(Color.clear)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+
+            Divider()
+
+            Button(action: selectBtc) {
+                Text("btc")
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background(Color.clear)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(minWidth: 120, maxWidth: 200)
+        .presentationCompactAdaptation(.popover)
+        .foregroundStyle(.primary.opacity(0.8))
+        .contentShape(Rectangle())
+    }
+}
+
+private struct EnterAmountSecondaryAmountRow: View {
+    let amount: String
+    let unit: String
+    let showsUnit: Bool
+    let toggleAmountUnit: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(amount)
+                .contentTransition(.numericText())
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            if showsUnit {
+                Text(unit)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .onTapGesture(perform: toggleAmountUnit)
     }
 }

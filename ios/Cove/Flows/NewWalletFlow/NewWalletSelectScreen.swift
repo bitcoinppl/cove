@@ -95,7 +95,12 @@ struct NewWalletSelectScreen: View {
                 isPresented: $showSelectDialog,
                 titleVisibility: .visible
             ) {
-                ConfirmationDialogContent
+                NewWalletSelectConfirmationDialogContent(
+                    qrRoute: routeFactory.qrImport(),
+                    importFile: { isImporting = true },
+                    scanNfc: scanNfc,
+                    pasteWallet: pasteWallet
+                )
             }
 
             if nfcCalled {
@@ -178,37 +183,43 @@ struct NewWalletSelectScreen: View {
         }
     }
 
-    @ViewBuilder
-    var ConfirmationDialogContent: some View {
-        NavigationLink(value: routeFactory.qrImport()) {
+    private func scanNfc() {
+        app.nfcReader.scan()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation {
+                nfcCalled = true
+            }
+        }
+    }
+
+    private func pasteWallet() {
+        let text = UIPasteboard.general.string ?? ""
+        if text.isEmpty {
+            alert = AlertItem(
+                type: .error("No text found on the clipboard.")
+            )
+            return
+        }
+
+        newWalletFromXpub(text)
+    }
+}
+
+private struct NewWalletSelectConfirmationDialogContent: View {
+    let qrRoute: Route
+    let importFile: () -> Void
+    let scanNfc: () -> Void
+    let pasteWallet: () -> Void
+
+    var body: some View {
+        NavigationLink(value: qrRoute) {
             Text("QR Code")
         }
 
-        Button("File") {
-            isImporting = true
-        }
-
-        Button("NFC") {
-            app.nfcReader.scan()
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                withAnimation {
-                    nfcCalled = true
-                }
-            }
-        }
-
-        Button("Paste") {
-            let text = UIPasteboard.general.string ?? ""
-            if text.isEmpty {
-                alert = AlertItem(
-                    type: .error("No text found on the clipboard.")
-                )
-                return
-            }
-
-            newWalletFromXpub(text)
-        }
+        Button("File", action: importFile)
+        Button("NFC", action: scanNfc)
+        Button("Paste", action: pasteWallet)
     }
 }
 

@@ -61,30 +61,12 @@ struct VerificationSection: View {
             if let report {
                 verifiedSection(report)
             } else {
-                passkeyConfirmedSection
+                CloudBackupPasskeyConfirmedSection(manager: manager, isBusy: isBusy)
             }
         case .awaitingUploadConfirmation:
-            passkeyConfirmedSection
+            CloudBackupPasskeyConfirmedSection(manager: manager, isBusy: isBusy)
         case let .failed(failure):
             failureSection(failure)
-        }
-    }
-
-    private var passkeyConfirmedSection: some View {
-        Section {
-            Label("Passkey verified", systemImage: "checkmark.shield.fill")
-                .foregroundStyle(Color.statusSuccess)
-
-            Text("Your stored passkey is valid. Run a full verification to confirm wallet backups can be decrypted.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Button {
-                manager.startVerification()
-            } label: {
-                Label("Run Full Verification", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
         }
     }
 
@@ -120,7 +102,7 @@ struct VerificationSection: View {
             }
         }
 
-        actionButtons
+        CloudBackupVerificationActionButtons(manager: manager, isBusy: isBusy)
     }
 
     private func verifiedSummary(_ report: DeepVerificationReport) -> String? {
@@ -175,7 +157,7 @@ struct VerificationSection: View {
             .foregroundStyle(Color.statusWarning)
 
         retryButton(retryContext: retryContext)
-        repairPasskeyButton
+        CloudBackupRepairPasskeyButton(manager: manager, isBusy: isBusy)
     }
 
     @ViewBuilder
@@ -247,47 +229,6 @@ struct VerificationSection: View {
         .disabled(isBusy)
     }
 
-    private var actionButtons: some View {
-        Section {
-            if manager.detail?.needsSync.isEmpty == false {
-                syncButton
-            }
-
-            Button {
-                manager.startVerification()
-            } label: {
-                Label("Verify Again", systemImage: "checkmark.shield")
-            }
-            .disabled(isBusy)
-        }
-    }
-
-    private var syncButton: some View {
-        Group {
-            Button {
-                manager.dispatch(action: .syncUnsynced)
-            } label: {
-                HStack {
-                    if case .syncing = manager.syncState {
-                        ProgressView()
-                            .padding(.trailing, 8)
-                        Text("Syncing...")
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("Sync Now")
-                    }
-                }
-            }
-            .disabled(manager.syncState == .syncing)
-
-            if case let .failed(error) = manager.syncState {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color.statusError)
-            }
-        }
-    }
-
     private func retryButton(retryContext: CloudBackupRetryContext?) -> some View {
         Button {
             if retryContext?.action == .verifyDiscoverable {
@@ -300,8 +241,84 @@ struct VerificationSection: View {
         }
         .disabled(isBusy)
     }
+}
 
-    private var repairPasskeyButton: some View {
+private struct CloudBackupPasskeyConfirmedSection: View {
+    let manager: CloudBackupManager
+    let isBusy: Bool
+
+    var body: some View {
+        Section {
+            Label("Passkey verified", systemImage: "checkmark.shield.fill")
+                .foregroundStyle(Color.statusSuccess)
+
+            Text("Your stored passkey is valid. Run a full verification to confirm wallet backups can be decrypted.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                manager.startVerification()
+            } label: {
+                Label("Run Full Verification", systemImage: "checkmark.shield")
+            }
+            .disabled(isBusy)
+        }
+    }
+}
+
+private struct CloudBackupVerificationActionButtons: View {
+    let manager: CloudBackupManager
+    let isBusy: Bool
+
+    var body: some View {
+        Section {
+            if manager.detail?.needsSync.isEmpty == false {
+                CloudBackupVerificationSyncButton(manager: manager)
+            }
+
+            Button {
+                manager.startVerification()
+            } label: {
+                Label("Verify Again", systemImage: "checkmark.shield")
+            }
+            .disabled(isBusy)
+        }
+    }
+}
+
+private struct CloudBackupVerificationSyncButton: View {
+    let manager: CloudBackupManager
+
+    var body: some View {
+        Button {
+            manager.dispatch(action: .syncUnsynced)
+        } label: {
+            HStack {
+                if case .syncing = manager.syncState {
+                    ProgressView()
+                        .padding(.trailing, 8)
+                    Text("Syncing...")
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("Sync Now")
+                }
+            }
+        }
+        .disabled(manager.syncState == .syncing)
+
+        if case let .failed(error) = manager.syncState {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(Color.statusError)
+        }
+    }
+}
+
+private struct CloudBackupRepairPasskeyButton: View {
+    let manager: CloudBackupManager
+    let isBusy: Bool
+
+    var body: some View {
         Button {
             manager.dispatch(action: .repairPasskeyNoDiscovery)
         } label: {

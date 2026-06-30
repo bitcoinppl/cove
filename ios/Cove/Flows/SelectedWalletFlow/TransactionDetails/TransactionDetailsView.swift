@@ -51,315 +51,12 @@ struct TransactionDetailsView: View {
         self.manager = manager
     }
 
-    var headerIcon: HeaderIcon {
-        HeaderIcon(
-            isSent: transactionDetails.isSent(),
-            isConfirmed: transactionDetails.isConfirmed(),
-            numberOfConfirmations: numberOfConfirmations
-        )
-    }
-
     var metadata: WalletMetadata {
         manager.walletMetadata
     }
 
     var detailsExpanded: Bool {
         metadata.detailsExpanded
-    }
-
-    @ViewBuilder
-    var ReceivedDetails: some View {
-        VStack {
-            headerIcon
-
-            VStack(spacing: 4) {
-                Text(
-                    transactionDetails.isConfirmed()
-                        ? "Transaction Received" : "Transaction Pending"
-                )
-                .font(.title)
-                .fontWeight(.semibold)
-                .padding(.top, 8)
-
-                // add, edit, remove label
-                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
-            }
-        }
-
-        // confirmed
-        if transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction was successfully received")
-                    .foregroundColor(.secondary)
-
-                Text(transactionDetails.confirmationDateTime() ?? "Unknown")
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        // pending
-        if !transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction is pending. ")
-                    .foregroundColor(.secondary)
-
-                Text("Please check back soon for an update.")
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        VStack(spacing: 8) {
-            Text(transactionDetails.displayAmount(metadata: metadata))
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top, 12)
-
-            AsyncView(
-                cachedValue: transactionDetails.amountFiatFmtCached(),
-                operation: transactionDetails.amountFiatFmt
-            ) { amount in
-                Text(amount).foregroundStyle(.primary.opacity(0.8))
-            }
-        }
-
-        Group {
-            if transactionDetails.isConfirmed() {
-                TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .statusSuccess)
-            } else {
-                TransactionCapsule(
-                    text: "Receiving", icon: "arrow.down.left",
-                    color: .coolGray, textColor: .black.opacity(0.8)
-                )
-            }
-        }
-        .padding(.top, 12)
-
-        TransactionLockControl
-
-        // confirmations pills
-        if let confirmations = numberOfConfirmations, confirmations < 3 {
-            VStack {
-                Divider().padding(.vertical, 18)
-                ConfirmationIndicatorView(current: confirmations)
-            }
-            .padding(.horizontal, detailsExpandedPadding)
-        }
-
-        // MARK: Received Details Expanded
-
-        if metadata.detailsExpanded {
-            ReceivedDetailsExpandedView(
-                manager: manager, transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations
-            )
-        }
-    }
-
-    @ViewBuilder
-    var SentDetails: some View {
-        VStack {
-            headerIcon
-
-            VStack(spacing: 4) {
-                Text(transactionDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
-                    .font(.title)
-                    .fontWeight(.semibold)
-                    .padding(.top, 6)
-
-                // add, edit, remove label
-                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
-            }
-        }
-
-        // confirmed
-        if transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction was sent on")
-                    .foregroundColor(.secondary)
-
-                Text(transactionDetails.confirmationDateTime() ?? "Unknown")
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        // pending
-        if !transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction is pending. ")
-                    .foregroundColor(.secondary)
-
-                Text("Please check back soon for an update.")
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        VStack(spacing: 8) {
-            Text(transactionDetails.displayAmount(metadata: metadata))
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top, 12)
-
-            AsyncView(
-                cachedValue: transactionDetails.amountFiatFmtCached(),
-                operation: transactionDetails.amountFiatFmt
-            ) { amount in
-                Text(amount).foregroundStyle(.primary.opacity(0.8))
-            }
-        }
-
-        Group {
-            if transactionDetails.isConfirmed() {
-                TransactionCapsule(
-                    text: "Sent", icon: "arrow.up.right",
-                    color: .black, textColor: .white
-                )
-            } else {
-                TransactionCapsule(
-                    text: "Sending", icon: "arrow.up.right",
-                    color: .coolGray, textColor: .black.opacity(0.8)
-                )
-            }
-        }
-        .padding(.top, 12)
-
-        TransactionLockControl
-
-        if let confirmations = numberOfConfirmations, confirmations < 3 {
-            VStack {
-                Divider().padding(.vertical, 18)
-                ConfirmationIndicatorView(current: confirmations)
-            }
-            .padding(.horizontal, detailsExpandedPadding)
-        }
-
-        if metadata.detailsExpanded {
-            SentDetailsExpandedView(
-                manager: manager, transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations
-            )
-        }
-    }
-
-    @ViewBuilder
-    var TransactionLockControl: some View {
-        if lockStateLoadError != nil {
-            transactionLockControlContent(
-                title: String(localized: "Unable to load lock state"),
-                buttonTitle: String(localized: "Retry"),
-                systemImage: "arrow.clockwise",
-                action: { Task { await refreshTransactionLockState() } }
-            )
-        } else {
-            switch lockState {
-            case .some(.none), nil:
-                EmptyView()
-            case .some(.unlocked), .some(.locked), .some(.mixed):
-                transactionLockControlContent(
-                    title: lockStateText,
-                    buttonTitle: isUpdatingLockState
-                        ? String(localized: "Updating...")
-                        : lockStateButtonText,
-                    systemImage: lockStateButtonIcon,
-                    isUpdating: isUpdatingLockState,
-                    action: {
-                        guard !isUpdatingLockState else { return }
-
-                        isUpdatingLockState = true
-                        Task { await toggleTransactionLockState() }
-                    }
-                )
-            }
-        }
-    }
-
-    func transactionLockControlContent(
-        title: String,
-        buttonTitle: String,
-        systemImage: String,
-        isUpdating: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-            }
-
-            Button(action: action) {
-                HStack(spacing: 6) {
-                    if isUpdating {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else {
-                        Image(systemName: systemImage)
-                            .font(.footnote.weight(.semibold))
-                    }
-
-                    Text(buttonTitle)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.systemGray5)
-                .foregroundStyle(.primary)
-                .clipShape(Capsule())
-                .opacity(isUpdating ? 0.72 : 1)
-            }
-            .buttonStyle(.plain)
-            .disabled(isUpdating)
-        }
-        .padding(.top, 2)
-    }
-
-    var lockStateText: String {
-        switch lockState {
-        case .some(.locked):
-            String(localized: "Locked")
-        case .some(.mixed):
-            String(localized: "Mixed")
-        case .some(.unlocked):
-            String(localized: "Unlocked")
-        case .some(.none), nil:
-            ""
-        }
-    }
-
-    var lockStateButtonText: String {
-        switch lockState {
-        case .some(.locked):
-            String(localized: "Unlock Transaction")
-        case .some(.mixed):
-            String(localized: "Lock Transaction")
-        case .some(.unlocked):
-            String(localized: "Lock Transaction")
-        case .some(.none), nil:
-            ""
-        }
-    }
-
-    var lockStateButtonIcon: String {
-        switch lockState {
-        case .some(.locked):
-            "lock.open"
-        case .some(.mixed), .some(.unlocked):
-            "lock"
-        case .some(.none), nil:
-            "lock"
-        }
     }
 
     func ContentScrollView(content: @escaping () -> some View) -> some View {
@@ -383,6 +80,17 @@ struct TransactionDetailsView: View {
         }
     }
 
+    private func retryTransactionLockState() {
+        Task { await refreshTransactionLockState() }
+    }
+
+    private func beginToggleTransactionLockState() {
+        guard !isUpdatingLockState else { return }
+
+        isUpdatingLockState = true
+        Task { await toggleTransactionLockState() }
+    }
+
     var body: some View {
         ContentScrollView {
             VStack(spacing: 24) {
@@ -390,9 +98,29 @@ struct TransactionDetailsView: View {
 
                 Group {
                     if transactionDetails.isReceived() {
-                        ReceivedDetails
+                        TransactionReceivedDetailsSection(
+                            transactionDetails: transactionDetails,
+                            manager: manager,
+                            metadata: metadata,
+                            numberOfConfirmations: numberOfConfirmations,
+                            lockState: lockState,
+                            isUpdatingLockState: isUpdatingLockState,
+                            lockStateLoadError: lockStateLoadError,
+                            retryLockState: retryTransactionLockState,
+                            toggleLockState: beginToggleTransactionLockState
+                        )
                     } else {
-                        SentDetails
+                        TransactionSentDetailsSection(
+                            transactionDetails: transactionDetails,
+                            manager: manager,
+                            metadata: metadata,
+                            numberOfConfirmations: numberOfConfirmations,
+                            lockState: lockState,
+                            isUpdatingLockState: isUpdatingLockState,
+                            lockStateLoadError: lockStateLoadError,
+                            retryLockState: retryTransactionLockState,
+                            toggleLockState: beginToggleTransactionLockState
+                        )
                     }
                 }
 

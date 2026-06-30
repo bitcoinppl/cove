@@ -57,64 +57,6 @@ struct WalletBalanceHeaderView: View {
         app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
     }
 
-    @ViewBuilder
-    private var primaryBalanceView: some View {
-        if !metadata.sensitiveVisible {
-            Text("••••••")
-        } else if metadata.fiatOrBtc == .fiat {
-            if let fiatBalance {
-                Text(manager.displayFiatAmount(fiatBalance))
-            } else {
-                ProgressView()
-                    .tint(.white.opacity(balancePresentation.primaryOpacity))
-            }
-        } else {
-            Text(manager.amountFmtUnit(balance))
-        }
-    }
-
-    @ViewBuilder
-    private var secondaryBalanceView: some View {
-        if !metadata.sensitiveVisible {
-            Text("••••••")
-        } else if metadata.fiatOrBtc == .btc {
-            if let fiatBalance {
-                Text(manager.displayFiatAmount(fiatBalance))
-            } else {
-                ProgressView()
-                    .tint(.white.opacity(balancePresentation.secondaryOpacity))
-                    .scaleEffect(0.7)
-            }
-        } else {
-            Text(manager.amountFmtUnit(balance))
-        }
-    }
-
-    @ViewBuilder
-    private var pendingBalanceView: some View {
-        let pending = manager.balance.untrustedPending()
-
-        if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
-           let pendingStr = manager.displayFiatAmountPendingFmt(fiatPendingBalance)
-        {
-            HStack {
-                Text(pendingStr)
-                    .foregroundColor(.white.opacity(balancePresentation.pendingOpacity))
-                    .font(.footnote)
-                    .padding(.leading, 2)
-                Spacer()
-            }
-        } else if let pendingStr = manager.displayAmountPendingFmt(pending) {
-            HStack {
-                Text(pendingStr)
-                    .foregroundColor(.white.opacity(balancePresentation.pendingOpacity))
-                    .font(.footnote)
-                    .padding(.leading, 2)
-                Spacer()
-            }
-        }
-    }
-
     var eyeIcon: String {
         metadata.sensitiveVisible ? "eye" : "eye.slash"
     }
@@ -139,20 +81,32 @@ struct WalletBalanceHeaderView: View {
         VStack(spacing: 28) {
             VStack(spacing: 6) {
                 HStack {
-                    secondaryBalanceView
-                        .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
-                        .font(.footnote)
-                        .padding(.leading, 2)
-                        .contentTransition(.numericText())
+                    WalletBalanceSecondaryView(
+                        balance: balance,
+                        fiatBalance: fiatBalance,
+                        metadata: metadata,
+                        manager: manager,
+                        opacity: balancePresentation.secondaryOpacity
+                    )
+                    .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
+                    .font(.footnote)
+                    .padding(.leading, 2)
+                    .contentTransition(.numericText())
 
                     Spacer()
                 }
 
                 HStack {
-                    primaryBalanceView
-                        .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
-                        .font(.system(size: fontSize, weight: .bold))
-                        .contentTransition(.numericText())
+                    WalletBalancePrimaryView(
+                        balance: balance,
+                        fiatBalance: fiatBalance,
+                        metadata: metadata,
+                        manager: manager,
+                        opacity: balancePresentation.primaryOpacity
+                    )
+                    .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
+                    .font(.system(size: fontSize, weight: .bold))
+                    .contentTransition(.numericText())
 
                     Spacer()
 
@@ -161,7 +115,13 @@ struct WalletBalanceHeaderView: View {
                         .onTapGesture { updater(.toggleSensitiveVisibility) }
                 }
 
-                pendingBalanceView
+                WalletBalancePendingView(
+                    pending: manager.balance.untrustedPending(),
+                    fiatPendingBalance: fiatPendingBalance,
+                    metadata: metadata,
+                    manager: manager,
+                    opacity: balancePresentation.pendingOpacity
+                )
             }
             .onTapGesture {
                 manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
@@ -237,6 +197,81 @@ struct WalletBalanceHeaderView: View {
             // recalculate fiat when prices are loaded/updated
             fiatBalance = manager.amountInFiatCached(balance)
             fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
+        }
+    }
+}
+
+private struct WalletBalancePrimaryView: View {
+    let balance: Amount
+    let fiatBalance: Double?
+    let metadata: WalletMetadata
+    let manager: WalletManager
+    let opacity: Double
+
+    var body: some View {
+        if !metadata.sensitiveVisible {
+            Text("••••••")
+        } else if metadata.fiatOrBtc == .fiat {
+            if let fiatBalance {
+                Text(manager.displayFiatAmount(fiatBalance))
+            } else {
+                ProgressView()
+                    .tint(.white.opacity(opacity))
+            }
+        } else {
+            Text(manager.amountFmtUnit(balance))
+        }
+    }
+}
+
+private struct WalletBalanceSecondaryView: View {
+    let balance: Amount
+    let fiatBalance: Double?
+    let metadata: WalletMetadata
+    let manager: WalletManager
+    let opacity: Double
+
+    var body: some View {
+        if !metadata.sensitiveVisible {
+            Text("••••••")
+        } else if metadata.fiatOrBtc == .btc {
+            if let fiatBalance {
+                Text(manager.displayFiatAmount(fiatBalance))
+            } else {
+                ProgressView()
+                    .tint(.white.opacity(opacity))
+                    .scaleEffect(0.7)
+            }
+        } else {
+            Text(manager.amountFmtUnit(balance))
+        }
+    }
+}
+
+private struct WalletBalancePendingView: View {
+    let pending: Amount
+    let fiatPendingBalance: Double?
+    let metadata: WalletMetadata
+    let manager: WalletManager
+    let opacity: Double
+
+    var body: some View {
+        if metadata.fiatOrBtc == .fiat, let fiatPendingBalance,
+           let pendingStr = manager.displayFiatAmountPendingFmt(fiatPendingBalance)
+        {
+            pendingText(pendingStr)
+        } else if let pendingStr = manager.displayAmountPendingFmt(pending) {
+            pendingText(pendingStr)
+        }
+    }
+
+    private func pendingText(_ pendingStr: String) -> some View {
+        HStack {
+            Text(pendingStr)
+                .foregroundColor(.white.opacity(opacity))
+                .font(.footnote)
+                .padding(.leading, 2)
+            Spacer()
         }
     }
 }

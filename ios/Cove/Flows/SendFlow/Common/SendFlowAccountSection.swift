@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SendFlowAccountSection: View {
     let manager: WalletManager
+    let showsTitle: Bool = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -17,30 +18,46 @@ struct SendFlowAccountSection: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                if metadata.walletType == .hot {
-                    Image(systemName: "bitcoinsign")
-                        .font(.title2)
-                        .foregroundColor(.orange)
-                        .padding(.trailing, 6)
-                }
-
-                if case .cold = metadata.walletType {
-                    BitcoinShieldIcon(width: 24, color: .orange)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(metadata.identOrFingerprint())
+                if showsTitle {
+                    Text("Account")
                         .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .fontWeight(.medium)
-                        .foregroundColor(.secondary)
 
-                    Text(metadata.name)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
+                    Spacer()
                 }
 
-                Spacer()
+                accountIdentity
+
+                if !showsTitle {
+                    Spacer()
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var accountIdentity: some View {
+        if metadata.walletType == .hot {
+            Image(systemName: "bitcoinsign")
+                .font(.title2)
+                .foregroundColor(.orange)
+                .padding(.trailing, 6)
+        }
+
+        if case .cold = metadata.walletType {
+            BitcoinShieldIcon(width: 24, color: .orange)
+        }
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text(metadata.identOrFingerprint())
+                .font(.footnote)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+
+            Text(metadata.name)
+                .font(.footnote)
+                .fontWeight(.semibold)
         }
     }
 }
@@ -48,7 +65,8 @@ struct SendFlowAccountSection: View {
 #Preview {
     AsyncPreview {
         SendFlowAccountSection(
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: "preview_only"),
+            showsTitle: false
         )
     }
 }

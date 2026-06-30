@@ -34,43 +34,6 @@ struct MiddlePopupView: View {
         state == .loading
     }
 
-    @ViewBuilder
-    var HeadingIcon: some View {
-        switch state {
-        case .initial:
-            EmptyView()
-        case .loading:
-            EmptyView()
-        case .failure:
-            Image(systemName: "x.circle.fill")
-                .font(.title)
-                .foregroundColor(.red)
-        case .success:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title)
-                .foregroundColor(.green)
-        }
-    }
-
-    @ViewBuilder
-    var Heading: some View {
-        let headingFromState =
-            switch state {
-            case .initial:
-                ""
-            case .loading:
-                ""
-            case .failure:
-                "Something went wrong"
-            case .success:
-                "You're all set"
-            }
-
-        Text(heading ?? headingFromState)
-            .foregroundColor(.primary)
-            .font(.headline)
-    }
-
     var popupMessage: String {
         let messageFromState =
             switch state {
@@ -90,10 +53,7 @@ struct MiddlePopupView: View {
     var body: some View {
         VStack(spacing: 16) {
             if !isLoading {
-                VStack(spacing: 12) {
-                    HeadingIcon
-                    Heading
-                }
+                MiddlePopupHeading(state: state, heading: heading)
 
                 Text(popupMessage)
                     .font(.footnote)
@@ -132,6 +92,52 @@ struct MiddlePopupView: View {
         .padding(18)
         .background(.coveBg)
         .cornerRadius(10)
+    }
+}
+
+private struct MiddlePopupHeading: View {
+    let state: PopupState
+    let heading: String?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            icon
+
+            Text(heading ?? defaultHeading)
+                .foregroundColor(.primary)
+                .font(.headline)
+        }
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch state {
+        case .initial:
+            EmptyView()
+        case .loading:
+            EmptyView()
+        case .failure:
+            Image(systemName: "x.circle.fill")
+                .font(.title)
+                .foregroundColor(.red)
+        case .success:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title)
+                .foregroundColor(.green)
+        }
+    }
+
+    private var defaultHeading: String {
+        switch state {
+        case .initial:
+            ""
+        case .loading:
+            ""
+        case .failure:
+            "Something went wrong"
+        case .success:
+            "You're all set"
+        }
     }
 }
 

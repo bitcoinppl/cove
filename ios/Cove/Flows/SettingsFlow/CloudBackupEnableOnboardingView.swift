@@ -37,21 +37,31 @@ struct CloudBackupEnableOnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            cancelButton
+            CloudBackupEnableCancelButton(isBusy: isBusy, onCancel: onCancel)
 
             ScrollView {
                 VStack(spacing: 24) {
                     Spacer().frame(height: 8)
-                    headerIcon
-                    titleSection
+                    CloudBackupEnableHeaderIcon()
+                    CloudBackupEnableTitleSection()
 
                     Divider().overlay(Color.coveLightGray.opacity(0.50))
-                    infoCard
+                    CloudBackupEnableInfoCard(bodyText: infoCardBody)
                     if let message {
                         OnboardingInlineMessage(text: message)
                     }
-                    checkboxSection
-                    enableButton
+                    CloudBackupEnableCheckboxSection(
+                        checks: $checks,
+                        firstText: firstCheckboxText,
+                        secondText: secondCheckboxText,
+                        thirdText: thirdCheckboxText
+                    )
+                    CloudBackupEnableButton(
+                        title: primaryButtonTitle,
+                        allChecked: allChecked,
+                        isBusy: isBusy,
+                        onEnable: onEnable
+                    )
 
                     Spacer().frame(height: 16)
                 }
@@ -59,125 +69,8 @@ struct CloudBackupEnableOnboardingView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(backgroundView)
+        .background(CloudBackupEnableBackground())
         .allowsHitTesting(!isBusy)
-    }
-
-    private var cancelButton: some View {
-        HStack {
-            Spacer()
-            Button("Cancel") { onCancel() }
-                .foregroundStyle(.white)
-                .font(.headline)
-                .disabled(isBusy)
-        }
-        .padding(.horizontal)
-        .padding(.top)
-    }
-
-    private var headerIcon: some View {
-        ZStack {
-            Circle()
-                .fill(Color.duskBlue.opacity(0.4))
-                .frame(width: 100, height: 100)
-                .shadow(
-                    color: Color(red: 0.165, green: 0.353, blue: 0.545).opacity(0.5),
-                    radius: 30
-                )
-
-            Circle()
-                .stroke(
-                    LinearGradient(
-                        colors: [.btnGradientLight, .btnGradientDark],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 2
-                )
-                .frame(width: 100, height: 100)
-
-            Image(systemName: "icloud.and.arrow.up")
-                .font(.system(size: 36, weight: .medium))
-                .foregroundStyle(.white)
-        }
-    }
-
-    private var titleSection: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text("Cloud Backup")
-                    .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(.white)
-                Spacer()
-            }
-
-            HStack {
-                Text("Cloud Backup is end-to-end encrypted before it leaves your device and stored in iCloud, secured by a passkey that only you control.")
-                    .font(.footnote)
-                    .foregroundStyle(.coveLightGray.opacity(0.75))
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-            }
-        }
-    }
-
-    private var infoCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "person.badge.key")
-                    .font(.title3)
-                    .foregroundStyle(Color.btnGradientLight)
-                    .frame(width: 40, height: 40)
-                    .background(Color.btnGradientLight.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("How It Works")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-
-                    Text("Secured with Passkey + iCloud")
-                        .font(.caption)
-                        .foregroundStyle(.coveLightGray.opacity(0.75))
-                }
-
-                Spacer()
-            }
-
-            Text(infoCardBody)
-                .font(.caption)
-                .foregroundStyle(.coveLightGray.opacity(0.60))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.duskBlue.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.coveLightGray.opacity(0.15), lineWidth: 1)
-        )
-    }
-
-    private var checkboxSection: some View {
-        VStack(spacing: 6) {
-            Toggle(isOn: $checks[0]) {
-                Text(firstCheckboxText)
-            }
-            .toggleStyle(DarkCheckboxToggleStyle())
-
-            Toggle(isOn: $checks[1]) {
-                Text(secondCheckboxText)
-            }
-            .toggleStyle(DarkCheckboxToggleStyle())
-
-            Toggle(isOn: $checks[2]) {
-                Text(thirdCheckboxText)
-            }
-            .toggleStyle(DarkCheckboxToggleStyle())
-        }
     }
 
     private var infoCardBody: String {
@@ -207,19 +100,168 @@ struct CloudBackupEnableOnboardingView: View {
             "I understand that Cloud Backup does not replace the offline backup for my hardware wallet seed or recovery phrase."
         }
     }
+}
 
-    private var enableButton: some View {
+struct CloudBackupEnableCancelButton: View {
+    let isBusy: Bool
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+
+            Button("Cancel", action: onCancel)
+                .foregroundStyle(.white)
+                .font(.headline)
+                .disabled(isBusy)
+        }
+        .padding(.horizontal)
+        .padding(.top)
+    }
+}
+
+struct CloudBackupEnableHeaderIcon: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.duskBlue.opacity(0.4))
+                .frame(width: 100, height: 100)
+                .shadow(
+                    color: Color(red: 0.165, green: 0.353, blue: 0.545).opacity(0.5),
+                    radius: 30
+                )
+
+            Circle()
+                .stroke(
+                    LinearGradient(
+                        colors: [.btnGradientLight, .btnGradientDark],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 2
+                )
+                .frame(width: 100, height: 100)
+
+            Image(systemName: "icloud.and.arrow.up")
+                .font(.system(size: 36, weight: .medium))
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+struct CloudBackupEnableTitleSection: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Cloud Backup")
+                    .font(.system(size: 38, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                Spacer()
+            }
+
+            HStack {
+                Text("Cloud Backup is end-to-end encrypted before it leaves your device and stored in iCloud, secured by a passkey that only you control.")
+                    .font(.footnote)
+                    .foregroundStyle(.coveLightGray.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer()
+            }
+        }
+    }
+}
+
+struct CloudBackupEnableInfoCard: View {
+    let bodyText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "person.badge.key")
+                    .font(.title3)
+                    .foregroundStyle(Color.btnGradientLight)
+                    .frame(width: 40, height: 40)
+                    .background(Color.btnGradientLight.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("How It Works")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+
+                    Text("Secured with Passkey + iCloud")
+                        .font(.caption)
+                        .foregroundStyle(.coveLightGray.opacity(0.75))
+                }
+
+                Spacer()
+            }
+
+            Text(bodyText)
+                .font(.caption)
+                .foregroundStyle(.coveLightGray.opacity(0.60))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.duskBlue.opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.coveLightGray.opacity(0.15), lineWidth: 1)
+        )
+    }
+}
+
+struct CloudBackupEnableCheckboxSection: View {
+    @Binding var checks: [Bool]
+    let firstText: String
+    let secondText: String
+    let thirdText: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Toggle(isOn: $checks[0]) {
+                Text(firstText)
+            }
+            .toggleStyle(DarkCheckboxToggleStyle())
+
+            Toggle(isOn: $checks[1]) {
+                Text(secondText)
+            }
+            .toggleStyle(DarkCheckboxToggleStyle())
+
+            Toggle(isOn: $checks[2]) {
+                Text(thirdText)
+            }
+            .toggleStyle(DarkCheckboxToggleStyle())
+        }
+    }
+}
+
+struct CloudBackupEnableButton: View {
+    let title: String
+    let allChecked: Bool
+    let isBusy: Bool
+    let onEnable: () -> Void
+
+    var body: some View {
         Button {
             if allChecked { onEnable() }
         } label: {
-            Text(primaryButtonTitle)
+            Text(title)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
         .disabled(!allChecked || isBusy)
         .animation(.easeInOut(duration: 0.2), value: allChecked)
     }
+}
 
-    private var backgroundView: some View {
+struct CloudBackupEnableBackground: View {
+    var body: some View {
         ZStack {
             Color.midnightBlue
 

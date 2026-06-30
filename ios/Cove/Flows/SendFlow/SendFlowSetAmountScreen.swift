@@ -135,7 +135,7 @@ struct SendFlowSetAmountScreen: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         // Set amount, header and text
-                        AmountInfoSection
+                        SendFlowAmountInfoSection()
 
                         // Amount input
                         EnterAmountView(sendFlowManager: sendFlowManager)
@@ -148,25 +148,45 @@ struct SendFlowSetAmountScreen: View {
                         }
 
                         // Account Section
-                        AccountSection
+                        SendFlowAccountSection(manager: manager, showsTitle: true)
 
                         if sendFlowManager.feeSelection != nil,
                            sendFlowManager.address != nil
                         {
                             // Network Fee Section
-                            NetworkFeeSection
+                            SendFlowNetworkFeeSection(
+                                selectedFeeRate: selectedFeeRate,
+                                totalFeeString: totalFeeString,
+                                showFeeSelection: showFeeSelection
+                            )
 
                             // Total Spending Section
-                            TotalSpendingSection
+                            SendFlowTotalSpendingSection(
+                                totalSpentBtc: totalSpentBtc,
+                                totalSpentInFiat: totalSpentInFiat
+                            )
 
                             // Next Button
-                            NextButtonBottom
+                            SendFlowNextButton(action: next)
                         }
                     }
 
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
-                            ToolBarView
+                            SendFlowSetAmountToolbar(
+                                focusField: presenter.focusField,
+                                addressIsEmpty: address.wrappedValue.isEmpty,
+                                addressIsValid: validateAddress(),
+                                amountIsValid: validateAmount(),
+                                focusAddress: { presenter.focusField = .address },
+                                focusAmount: { presenter.focusField = .amount },
+                                selectMax: setMaxSelected,
+                                clearAmount: clearSendAmount,
+                                pasteAddress: pasteAddress,
+                                showQrScanner: { presenter.sheetState = TaggedItem(.qr) },
+                                clearAddress: clearAddress,
+                                dismissIfValid: dismissIfValid
+                            )
                         }
                     }
                 }
@@ -332,6 +352,26 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.dispatch(action: .clearAddress)
     }
 
+    private func pasteAddress() {
+        let address = UIPasteboard.general.string ?? ""
+        sendFlowManager.dispatch(action: .changeEnteringAddress(address))
+
+        if address.isEmpty { return }
+        if !validateAddress() { return }
+        if !validateAmount() {
+            presenter.focusField = .amount
+            return
+        }
+
+        presenter.focusField = .none
+    }
+
+    private func showFeeSelection() {
+        selectedPresentationDetent =
+            if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
+        presenter.sheetState = TaggedItem(.fee)
+    }
+
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
         Log.debug(
             "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))"
@@ -341,238 +381,6 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.dispatch(
             action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item)
         )
-    }
-
-    var AmountKeyboardToolbar: some View {
-        HStack {
-            Group {
-                if address.wrappedValue.isEmpty {
-                    Button(action: { presenter.focusField = .address }) {
-                        Text("Next")
-                    }
-                } else {
-                    Button(action: dismissIfValid) {
-                        Text("Done")
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Spacer()
-
-            Button(action: { setMaxSelected() }) {
-                Text("Max")
-                    .font(.callout)
-            }
-            .tint(.primary)
-            .buttonStyle(.bordered)
-
-            Button(action: { clearSendAmount() }) {
-                Label("Clear", systemImage: "xmark.circle")
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Button(action: dismissIfValid) {
-                Label("Done", systemImage: "keyboard.chevron.compact.down")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-        }
-    }
-
-    var AddressKeyboardToolbar: some View {
-        HStack {
-            Group {
-                if address.wrappedValue.isEmpty || !validateAddress() {
-                    Button(action: {
-                        let address = UIPasteboard.general.string ?? ""
-                        sendFlowManager.dispatch(action: .changeEnteringAddress(address))
-                        if address.isEmpty { return }
-                        if !validateAddress() { return }
-                        if !validateAmount() {
-                            presenter.focusField = .amount
-                            return
-                        }
-
-                        presenter.focusField = .none
-                    }) {
-                        Text("Paste")
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Group {
-                if validateAddress(), !validateAmount() {
-                    Button(action: { presenter.focusField = .amount }) {
-                        Text("Next")
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Button(action: { presenter.sheetState = TaggedItem(.qr) }) {
-                Label("QR", systemImage: "qrcode")
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Spacer()
-
-            Button(action: { clearAddress() }) {
-                Label("Clear", systemImage: "xmark.circle")
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Button(action: dismissIfValid) {
-                Label("Done", systemImage: "keyboard.chevron.compact.down")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-        }
-    }
-
-    @ViewBuilder
-    var ToolBarView: some View {
-        switch presenter.focusField {
-        case .amount: AmountKeyboardToolbar
-        case .address: AddressKeyboardToolbar
-        case .none: EmptyView()
-        }
-    }
-
-    var AmountInfoSection: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text("Enter amount")
-                    .font(.headline)
-                    .fontWeight(.bold)
-
-                Spacer()
-            }
-            .id(FocusField.amount)
-
-            HStack {
-                Text("How much would you like to send?")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary.opacity(0.80))
-                    .fontWeight(.medium)
-                Spacer()
-            }
-        }
-        .padding(.top)
-    }
-
-    var NetworkFeeSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Network Fee")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fontWeight(.medium)
-
-            HStack {
-                Text(selectedFeeRate?.duration() ?? "")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Button("Change speed") {
-                    selectedPresentationDetent =
-                        if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
-                    presenter.sheetState = TaggedItem(.fee)
-                }
-                .font(.caption2)
-                .foregroundColor(.blue)
-
-                Spacer()
-
-                AsyncText(text: totalFeeString, font: .footnote, color: .secondary, spinnerScale: 0.5)
-            }
-        }
-        .onTapGesture {
-            presenter.sheetState = TaggedItem(.fee)
-        }
-    }
-
-    var AccountSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Account")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fontWeight(.medium)
-
-                Spacer()
-
-                if metadata.walletType == .hot {
-                    Image(systemName: "bitcoinsign")
-                        .font(.title2)
-                        .foregroundColor(.orange)
-                        .padding(.trailing, 6)
-                }
-
-                if case .cold = metadata.walletType {
-                    BitcoinShieldIcon(width: 24, color: .orange)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(metadata.identOrFingerprint())
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .fontWeight(.medium)
-
-                    Text(metadata.name)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                }
-            }
-        }
-    }
-
-    var TotalSpendingSection: some View {
-        VStack {
-            HStack {
-                Text("Total Spending")
-                    .font(.footnote)
-                    .fontWeight(.semibold)
-
-                Spacer()
-
-                Text(totalSpentBtc)
-                    .multilineTextAlignment(.center)
-                    .font(.footnote)
-                    .fontWeight(.semibold)
-            }
-
-            HStack {
-                Spacer()
-                Text(totalSpentInFiat)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 1)
-        }
-    }
-
-    var NextButtonBottom: some View {
-        Button(action: next) {
-            Text("Next")
-                .font(.footnote)
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.midnightBtn)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-        }
-        .padding(.vertical, 10)
     }
 
     @ViewBuilder

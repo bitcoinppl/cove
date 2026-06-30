@@ -48,8 +48,15 @@ struct WordsView: View {
         Group {
             if sizeCategory >= .extraExtraLarge || isMiniDevice {
                 ScrollView {
-                    MainContent
-                        .frame(minHeight: screenHeight, maxHeight: .infinity)
+                    RecoveryWordsContent(
+                        groupedWords: groupedWords,
+                        tabIndex: $tabIndex,
+                        lastIndex: lastIndex,
+                        showConfirmationAlert: $showConfirmationAlert,
+                        saveWallet: saveWallet,
+                        dismiss: { dismiss() }
+                    )
+                    .frame(minHeight: screenHeight, maxHeight: .infinity)
                 }
                 .background(
                     Color.midnightBlue
@@ -57,12 +64,37 @@ struct WordsView: View {
                 )
 
             } else {
-                MainContent
+                RecoveryWordsContent(
+                    groupedWords: groupedWords,
+                    tabIndex: $tabIndex,
+                    lastIndex: lastIndex,
+                    showConfirmationAlert: $showConfirmationAlert,
+                    saveWallet: saveWallet,
+                    dismiss: { dismiss() }
+                )
             }
         }
     }
 
-    var MainContent: some View {
+    private func saveWallet() {
+        do {
+            let result = try manager.rust.saveWallet()
+            app.resetRoute(to: result.routes)
+        } catch {
+            Log.error("Error \(error)")
+        }
+    }
+}
+
+struct RecoveryWordsContent: View {
+    let groupedWords: [[GroupedWord]]
+    @Binding var tabIndex: Int
+    let lastIndex: Int
+    @Binding var showConfirmationAlert: Bool
+    let saveWallet: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
         VStack(spacing: 24) {
             StyledWordCard(tabIndex: $tabIndex) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
@@ -116,14 +148,7 @@ struct WordsView: View {
             VStack(spacing: 24) {
                 Group {
                     if tabIndex == lastIndex {
-                        Button(action: {
-                            do {
-                                let result = try manager.rust.saveWallet()
-                                app.resetRoute(to: result.routes)
-                            } catch {
-                                Log.error("Error \(error)")
-                            }
-                        }) {
+                        Button(action: saveWallet) {
                             Text("Save Wallet")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
