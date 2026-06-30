@@ -708,6 +708,7 @@ mod tests {
     use cove_types::fees::{
         FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed,
     };
+    use cove_types::utxo::{UtxoList, ffi_preview::preview_new_utxo_list};
 
     use crate::{
         manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
@@ -785,6 +786,14 @@ mod tests {
         state.address = Some(Arc::new(Address::preview_new()));
     }
 
+    fn set_coin_control_mode(manager: &super::RustSendFlowManager) {
+        let utxo_list = Arc::new(UtxoList::from(preview_new_utxo_list(1, 0)));
+
+        let mut state = manager.state.lock();
+        state.metadata.selected_unit = super::BitcoinUnit::Sat;
+        state.mode = super::EnterMode::coin_control_max(utxo_list);
+    }
+
     fn next_reconcile_message(manager: &super::RustSendFlowManager) -> super::Message {
         let message = manager.reconcile_receiver.try_recv().expect("message is reconciled");
         let SingleOrMany::Single(message) = message else {
@@ -835,6 +844,36 @@ mod tests {
         }
 
         assert!(manager.validate_amount(false));
+    }
+
+    #[test]
+    fn coin_control_amount_change_preserves_below_conservative_dust_amount() {
+        let manager = manager_for_validation();
+        set_coin_control_mode(&manager);
+
+        assert!(manager.handle_coin_control_amount_changed(300.0).is_some());
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(300));
+        assert!(
+            matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
+        );
+    }
+
+    #[test]
+    fn focused_coin_control_entry_preserves_below_conservative_dust_amount() {
+        let manager = manager_for_validation();
+        set_coin_control_mode(&manager);
+
+        assert!(
+            manager.handle_coin_control_entered_amount_changed("300".to_string(), true).is_some()
+        );
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(300));
+        assert!(
+            matches!(&state.mode, super::EnterMode::CoinControl(mode) if !mode.is_max_selected)
+        );
     }
 
     #[test]

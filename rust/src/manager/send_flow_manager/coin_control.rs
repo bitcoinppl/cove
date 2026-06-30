@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use cove_common::consts::CONSERVATIVE_DUST_LIMIT_AMOUNT;
 use cove_types::{
     amount::Amount,
     unit::BitcoinUnit,
@@ -23,8 +22,7 @@ impl RustSendFlowManager {
         let amount = match unit {
             BitcoinUnit::Btc => Amount::from_btc(amount).ok()?,
             BitcoinUnit::Sat => Amount::from_sat(amount as u64),
-        }
-        .max(CONSERVATIVE_DUST_LIMIT_AMOUNT.into());
+        };
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
         let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
@@ -58,22 +56,11 @@ impl RustSendFlowManager {
     pub(crate) fn handle_coin_control_entered_amount_changed(
         self: &Arc<Self>,
         amount: String,
-        is_focused: bool,
+        _is_focused: bool,
     ) -> Option<()> {
         debug!("handle_coin_control_entered_amount_changed: {amount}");
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
         let amount_float = amount.parse::<f64>().ok()?;
-
-        let unit = self.state.lock().metadata.selected_unit;
-        let amount = match unit {
-            BitcoinUnit::Btc => Amount::from_btc(amount_float).ok()?,
-            BitcoinUnit::Sat => Amount::from_sat(amount_float as u64),
-        };
-        let dust_limit = CONSERVATIVE_DUST_LIMIT_AMOUNT.into();
-
-        if amount < dust_limit && is_focused {
-            return None;
-        }
 
         self.handle_coin_control_amount_changed(amount_float)
     }
