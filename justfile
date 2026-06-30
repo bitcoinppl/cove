@@ -182,31 +182,23 @@ compile-android:
 ui-manual:
     just android-ui-manual && just ios-ui-background
 
-# Run manual Android full-launch onboarding UI tests
+# Run an Android device command from android/ with stay-awake enabled.
+#
+# Use this for ad hoc device UI testing:
+#   just android-stay-awake ./gradlew :app:connectedUiTestDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.LayoutRegressionTest
+#
+# Focused instrumentation tests should use AndroidDeviceStayAwakeRule when the
+# stay-awake behavior belongs in the test itself.
+#
+# Run an Android device command from android/ with stay-awake enabled.
 [group('test')]
-[script('bash')]
-[working-directory('android')]
+android-stay-awake *command:
+    just xtask android-stay-awake -- {{ command }}
+
+# Run manual Android full-launch onboarding UI tests.
+[group('test')]
 android-ui-manual:
-    set -e
-    STAY_AWAKE_SETTING="$(adb shell settings get global stay_on_while_plugged_in | tr -d '\r')"
-
-    cleanup() {
-        if [ "$STAY_AWAKE_SETTING" = "null" ]; then
-            adb shell settings delete global stay_on_while_plugged_in >/dev/null 2>&1 || true
-        else
-            adb shell settings put global stay_on_while_plugged_in "$STAY_AWAKE_SETTING" >/dev/null 2>&1 || true
-        fi
-        adb uninstall org.bitcoinppl.cove.uitest.test >/dev/null 2>&1 || true
-        adb uninstall org.bitcoinppl.cove.uitest >/dev/null 2>&1 || true
-    }
-
-    trap cleanup EXIT
-    adb shell settings put global stay_on_while_plugged_in 7 >/dev/null
-    adb shell input keyevent KEYCODE_WAKEUP >/dev/null
-    adb shell wm dismiss-keyguard >/dev/null
-
-    ./gradlew :app:connectedUiTestDebugAndroidTest \
-        -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest
+    just xtask android-ui-manual
 
 alias aum := android-ui-manual
 

@@ -45,33 +45,39 @@ struct WordsView: View {
     }
 
     var body: some View {
-        if sizeCategory >= .extraExtraLarge || isMiniDevice {
-            ScrollView {
-                RecoveryWordsContent(
-                    groupedWords: groupedWords,
-                    tabIndex: $tabIndex,
-                    lastIndex: lastIndex,
-                    showConfirmationAlert: $showConfirmationAlert,
-                    saveWallet: saveWallet,
-                    dismiss: { dismiss() }
-                )
-                .frame(minHeight: screenHeight, maxHeight: .infinity)
-            }
-            .background(
-                Color.midnightBlue
-                    .ignoresSafeArea(.all)
-            )
-
-        } else {
-            RecoveryWordsContent(
+        GeometryReader { proxy in
+            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let content = RecoveryWordsContent(
                 groupedWords: groupedWords,
                 tabIndex: $tabIndex,
                 lastIndex: lastIndex,
                 showConfirmationAlert: $showConfirmationAlert,
+                compactHeight: scrollableLayout,
                 saveWallet: saveWallet,
                 dismiss: { dismiss() }
             )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        content
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity)
+                            .padding(.bottom, 48)
+                    }
+                    .background(
+                        Color.midnightBlue
+                            .ignoresSafeArea(.all)
+                    )
+
+                } else {
+                    content
+                }
+            }
         }
+    }
+
+    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
+        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 
     private func saveWallet() {
@@ -89,12 +95,13 @@ struct RecoveryWordsContent: View {
     @Binding var tabIndex: Int
     let lastIndex: Int
     @Binding var showConfirmationAlert: Bool
+    let compactHeight: Bool
     let saveWallet: () -> Void
     let dismiss: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
-            StyledWordCard(tabIndex: $tabIndex) {
+            StyledWordCard(tabIndex: $tabIndex, compactHeight: compactHeight) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
                     WordCardView(words: wordGroup).tag(index)
                 }
@@ -265,6 +272,7 @@ struct WordCardView: View {
 
 struct StyledWordCard<Content: View>: View {
     @Binding var tabIndex: Int
+    let compactHeight: Bool
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -272,7 +280,7 @@ struct StyledWordCard<Content: View>: View {
             content.padding(.bottom, 40)
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-        .frame(minHeight: isMiniDevice ? 350 : nil)
+        .frame(minHeight: compactHeight ? 350 : nil)
     }
 }
 
