@@ -36,9 +36,17 @@ struct MainSettingsBackupSection: View {
     var body: some View {
         if isVisible {
             Section(header: backupHeader) {
-                SettingsRow(title: "Export All", symbol: "square.and.arrow.up", action: exportAll)
-                SettingsRow(title: "Import All", symbol: "square.and.arrow.down", action: importAll)
-                SettingsRow(title: "Verify Backup", symbol: "checkmark.shield", action: verifyBackup)
+                SettingsRow(title: "Export All", symbol: "square.and.arrow.up") {
+                    exportAll()
+                }
+
+                SettingsRow(title: "Import All", symbol: "square.and.arrow.down") {
+                    importAll()
+                }
+
+                SettingsRow(title: "Verify Backup", symbol: "checkmark.shield") {
+                    verifyBackup()
+                }
             }
         }
     }

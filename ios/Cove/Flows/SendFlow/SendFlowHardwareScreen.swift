@@ -213,6 +213,11 @@ struct SendFlowHardwareScreen: View {
             .padding(.horizontal)
             .background(Color.background)
             .sheet(item: $sheetState, content: SheetContent)
+            .confirmationDialog(
+                confirmationDialogTitle,
+                isPresented: confirmationDialogIsPresented,
+                actions: ConfirmationDialogView
+            )
             .alert(
                 alertTitle,
                 isPresented: showingAlert,

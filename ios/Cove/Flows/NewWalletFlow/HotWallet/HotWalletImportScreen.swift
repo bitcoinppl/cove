@@ -331,7 +331,7 @@ struct HotWalletImportScreen: View {
                     filteredSuggestions: $filteredSuggestions,
                     focusField: $focusField,
                     onPasteMnemonic: handlePasteMnemonic,
-                    importWallet: importWallet
+                    importWallet: { importWallet() }
                 )
 
                 if keyboardObserver.keyboardIsShowing, focusField != nil, !filteredSuggestions.isEmpty {

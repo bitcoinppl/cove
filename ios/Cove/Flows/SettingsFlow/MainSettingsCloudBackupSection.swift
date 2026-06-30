@@ -195,6 +195,7 @@ struct MainSettingsCloudBackupEnabledStatus: View {
         }
     }
 
+    @ViewBuilder
     private func cloudBackupStatusContent(
         symbol: String,
         title: String,

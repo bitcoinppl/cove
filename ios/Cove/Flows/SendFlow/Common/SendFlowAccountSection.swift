@@ -9,7 +9,12 @@ import SwiftUI
 
 struct SendFlowAccountSection: View {
     let manager: WalletManager
-    let showsTitle: Bool = false
+    let showsTitle: Bool
+
+    init(manager: WalletManager, showsTitle: Bool = false) {
+        self.manager = manager
+        self.showsTitle = showsTitle
+    }
 
     var metadata: WalletMetadata {
         manager.walletMetadata
