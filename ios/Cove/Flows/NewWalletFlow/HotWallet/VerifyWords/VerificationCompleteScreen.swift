@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 
 struct VerificationCompleteScreen: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
 
     /// args
@@ -21,9 +22,39 @@ struct VerificationCompleteScreen: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    mainContent(usesFlexibleSpacing: true)
+                }
+            }
+        }
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .opacity(0.75)
+        )
+        .background(Color.midnightBlue)
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
         VStack(spacing: 24) {
-            Spacer()
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+                Spacer()
+            }
 
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: screenWidth * 0.46))
@@ -31,9 +62,11 @@ struct VerificationCompleteScreen: View {
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.midnightBlue, Color.lightGreen)
 
-            Spacer()
-            Spacer()
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+                Spacer()
+                Spacer()
+            }
 
             HStack {
                 DotMenuView(selected: 3, size: 5)
@@ -79,15 +112,10 @@ struct VerificationCompleteScreen: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            Image(.newWalletPattern)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
-                .frame(maxWidth: .infinity)
-                .opacity(0.75)
-        )
-        .background(Color.midnightBlue)
+    }
+
+    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
+        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 }
 

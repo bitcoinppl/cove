@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct TapSignerAdvancedChainCode: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
     @Environment(TapSignerManager.self) var manager
 
@@ -21,8 +22,29 @@ struct TapSignerAdvancedChainCode: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    mainContent(usesFlexibleSpacing: true)
+                }
+            }
+        }
+        .contentTransition(.opacity)
+        .background(backgroundView)
+        .navigationBarHidden(true)
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
         VStack(spacing: 20) {
-            // Top Back Button
             HStack {
                 Button(action: { manager.popRoute() }) {
                     Image(systemName: "chevron.left")
@@ -36,7 +58,9 @@ struct TapSignerAdvancedChainCode: View {
             .foregroundStyle(.primary)
             .fontWeight(.semibold)
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack {
                 Text("Advanced Setup")
@@ -45,7 +69,6 @@ struct TapSignerAdvancedChainCode: View {
                     .padding(.bottom, 5)
             }
 
-            // Description Text
             VStack(spacing: 12) {
                 Group {
                     Text("Enter your custom 32-byte chain code below. If you’re unsure, select automatic on the previous screen.")
@@ -79,7 +102,7 @@ struct TapSignerAdvancedChainCode: View {
                     .padding(.bottom, 30)
             }
             .contentShape(Rectangle())
-            .padding(.bottom, screenHeight * 0.1)
+            .padding(.bottom, usesFlexibleSpacing ? screenHeight * 0.1 : 0)
 
             Button("Continue") {
                 manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: chainCode))
@@ -94,21 +117,23 @@ struct TapSignerAdvancedChainCode: View {
             .padding(.bottom, 30)
             .disabled(isButtonDisabled)
         }
-        .contentTransition(.opacity)
-        .edgesIgnoringSafeArea(.all)
-        .background(
-            VStack {
-                Image(.chainCodePattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .ignoresSafeArea(edges: .all)
-                    .padding(.top, 5)
+    }
 
-                Spacer()
-            }
-            .opacity(0.8)
-        )
-        .navigationBarHidden(true)
+    private var backgroundView: some View {
+        VStack {
+            Image(.chainCodePattern)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .ignoresSafeArea(edges: .all)
+                .padding(.top, 5)
+
+            Spacer()
+        }
+        .opacity(0.8)
+    }
+
+    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
+        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 }
 

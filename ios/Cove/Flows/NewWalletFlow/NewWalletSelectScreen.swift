@@ -9,6 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct NewWalletSelectScreen: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
@@ -34,89 +35,22 @@ struct NewWalletSelectScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 28) {
-            Spacer()
+        GeometryReader { proxy in
+            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
 
-            HStack {
-                DotMenuView(selected: 0, size: 5)
-                Spacer()
-            }
-
-            HStack {
-                Text("How do you want to secure your Bitcoin?")
-                    .font(.system(size: 38, weight: .semibold))
-                    .lineSpacing(1.2)
-                    .foregroundColor(.white)
-
-                Spacer()
-            }
-
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
-
-            HStack(spacing: 14) {
-                Button(action: { showSelectDialog = true }) {
-                    HStack {
-                        BitcoinShieldIcon(width: 15, color: .midnightBlue)
-
-                        Text("Hardware Wallet")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleTopSpacer: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .padding(.horizontal, 10)
-                    .background(Color.btnPrimary)
-                    .foregroundColor(.midnightBlue)
-                    .cornerRadius(10)
+                    .scrollIndicators(.hidden)
+                } else {
+                    bottomActionLayout()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
                 }
-
-                NavigationLink(value: RouteFactory().newHotWallet()) {
-                    HStack {
-                        Image(systemName: "iphone")
-                            .font(.subheadline)
-                            .symbolRenderingMode(.monochrome)
-
-                        Text("On This Device")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .padding(.horizontal, 10)
-                    .background(Color.btnPrimary)
-                    .foregroundColor(.midnightBlue)
-                    .cornerRadius(10)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-            .confirmationDialog(
-                "Import hardware wallet using",
-                isPresented: $showSelectDialog,
-                titleVisibility: .visible
-            ) {
-                NewWalletSelectConfirmationDialogContent(
-                    qrRoute: routeFactory.qrImport(),
-                    importFile: { isImporting = true },
-                    scanNfc: scanNfc,
-                    pasteWallet: pasteWallet
-                )
-            }
-
-            if nfcCalled {
-                Button(action: {
-                    sheetState = TaggedItem(.nfcHelp)
-                }) {
-                    HStack {
-                        Image(systemName: "wave.3.right")
-                        Text("NFC Help")
-                            .font(.subheadline)
-                    }
-                }
-                .foregroundColor(.white)
             }
         }
-        .padding()
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.plainText, .json]
@@ -141,7 +75,6 @@ struct NewWalletSelectScreen: View {
             )
         }
         .sheet(item: $sheetState, content: SheetContent)
-        .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)
                 .resizable()
@@ -169,6 +102,138 @@ struct NewWalletSelectScreen: View {
                 }
             }
         }
+    }
+
+    private func mainContent(usesFlexibleTopSpacer: Bool) -> some View {
+        VStack(spacing: 28) {
+            if usesFlexibleTopSpacer {
+                Spacer()
+            }
+
+            promptContent
+
+            Divider()
+                .overlay(.coveLightGray.opacity(0.50))
+
+            walletTypeActions
+        }
+        .padding()
+        .frame(maxHeight: .infinity)
+    }
+
+    private func bottomActionLayout() -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            promptContent
+                .padding(.horizontal)
+                .padding(.bottom, 28)
+
+            VStack(spacing: 28) {
+                Divider()
+                    .overlay(.coveLightGray.opacity(0.50))
+
+                walletTypeActions
+            }
+            .padding(.horizontal)
+            .padding(.top, 16)
+            .padding(.bottom, 56)
+        }
+    }
+
+    private var promptContent: some View {
+        VStack(spacing: 28) {
+            HStack {
+                DotMenuView(selected: 0, size: 5)
+                Spacer()
+            }
+
+            HStack {
+                Text("How do you want to secure your Bitcoin?")
+                    .font(.system(size: 38, weight: .semibold))
+                    .lineSpacing(1.2)
+                    .foregroundColor(.white)
+
+                Spacer()
+            }
+        }
+    }
+
+    private var walletTypeActions: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 14) {
+                hardwareWalletButton
+                hotWalletButton
+            }
+            .confirmationDialog(
+                "Import hardware wallet using",
+                isPresented: $showSelectDialog,
+                titleVisibility: .visible
+            ) {
+                NewWalletSelectConfirmationDialogContent(
+                    qrRoute: routeFactory.qrImport(),
+                    importFile: { isImporting = true },
+                    scanNfc: scanNfc,
+                    pasteWallet: pasteWallet
+                )
+            }
+
+            if nfcCalled {
+                Button(action: {
+                    sheetState = TaggedItem(.nfcHelp)
+                }) {
+                    HStack {
+                        Image(systemName: "wave.3.right")
+                        Text("NFC Help")
+                            .font(.subheadline)
+                    }
+                }
+                .foregroundColor(.white)
+            }
+        }
+    }
+
+    private var hardwareWalletButton: some View {
+        Button(action: { showSelectDialog = true }) {
+            HStack {
+                BitcoinShieldIcon(width: 15, color: .midnightBlue)
+
+                Text("Hardware Wallet")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .padding(.horizontal, 10)
+            .background(Color.btnPrimary)
+            .foregroundColor(.midnightBlue)
+            .cornerRadius(10)
+        }
+    }
+
+    private var hotWalletButton: some View {
+        NavigationLink(value: RouteFactory().newHotWallet()) {
+            HStack {
+                Image(systemName: "iphone")
+                    .font(.subheadline)
+                    .symbolRenderingMode(.monochrome)
+
+                Text("On This Device")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .padding(.horizontal, 10)
+            .background(Color.btnPrimary)
+            .foregroundColor(.midnightBlue)
+            .cornerRadius(10)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private func usesScrollableLayout(availableHeight _: CGFloat) -> Bool {
+        sizeCategory >= .extraExtraLarge
     }
 
     private func newWalletFromXpub(_ xpub: String) {

@@ -156,6 +156,7 @@ private struct VerifyWordsLoadedView: View {
 // MARK: Screen
 
 struct VerifyWordsScreen: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
 
@@ -344,6 +345,39 @@ struct VerifyWordsScreen: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+
+            Group {
+                if scrollableLayout {
+                    VStack(spacing: 0) {
+                        ScrollView {
+                            mainContent(usesFlexibleMiddleSpacer: false, includesActions: false)
+                                .padding(.bottom, 24)
+                        }
+                        .scrollIndicators(.hidden)
+
+                        compactBottomActions
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                } else {
+                    mainContent(usesFlexibleMiddleSpacer: true, includesActions: true)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            }
+        }
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .opacity(0.5)
+        )
+        .background(Color.midnightBlue)
+    }
+
+    private func mainContent(usesFlexibleMiddleSpacer: Bool, includesActions: Bool) -> some View {
         VStack(spacing: 24) {
             Text("What is word #\(wordNumber)?")
                 .foregroundStyle(.white)
@@ -412,7 +446,9 @@ struct VerifyWordsScreen: View {
             }
             .padding(.vertical)
 
-            Spacer()
+            if usesFlexibleMiddleSpacer {
+                Spacer()
+            }
 
             HStack {
                 DotMenuView(selected: 3, size: 5)
@@ -443,37 +479,51 @@ struct VerifyWordsScreen: View {
 
             if !isMiniDevice { Spacer() }
 
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
+            if includesActions {
+                Divider()
+                    .overlay(.coveLightGray.opacity(0.50))
 
-            VStack(spacing: 16) {
-                Button(action: { activeAlert = .words }) {
-                    Text("Show Words")
-                }
-                .buttonStyle(PrimaryButtonStyle())
-
-                Button(action: { activeAlert = .skip }) {
-                    Text("Skip Verification")
-                        .foregroundStyle(.white)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
+                actionButtons
+                    .safeAreaPadding(.bottom, 30)
             }
-            .safeAreaPadding(.bottom, 30)
         }
         .padding()
         .alert(item: $activeAlert) { alertType in
             DisplayAlert(for: alertType)
         }
-        .background(
-            Image(.newWalletPattern)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
-                .frame(maxWidth: .infinity)
-                .opacity(0.5)
-        )
+    }
+
+    private var actionButtons: some View {
+        VStack(spacing: 16) {
+            Button(action: { activeAlert = .words }) {
+                Text("Show Words")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+
+            Button(action: { activeAlert = .skip }) {
+                Text("Skip Verification")
+                    .foregroundStyle(.white)
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+        }
+    }
+
+    private var compactBottomActions: some View {
+        VStack(spacing: 16) {
+            Divider()
+                .overlay(.coveLightGray.opacity(0.50))
+
+            actionButtons
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .padding(.bottom, 56)
         .background(Color.midnightBlue)
+    }
+
+    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
+        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 
     private var isReturning: Bool {
