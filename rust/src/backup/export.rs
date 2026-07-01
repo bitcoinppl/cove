@@ -53,8 +53,9 @@ impl BackupExporter {
                     let mode_tag = if mode == WalletMode::Decoy { " (Decoy)" } else { "" };
 
                     // serialize metadata to JSON value for forward compatibility
-                    let metadata_value = serde_json::to_value(&metadata)
-                        .map_err(|e| BackupError::Serialization(e.to_string()))?;
+                    let metadata_value =
+                        serde_json::to_value(metadata.clone_without_local_scan_state())
+                            .map_err(|e| BackupError::Serialization(e.to_string()))?;
 
                     // gather secret material based on wallet type
                     let secret = match metadata.wallet_type {

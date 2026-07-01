@@ -84,11 +84,24 @@ pub struct InternalOnlyMetadata {
 }
 
 impl InternalOnlyMetadata {
-    pub(crate) fn reset_scan_state_for_address_type_switch(&mut self) {
+    pub(crate) fn reset_local_scan_state(&mut self) {
         self.address_index = None;
         self.last_scan_finished = None;
         self.last_height_fetched = None;
         self.performed_full_scan_at = None;
+    }
+
+    pub(crate) fn reset_scan_state_for_address_type_switch(&mut self) {
+        self.reset_local_scan_state();
+    }
+}
+
+impl WalletMetadata {
+    pub(crate) fn clone_without_local_scan_state(&self) -> Self {
+        let mut metadata = self.clone();
+        metadata.internal.reset_local_scan_state();
+
+        metadata
     }
 }
 
@@ -621,5 +634,26 @@ mod tests {
         assert_eq!(metadata.last_height_fetched, None);
         assert_eq!(metadata.performed_full_scan_at, None);
         assert_eq!(metadata.store_type, StoreType::FileStore);
+    }
+
+    #[test]
+    fn backup_metadata_clone_clears_local_scan_state_without_mutating_original() {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.internal.address_index =
+            Some(cove_types::AddressIndex { last_seen_index: 4, address_list_hash: 2 });
+        metadata.internal.last_scan_finished = Some(Duration::from_secs(10));
+        metadata.internal.last_height_fetched =
+            Some(BlockSizeLast { block_height: 1, last_seen: Duration::from_secs(20) });
+        metadata.internal.performed_full_scan_at = Some(30);
+        metadata.internal.store_type = StoreType::FileStore;
+
+        let sanitized = metadata.clone_without_local_scan_state();
+
+        assert_eq!(sanitized.internal.address_index, None);
+        assert_eq!(sanitized.internal.last_scan_finished, None);
+        assert_eq!(sanitized.internal.last_height_fetched, None);
+        assert_eq!(sanitized.internal.performed_full_scan_at, None);
+        assert_eq!(sanitized.internal.store_type, StoreType::FileStore);
+        assert_eq!(metadata.internal.performed_full_scan_at, Some(30));
     }
 }
