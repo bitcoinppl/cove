@@ -496,6 +496,15 @@ class WalletManager :
         return details
     }
 
+    suspend fun refreshTransactionDetails(txId: TxId): TransactionDetails {
+        val details =
+            withRustSuspend {
+                transactionDetails(txId)
+            }
+        transactionDetailsCache[txId] = details
+        return details
+    }
+
     fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
         transactionDetailsCache[txId] = details
     }

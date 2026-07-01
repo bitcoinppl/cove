@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
@@ -88,24 +89,19 @@ fun TransactionLabelView(
         }
     }
 
-    // get updated details with the new label
-    fun updateDetails() {
-        scope.launch {
-            try {
-                // bypass cache to get fresh label data from rust
-                val details = manager.transactionDetails(txId)
-                currentLabel = details.transactionLabel()
-
-                // update the cache so future reads get the updated label
-                manager.updateTransactionDetailsCache(txId, details)
-            } catch (e: Exception) {
-                android.util.Log.e(TAG, "Error getting updated label", e)
-                val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
-                snackbarHostState.showSnackbar(
-                    message = message,
-                    duration = SnackbarDuration.Short,
-                )
-            }
+    suspend fun updateDetails() {
+        try {
+            val details = manager.refreshTransactionDetails(txId)
+            currentLabel = details.transactionLabel()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Error getting updated label", e)
+            val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
         }
     }
 
@@ -116,15 +112,20 @@ fun TransactionLabelView(
             isOperationInProgress = true
             try {
                 val metadata = manager.walletMetadata
+                val label = editingLabel.text.trim()
                 labelManager.insertOrUpdateLabelsForTxn(
                     details = transactionDetails,
-                    label = editingLabel.text.trim(),
+                    label = label,
                     origin = metadata?.origin,
                 )
 
-                updateDetails()
+                currentLabel = label.ifEmpty { null }
                 isEditing = false
                 hasFocusedOnce = false
+
+                updateDetails()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Unable to save label", e)
                 val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
@@ -151,6 +152,8 @@ fun TransactionLabelView(
                 currentLabel = null
 
                 updateDetails()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Unable to delete label", e)
                 val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
