@@ -251,6 +251,40 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
     }
 
+    func testCompactSendFlowConfirmActionIsVisible() async throws {
+        try await bootstrapIfNeeded()
+
+        let size = CGSize(width: 375, height: 667)
+        let manager = WalletManager(preview: "preview_only")
+        let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
+        let image = render(
+            view: NavigationStack {
+                SendFlowConfirmScreen(
+                    id: WalletId(),
+                    manager: manager,
+                    details: confirmDetailsPreviewNew(),
+                    input: .unsigned,
+                    payjoinEndpoint: nil
+                )
+                .environment(AppManager.shared)
+                .environment(AuthManager.shared)
+                .environment(presenter)
+            }
+            .frame(width: size.width, height: size.height),
+            size: size
+        )
+        addScreenshotAttachment(image, name: "compact-send-flow-confirm")
+        try saveAuditScreenshotIfDirectoryRequested(image, screenName: "send-flow-confirm")
+        try assertLightScreenBottomEdgeIsClear(in: image)
+
+        let recognizedText = try normalizedRecognizedText(in: image)
+
+        XCTAssertTrue(
+            recognizedText.contains("swipe to send"),
+            "expected compact send confirmation screen to show Swipe to Send, got:\n\(recognizedText)"
+        )
+    }
+
     func testCompactHotWalletImportActionIsVisible() async throws {
         try await bootstrapIfNeeded()
 

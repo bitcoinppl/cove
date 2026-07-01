@@ -672,6 +672,10 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
         ],
         "Failed to increase Android screen-off timeout",
     )?;
+    adb_status(
+        &["shell", "svc", "power", "stayon", "true"],
+        "Failed to enable Android svc stayon",
+    )?;
     adb_status(&["shell", "input", "keyevent", "KEYCODE_WAKEUP"], "Failed to wake Android device")?;
 
     if let Err(error) =

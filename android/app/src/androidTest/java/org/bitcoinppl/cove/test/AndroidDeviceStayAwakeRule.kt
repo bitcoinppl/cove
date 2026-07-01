@@ -35,6 +35,7 @@ internal fun UiDevice.withStayAwake(block: () -> Unit) {
     try {
         executeShellCommand("settings put global stay_on_while_plugged_in $STAY_AWAKE_WHILE_PLUGGED_IN")
         executeShellCommand("settings put system screen_off_timeout $STAY_AWAKE_SCREEN_OFF_TIMEOUT_MS")
+        executeShellCommand("svc power stayon true")
         wakeUp()
         executeShellCommand("wm dismiss-keyguard")
 
