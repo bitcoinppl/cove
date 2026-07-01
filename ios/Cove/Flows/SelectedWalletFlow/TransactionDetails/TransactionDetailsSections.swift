@@ -283,8 +283,12 @@ private struct TransactionCollapsedLockBadge: View {
     let isUpdatingLockState: Bool
     let requestUnlockLockedUtxos: () -> Void
 
+    @State private var showUnlockLockedUtxosConfirmation = false
+
     var body: some View {
-        Button(action: requestUnlockLockedUtxos) {
+        Button {
+            showUnlockLockedUtxosConfirmation = true
+        } label: {
             Label {
                 Text(lockState.collapsedLockBadgeTitle)
                     .font(.caption)
@@ -304,6 +308,19 @@ private struct TransactionCollapsedLockBadge: View {
         .buttonStyle(.plain)
         .disabled(isUpdatingLockState)
         .accessibilityLabel(lockState.collapsedLockBadgeTitle)
+        .confirmationDialog(
+            "Unlock UTXOs?",
+            isPresented: $showUnlockLockedUtxosConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Unlock") {
+                requestUnlockLockedUtxos()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Do you want to unlock this transaction's UTXOs?")
+        }
     }
 }
 

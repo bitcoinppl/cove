@@ -24,7 +24,6 @@ struct TransactionDetailsView: View {
     @State private var lockStateUpdatingIndicatorShownAt: ContinuousClock.Instant? = nil
     @State private var lockStateError: String? = nil
     @State private var lockStateLoadError: String? = nil
-    @State private var showUnlockLockedUtxosConfirmation = false
 
     // public
     let id: WalletId
@@ -136,7 +135,7 @@ struct TransactionDetailsView: View {
                             showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                             lockStateLoadError: lockStateLoadError,
                             retryLockState: retryTransactionLockState,
-                            requestUnlockLockedUtxos: { showUnlockLockedUtxosConfirmation = true },
+                            requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
                             toggleLockState: beginToggleTransactionLockState
                         )
                     } else {
@@ -150,7 +149,7 @@ struct TransactionDetailsView: View {
                             showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                             lockStateLoadError: lockStateLoadError,
                             retryLockState: retryTransactionLockState,
-                            requestUnlockLockedUtxos: { showUnlockLockedUtxosConfirmation = true },
+                            requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
                             toggleLockState: beginToggleTransactionLockState
                         )
                     }
@@ -242,19 +241,6 @@ struct TransactionDetailsView: View {
             }
         } message: {
             Text(lockStateError ?? "")
-        }
-        .confirmationDialog(
-            "Unlock UTXOs?",
-            isPresented: $showUnlockLockedUtxosConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Unlock") {
-                beginUnlockTransactionOutputs()
-            }
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Do you want to unlock this transaction's UTXOs?")
         }
     }
 
