@@ -136,7 +136,7 @@ pub async fn build_wallet_entry(
 
     let descriptors = backup_descriptors(keychain, metadata, id, &secret)?;
 
-    let metadata_value = serde_json::to_value(metadata)
+    let metadata_value = serde_json::to_value(metadata.clone_without_local_scan_state())
         .map_err_prefix("serialize metadata", CloudBackupError::Internal)?;
 
     let wallet_mode = mode.into();

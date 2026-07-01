@@ -187,12 +187,14 @@ impl RestoredWalletMetadataStore {
         name: &str,
         save_behavior: RestoreSaveBehavior,
     ) -> Result<(), BackupError> {
+        let metadata = metadata.clone_without_local_scan_state();
+
         let save = match save_behavior {
             RestoreSaveBehavior::BackupAsNewWallet => {
-                self.0.wallets.save_new_wallet_metadata(metadata.clone())
+                self.0.wallets.save_new_wallet_metadata(metadata)
             }
             RestoreSaveBehavior::SkipCloudBackup => {
-                self.0.wallets.save_restored_wallet_metadata(metadata.clone())
+                self.0.wallets.save_restored_wallet_metadata(metadata)
             }
         };
 
@@ -610,8 +612,12 @@ mod tests {
     use std::collections::BTreeMap;
     use std::str::FromStr as _;
     use std::sync::Arc;
+    use std::time::Duration;
+
+    use cove_types::BlockSizeLast;
 
     use crate::wallet::fingerprint::Fingerprint;
+    use crate::wallet::metadata::StoreType;
 
     use super::*;
 
@@ -692,6 +698,34 @@ mod tests {
         write_txn.commit().unwrap();
 
         (tmp, table)
+    }
+
+    #[test]
+    fn restored_metadata_store_clears_local_scan_state() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        let db = Database::global();
+        let mut metadata = hot_metadata("Restored wallet");
+        metadata.internal.address_index =
+            Some(cove_types::AddressIndex { last_seen_index: 4, address_list_hash: 2 });
+        metadata.internal.last_scan_finished = Some(Duration::from_secs(10));
+        metadata.internal.last_height_fetched =
+            Some(BlockSizeLast { block_height: 1, last_seen: Duration::from_secs(20) });
+        metadata.internal.performed_full_scan_at = Some(30);
+        metadata.internal.store_type = StoreType::FileStore;
+
+        RestoredWalletMetadataStore::new(&db)
+            .save(&metadata, &metadata.name, RestoreSaveBehavior::SkipCloudBackup)
+            .unwrap();
+
+        let restored =
+            db.wallets.get(&metadata.id, metadata.network, metadata.wallet_mode).unwrap().unwrap();
+
+        assert_eq!(restored.internal.address_index, None);
+        assert_eq!(restored.internal.last_scan_finished, None);
+        assert_eq!(restored.internal.last_height_fetched, None);
+        assert_eq!(restored.internal.performed_full_scan_at, None);
+        assert_eq!(restored.internal.store_type, StoreType::FileStore);
     }
 
     #[tokio::test(flavor = "current_thread")]
