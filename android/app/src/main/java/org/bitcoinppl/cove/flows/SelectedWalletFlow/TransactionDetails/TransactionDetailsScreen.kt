@@ -733,23 +733,20 @@ private fun TransactionDetailsHeaderLabelRow(
         return
     }
 
-    Row(
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         TransactionLabelView(
             transactionDetails = transactionDetails,
             manager = manager,
             secondaryColor = secondaryColor,
             snackbarHostState = snackbarHostState,
-            modifier = Modifier.weight(1f, fill = false),
         )
-
-        Spacer(Modifier.width(12.dp))
 
         TransactionLockedUtxosBadge(
             state = collapsedLockState,
@@ -777,7 +774,7 @@ private fun TransactionLockedUtxosBadge(
             Modifier
                 .alpha(if (updating) 0.72f else 1f)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(CoveColor.WarningOrange.copy(alpha = 0.14f))
+                .background(CoveColor.ErrorRed.copy(alpha = 0.14f))
                 .clickable(enabled = !updating, onClick = onClick)
                 .padding(horizontal = 9.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -786,14 +783,14 @@ private fun TransactionLockedUtxosBadge(
         Icon(
             imageVector = Icons.Filled.Lock,
             contentDescription = null,
-            tint = CoveColor.WarningOrange,
-            modifier = Modifier.size(11.dp),
+            tint = CoveColor.ErrorRed,
+            modifier = Modifier.size(13.dp),
         )
 
         Text(
             text = stringResource(textRes),
-            color = CoveColor.WarningOrange,
-            fontSize = 12.sp,
+            color = CoveColor.ErrorRed,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
