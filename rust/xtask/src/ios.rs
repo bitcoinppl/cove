@@ -1349,10 +1349,14 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        default_build_slot_from_cwd, derived_data_dir_name_for_slot,
         devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, normalize_pem_text,
-        simulator_line_matches_device, simulator_state_from_line, DevicectlConnectionProperties,
-        DevicectlDevice, DevicectlDeviceProperties, DevicectlHardwareProperties,
+        sanitize_build_slot, simulator_line_matches_device, simulator_state_from_line,
+        DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
+        DevicectlHardwareProperties, IOS_DEVICE_DERIVED_DATA_SUFFIX,
+        IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
+    use std::path::Path;
 
     const VALID_PEM: &str = "\
 -----BEGIN PRIVATE KEY-----
@@ -1506,6 +1510,48 @@ ABC123
         let body = r#"{"applinks": {"apps": []}}"#;
 
         assert!(ensure_aasa_webcredentials_app(body, "Q8UP8C53Y8.org.bitcoinppl.cove").is_err());
+    }
+    #[test]
+    fn derived_data_dir_name_includes_sanitized_slot_and_target() {
+        assert_eq!(
+            derived_data_dir_name_for_slot(IOS_DEVICE_DERIVED_DATA_SUFFIX, "cove-wk2"),
+            "Cove-cove-wk2-device-run",
+        );
+        assert_eq!(
+            derived_data_dir_name_for_slot(IOS_SIMULATOR_DERIVED_DATA_SUFFIX, "cove-wk2"),
+            "Cove-cove-wk2-simulator-run",
+        );
+    }
+
+    #[test]
+    fn sanitize_build_slot_keeps_directory_safe_characters() {
+        assert_eq!(sanitize_build_slot("cove.wk_2-dev"), "cove.wk_2-dev");
+    }
+
+    #[test]
+    fn sanitize_build_slot_replaces_unsafe_characters_and_trims_hyphens() {
+        assert_eq!(sanitize_build_slot(" /tmp/cove wk2! "), "tmp-cove-wk2");
+    }
+
+    #[test]
+    fn sanitize_build_slot_falls_back_when_empty_after_sanitizing() {
+        assert_eq!(sanitize_build_slot(" / "), "workspace");
+    }
+
+    #[test]
+    fn default_build_slot_uses_repo_directory_name() {
+        assert_eq!(
+            default_build_slot_from_cwd(Path::new("/Users/praveen/code/bitcoinppl/cove-wk2")),
+            "cove-wk2",
+        );
+    }
+
+    #[test]
+    fn default_build_slot_uses_repo_parent_when_running_from_rust_workspace() {
+        assert_eq!(
+            default_build_slot_from_cwd(Path::new("/Users/praveen/code/bitcoinppl/cove-wk2/rust")),
+            "cove-wk2",
+        );
     }
 
     fn devicectl_device(platform: &str, tunnel_state: &str) -> DevicectlDevice {

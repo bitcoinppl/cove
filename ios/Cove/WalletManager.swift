@@ -359,6 +359,16 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         return state
     }
 
+    func unlockTransactionOutputs(for txId: TxId) async throws -> TransactionLockState {
+        let state = try await rust.unlockTransactionOutputs(txId: txId)
+        await MainActor.run {
+            transactionLockStates[txId] = state
+        }
+        await AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
+
+        return state
+    }
+
     @MainActor
     func clearTransactionLockState(for txId: TxId) {
         transactionLockStates[txId] = nil

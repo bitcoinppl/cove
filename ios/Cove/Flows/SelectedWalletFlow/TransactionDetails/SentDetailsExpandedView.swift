@@ -13,6 +13,7 @@ struct SentDetailsExpandedView: View {
     let numberOfConfirmations: Int?
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
     let lockStateLoadError: String?
     let retryLockState: () -> Void
     let toggleLockState: () -> Void
@@ -78,6 +79,7 @@ struct SentDetailsExpandedView: View {
                 TransactionDetailsLockControl(
                     lockState: lockState,
                     isUpdatingLockState: isUpdatingLockState,
+                    showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                     lockStateLoadError: lockStateLoadError,
                     retryLockState: retryLockState,
                     toggleLockState: toggleLockState

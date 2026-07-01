@@ -9274,6 +9274,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func transactionLockState(txId: TxId) async throws  -> TransactionLockState
 
+    func unlockTransactionOutputs(txId: TxId) async throws  -> TransactionLockState
+
 }
 open class RustWalletManager: RustWalletManagerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -10305,6 +10307,23 @@ open func transactionLockState(txId: TxId)async throws  -> TransactionLockState 
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTxId_lower(txId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTransactionLockState_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+
+open func unlockTransactionOutputs(txId: TxId)async throws  -> TransactionLockState  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_unlock_transaction_outputs(
                     self.uniffiCloneHandle(),
                     FfiConverterTypeTxId_lower(txId)
                 )
@@ -41272,6 +41291,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 13498) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_unlock_transaction_outputs() != 45492) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 24108) {

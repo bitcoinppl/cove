@@ -49,6 +49,30 @@ impl RustWalletManager {
 
         Ok(state)
     }
+
+    #[uniffi::method]
+    pub async fn unlock_transaction_outputs(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<TransactionLockState, Error> {
+        let tx_id = Arc::unwrap_or_clone(tx_id);
+        let outpoints = call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)?;
+        let Some((outpoints, spendable)) = transaction_unlock_update(outpoints) else {
+            return Ok(TransactionLockState::None);
+        };
+
+        self.label_manager
+            .set_output_spendability_for_outpoints(outpoints, spendable)
+            .map_err_str(Error::OutputLabelsError)?;
+
+        let state = call!(self.actor.transaction_lock_state(tx_id))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
+
+        Ok(state)
+    }
 }
 
 fn spendability_for_transaction_lock_toggle(state: TransactionLockState) -> Option<bool> {
@@ -71,13 +95,21 @@ fn transaction_lock_toggle_update(
     Some((outpoints, spendable))
 }
 
+fn transaction_unlock_update(outpoints: Vec<OutPoint>) -> Option<(Vec<OutPoint>, bool)> {
+    if outpoints.is_empty() {
+        return None;
+    }
+
+    Some((outpoints, true))
+}
+
 #[cfg(test)]
 mod tests {
     use bitcoin::{OutPoint, Txid, hashes::Hash as _};
 
     use super::{
         TransactionLockState, spendability_for_transaction_lock_toggle,
-        transaction_lock_toggle_update,
+        transaction_lock_toggle_update, transaction_unlock_update,
     };
 
     fn outpoint(vout: u32) -> OutPoint {
@@ -124,5 +156,13 @@ mod tests {
         assert_eq!(transaction_lock_toggle_update(TransactionLockState::None, vec![]), None);
         assert_eq!(transaction_lock_toggle_update(TransactionLockState::Unlocked, vec![]), None);
         assert_eq!(transaction_lock_toggle_update(TransactionLockState::Locked, vec![]), None);
+    }
+
+    #[test]
+    fn transaction_unlock_update_marks_current_outpoints_spendable() {
+        let outpoints = vec![outpoint(0), outpoint(2)];
+
+        assert_eq!(transaction_unlock_update(outpoints.clone()), Some((outpoints, true)));
+        assert_eq!(transaction_unlock_update(vec![]), None);
     }
 }

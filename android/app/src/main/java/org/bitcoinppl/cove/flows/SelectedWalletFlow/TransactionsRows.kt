@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
@@ -67,6 +66,9 @@ private const val TAG = "TransactionsRows"
 enum class TransactionType { SENT, RECEIVED }
 
 private enum class AmountPosition { PRIMARY, SECONDARY }
+
+private val TransactionLockState?.showsLockedTransactionTreatment: Boolean
+    get() = this == TransactionLockState.LOCKED || this == TransactionLockState.MIXED
 
 @Composable
 internal fun TransactionItem(
@@ -202,13 +204,42 @@ internal fun ConfirmedTransactionWidget(
 ) {
     val txId = transaction.v1.id()
     val lockState = transactionLockStateForRow(txId, manager)
+    val showsLockedTreatment = lockState.showsLockedTransactionTreatment
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
 
-    val iconBackground = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
-    val iconForeground = MaterialTheme.colorScheme.inverseOnSurface
-    val icon = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest
+    val iconBackground =
+        if (showsLockedTreatment) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
+        }
+    val iconForeground =
+        if (showsLockedTreatment) {
+            secondaryText.copy(alpha = 0.75f)
+        } else {
+            MaterialTheme.colorScheme.inverseOnSurface
+        }
+    val icon =
+        when {
+            showsLockedTreatment -> Icons.Filled.Lock
+            type == TransactionType.SENT -> Icons.Filled.NorthEast
+            else -> Icons.Filled.SouthWest
+        }
+    val iconContentDescription = transactionIconContentDescription(lockState, label)
+    val labelColor =
+        if (showsLockedTreatment) {
+            secondaryText.copy(alpha = 0.72f)
+        } else {
+            primaryText.copy(alpha = 0.65f)
+        }
+    val dateColor =
+        if (showsLockedTreatment) {
+            secondaryText.copy(alpha = 0.68f)
+        } else {
+            secondaryText
+        }
 
     Row(
         modifier =
@@ -237,7 +268,7 @@ internal fun ConfirmedTransactionWidget(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = label,
+                contentDescription = iconContentDescription,
                 tint = iconForeground,
                 modifier = Modifier.size(24.dp),
             )
@@ -251,27 +282,32 @@ internal fun ConfirmedTransactionWidget(
         ) {
             Text(
                 text = label,
-                color = primaryText.copy(alpha = 0.65f),
+                color = labelColor,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
             AutoSizeText(
                 text = privateShow(date),
-                color = secondaryText,
+                color = dateColor,
                 maxFontSize = 12.sp,
                 minimumScaleFactor = 0.90f,
                 fontWeight = FontWeight.Normal,
             )
-
-            TransactionLockBadge(lockState)
         }
 
         Column(horizontalAlignment = Alignment.End) {
             val amountColor =
-                if (type == TransactionType.RECEIVED) {
-                    CoveColor.TransactionReceived
+                when {
+                    showsLockedTreatment && type == TransactionType.RECEIVED -> CoveColor.TransactionReceived.copy(alpha = 0.72f)
+                    type == TransactionType.RECEIVED -> CoveColor.TransactionReceived
+                    showsLockedTreatment -> secondaryText.copy(alpha = 0.75f)
+                    else -> primaryText.copy(alpha = 0.8f)
+                }
+            val secondaryAmountColor =
+                if (showsLockedTreatment) {
+                    secondaryText.copy(alpha = 0.62f)
                 } else {
-                    primaryText.copy(alpha = 0.8f)
+                    secondaryText
                 }
             Text(
                 text = privateShow(amount),
@@ -281,7 +317,7 @@ internal fun ConfirmedTransactionWidget(
             )
             Text(
                 text = privateShow(secondaryAmount),
-                color = secondaryText,
+                color = secondaryAmountColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
             )
@@ -305,12 +341,42 @@ internal fun UnconfirmedTransactionWidget(
 ) {
     val txId = transaction.v1.id()
     val lockState = transactionLockStateForRow(txId, manager)
+    val showsLockedTreatment = lockState.showsLockedTransactionTreatment
 
     fun privateShow(text: String, placeholder: String = "••••••"): String =
         if (sensitiveVisible) text else placeholder
 
-    val iconBackground = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
-    val iconForeground = MaterialTheme.colorScheme.inverseOnSurface
+    val iconBackground =
+        if (showsLockedTreatment) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
+        }
+    val iconForeground =
+        if (showsLockedTreatment) {
+            secondaryText.copy(alpha = 0.75f)
+        } else {
+            MaterialTheme.colorScheme.inverseOnSurface
+        }
+    val icon =
+        if (showsLockedTreatment) {
+            Icons.Filled.Lock
+        } else {
+            Icons.Filled.Schedule
+        }
+    val iconContentDescription = transactionIconContentDescription(lockState, label)
+    val iconModifier =
+        if (showsLockedTreatment) {
+            Modifier
+        } else {
+            Modifier.graphicsLayer { alpha = 0.6f }
+        }
+    val labelColor =
+        if (showsLockedTreatment) {
+            secondaryText.copy(alpha = 0.72f)
+        } else {
+            primaryText.copy(alpha = 0.4f)
+        }
 
     Row(
         modifier =
@@ -329,7 +395,7 @@ internal fun UnconfirmedTransactionWidget(
                 },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.graphicsLayer { alpha = 0.6f }) {
+        Box(modifier = iconModifier) {
             Box(
                 modifier =
                     Modifier
@@ -339,8 +405,8 @@ internal fun UnconfirmedTransactionWidget(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Schedule,
-                    contentDescription = label,
+                    imageVector = icon,
+                    contentDescription = iconContentDescription,
                     tint = iconForeground,
                     modifier = Modifier.size(24.dp),
                 )
@@ -355,30 +421,35 @@ internal fun UnconfirmedTransactionWidget(
         ) {
             Text(
                 text = label,
-                color = primaryText.copy(alpha = 0.4f),
+                color = labelColor,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
-
-            TransactionLockBadge(lockState)
         }
 
         Column(horizontalAlignment = Alignment.End) {
             val amountColor =
-                if (type == TransactionType.RECEIVED) {
-                    CoveColor.TransactionReceived
+                when {
+                    showsLockedTreatment && type == TransactionType.RECEIVED -> CoveColor.TransactionReceived.copy(alpha = 0.72f)
+                    type == TransactionType.RECEIVED -> CoveColor.TransactionReceived.copy(alpha = 0.65f)
+                    showsLockedTreatment -> secondaryText.copy(alpha = 0.75f)
+                    else -> primaryText.copy(alpha = 0.65f)
+                }
+            val secondaryAmountColor =
+                if (showsLockedTreatment) {
+                    secondaryText.copy(alpha = 0.62f)
                 } else {
-                    primaryText.copy(alpha = 0.8f)
+                    secondaryText.copy(alpha = 0.65f)
                 }
             Text(
                 text = privateShow(amount),
-                color = amountColor.copy(alpha = 0.65f),
+                color = amountColor,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
                 text = privateShow(secondaryAmount),
-                color = secondaryText.copy(alpha = 0.65f),
+                color = secondaryAmountColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
             )
@@ -408,39 +479,14 @@ private fun transactionLockStateForRow(
 }
 
 @Composable
-private fun TransactionLockBadge(lockState: TransactionLockState?) {
-    val textRes =
-        when (lockState) {
-            TransactionLockState.LOCKED -> R.string.label_transaction_utxos_locked
-            TransactionLockState.MIXED -> R.string.label_transaction_utxos_some_locked
-            TransactionLockState.NONE, TransactionLockState.UNLOCKED, null -> return
-        }
-    val text = stringResource(textRes)
-
-    Row(
-        modifier =
-            Modifier
-                .padding(top = 2.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(CoveColor.WarningOrange.copy(alpha = 0.14f))
-                .padding(horizontal = 7.dp, vertical = 3.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Lock,
-            contentDescription = null,
-            tint = CoveColor.WarningOrange,
-            modifier = Modifier.size(11.dp),
-        )
-        Text(
-            text = text,
-            color = CoveColor.WarningOrange,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+private fun transactionIconContentDescription(
+    lockState: TransactionLockState?,
+    fallback: String,
+): String {
+    return when (lockState) {
+        TransactionLockState.LOCKED -> stringResource(R.string.label_transaction_utxos_locked)
+        TransactionLockState.MIXED -> stringResource(R.string.label_transaction_utxos_some_locked)
+        TransactionLockState.NONE, TransactionLockState.UNLOCKED, null -> fallback
     }
 }
 

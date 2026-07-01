@@ -271,28 +271,6 @@ pub fn build_android(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::target_for_abi;
-
-    #[test]
-    fn maps_supported_android_abis_to_rust_targets() {
-        assert_eq!(target_for_abi("arm64-v8a"), Some("aarch64-linux-android"));
-        assert_eq!(target_for_abi("armeabi-v7a"), Some("armv7-linux-androideabi"));
-        assert_eq!(target_for_abi("x86_64"), Some("x86_64-linux-android"));
-    }
-
-    #[test]
-    fn trims_device_abi_output() {
-        assert_eq!(target_for_abi("arm64-v8a\r\n"), Some("aarch64-linux-android"));
-    }
-
-    #[test]
-    fn rejects_unsupported_android_abis() {
-        assert_eq!(target_for_abi("x86"), None);
-    }
-}
-
 pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
@@ -426,4 +404,26 @@ fn extract_version_code(content: &str) -> Option<u32> {
     let after_key = &content[start + key.len()..];
     let end = after_key.find('\n').unwrap_or(after_key.len());
     after_key[..end].trim().parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::target_for_abi;
+
+    #[test]
+    fn maps_supported_android_abis_to_rust_targets() {
+        assert_eq!(target_for_abi("arm64-v8a"), Some("aarch64-linux-android"));
+        assert_eq!(target_for_abi("armeabi-v7a"), Some("armv7-linux-androideabi"));
+        assert_eq!(target_for_abi("x86_64"), Some("x86_64-linux-android"));
+    }
+
+    #[test]
+    fn trims_device_abi_output() {
+        assert_eq!(target_for_abi("arm64-v8a\r\n"), Some("aarch64-linux-android"));
+    }
+
+    #[test]
+    fn rejects_unsupported_android_abis() {
+        assert_eq!(target_for_abi("x86"), None);
+    }
 }

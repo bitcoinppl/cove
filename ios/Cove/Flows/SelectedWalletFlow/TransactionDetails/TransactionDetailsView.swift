@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+private let lockStateUpdateRevealDelay: Duration = .milliseconds(200)
+private let lockStateUpdateMinimumVisibleDuration: Duration = .milliseconds(350)
+
 struct TransactionDetailsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
@@ -17,8 +20,11 @@ struct TransactionDetailsView: View {
     @State private var initialOffset: Double? = nil
     @State private var currentOffset: Double = 0
     @State private var isUpdatingLockState = false
+    @State private var showLockStateUpdatingIndicator = false
+    @State private var lockStateUpdatingIndicatorShownAt: ContinuousClock.Instant? = nil
     @State private var lockStateError: String? = nil
     @State private var lockStateLoadError: String? = nil
+    @State private var showUnlockLockedUtxosConfirmation = false
 
     // public
     let id: WalletId
@@ -91,7 +97,26 @@ struct TransactionDetailsView: View {
         guard !isUpdatingLockState else { return }
 
         isUpdatingLockState = true
-        Task { await toggleTransactionLockState() }
+        showLockStateUpdatingIndicator = false
+        lockStateUpdatingIndicatorShownAt = nil
+        Task {
+            await updateTransactionLockState {
+                try await manager.toggleTransactionLockState(for: initialDetails.txId())
+            }
+        }
+    }
+
+    private func beginUnlockTransactionOutputs() {
+        guard !isUpdatingLockState else { return }
+
+        isUpdatingLockState = true
+        showLockStateUpdatingIndicator = false
+        lockStateUpdatingIndicatorShownAt = nil
+        Task {
+            await updateTransactionLockState {
+                try await manager.unlockTransactionOutputs(for: initialDetails.txId())
+            }
+        }
     }
 
     var body: some View {
@@ -108,8 +133,10 @@ struct TransactionDetailsView: View {
                             numberOfConfirmations: numberOfConfirmations,
                             lockState: lockState,
                             isUpdatingLockState: isUpdatingLockState,
+                            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                             lockStateLoadError: lockStateLoadError,
                             retryLockState: retryTransactionLockState,
+                            requestUnlockLockedUtxos: { showUnlockLockedUtxosConfirmation = true },
                             toggleLockState: beginToggleTransactionLockState
                         )
                     } else {
@@ -120,8 +147,10 @@ struct TransactionDetailsView: View {
                             numberOfConfirmations: numberOfConfirmations,
                             lockState: lockState,
                             isUpdatingLockState: isUpdatingLockState,
+                            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                             lockStateLoadError: lockStateLoadError,
                             retryLockState: retryTransactionLockState,
+                            requestUnlockLockedUtxos: { showUnlockLockedUtxosConfirmation = true },
                             toggleLockState: beginToggleTransactionLockState
                         )
                     }
@@ -214,6 +243,19 @@ struct TransactionDetailsView: View {
         } message: {
             Text(lockStateError ?? "")
         }
+        .confirmationDialog(
+            "Unlock UTXOs?",
+            isPresented: $showUnlockLockedUtxosConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Unlock") {
+                beginUnlockTransactionOutputs()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Do you want to unlock this transaction's UTXOs?")
+        }
     }
 
     func refreshTransactionDetails() async {
@@ -238,16 +280,43 @@ struct TransactionDetailsView: View {
         }
     }
 
-    func toggleTransactionLockState() async {
+    func updateTransactionLockState(
+        operation: @escaping () async throws -> TransactionLockState
+    ) async {
+        let indicatorTask = Task {
+            do {
+                try await Task.sleep(for: lockStateUpdateRevealDelay)
+                try Task.checkCancellation()
+                await MainActor.run {
+                    lockStateUpdatingIndicatorShownAt = ContinuousClock.now
+                    showLockStateUpdatingIndicator = true
+                }
+            } catch {}
+        }
+        var updateError: String? = nil
+
         do {
-            _ = try await manager.toggleTransactionLockState(for: initialDetails.txId())
-            await MainActor.run {
-                isUpdatingLockState = false
-            }
+            _ = try await operation()
         } catch {
-            await MainActor.run {
-                lockStateError = error.localizedDescription
-                isUpdatingLockState = false
+            updateError = error.localizedDescription
+        }
+
+        indicatorTask.cancel()
+
+        if let visibleSince = await MainActor.run(body: { lockStateUpdatingIndicatorShownAt }) {
+            let remaining = lockStateUpdateMinimumVisibleDuration - visibleSince.duration(to: ContinuousClock.now)
+            if remaining > .zero {
+                try? await Task.sleep(for: remaining)
+            }
+        }
+
+        await MainActor.run {
+            showLockStateUpdatingIndicator = false
+            lockStateUpdatingIndicatorShownAt = nil
+            isUpdatingLockState = false
+
+            if let updateError {
+                lockStateError = updateError
             }
         }
     }

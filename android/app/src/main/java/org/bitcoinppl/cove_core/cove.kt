@@ -1725,6 +1725,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_unlock_transaction_outputs(
+    ): Short
     external fun uniffi_cove_checksum_method_mnemonic_all_words(
     ): Short
     external fun uniffi_cove_checksum_method_mnemonic_to_seed_qr_string(
@@ -2852,6 +2854,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_toggle_transaction_lock_state(`ptr`: Long,`txId`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(`ptr`: Long,`txId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_unlock_transaction_outputs(`ptr`: Long,`txId`: Long,
     ): Long
     external fun uniffi_cove_fn_clone_mnemonic(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4660,6 +4664,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state() != 13498.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_unlock_transaction_outputs() != 45492.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_mnemonic_all_words() != 24108.toShort()) {
@@ -21397,6 +21404,8 @@ public interface RustWalletManagerInterface {
 
     suspend fun `transactionLockState`(`txId`: TxId): TransactionLockState
 
+    suspend fun `unlockTransactionOutputs`(`txId`: TxId): TransactionLockState
+
     companion object
 }
 
@@ -22730,6 +22739,28 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(
+                uniffiHandle,
+
+        FfiConverterTypeTxId.lower(`txId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTransactionLockState.lift(it) },
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `unlockTransactionOutputs`(`txId`: TxId) : TransactionLockState {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_unlock_transaction_outputs(
                 uniffiHandle,
 
         FfiConverterTypeTxId.lower(`txId`),

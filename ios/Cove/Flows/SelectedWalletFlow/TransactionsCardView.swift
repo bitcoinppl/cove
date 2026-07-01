@@ -244,12 +244,16 @@ struct EmptyWalletScanState: View {
     }
 }
 
-private func amountColor(_ direction: TransactionDirection) -> Color {
+private func showsLockedTransactionTreatment(_ lockState: TransactionLockState?) -> Bool {
+    lockState == .locked || lockState == .mixed
+}
+
+private func amountColor(_ direction: TransactionDirection, locked: Bool = false) -> Color {
     switch direction {
     case .incoming:
-        .green
+        locked ? .green.opacity(0.72) : .green
     case .outgoing:
-        .primary.opacity(0.8)
+        locked ? .secondary.opacity(0.75) : .primary.opacity(0.8)
     }
 }
 
@@ -342,7 +346,7 @@ struct ConfirmedTransactionView: View {
             _ = try await manager.transactionLockState(for: txn.id())
         } catch {
             Log.error("Failed to load transaction lock state for \(txn.id()): \(error)")
-            await manager.clearTransactionLockState(for: txn.id())
+            manager.clearTransactionLockState(for: txn.id())
         }
     }
 
@@ -352,14 +356,17 @@ struct ConfirmedTransactionView: View {
     }
 
     var body: some View {
+        let direction = txn.sentAndReceived().direction()
+        let showsLockedTreatment = showsLockedTransactionTreatment(lockState)
+
         HStack {
-            TxnIcon(direction: txn.sentAndReceived().direction())
+            TxnIcon(direction: direction, locked: showsLockedTreatment)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(label)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary.opacity(0.65))
+                    .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.72) : .primary.opacity(0.65))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .minimumScaleFactor(0.90)
@@ -367,21 +374,19 @@ struct ConfirmedTransactionView: View {
 
                 Text(privateShow(txn.confirmedAtFmt()))
                     .font(.caption)
-                    .foregroundColor(.secondary)
-
-                TransactionLockBadge(lockState: lockState)
+                    .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.68) : .secondary)
             }
 
             Spacer()
 
             VStack(alignment: .trailing) {
                 Text(amount)
-                    .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
+                    .foregroundStyle(amountColor(direction, locked: showsLockedTreatment))
                     .contentTransition(.numericText())
 
                 Text(secondaryAmount)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.62) : .secondary)
             }
         }
         .contentShape(Rectangle())
@@ -466,34 +471,39 @@ struct UnconfirmedTransactionView: View {
             _ = try await manager.transactionLockState(for: txn.id())
         } catch {
             Log.error("Failed to load transaction lock state for \(txn.id()): \(error)")
-            await manager.clearTransactionLockState(for: txn.id())
+            manager.clearTransactionLockState(for: txn.id())
         }
     }
 
     var body: some View {
+        let direction = txn.sentAndReceived().direction()
+        let showsLockedTreatment = showsLockedTransactionTreatment(lockState)
+
         HStack {
             TxnIcon(
-                direction: txn.sentAndReceived().direction(),
-                confirmed: false
+                direction: direction,
+                confirmed: false,
+                locked: showsLockedTreatment
             )
-            .opacity(0.6)
+            .opacity(showsLockedTreatment ? 1 : 0.6)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.primary.opacity(0.4))
-
-                TransactionLockBadge(lockState: lockState)
+                    .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.72) : .primary.opacity(0.4))
             }
             Spacer()
             VStack(alignment: .trailing) {
                 Text(amount)
-                    .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
+                    .foregroundStyle(
+                        amountColor(direction, locked: showsLockedTreatment)
+                            .opacity(showsLockedTreatment && direction == .incoming ? 1 : 0.65)
+                    )
 
                 Text(secondaryAmount)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.62) : .secondary)
             }
         }
         .contentShape(Rectangle())
@@ -502,43 +512,6 @@ struct UnconfirmedTransactionView: View {
         }
         .task(id: txn.id().description) {
             await refreshLockState()
-        }
-    }
-}
-
-private struct TransactionLockBadge: View {
-    let lockState: TransactionLockState?
-
-    var body: some View {
-        if let title = lockState?.transactionRowBadgeTitle {
-            Label {
-                Text(title)
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-            } icon: {
-                Image(systemName: "lock.fill")
-                    .font(.caption2.weight(.semibold))
-            }
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(.orange.opacity(0.14))
-            .clipShape(Capsule())
-            .accessibilityLabel(title)
-        }
-    }
-}
-
-private extension TransactionLockState {
-    var transactionRowBadgeTitle: String? {
-        switch self {
-        case .locked:
-            String(localized: "UTXOs locked")
-        case .mixed:
-            String(localized: "Some UTXOs locked")
-        case .none, .unlocked:
-            nil
         }
     }
 }
@@ -652,12 +625,23 @@ private struct TxnIcon: View {
 
     let direction: TransactionDirection
     var confirmed: Bool = true
+    var locked: Bool = false
 
     var iconColor: Color {
-        colorScheme == .dark ? .gray.opacity(0.35) : .primary.opacity(0.75)
+        if locked { return .systemGray5 }
+
+        return colorScheme == .dark ? Color.gray.opacity(0.35) : Color.primary.opacity(0.75)
+    }
+
+    var iconForeground: Color {
+        locked ? .secondary : .white
     }
 
     var arrow: String {
+        if locked {
+            return "lock.fill"
+        }
+
         if !confirmed {
             return "clock.arrow.2.circlepath"
         }
@@ -673,7 +657,7 @@ private struct TxnIcon: View {
     var body: some View {
         ZStack {
             Image(systemName: arrow)
-                .foregroundColor(.white)
+                .foregroundColor(iconForeground)
                 .padding()
         }
         .frame(width: 50, height: 50)

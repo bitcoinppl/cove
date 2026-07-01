@@ -552,6 +552,17 @@ class WalletManager :
         return state
     }
 
+    suspend fun unlockTransactionOutputs(txId: TxId): TransactionLockState {
+        val state =
+            withRustSuspend {
+                unlockTransactionOutputs(txId)
+            }
+        transactionLockStates[txId] = state
+        AppManager.getInstance().reconcileAfterLabelImport(id)
+
+        return state
+    }
+
     fun clearTransactionLockState(txId: TxId) {
         transactionLockStates.remove(txId)
     }
