@@ -260,7 +260,7 @@ private struct TransactionDetailsHeaderLabelRow: View {
 
     var body: some View {
         if let lockedUtxosState {
-            HStack(spacing: 12) {
+            VStack(spacing: 8) {
                 TransactionDetailsLabelView(details: transactionDetails, manager: manager)
                     .lineLimit(1)
 
@@ -291,17 +291,17 @@ private struct TransactionCollapsedLockBadge: View {
         } label: {
             Label {
                 Text(lockState.collapsedLockBadgeTitle)
-                    .font(.caption)
+                    .font(.footnote)
                     .fontWeight(.semibold)
                     .lineLimit(1)
             } icon: {
                 Image(systemName: "lock.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
             }
-            .foregroundStyle(Color.statusWarning)
+            .foregroundStyle(Color.statusError)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(Color.statusWarning.opacity(0.14))
+            .background(Color.statusError.opacity(0.14))
             .clipShape(Capsule())
             .opacity(isUpdatingLockState ? 0.72 : 1)
         }
