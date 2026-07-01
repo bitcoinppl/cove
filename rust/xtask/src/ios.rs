@@ -44,8 +44,9 @@ const IOS_REQUIRED_SIGNED_ENTITLEMENTS: [&str; 4] = [
 ];
 const IOS_SIMULATOR_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
 const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
-const IOS_SIMULATOR_DERIVED_DATA_DIR: &str = "Cove-simulator-run";
-const IOS_DEVICE_DERIVED_DATA_DIR: &str = "Cove-device-run";
+const COVE_BUILD_SLOT_ENV: &str = "COVE_BUILD_SLOT";
+const IOS_SIMULATOR_DERIVED_DATA_SUFFIX: &str = "simulator-run";
+const IOS_DEVICE_DERIVED_DATA_SUFFIX: &str = "device-run";
 const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_CONNECTED_DEVICE_FILTER: &str = "state == \"connected\"";
@@ -1048,7 +1049,7 @@ fn normalize_arg(value: String) -> Option<String> {
 }
 
 fn run_ios_simulator(sh: &Shell, verbose: bool) -> Result<()> {
-    let derived_data_path = derived_data_path(IOS_SIMULATOR_DERIVED_DATA_DIR)?;
+    let derived_data_path = derived_data_path(IOS_SIMULATOR_DERIVED_DATA_SUFFIX)?;
     let app_path = build_ios_app(
         sh,
         IOS_SIMULATOR_DESTINATION,
@@ -1077,7 +1078,7 @@ fn run_ios_device(sh: &Shell, selector: &DeviceSelector, verbose: bool) -> Resul
     let device_identifier = device.device_identifier.clone();
     print_info(&format!("Running iOS app on {}", device.description));
 
-    let derived_data_path = derived_data_path(IOS_DEVICE_DERIVED_DATA_DIR)?;
+    let derived_data_path = derived_data_path(IOS_DEVICE_DERIVED_DATA_SUFFIX)?;
     let app_path = build_ios_app(
         sh,
         &device.destination,
@@ -1134,9 +1135,59 @@ fn build_ios_app(
     Ok(app_path)
 }
 
-fn derived_data_path(dir_name: &str) -> Result<String> {
+fn derived_data_path(target_suffix: &str) -> Result<String> {
     let home_dir = std::env::var("HOME").wrap_err("Failed to get HOME environment variable")?;
+    let dir_name = derived_data_dir_name(target_suffix)?;
+
     Ok(format!("{home_dir}/{XCODE_DERIVED_DATA_PATH}/{dir_name}"))
+}
+
+fn derived_data_dir_name(target_suffix: &str) -> Result<String> {
+    Ok(derived_data_dir_name_for_slot(target_suffix, &ios_build_slot()?))
+}
+
+fn derived_data_dir_name_for_slot(target_suffix: &str, slot: &str) -> String {
+    format!("Cove-{}-{target_suffix}", sanitize_build_slot(slot))
+}
+
+fn ios_build_slot() -> Result<String> {
+    if let Some(slot) = std::env::var_os(COVE_BUILD_SLOT_ENV).filter(|slot| !slot.is_empty()) {
+        return Ok(sanitize_build_slot(&slot.to_string_lossy()));
+    }
+
+    let current_dir = std::env::current_dir().wrap_err("Failed to get current directory")?;
+
+    Ok(default_build_slot_from_cwd(&current_dir))
+}
+
+fn default_build_slot_from_cwd(cwd: &Path) -> String {
+    let workspace_dir = if cwd.file_name().is_some_and(|name| name == "rust") {
+        cwd.parent().unwrap_or(cwd)
+    } else {
+        cwd
+    };
+
+    let slot = workspace_dir
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_else(|| "workspace".into());
+
+    sanitize_build_slot(&slot)
+}
+
+fn sanitize_build_slot(slot: &str) -> String {
+    let sanitized = slot
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "workspace".to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn resolve_connected_device(sh: &Shell, selector: &str) -> Result<ResolvedDevice> {

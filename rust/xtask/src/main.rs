@@ -5,6 +5,7 @@ mod android;
 mod common;
 mod github;
 mod ios;
+mod mobile_artifact;
 mod rebase;
 mod util;
 mod version;
@@ -142,6 +143,13 @@ enum Commands {
     #[command(name = "regenerate-bindings")]
     RegenerateBindings,
 
+    /// Build, download, validate, install, and clean mobile artifacts
+    #[command(name = "mobile-artifact")]
+    MobileArtifact {
+        #[command(subcommand)]
+        command: mobile_artifact::MobileArtifactCommand,
+    },
+
     /// Rebase the current branch onto a new base after choosing the old base
     #[command(name = "rebase")]
     Rebase {
@@ -260,6 +268,8 @@ fn main() -> Result<()> {
         Commands::InstallDeps => install_deps(cli.verbose),
 
         Commands::RegenerateBindings => github::regenerate_bindings(),
+
+        Commands::MobileArtifact { command } => mobile_artifact::run(command, cli.verbose),
 
         Commands::Rebase { new_base } => rebase::rebase(&new_base),
 

@@ -73,6 +73,26 @@ regenerate-bindings:
 
 alias rb := regenerate-bindings
 
+# Run mobile artifact producer or consumer commands
+[group('ci')]
+mobile-artifact *args:
+    just xtask mobile-artifact {{ args }}
+
+# Trigger Android and iOS mobile artifacts for a pushed ref
+[group('ci')]
+mobile-artifact-trigger ref platform="both":
+    just mobile-artifact trigger --platform "{{ platform }}" --ref "{{ ref }}"
+
+# Install latest matching Android mobile artifact
+[group('ci')]
+mobile-artifact-install-android ref:
+    just mobile-artifact install-android --ref "{{ ref }}"
+
+# Fetch latest matching iOS CoveCore mobile artifact
+[group('ci')]
+mobile-artifact-fetch-ios-core ref:
+    just mobile-artifact fetch-ios-core --ref "{{ ref }}"
+
 # ------------------------------------------------------------------------------
 # build
 # ------------------------------------------------------------------------------

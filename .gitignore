@@ -1,5 +1,6 @@
 _docs/
 _plans
+/_artifacts/
 
 *~.swift
 **/**/UserInterfaceState.xcuserstate
