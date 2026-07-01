@@ -81,18 +81,33 @@ impl ReceiveAddressCache {
     }
 }
 
+/// Consensus-encoded bytes of a bitcoin transaction stored in the database.
+///
+/// `bitcoin::Transaction` does not implement serde natively; storing the consensus-encoded
+/// bytes avoids an orphan-impl problem while keeping the format identical to what is broadcast.
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Eq, PartialEq, derive_more::From, derive_more::Into,
+)]
+pub struct TransactionBytes(Vec<u8>);
+
+impl AsRef<[u8]> for TransactionBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Terminal action decided for a payjoin session before the broadcast completes
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum PendingAction {
     BroadcastFallback,
-    BroadcastProposal { transaction: Vec<u8> },
+    BroadcastProposal { transaction: TransactionBytes },
 }
 
 /// Event log for an in-flight payjoin sender session, allowing it to survive app restarts
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PayjoinSenderSession {
     pub events: Vec<String>,
-    pub fallback_tx: Vec<u8>,
+    pub fallback_tx: TransactionBytes,
     #[serde(default)]
     pub created_at_secs: Option<u64>,
     #[serde(default)]
@@ -442,7 +457,7 @@ mod tests {
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
         let session = PayjoinSenderSession {
             events: vec![r#"{"PostedOriginalPsbt":[]}"#.to_string()],
-            fallback_tx: vec![0x02, 0x00, 0x00, 0x00],
+            fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
             pending_action: None,
         };
@@ -458,7 +473,7 @@ mod tests {
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
         let session = PayjoinSenderSession {
             events: vec![r#"{"Closed":"Failure"}"#.to_string()],
-            fallback_tx: vec![0x02, 0x00, 0x00, 0x00],
+            fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
             pending_action: None,
         };

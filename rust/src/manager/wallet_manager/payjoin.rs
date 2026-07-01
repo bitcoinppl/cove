@@ -101,7 +101,9 @@ impl PayjoinSessionPersister {
         match &session.pending_action {
             None => {}
 
-            Some(PendingAction::BroadcastProposal { transaction }) if *transaction == tx_bytes => {
+            Some(PendingAction::BroadcastProposal { transaction })
+                if transaction.as_ref() == tx_bytes.as_slice() =>
+            {
                 return Ok(());
             }
 
@@ -112,7 +114,8 @@ impl PayjoinSessionPersister {
             }
         }
 
-        session.pending_action = Some(PendingAction::BroadcastProposal { transaction: tx_bytes });
+        session.pending_action =
+            Some(PendingAction::BroadcastProposal { transaction: tx_bytes.into() });
         self.db.set_payjoin_sender_session(session)
     }
 
@@ -132,7 +135,7 @@ impl PayjoinSessionPersister {
             SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs());
         let session = PayjoinSenderSession {
             events: vec![],
-            fallback_tx: consensus::serialize(fallback_tx),
+            fallback_tx: consensus::serialize(fallback_tx).into(),
             created_at_secs,
             pending_action: None,
         };
@@ -146,12 +149,12 @@ impl PayjoinSessionPersister {
         match &session.pending_action {
             None => None,
             Some(PendingAction::BroadcastFallback) => {
-                consensus::deserialize::<BdkTransaction>(&session.fallback_tx)
+                consensus::deserialize::<BdkTransaction>(session.fallback_tx.as_ref())
                     .ok()
                     .map(|tx| tx.compute_txid())
             }
             Some(PendingAction::BroadcastProposal { transaction }) => {
-                consensus::deserialize::<BdkTransaction>(transaction)
+                consensus::deserialize::<BdkTransaction>(transaction.as_ref())
                     .ok()
                     .map(|tx| tx.compute_txid())
             }
@@ -793,7 +796,7 @@ pub(crate) fn resume_session(
 
 /// Recovers the fallback tx from the session record when replay is not possible.
 fn fallback_from_record(db: &WalletDataDb, record: PayjoinSenderSession) -> SessionResumption {
-    match consensus::deserialize(&record.fallback_tx) {
+    match consensus::deserialize(record.fallback_tx.as_ref()) {
         Ok(fallback_tx) => SessionResumption::BroadcastFallback { fallback_tx },
 
         Err(error) if matches!(record.pending_action, Some(PendingAction::BroadcastFallback)) => {
@@ -829,7 +832,7 @@ fn fallback_from_record(db: &WalletDataDb, record: PayjoinSenderSession) -> Sess
 /// so deleting the record or broadcasting the fallback would be unsafe.
 fn proposal_from_record(_db: &WalletDataDb, record: PayjoinSenderSession) -> SessionResumption {
     let tx_bytes = match &record.pending_action {
-        Some(PendingAction::BroadcastProposal { transaction }) => transaction.clone(),
+        Some(PendingAction::BroadcastProposal { transaction }) => transaction.as_ref().to_vec(),
         _ => {
             error!(
                 "proposal_from_record called without BroadcastProposal action; retaining record"
@@ -1077,7 +1080,7 @@ mod tests {
         let tx = test_fallback_tx();
         let session = PayjoinSenderSession {
             events: vec!["irrelevant_event".to_string()],
-            fallback_tx: consensus::serialize(&tx),
+            fallback_tx: consensus::serialize(&tx).into(),
             created_at_secs: None,
             pending_action: Some(PendingAction::BroadcastFallback),
         };
@@ -1140,10 +1143,10 @@ mod tests {
         let tx = empty_transaction();
         let session = PayjoinSenderSession {
             events: vec![],
-            fallback_tx: consensus::serialize(&test_fallback_tx()),
+            fallback_tx: consensus::serialize(&test_fallback_tx()).into(),
             created_at_secs: None,
             pending_action: Some(PendingAction::BroadcastProposal {
-                transaction: consensus::serialize(&tx),
+                transaction: consensus::serialize(&tx).into(),
             }),
         };
         db.set_payjoin_sender_session(session).unwrap();
@@ -1163,10 +1166,10 @@ mod tests {
         let (_persister, db, _tmp) = new_test_persister();
         let session = PayjoinSenderSession {
             events: vec![],
-            fallback_tx: consensus::serialize(&test_fallback_tx()),
+            fallback_tx: consensus::serialize(&test_fallback_tx()).into(),
             created_at_secs: None,
             pending_action: Some(PendingAction::BroadcastProposal {
-                transaction: vec![0xff], // corrupt bytes
+                transaction: vec![0xff].into(),
             }),
         };
         db.set_payjoin_sender_session(session).unwrap();
@@ -1189,7 +1192,7 @@ mod tests {
         let (_persister, db, _tmp) = new_test_persister();
         let session = PayjoinSenderSession {
             events: vec![],
-            fallback_tx: vec![0xff],
+            fallback_tx: vec![0xff].into(),
             created_at_secs: None,
             pending_action: None,
         };
@@ -1213,7 +1216,7 @@ mod tests {
         let (_persister, db, _tmp) = new_test_persister();
         let session = PayjoinSenderSession {
             events: vec![],
-            fallback_tx: vec![0xff],
+            fallback_tx: vec![0xff].into(),
             created_at_secs: None,
             pending_action: Some(PendingAction::BroadcastFallback), // marker written before crash
         };
