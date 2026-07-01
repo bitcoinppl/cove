@@ -243,7 +243,7 @@ impl LabelManager {
 
             let split = Split::try_from_data(
                 data,
-                FileType::Json,
+                FileType::UnicodeText,
                 SplitOptions {
                     encoding: Encoding::Zlib,
                     min_split_number: 1,
@@ -838,5 +838,25 @@ mod tests {
             .global_config
             .clear_selected_wallet()
             .expect("selected wallet is cleared");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn label_bbqr_export_uses_unicode_text_file_type() {
+        use bbqr::{file_type::FileType, header::Header};
+
+        let (manager, _tmp) = test_manager();
+        manager
+            .import_without_cloud_backup_dirty(
+                r#"{"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"exported"}"#,
+            )
+            .expect("failed to insert labels");
+
+        let parts = manager
+            .export_to_bbqr_with_density(&QrDensity::default())
+            .await
+            .expect("failed to export labels");
+        let header = Header::try_from_str(&parts[0]).expect("failed to parse BBQr header");
+
+        assert_eq!(header.file_type, FileType::UnicodeText);
     }
 }
