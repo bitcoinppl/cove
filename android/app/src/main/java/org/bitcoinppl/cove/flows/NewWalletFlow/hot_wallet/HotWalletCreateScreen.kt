@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -216,7 +217,7 @@ fun HotWalletCreateScreen(
                             .fillMaxWidth()
                             .heightIn(min = maxHeight)
                             .verticalScroll(rememberScrollState())
-                            .padding(vertical = 20.dp),
+                            .padding(top = 20.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
                     // pager for word groups
@@ -323,6 +324,12 @@ fun HotWalletCreateScreen(
                                 Modifier
                                     .fillMaxWidth()
                                     .testTag("hotWalletCreate.primaryAction"),
+                        )
+
+                        Spacer(
+                            Modifier
+                                .height(16.dp)
+                                .testTag("hotWalletCreate.bottomPadding"),
                         )
                     }
                 }

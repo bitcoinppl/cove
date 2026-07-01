@@ -17,12 +17,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -55,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -269,6 +274,7 @@ fun VerifyWordsScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .testTag("verifyWords.viewport")
                     .onGloballyPositioned { coords ->
                         val pos = coords.positionInRoot()
                         rootOffset = Offset(pos.x, pos.y)
@@ -284,143 +290,147 @@ fun VerifyWordsScreen(
                         .align(Alignment.TopCenter),
             )
 
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
                 Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.Top,
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                            .heightIn(min = maxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(top = 20.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Spacer(Modifier.height(12.dp))
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                        verticalArrangement = Arrangement.Top,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Spacer(Modifier.height(12.dp))
 
-                    Text(
-                        text = stringResource(R.string.label_what_is_word_n, wordNumber),
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Spacer(Modifier.height(24.dp))
-
-                    // target position for chip animation
-                    BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val cellWidth = (maxWidth - 12.dp * 3) / 4
-                        Box(
+                        Text(
+                            text = stringResource(R.string.label_what_is_word_n, wordNumber),
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                        )
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // target position for chip animation
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val cellWidth = (maxWidth - 12.dp * 3) / 4
                             Box(
-                                modifier =
-                                    Modifier
-                                        .width(cellWidth)
-                                        .height(chipHeight)
-                                        .onGloballyPositioned { coordinates ->
-                                            val pos = coordinates.positionInRoot()
-                                            targetPosition =
-                                                Offset(
-                                                    pos.x - rootOffset.x,
-                                                    pos.y - rootOffset.y,
-                                                )
-                                        },
-                            ) { }
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .width(cellWidth)
+                                            .height(chipHeight)
+                                            .testTag("verifyWords.target")
+                                            .onGloballyPositioned { coordinates ->
+                                                val pos = coordinates.positionInRoot()
+                                                targetPosition =
+                                                    Offset(
+                                                        pos.x - rootOffset.x,
+                                                        pos.y - rootOffset.y,
+                                                    )
+                                            },
+                                ) { }
+                            }
                         }
-                    }
 
-                    Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.dp))
 
-                    HorizontalDivider(
-                        color = Color.White,
-                        thickness = 1.dp,
-                        modifier = Modifier.width(160.dp),
-                    )
+                        HorizontalDivider(
+                            color = Color.White,
+                            thickness = 1.dp,
+                            modifier = Modifier.width(160.dp),
+                        )
 
-                    Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(24.dp))
 
-                    // word options grid
-                    BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val cellWidth = (maxWidth - 12.dp * 3) / 4
-                        actualChipWidth = cellWidth
+                        // word options grid
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val cellWidth = (maxWidth - 12.dp * 3) / 4
+                            actualChipWidth = cellWidth
 
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            possibleWords.chunked(4).forEach { rowItems ->
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    rowItems.forEach { word ->
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            val isAnimating =
-                                                checkState.let {
-                                                    when (it) {
-                                                        is WordCheckState.Checking -> it.word == word
-                                                        is WordCheckState.Correct -> it.word == word
-                                                        is WordCheckState.Incorrect -> it.word == word
-                                                        is WordCheckState.Returning -> it.word == word
-                                                        WordCheckState.None -> false
-                                                    }
-                                                }
-
-                                            if (isAnimating) {
-                                                // placeholder while animating
-                                                Box(
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .height(46.dp),
-                                                ) { }
-                                            } else {
-                                                OptionChip(
-                                                    text = word,
-                                                    selected = false,
-                                                    onClick = {
-                                                        if (checkState == WordCheckState.None) {
-                                                            val transition = stateMachine.selectWord(word)
-                                                            checkState = transition.newState
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                possibleWords.chunked(4).forEach { rowItems ->
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        rowItems.forEach { word ->
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                val isAnimating =
+                                                    checkState.let {
+                                                        when (it) {
+                                                            is WordCheckState.Checking -> it.word == word
+                                                            is WordCheckState.Correct -> it.word == word
+                                                            is WordCheckState.Incorrect -> it.word == word
+                                                            is WordCheckState.Returning -> it.word == word
+                                                            WordCheckState.None -> false
                                                         }
-                                                    },
-                                                    onPositionCaptured = { position ->
-                                                        wordPositions = wordPositions + (
-                                                            word to
-                                                                Offset(
-                                                                    position.x - rootOffset.x,
-                                                                    position.y - rootOffset.y,
-                                                                )
-                                                        )
-                                                    },
-                                                )
+                                                    }
+
+                                                if (isAnimating) {
+                                                    // placeholder while animating
+                                                    Box(
+                                                        modifier =
+                                                            Modifier
+                                                                .fillMaxWidth()
+                                                                .height(46.dp),
+                                                    ) { }
+                                                } else {
+                                                    OptionChip(
+                                                        text = word,
+                                                        selected = false,
+                                                        onClick = {
+                                                            if (checkState == WordCheckState.None) {
+                                                                val transition = stateMachine.selectWord(word)
+                                                                checkState = transition.newState
+                                                            }
+                                                        },
+                                                        onPositionCaptured = { position ->
+                                                            wordPositions = wordPositions + (
+                                                                word to
+                                                                    Offset(
+                                                                        position.x - rootOffset.x,
+                                                                        position.y - rootOffset.y,
+                                                                    )
+                                                            )
+                                                        },
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                    repeat(4 - rowItems.size) {
-                                        Spacer(modifier = Modifier.weight(1f))
+                                        repeat(4 - rowItems.size) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 20.dp),
-                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 20.dp),
+                    ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DotMenuView(
                             count = 4,
@@ -444,8 +454,6 @@ fun VerifyWordsScreen(
                         lineHeight = 18.sp,
                     )
 
-                    Spacer(Modifier.weight(1f))
-
                     HorizontalDivider(color = Color.White.copy(alpha = 0.35f), thickness = 1.dp)
 
                     Button(
@@ -457,7 +465,7 @@ fun VerifyWordsScreen(
                                 contentColor = CoveColor.midnightBlue,
                             ),
                         contentPadding = PaddingValues(vertical = 20.dp, horizontal = 10.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("verifyWords.showWords"),
                     ) {
                         Text(
                             text = stringResource(R.string.btn_show_words),
@@ -477,8 +485,16 @@ fun VerifyWordsScreen(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
+                                .testTag("verifyWords.skip")
                                 .clickable { showSkipAlert = true },
                     )
+
+                    Spacer(
+                        Modifier
+                            .height(1.dp)
+                            .testTag("verifyWords.bottomPadding"),
+                    )
+                    }
                 }
             }
 

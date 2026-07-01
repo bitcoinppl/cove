@@ -362,9 +362,10 @@ fun HotWalletImportScreen(
     ) { padding ->
         Box(
             modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .testTag("hotWalletImport.viewport"),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
