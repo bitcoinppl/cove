@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove
 
+import android.content.Context
 import android.os.Build
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -13,18 +14,21 @@ import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.startupDiagnosticTextReport
 import java.time.Instant
 
-internal fun startupDiagnosticsReport(errorMessage: String): String {
+internal fun startupDiagnosticsReport(
+    context: Context,
+    errorMessage: String,
+): String {
     return buildString {
-        appendLine("Cove startup diagnostics")
-        appendLine("Generated: ${Instant.now()}")
+        appendLine(context.getString(R.string.common_remaining_diagnostics_title))
+        appendLine(context.getString(R.string.common_remaining_diagnostics_generated, Instant.now().toString()))
         appendLine()
-        appendLine("App")
-        appendLine("Version: ${BuildConfig.VERSION_NAME}")
-        appendLine("Build: ${BuildConfig.VERSION_CODE}")
-        appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
-        appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine(context.getString(R.string.common_remaining_diagnostics_app_section))
+        appendLine(context.getString(R.string.common_remaining_diagnostics_version, BuildConfig.VERSION_NAME))
+        appendLine(context.getString(R.string.common_remaining_diagnostics_build, BuildConfig.VERSION_CODE))
+        appendLine(context.getString(R.string.common_remaining_diagnostics_android, Build.VERSION.RELEASE, Build.VERSION.SDK_INT))
+        appendLine(context.getString(R.string.common_remaining_diagnostics_device, Build.MANUFACTURER, Build.MODEL))
         appendLine()
-        appendLine("Platform error")
+        appendLine(context.getString(R.string.common_remaining_diagnostics_platform_error))
         appendLine(errorMessage)
         appendLine()
         append(startupDiagnosticTextReport())
@@ -32,14 +36,16 @@ internal fun startupDiagnosticsReport(errorMessage: String): String {
 }
 
 internal suspend fun runBootstrapWithWatchdog(
+    context: Context,
     onMigrationProgress: (status: String?, progress: Float?) -> Unit,
 ): String? = coroutineScope {
     val bootstrapDeferred = async { bootstrap() }
-    launch { watchBootstrap(bootstrapDeferred, onMigrationProgress) }
+    launch { watchBootstrap(context, bootstrapDeferred, onMigrationProgress) }
     bootstrapDeferred.await()
 }
 
 private suspend fun watchBootstrap(
+    context: Context,
     bootstrapDeferred: kotlinx.coroutines.Deferred<*>,
     onMigrationProgress: (status: String?, progress: Float?) -> Unit,
 ) {
@@ -59,7 +65,10 @@ private suspend fun watchBootstrap(
         if (progress != null && progress.total > 0u) {
             migrationDetected = true
             progressCleared = false
-            onMigrationProgress("Encrypting data...", progress.current.toFloat() / progress.total.toFloat())
+            onMigrationProgress(
+                context.getString(R.string.common_remaining_encrypting_data),
+                progress.current.toFloat() / progress.total.toFloat(),
+            )
         } else if (!progressCleared) {
             progressCleared = true
             onMigrationProgress(null, null)

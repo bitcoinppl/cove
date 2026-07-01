@@ -32,7 +32,6 @@ pub use self::state_types::{
     CloudBackupVerificationState, LoadedCloudBackupDetail,
 };
 
-const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
 const STALE_VERIFICATION_THRESHOLD: Duration = Duration::from_secs(60 * 60 * 24 * 30);
 
 /// Private reducer wrapper that projects public Cloud Backup state
@@ -60,7 +59,7 @@ enum CloudBackupLifecyclePhase {
     Enabling(CloudBackupEnableFlow),
     Restoring(CloudBackupRestoreFlow),
     Configured,
-    Failed(CloudBackupFailure),
+    Failed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,8 +129,8 @@ impl CloudBackupReducerState {
             CloudBackupLifecyclePhase::Configured => {
                 CloudBackupLifecycle::Configured(self.public_configured_state())
             }
-            CloudBackupLifecyclePhase::Failed(failure) => {
-                CloudBackupLifecycle::Failed(failure.clone())
+            CloudBackupLifecyclePhase::Failed(_) => {
+                CloudBackupLifecycle::Failed(CloudBackupFailure::Failed)
             }
         }
     }
@@ -287,7 +286,7 @@ impl CloudBackupReducerState {
             CloudBackupPasskeyState::Missing
                 | CloudBackupPasskeyState::NeedsRepair {
                     state: CloudBackupPasskeyRepairState::Idle
-                        | CloudBackupPasskeyRepairState::Failed(_),
+                        | CloudBackupPasskeyRepairState::Failed,
                 }
         )
     }
@@ -335,9 +334,7 @@ impl CloudBackupReducerState {
                     CloudBackupStatus::UnsupportedPasskeyProvider
                 }
             },
-            CloudBackupLifecyclePhase::Failed(failure) => {
-                CloudBackupStatus::Error(failure.message.clone())
-            }
+            CloudBackupLifecyclePhase::Failed(message) => CloudBackupStatus::Error(message.clone()),
         }
     }
 
@@ -353,9 +350,7 @@ impl CloudBackupReducerState {
             CloudBackupStatus::UnsupportedPasskeyProvider => {
                 return CloudBackupSettingsRowStatus::PasskeyProviderUnsupported;
             }
-            CloudBackupStatus::Error(message) => {
-                return CloudBackupSettingsRowStatus::Error(message);
-            }
+            CloudBackupStatus::Error(_) => return CloudBackupSettingsRowStatus::Error,
             CloudBackupStatus::Enabled => {}
         }
 
@@ -378,13 +373,11 @@ impl CloudBackupReducerState {
             CloudSyncHealth::Uploading => CloudBackupSettingsRowStatus::Syncing,
             CloudSyncHealth::Unknown => CloudBackupSettingsRowStatus::CheckingSync,
             CloudSyncHealth::NoFiles => CloudBackupSettingsRowStatus::NoFiles,
-            CloudSyncHealth::AuthorizationRequired(message) => {
-                CloudBackupSettingsRowStatus::AuthorizationRequired(message.clone())
+            CloudSyncHealth::AuthorizationRequired => {
+                CloudBackupSettingsRowStatus::AuthorizationRequired
             }
             CloudSyncHealth::Unavailable => CloudBackupSettingsRowStatus::DriveUnavailable,
-            CloudSyncHealth::Failed(message) => {
-                CloudBackupSettingsRowStatus::Error(message.clone())
-            }
+            CloudSyncHealth::Failed => CloudBackupSettingsRowStatus::Error,
         }
     }
 
@@ -471,7 +464,7 @@ impl CloudBackupReducerState {
             CloudBackupDetailState::Loaded { state } => Some(state),
             CloudBackupDetailState::NotLoaded
             | CloudBackupDetailState::Loading
-            | CloudBackupDetailState::Failed(_) => None,
+            | CloudBackupDetailState::Failed => None,
         }
     }
 
@@ -587,8 +580,9 @@ impl CloudBackupReducerState {
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupStatus::Error(message) => {
+                tracing::warn!("Cloud backup lifecycle failed: {message}");
                 self.active_enable_context = None;
-                self.phase = CloudBackupLifecyclePhase::Failed(CloudBackupFailure { message });
+                self.phase = CloudBackupLifecyclePhase::Failed(message);
             }
         }
     }
@@ -645,19 +639,17 @@ impl CloudBackupReducerState {
 
         match pending {
             PendingUploadVerificationState::Idle => {
-                if matches!(self.configured.sync, CloudBackupSyncState::Blocked(_)) {
+                if matches!(self.configured.sync, CloudBackupSyncState::Blocked) {
                     self.configured.sync = CloudBackupSyncState::Idle;
                 }
             }
             PendingUploadVerificationState::Confirming => {
-                if matches!(self.configured.sync, CloudBackupSyncState::Blocked(_)) {
+                if matches!(self.configured.sync, CloudBackupSyncState::Blocked) {
                     self.configured.sync = CloudBackupSyncState::Idle;
                 }
             }
             PendingUploadVerificationState::BlockedOnAuthorization => {
-                self.configured.sync = CloudBackupSyncState::Blocked(
-                    PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into(),
-                );
+                self.configured.sync = CloudBackupSyncState::Blocked;
             }
         }
     }
@@ -734,7 +726,7 @@ impl CloudBackupReducerState {
         self.configured.sync = match sync {
             SyncState::Idle => CloudBackupSyncState::Idle,
             SyncState::Syncing => CloudBackupSyncState::Syncing,
-            SyncState::Failed(message) => CloudBackupSyncState::Failed(message),
+            SyncState::Failed => CloudBackupSyncState::Failed,
         };
     }
 
@@ -769,8 +761,9 @@ impl CloudBackupReducerState {
                 self.configured.destructive_operation = CloudBackupDestructiveOperationState::Idle;
             }
             RecoveryState::Failed { action: RecoveryAction::RepairPasskey, error } => {
+                tracing::warn!("Cloud backup passkey repair failed: {error}");
                 self.configured.passkey = CloudBackupPasskeyState::NeedsRepair {
-                    state: CloudBackupPasskeyRepairState::Failed(error),
+                    state: CloudBackupPasskeyRepairState::Failed,
                 };
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
@@ -789,11 +782,9 @@ impl CloudBackupReducerState {
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupDisableOutcome::Failed { message, can_keep_enabled } => {
+                tracing::warn!("Cloud Backup disable failed: {message}");
                 self.configured.destructive_operation =
-                    CloudBackupDestructiveOperationState::DisableFailed {
-                        message,
-                        can_keep_enabled,
-                    };
+                    CloudBackupDestructiveOperationState::DisableFailed { can_keep_enabled };
                 self.phase = CloudBackupLifecyclePhase::Configured;
             }
             CloudBackupDisableOutcome::ReturnedToIdle => {
@@ -843,15 +834,15 @@ impl CloudBackupReducerState {
             (detail, CloudOnlyState::Loading) => {
                 *detail = CloudBackupDetailState::Loading;
             }
-            (detail, CloudOnlyState::Failed { error }) => {
-                *detail = CloudBackupDetailState::Failed(error);
+            (detail, CloudOnlyState::Failed) => {
+                *detail = CloudBackupDetailState::Failed;
             }
             (detail, CloudOnlyState::NotFetched) => {
                 *detail = CloudBackupDetailState::NotLoaded;
             }
             (CloudBackupDetailState::NotLoaded, CloudOnlyState::Loaded { .. })
             | (CloudBackupDetailState::Loading, CloudOnlyState::Loaded { .. })
-            | (CloudBackupDetailState::Failed(_), CloudOnlyState::Loaded { .. }) => {}
+            | (CloudBackupDetailState::Failed, CloudOnlyState::Loaded { .. }) => {}
         }
     }
 
@@ -1279,12 +1270,12 @@ mod tests {
     fn settings_row_status_projects_sync_health() {
         let state = configured_state(
             CloudBackupVerificationState::NotVerified,
-            CloudSyncHealth::AuthorizationRequired("wrong account".into()),
+            CloudSyncHealth::AuthorizationRequired,
         );
 
         assert_eq!(
             state.settings_row_status(),
-            CloudBackupSettingsRowStatus::AuthorizationRequired("wrong account".into())
+            CloudBackupSettingsRowStatus::AuthorizationRequired
         );
     }
 
@@ -1300,15 +1291,10 @@ mod tests {
 
     #[test]
     fn settings_row_status_projects_failed_sync_health() {
-        let state = configured_state(
-            CloudBackupVerificationState::NotVerified,
-            CloudSyncHealth::Failed("upload failed".into()),
-        );
+        let state =
+            configured_state(CloudBackupVerificationState::NotVerified, CloudSyncHealth::Failed);
 
-        assert_eq!(
-            state.settings_row_status(),
-            CloudBackupSettingsRowStatus::Error("upload failed".into())
-        );
+        assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Error);
     }
 
     #[test]
@@ -1590,9 +1576,7 @@ mod tests {
             Some(&CloudBackupLifecycle::Configured(CloudBackupConfiguredState {
                 passkey: CloudBackupPasskeyState::Available,
                 verification: CloudBackupVerificationState::AwaitingUploadConfirmation,
-                sync: CloudBackupSyncState::Blocked(
-                    PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into(),
-                ),
+                sync: CloudBackupSyncState::Blocked,
                 destructive_operation: CloudBackupDestructiveOperationState::Idle,
                 detail: CloudBackupDetailState::NotLoaded,
                 root_prompt: CloudBackupRootPrompt::None,
@@ -1626,10 +1610,7 @@ mod tests {
             panic!("enabled backup should project configured lifecycle");
         };
 
-        assert_eq!(
-            state.sync,
-            CloudBackupSyncState::Blocked(PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into()),
-        );
+        assert_eq!(state.sync, CloudBackupSyncState::Blocked);
     }
 
     #[test]
@@ -1684,10 +1665,7 @@ mod tests {
         };
         assert_eq!(
             state.destructive_operation,
-            CloudBackupDestructiveOperationState::DisableFailed {
-                message: "blocked".into(),
-                can_keep_enabled: true,
-            }
+            CloudBackupDestructiveOperationState::DisableFailed { can_keep_enabled: true }
         );
     }
 

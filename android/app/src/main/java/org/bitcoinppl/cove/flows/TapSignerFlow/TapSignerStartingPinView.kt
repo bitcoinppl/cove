@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove_core.TapSignerNewPinArgs
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -103,10 +105,10 @@ fun TapSignerStartingPinView(
                     TextButton(onClick = { manager.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.scoped_common_back),
                             tint = Color.White,
                         )
-                        Text("Back", fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(stringResource(R.string.scoped_common_back), fontWeight = FontWeight.SemiBold, color = Color.White)
                     }
                 }
 
@@ -117,7 +119,7 @@ fun TapSignerStartingPinView(
                             .Builder(LocalContext.current)
                             .data("file:///android_asset/tapsigner_card.svg")
                             .build(),
-                    contentDescription = "TapSigner Card",
+                    contentDescription = stringResource(R.string.tap_signer_card),
                     modifier =
                         Modifier
                             .offset(y = 10.dp)
@@ -139,15 +141,14 @@ fun TapSignerStartingPinView(
 
             // title
             Text(
-                text = "Enter Starting PIN",
+                text = stringResource(R.string.tap_signer_enter_starting_pin),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
 
             // description
             Text(
-                text =
-                    "The starting PIN is the 6 digit numeric PIN found on the back of your TAPSIGNER",
+                text = stringResource(R.string.tap_signer_starting_pin_body),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )

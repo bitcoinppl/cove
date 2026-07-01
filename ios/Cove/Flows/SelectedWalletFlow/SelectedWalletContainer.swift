@@ -64,10 +64,10 @@ struct SelectedWalletContainer: View {
 
     private func handleManagerError(_ error: Error) {
         switch error {
-        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
-            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
+        case let WalletManagerError.DatabaseCorruption(walletId):
+            Log.error("Wallet database corrupted for \(walletId)")
             app.alertState = TaggedItem(
-                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
+                .walletDatabaseCorrupted(walletId: walletId)
             )
         default:
             Log.error("Something went very wrong: \(error)")

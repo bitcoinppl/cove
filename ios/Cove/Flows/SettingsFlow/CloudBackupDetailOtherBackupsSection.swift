@@ -22,9 +22,9 @@ struct OtherBackupsSection: View {
         isRecovering || isDeleting
     }
 
-    private var failure: String? {
-        if case let .failed(error) = manager.otherBackupsOperation { return error }
-        return nil
+    private var hasFailure: Bool {
+        if case .failed = manager.otherBackupsOperation { return true }
+        return false
     }
 
     var body: some View {
@@ -55,8 +55,8 @@ struct OtherBackupsSection: View {
             }
             .disabled(isOperating)
 
-            if let failure {
-                Text(failure)
+            if hasFailure {
+                Text("Unable to update these Cloud Backups. Please try again.")
                     .font(.caption)
                     .foregroundStyle(Color.statusError)
             }
@@ -153,17 +153,11 @@ struct OtherBackupsSection: View {
 }
 
 struct OtherBackupsLoadFailedSection: View {
-    let error: String
-
     var body: some View {
         Section(header: Text("Other Cloud Backups")) {
             Text("Could not load other cloud backups.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(Color.statusError)
         }
     }
 }

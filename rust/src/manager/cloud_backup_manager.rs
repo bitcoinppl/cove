@@ -121,6 +121,19 @@ pub enum CloudBackupStatus {
     Error(String),
 }
 
+/// Background cloud backup health issues returned as typed diagnostics
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupIntegrityIssue {
+    MasterKeyMissing,
+    PasskeyCredentialMissing,
+    PasskeySaltMissing,
+    NamespaceMissing,
+    RemoteWalletListUnreadable,
+    RemoteBackupFreshnessUnknown,
+    LocalWalletInventoryUnreadable,
+    WalletsNotBackedUp,
+}
+
 /// Shared settings row state projected for Swift and Kotlin presentation
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupSettingsRowStatus {
@@ -138,8 +151,8 @@ pub enum CloudBackupSettingsRowStatus {
     Syncing,
     NoFiles,
     DriveUnavailable,
-    Error(String),
-    AuthorizationRequired(String),
+    Error,
+    AuthorizationRequired,
 }
 
 /// Whether saved passkey confirmation was user-triggered or flow-triggered
@@ -314,7 +327,7 @@ pub struct CloudBackupDetail {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupOtherBackupsState {
     Loaded { summary: CloudBackupOtherBackupsSummary },
-    LoadFailed { error: String },
+    LoadFailed,
 }
 
 /// Aggregate count of recoverable backup data in other namespaces
@@ -351,7 +364,7 @@ pub enum OtherBackupsOperation {
     Recovered { wallets_restored: u32, wallets_failed: u32, failed_wallet_errors: Vec<String> },
     Deleting,
     Deleted,
-    Failed { error: String },
+    Failed,
 }
 
 /// Outcome of deep verification before projection into UI state
@@ -396,17 +409,13 @@ pub enum CloudBackupVerificationMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum DeepVerificationFailure {
     /// Transient iCloud/network/passkey error — safe to retry
-    Retry {
-        message: String,
-        detail: Option<CloudBackupDetail>,
-        retry_context: Option<CloudBackupRetryContext>,
-    },
+    Retry { detail: Option<CloudBackupDetail>, retry_context: Option<CloudBackupRetryContext> },
     /// Manifest missing, master key verified intact — recreate from local wallets
-    RecreateManifest { message: String, warning: String, detail: Option<CloudBackupDetail> },
+    RecreateManifest { detail: Option<CloudBackupDetail> },
     /// No verified cloud or local master key available — full re-enable needed
-    ReinitializeBackup { message: String, warning: String, detail: Option<CloudBackupDetail> },
+    ReinitializeBackup { detail: Option<CloudBackupDetail> },
     /// Backup uses a newer format — do not overwrite
-    UnsupportedVersion { message: String, detail: Option<CloudBackupDetail> },
+    UnsupportedVersion { detail: Option<CloudBackupDetail> },
 }
 
 /// Retry issue category for a user-visible verification retry
@@ -500,25 +509,13 @@ impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
     }
 }
 
-#[uniffi::export]
-impl DeepVerificationFailure {
-    pub fn message(&self) -> String {
-        match self {
-            Self::Retry { message, .. }
-            | Self::RecreateManifest { message, .. }
-            | Self::ReinitializeBackup { message, .. }
-            | Self::UnsupportedVersion { message, .. } => message.clone(),
-        }
-    }
-}
-
 impl DeepVerificationFailure {
     pub(crate) fn retry(
-        message: impl Into<String>,
+        _message: impl Into<String>,
         detail: Option<CloudBackupDetail>,
         retry_context: Option<CloudBackupRetryContext>,
     ) -> Self {
-        Self::Retry { message: message.into(), detail, retry_context }
+        Self::Retry { detail, retry_context }
     }
 
     pub(crate) fn detail(&self) -> Option<&CloudBackupDetail> {
@@ -970,7 +967,10 @@ impl RustCloudBackupManager {
         let sync = match outcome {
             CloudBackupSyncOutcome::Started => SyncState::Syncing,
             CloudBackupSyncOutcome::Completed => SyncState::Idle,
-            CloudBackupSyncOutcome::Failed(error) => SyncState::Failed(error),
+            CloudBackupSyncOutcome::Failed(error) => {
+                warn!("Cloud backup sync failed: {error}");
+                SyncState::Failed
+            }
         };
 
         self.apply_model_event(CloudBackupStateReducerEvent::SyncStateResolved(sync));
@@ -1279,7 +1279,7 @@ impl RustCloudBackupManager {
     }
 
     /// Background startup health check for cloud backup integrity
-    pub async fn verify_backup_integrity(&self) -> Option<String> {
+    pub async fn verify_backup_integrity(&self) -> Vec<CloudBackupIntegrityIssue> {
         self.verify_backup_integrity_impl().await
     }
 

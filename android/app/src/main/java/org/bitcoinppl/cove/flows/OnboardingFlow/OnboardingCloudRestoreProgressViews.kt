@@ -21,10 +21,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
 import org.bitcoinppl.cove_core.OnboardingRestoreState
 
@@ -111,7 +115,7 @@ private fun OnboardingRestoreContent(
                     is OnboardingRestoreState.Restoring,
                     -> {
                         Text(
-                            text = "Restoring from Google Drive...",
+                            text = stringResource(R.string.onboarding_restoring_from_drive),
                             color = Color.White,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
@@ -119,7 +123,7 @@ private fun OnboardingRestoreContent(
                         )
                         Spacer(modifier = Modifier.size(10.dp))
                         Text(
-                            text = "This might take a few minutes",
+                            text = stringResource(R.string.onboarding_restore_might_take_minutes),
                             color = OnboardingTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
@@ -130,7 +134,12 @@ private fun OnboardingRestoreContent(
                     is OnboardingRestoreState.Complete -> {
                         val failedCount = restoreState.v1.walletsFailed.toInt()
                         Text(
-                            text = if (failedCount == 0) "You're all set" else "Some wallets were restored",
+                            text =
+                                if (failedCount == 0) {
+                                    stringResource(R.string.onboarding_restore_all_set)
+                                } else {
+                                    stringResource(R.string.onboarding_restore_some_wallets_restored)
+                                },
                             color = Color.White,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
@@ -140,9 +149,13 @@ private fun OnboardingRestoreContent(
                         Text(
                             text =
                                 if (failedCount == 0) {
-                                    "Your wallets have been restored."
+                                    stringResource(R.string.onboarding_restore_wallets_restored)
                                 } else {
-                                    "${pluralize(failedCount, "wallet", "wallets")} could not be restored. You can retry from backup settings."
+                                    pluralStringResource(
+                                        R.plurals.onboarding_restore_wallets_failed,
+                                        failedCount,
+                                        failedCount,
+                                    )
                                 },
                             color = OnboardingTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
@@ -151,7 +164,7 @@ private fun OnboardingRestoreContent(
                     }
                     is OnboardingRestoreState.Failed -> {
                         Text(
-                            text = "Restore Failed",
+                            text = stringResource(R.string.onboarding_restore_failed_title),
                             color = Color.White,
                             fontSize = 34.sp,
                             lineHeight = 38.sp,
@@ -160,7 +173,7 @@ private fun OnboardingRestoreContent(
                         )
                         Spacer(modifier = Modifier.size(12.dp))
                         Text(
-                            text = "Something went wrong while restoring your wallets",
+                            text = stringResource(R.string.onboarding_restore_failed_body),
                             color = OnboardingTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
@@ -177,24 +190,38 @@ private fun OnboardingRestoreContent(
                     is OnboardingRestoreState.Complete -> {
                         val report = restoreState.v1
                         if (report.walletsFailed.toInt() > 0) {
-                            OnboardingInlineMessage(text = "${report.walletsFailed} wallet(s) could not be restored")
-                            Spacer(modifier = Modifier.size(16.dp))
-                        }
-                        if (report.labelsFailedWalletNames.isNotEmpty()) {
+                            val failedWallets = report.walletsFailed.toInt()
                             OnboardingInlineMessage(
-                                text = "${report.labelsFailedWalletNames.size} restored wallet(s) had labels that could not be imported",
+                                text =
+                                    pluralStringResource(
+                                        R.plurals.onboarding_restore_wallets_failed_inline,
+                                        failedWallets,
+                                        failedWallets,
+                                    ),
                             )
                             Spacer(modifier = Modifier.size(16.dp))
                         }
-                        OnboardingPrimaryButton(text = "Done", onClick = onDone)
+                        if (report.labelsFailedWalletNames.isNotEmpty()) {
+                            val failedLabels = report.labelsFailedWalletNames.size
+                            OnboardingInlineMessage(
+                                text =
+                                    pluralStringResource(
+                                        R.plurals.onboarding_restore_labels_failed_inline,
+                                        failedLabels,
+                                        failedLabels,
+                                    ),
+                            )
+                            Spacer(modifier = Modifier.size(16.dp))
+                        }
+                        OnboardingPrimaryButton(text = stringResource(R.string.wallet_send_done), onClick = onDone)
                     }
                     is OnboardingRestoreState.Failed -> {
-                        OnboardingInlineMessage(text = restoreState.message)
+                        OnboardingInlineMessage(text = restoreState.failure.localizedMessage().asString())
                         Spacer(modifier = Modifier.size(18.dp))
-                        OnboardingPrimaryButton(text = "Retry", onClick = onRetry)
+                        OnboardingPrimaryButton(text = stringResource(R.string.scoped_common_retry), onClick = onRetry)
                         Spacer(modifier = Modifier.size(12.dp))
                         OnboardingSecondaryButton(
-                            text = "Continue without backup",
+                            text = stringResource(R.string.onboarding_continue_without_backup_lower),
                             onClick = onContinueWithoutBackup,
                         )
                     }
@@ -205,9 +232,3 @@ private fun OnboardingRestoreContent(
         }
     }
 }
-
-private fun pluralize(
-    count: Int,
-    singular: String,
-    plural: String,
-): String = "$count ${if (count == 1) singular else plural}"

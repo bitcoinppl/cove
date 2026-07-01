@@ -20,11 +20,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
@@ -35,6 +38,7 @@ import org.bitcoinppl.cove_core.WalletException
 @Composable
 fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
     var showHelp by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -44,7 +48,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                     IconButton(onClick = { app.popRoute() }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                             tint = Color.White,
                         )
                     }
@@ -52,7 +56,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                 actions = {
                     TextButton(onClick = { showHelp = true }) {
                         Text(
-                            text = "?",
+                            text = stringResource(R.string.new_wallet_flow_help_button),
                             color = Color.White,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Medium,
@@ -91,9 +95,7 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                                 app.popRoute()
                                 app.alertState =
                                     TaggedItem(
-                                        AppAlertState.ErrorImportingHardwareWallet(
-                                            message = e.message ?: "Unknown error",
-                                        ),
+                                        AppAlertState.ErrorImportingHardwareWallet,
                                     )
                             }
                         }
@@ -102,8 +104,8 @@ fun ColdWalletQrScanScreen(app: AppManager, modifier: Modifier = Modifier) {
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
-                                        title = "Invalid QR Code",
-                                        message = "Please scan a valid hardware wallet export QR code",
+                                        title = context.getString(R.string.new_wallet_flow_invalid_qr_code),
+                                        message = context.getString(R.string.new_wallet_flow_invalid_hardware_qr),
                                     ),
                                 )
                         }

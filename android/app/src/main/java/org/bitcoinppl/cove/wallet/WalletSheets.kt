@@ -27,12 +27,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.ChooseWalletTypeSheet
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.ReceiveAddressSheet
@@ -101,7 +103,9 @@ internal fun WalletSheetsHost(
                         shareTransactionsFile(context, manager)
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "Failed to share transactions", e)
-                        snackbarHostState.showSnackbar("Unable to share transactions: ${e.localizedMessage ?: e.message}")
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.wallet_send_unable_to_share_transactions),
+                        )
                     }
                 }
             },
@@ -120,7 +124,7 @@ internal fun WalletSheetsHost(
                 exportLabelManager?.close()
                 exportLabelManager = null
             },
-            title = { Text("Export Labels") },
+            title = { Text(stringResource(R.string.wallet_send_export_labels)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
@@ -131,7 +135,7 @@ internal fun WalletSheetsHost(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.QrCode, contentDescription = null)
-                        Text("QR Code", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.wallet_send_qr_code), modifier = Modifier.padding(start = 8.dp))
                     }
 
                     TextButton(
@@ -144,14 +148,16 @@ internal fun WalletSheetsHost(
                                     shareLabelsFile(context, manager)
                                 } catch (e: Exception) {
                                     android.util.Log.e(tag, "Failed to share labels", e)
-                                    snackbarHostState.showSnackbar("Unable to share labels: ${e.localizedMessage ?: e.message}")
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.wallet_send_unable_to_share_labels),
+                                    )
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
-                        Text("Share...", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.wallet_send_share), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             },
@@ -161,7 +167,7 @@ internal fun WalletSheetsHost(
                     exportLabelManager?.close()
                     exportLabelManager = null
                 }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.wallet_send_cancel))
                 }
             },
         )
@@ -179,8 +185,8 @@ internal fun WalletSheetsHost(
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
                 QrExportView(
-                    title = "Export Labels",
-                    subtitle = "Scan to import labels\ninto another wallet",
+                    title = stringResource(R.string.wallet_send_export_labels),
+                    subtitle = stringResource(R.string.wallet_send_scan_import_labels_subtitle),
                     generateBbqrStrings = { density -> manager.exportLabelsForQr(density) },
                     generateUrStrings = null,
                     onCopy = { manager.exportLabelsForShare().content },
@@ -194,7 +200,7 @@ internal fun WalletSheetsHost(
     if (showExportXpubDialog) {
         AlertDialog(
             onDismissRequest = { showExportXpubDialog = false },
-            title = { Text("Export Xpub") },
+            title = { Text(stringResource(R.string.wallet_send_export_xpub)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
@@ -205,7 +211,7 @@ internal fun WalletSheetsHost(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.QrCode, contentDescription = null)
-                        Text("QR Code", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.wallet_send_qr_code), modifier = Modifier.padding(start = 8.dp))
                     }
 
                     TextButton(
@@ -216,20 +222,22 @@ internal fun WalletSheetsHost(
                                     shareXpubFile(context, manager)
                                 } catch (e: Exception) {
                                     android.util.Log.e(tag, "Failed to share xpub", e)
-                                    snackbarHostState.showSnackbar("Unable to share xpub: ${e.localizedMessage ?: e.message}")
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.wallet_send_unable_to_share_xpub),
+                                    )
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
-                        Text("Share...", modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.wallet_send_share), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showExportXpubDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.wallet_send_cancel))
                 }
             },
         )
@@ -242,8 +250,8 @@ internal fun WalletSheetsHost(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
             QrExportView(
-                title = "Export Xpub",
-                subtitle = "Public descriptor for\nwatch-only wallet",
+                title = stringResource(R.string.wallet_send_export_xpub),
+                subtitle = stringResource(R.string.wallet_send_xpub_descriptor_subtitle),
                 generateBbqrStrings = { density -> manager.exportXpubForQr(density) },
                 generateUrStrings = null,
                 onCopy = { manager.exportXpubForShare().content },
@@ -263,7 +271,7 @@ internal fun WalletSheetsHost(
                 android.util.Log.e(tag, "Failed to get label manager")
                 nfcLabelManager = null
                 onDismissNfcScanner()
-                snackbarHostState.showSnackbar("Unable to access label manager")
+                snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_unable_to_access_label_manager))
             }
         } else {
             nfcLabelManager?.close()
@@ -285,22 +293,20 @@ internal fun WalletSheetsHost(
                 onSuccess = {
                     onDismissNfcScanner()
                     scope.launch {
-                        val refreshed =
-                            AppManager.getInstance().reconcileAfterLabelImportAndWait(manager.id)
-                        val message =
-                            if (refreshed) {
-                                "Labels imported successfully"
-                            } else {
-                                "Labels imported successfully, but transaction list may need manual refresh"
-                            }
-
-                        snackbarHostState.showSnackbar(message)
+                        // refresh transactions with updated labels
+                        try {
+                            manager.refreshTransactions()
+                            snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_labels_imported))
+                        } catch (e: Exception) {
+                            android.util.Log.e(tag, "Failed to refresh transactions after NFC label import")
+                            snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_labels_imported_refresh_failed))
+                        }
                     }
                 },
                 onError = { errorMsg ->
                     onDismissNfcScanner()
                     scope.launch {
-                        snackbarHostState.showSnackbar("Failed to import labels: $errorMsg")
+                        snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_failed_to_import_labels, errorMsg))
                     }
                 },
             )
@@ -352,7 +358,7 @@ private suspend fun shareLabelsFile(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-    context.startActivity(Intent.createChooser(intent, "Share Labels"))
+    context.startActivity(Intent.createChooser(intent, context.getString(R.string.wallet_send_share_labels)))
 }
 
 private suspend fun shareTransactionsFile(
@@ -380,7 +386,7 @@ private suspend fun shareTransactionsFile(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-    context.startActivity(Intent.createChooser(intent, "Share Transactions"))
+    context.startActivity(Intent.createChooser(intent, context.getString(R.string.wallet_send_share_transactions)))
 }
 
 private suspend fun shareXpubFile(
@@ -408,5 +414,5 @@ private suspend fun shareXpubFile(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-    context.startActivity(Intent.createChooser(intent, "Share Xpub"))
+    context.startActivity(Intent.createChooser(intent, context.getString(R.string.wallet_send_share_xpub)))
 }

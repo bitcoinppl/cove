@@ -99,6 +99,8 @@ fun CoinControlSetAmountScreen(
 
     val focusManager = LocalFocusManager.current
     val addressFocusRequester = remember { FocusRequester() }
+    val invalidQrCodeTitle = stringResource(R.string.wallet_send_invalid_qr_code_title)
+    val invalidQrCodeMessage = stringResource(R.string.wallet_send_invalid_bitcoin_address_qr)
 
     // bidirectional sync: observe presenter.focusField and update UI focus
     androidx.compose.runtime.LaunchedEffect(presenter.focusField) {
@@ -239,8 +241,8 @@ fun CoinControlSetAmountScreen(
                                     app.alertState =
                                         TaggedItem(
                                             AppAlertState.General(
-                                                title = "Invalid QR Code",
-                                                message = "Please scan a valid Bitcoin address QR code",
+                                                title = invalidQrCodeTitle,
+                                                message = invalidQrCodeMessage,
                                             ),
                                         )
                                 }
@@ -331,7 +333,14 @@ private fun BalanceWidget(
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = if (isHidden) "Hidden" else "Visible",
+                    contentDescription =
+                        stringResource(
+                            if (isHidden) {
+                                R.string.wallet_send_hidden
+                            } else {
+                                R.string.wallet_send_visible
+                            },
+                        ),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp),
                 )
@@ -457,7 +466,7 @@ private fun AddressWidget(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
-                        contentDescription = "Clear address",
+                        contentDescription = stringResource(R.string.wallet_send_clear_address),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
@@ -619,7 +628,12 @@ private fun SpendingWidget(
         Spacer(Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = if (utxoCount == 1) "Spending 1 UTXO" else "Spending $utxoCount UTXOs",
+                text =
+                    if (utxoCount == 1) {
+                        stringResource(R.string.wallet_send_spending_one_utxo)
+                    } else {
+                        stringResource(R.string.wallet_send_spending_utxos, utxoCount)
+                    },
                 color = CoveColor.LinkBlue,
                 fontSize = 11.sp,
                 modifier =

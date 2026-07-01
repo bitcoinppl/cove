@@ -19,11 +19,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.WalletSelectionRecoveryResult
@@ -51,6 +53,9 @@ fun WalletSettingsContainer(
     var recoveryGeneration by remember(id) { mutableStateOf(0) }
     var lastLoadFailureAlertMessage by remember(id, route) { mutableStateOf<String?>(null) }
     val tag = "WalletSettingsContainer"
+    val loadErrorTitle = stringResource(R.string.settings_wallet_load_error_title)
+    val unknownError = stringResource(R.string.common_remaining_unknown_error)
+    val loadErrorMessageWithDetail = stringResource(R.string.settings_wallet_load_error_message_with_detail)
 
     fun startWalletSelectionRecovery(message: String) {
         if (loadState is WalletSettingsLoadState.Recovering && !app.isNavigationSettled) return
@@ -101,7 +106,7 @@ fun WalletSettingsContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val message = e.message ?: "Unknown error"
+            val message = e.message ?: unknownError
 
             android.util.Log.e(tag, "failed to load wallet", e)
             recoveryGeneration += 1
@@ -112,8 +117,8 @@ fun WalletSettingsContainer(
                 app.alertState =
                     TaggedItem(
                         AppAlertState.General(
-                            title = "Error!",
-                            message = "Unable to load wallet: $message",
+                            title = loadErrorTitle,
+                            message = loadErrorMessageWithDetail.format(message),
                         ),
                     )
                 lastLoadFailureAlertMessage = message
@@ -153,6 +158,9 @@ fun WalletSettingsContainer(
 
             WalletSettingsLoadError(
                 message = state.message,
+                title = stringResource(R.string.settings_wallet_load_settings_error_title),
+                retryText = stringResource(R.string.action_try_again),
+                backText = stringResource(R.string.action_go_back),
                 onRetry = {
                     lastLoadFailureAlertMessage = null
                     loadAttempt++
@@ -201,7 +209,10 @@ private sealed interface WalletSettingsLoadState {
 
 @Composable
 private fun WalletSettingsLoadError(
+    title: String,
     message: String,
+    retryText: String,
+    backText: String,
     onRetry: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -216,7 +227,7 @@ private fun WalletSettingsLoadError(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Unable to load wallet settings",
+                text = title,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center,
@@ -228,10 +239,10 @@ private fun WalletSettingsLoadError(
                 textAlign = TextAlign.Center,
             )
             Button(onClick = onRetry) {
-                Text("Try again")
+                Text(retryText)
             }
             TextButton(onClick = onBack) {
-                Text("Go back")
+                Text(backText)
             }
         }
     }

@@ -113,8 +113,8 @@ private let navigationSettleDelayMs = 800
 
     func showInitialScanIncompleteAlert() {
         alertState = .init(.general(
-            title: "Initial Scan Incomplete",
-            message: "Can't send until initial scan completes."
+            title: String(localized: "Initial Scan Incomplete"),
+            message: String(localized: "Can't send until initial scan completes.")
         ))
     }
 

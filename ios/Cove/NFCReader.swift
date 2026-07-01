@@ -48,7 +48,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         scannedMessage = nil
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
-        session?.alertMessage = "Hold your iPhone near the NFC tag."
+        session?.alertMessage = String(localized: "Hold your iPhone near the NFC tag.")
         session?.begin()
     }
 
@@ -62,15 +62,14 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
     func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
         guard let tag = tags.first else {
-            session.invalidate(errorMessage: "No tag detected.")
+            session.invalidate(errorMessage: String(localized: "No tag detected."))
             return
         }
 
         session.connect(to: tag) { error in
-            if let error {
+            if error != nil {
                 session.invalidate(
-                    errorMessage:
-                    "Connection error: \(error.localizedDescription), please try again"
+                    errorMessage: String(localized: "Unable to connect to NFC tag. Please try again.")
                 )
                 return
             }
@@ -91,13 +90,13 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             @unknown default:
                 self.isScanning = false
                 Log.error("unsupported tag type: \(tag)")
-                session.invalidate(errorMessage: "Unsupported tag type.")
+                session.invalidate(errorMessage: String(localized: "Unsupported tag type."))
             }
         }
     }
 
     func readBlocks(tag: NFCISO15693Tag, session: NFCTagReaderSession) {
-        readingMessage = "Reading tag, please hold still"
+        readingMessage = String(localized: "Reading tag. Please hold still.")
         session.alertMessage = readingMessage
 
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
@@ -254,14 +253,14 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     /// fallback function
     func readNDEF(from tag: some NFCNDEFTag, session: NFCTagReaderSession) {
         Log.debug("reading NDEF message from tag: \(tag)")
-        session.alertMessage = "Reading data please hold still..."
+        session.alertMessage = String(localized: "Reading data. Please hold still.")
 
         tag.readNDEF { message, error in
             if let error {
                 if message == nil {
                     Log.error("read error: \(error.localizedDescription)")
                     self.isScanning = false
-                    session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
+                    session.invalidate(errorMessage: String(localized: "Unable to read NFC tag. Please try again."))
                     return
                 }
             }
@@ -269,7 +268,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             guard let message else {
                 Log.error("no NDEF message found")
                 self.isScanning = false
-                session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
+                session.invalidate(errorMessage: String(localized: "Unable to read NFC tag. Please try again."))
                 return
             }
 
@@ -277,7 +276,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             if self.scannedMessage != nil {
                 DispatchQueue.main.async {
                     self.isScanning = false
-                    session.alertMessage = "Tag read successfully!"
+                    session.alertMessage = String(localized: "Tag read successfully.")
                     session.invalidate()
                 }
             }
@@ -339,15 +338,15 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
         switch error as? NFCReaderError {
         case .none:
-            session.invalidate(errorMessage: "Unable to read NFC tag, try again")
+            session.invalidate(errorMessage: String(localized: "Unable to read NFC tag. Please try again."))
         case let .some(error):
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
                 session.invalidate(
-                    errorMessage: "Tag connection lost, please hold your phone still"
+                    errorMessage: String(localized: "Tag connection lost. Please hold your phone still.")
                 )
             default:
-                session.invalidate(errorMessage: "Unable to read NFC tag, try again")
+                session.invalidate(errorMessage: String(localized: "Unable to read NFC tag. Please try again."))
             }
         }
     }

@@ -530,25 +530,6 @@ impl TapSignerRoute {
     }
 }
 
-impl AfterPinAction {
-    pub fn user_message(&self) -> String {
-        match self {
-            Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
-            Self::Change => "Please enter your current PIN".to_string(),
-            Self::Backup => "For security purposes, you need to enter your TAPSIGNER PIN before you can backup your wallet".to_string(),
-            Self::Sign(_) => "For security purposes, you must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
-        }
-    }
-}
-
-#[uniffi::export]
-impl AfterPinAction {
-    #[uniffi::method(name = "userMessage")]
-    fn ffi_user_message(&self) -> String {
-        self.user_message()
-    }
-}
-
 #[uniffi::export]
 fn tap_signer_confirm_pin_args_new_from_new_pin(
     args: TapSignerNewPinArgs,

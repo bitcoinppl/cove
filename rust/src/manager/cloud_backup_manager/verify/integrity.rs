@@ -6,20 +6,9 @@ use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetailOutcome, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupStore,
+    CloudBackupDetailOutcome, CloudBackupIntegrityIssue, CloudBackupKeychain,
+    CloudBackupOtherBackupsState, CloudBackupStore,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BackupIntegrityIssue {
-    MasterKeyMissing,
-    PasskeyCredentialMissing,
-    PasskeySaltMissing,
-    NamespaceMissing,
-    RemoteWalletListUnreadable,
-    RemoteBackupFreshnessUnknown,
-    LocalWalletInventoryUnreadable,
-    WalletsNotBackedUp,
-}
 
 #[derive(Debug, Clone, Copy, derive_more::Display)]
 enum IntegrityDetailContext {
@@ -29,8 +18,8 @@ enum IntegrityDetailContext {
     Detail,
 }
 
-impl BackupIntegrityIssue {
-    fn message(&self) -> &'static str {
+impl CloudBackupIntegrityIssue {
+    fn log_message(&self) -> &'static str {
         match self {
             Self::MasterKeyMissing => "master key not found in keychain",
             Self::PasskeyCredentialMissing => {
@@ -52,11 +41,11 @@ impl RustCloudBackupManager {
     /// Background startup health check for cloud backup integrity
     ///
     /// Verifies the master key is in the keychain and backup files exist in iCloud
-    /// Returns None if everything is OK, Some(warning) if there's a problem
-    pub async fn verify_backup_integrity_impl(&self) -> Option<String> {
+    /// Returns typed issues so platforms can decide whether and how to present them
+    pub async fn verify_backup_integrity_impl(&self) -> Vec<CloudBackupIntegrityIssue> {
         let state = self.state.read().status().clone();
         if !matches!(state, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
-            return None;
+            return Vec::new();
         }
 
         let mut issues = Vec::new();
@@ -65,7 +54,7 @@ impl RustCloudBackupManager {
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         if !cspp.has_master_key() {
-            issues.push(BackupIntegrityIssue::MasterKeyMissing);
+            issues.push(CloudBackupIntegrityIssue::MasterKeyMissing);
         }
 
         let mut downgrade = None;
@@ -74,19 +63,19 @@ impl RustCloudBackupManager {
 
         // keep launch integrity checks non-interactive so app startup never presents passkey UI
         if stored_credential_id.is_none() {
-            issues.push(BackupIntegrityIssue::PasskeyCredentialMissing);
+            issues.push(CloudBackupIntegrityIssue::PasskeyCredentialMissing);
             downgrade = Some(IntegrityDowngrade::Unverified);
         }
 
         if !has_prf_salt {
-            issues.push(BackupIntegrityIssue::PasskeySaltMissing);
+            issues.push(CloudBackupIntegrityIssue::PasskeySaltMissing);
             downgrade = Some(IntegrityDowngrade::Unverified);
         }
 
         let namespace = match self.current_namespace_id() {
             Ok(namespace) => namespace,
             Err(_) => {
-                issues.push(BackupIntegrityIssue::NamespaceMissing);
+                issues.push(CloudBackupIntegrityIssue::NamespaceMissing);
                 return self.finish_backup_integrity_check(&issues, downgrade);
             }
         };
@@ -102,7 +91,7 @@ impl RustCloudBackupManager {
     async fn verify_wallet_backups_for_integrity_check(
         &self,
         namespace: String,
-        issues: &mut Vec<BackupIntegrityIssue>,
+        issues: &mut Vec<CloudBackupIntegrityIssue>,
     ) {
         // use a silent client because startup integrity checks must not present iCloud UI
         let cloud = CloudStorage::global_silent_client();
@@ -110,7 +99,7 @@ impl RustCloudBackupManager {
             Ok(wallet_record_ids) => wallet_record_ids,
             Err(error) => {
                 warn!("Backup integrity: wallet list check failed: {error}");
-                issues.push(BackupIntegrityIssue::RemoteWalletListUnreadable);
+                issues.push(CloudBackupIntegrityIssue::RemoteWalletListUnreadable);
                 return;
             }
         };
@@ -120,7 +109,7 @@ impl RustCloudBackupManager {
                 Ok(remote_wallet_truth) => remote_wallet_truth,
                 Err(error) => {
                     warn!("Backup integrity: remote truth refresh failed: {error}");
-                    issues.push(BackupIntegrityIssue::RemoteBackupFreshnessUnknown);
+                    issues.push(CloudBackupIntegrityIssue::RemoteBackupFreshnessUnknown);
                     return;
                 }
             };
@@ -134,7 +123,7 @@ impl RustCloudBackupManager {
             Ok(inventory) => inventory,
             Err(error) => {
                 warn!("Backup integrity: local wallet inventory failed: {error}");
-                issues.push(BackupIntegrityIssue::LocalWalletInventoryUnreadable);
+                issues.push(CloudBackupIntegrityIssue::LocalWalletInventoryUnreadable);
                 return;
             }
         };
@@ -156,7 +145,7 @@ impl RustCloudBackupManager {
             self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = backup_result {
                 error!("Backup integrity: auto-sync failed: {error}");
-                issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
+                issues.push(CloudBackupIntegrityIssue::WalletsNotBackedUp);
                 backup_failed = true;
             }
         }
@@ -179,7 +168,7 @@ impl RustCloudBackupManager {
             self.refresh_integrity_check_detail(&namespace, &wallet_record_ids).await;
             if let Err(error) = sync_result {
                 error!("Backup integrity: auto-sync failed: {error}");
-                issues.push(BackupIntegrityIssue::WalletsNotBackedUp);
+                issues.push(CloudBackupIntegrityIssue::WalletsNotBackedUp);
             }
         }
     }
@@ -238,27 +227,30 @@ impl RustCloudBackupManager {
             Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
             Err(error) => {
                 warn!("Backup integrity: {context} other backup summary failed: {error}");
-                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
+                CloudBackupOtherBackupsState::LoadFailed
             }
         }
     }
 
     fn finish_backup_integrity_check(
         &self,
-        issues: &[BackupIntegrityIssue],
+        issues: &[CloudBackupIntegrityIssue],
         downgrade: Option<IntegrityDowngrade>,
-    ) -> Option<String> {
+    ) -> Vec<CloudBackupIntegrityIssue> {
         if issues.is_empty() {
             info!("Backup integrity check passed");
-            return None;
+            return Vec::new();
         }
 
         self.persist_integrity_downgrade(downgrade);
-        let message =
-            issues.iter().map(BackupIntegrityIssue::message).collect::<Vec<_>>().join("; ");
+        let message = issues
+            .iter()
+            .map(CloudBackupIntegrityIssue::log_message)
+            .collect::<Vec<_>>()
+            .join("; ");
 
         error!("Backup integrity issues: {message}");
-        Some(message)
+        issues.to_vec()
     }
 
     fn persist_integrity_downgrade(&self, downgrade: Option<IntegrityDowngrade>) {

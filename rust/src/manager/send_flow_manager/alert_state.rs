@@ -6,6 +6,11 @@ use super::error::SendFlowError;
 pub enum SendFlowAlertState {
     Error(SendFlowError),
     General { title: String, message: String },
+    UnableToLoadFees,
+    FeeTooHigh,
+    HighFeeWarning,
+    UnableToReadLockedCoins,
+    BalanceStillLoading,
 }
 
 impl SendFlowAlertState {

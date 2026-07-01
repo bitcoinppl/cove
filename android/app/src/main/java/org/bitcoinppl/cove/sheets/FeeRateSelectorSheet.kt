@@ -12,9 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
@@ -58,7 +61,7 @@ fun FeeRateSelectorSheet(
         ) {
             // title
             Text(
-                text = "Network Fee",
+                text = stringResource(R.string.title_network_fee),
                 style = MaterialTheme.typography.title3,
                 fontWeight = FontWeight.Bold,
                 modifier =
@@ -142,7 +145,7 @@ fun FeeRateSelectorSheet(
                 shape = RoundedCornerShape(10.dp),
             ) {
                 Text(
-                    text = "Customize Fee",
+                    text = stringResource(R.string.btn_customize_fee),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -228,7 +231,7 @@ private fun FeeOptionCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = feeOption.feeSpeed().toString(),
+                        text = feeOption.feeSpeed().localizedLabel(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = contentColor,
@@ -244,7 +247,11 @@ private fun FeeOptionCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${String.format(Locale.US, "%.2f", feeOption.satPerVb())} sat/vB",
+                    text =
+                        stringResource(
+                            R.string.wallet_send_fee_rate_format,
+                            String.format(Locale.US, "%.2f", feeOption.satPerVb()),
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor,
                 )
@@ -257,7 +264,7 @@ private fun FeeOptionCard(
                 val totalFee = feeOption.totalFee()
 
                 AsyncText(
-                    text = totalFee?.let { "${it.satsString()} sats" },
+                    text = totalFee?.let { stringResource(R.string.wallet_send_total_sats_format, it.satsString()) },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                     color = contentColor,
@@ -293,17 +300,18 @@ private fun DurationCapsule(
     fontColor: Color,
 ) {
     val durationText =
-        remember(speed) {
-            when (speed) {
-                is FeeSpeed.Fast -> "~10 min"
-                is FeeSpeed.Medium -> "~30 min"
-                is FeeSpeed.Slow -> "~1 hour"
-                is FeeSpeed.Custom -> {
-                    val mins = speed.durationMins.toInt()
-                    when {
-                        mins < 60 -> "~$mins min"
-                        mins < 120 -> "~1 hour"
-                        else -> "~${mins / 60} hours"
+        when (speed) {
+            is FeeSpeed.Fast -> stringResource(R.string.wallet_send_fee_eta_fast)
+            is FeeSpeed.Medium -> stringResource(R.string.wallet_send_fee_eta_medium)
+            is FeeSpeed.Slow -> stringResource(R.string.wallet_send_fee_eta_slow)
+            is FeeSpeed.Custom -> {
+                val mins = speed.durationMins.toInt()
+                when {
+                    mins < 60 -> pluralStringResource(R.plurals.wallet_send_fee_eta_minutes, mins, mins)
+                    mins < 120 -> stringResource(R.string.wallet_send_fee_eta_slow)
+                    else -> {
+                        val hours = mins / 60
+                        pluralStringResource(R.plurals.wallet_send_fee_eta_hours, hours, hours)
                     }
                 }
             }
@@ -335,3 +343,12 @@ private fun DurationCapsule(
         }
     }
 }
+
+@Composable
+private fun FeeSpeed.localizedLabel(): String =
+    when (this) {
+        is FeeSpeed.Fast -> stringResource(R.string.label_fee_fast)
+        is FeeSpeed.Medium -> stringResource(R.string.label_fee_medium)
+        is FeeSpeed.Slow -> stringResource(R.string.label_fee_slow)
+        is FeeSpeed.Custom -> stringResource(R.string.label_fee_custom)
+    }

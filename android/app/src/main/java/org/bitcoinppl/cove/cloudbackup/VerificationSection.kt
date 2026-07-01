@@ -26,8 +26,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.localizedMessage
+import org.bitcoinppl.cove.localizedWarning
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.views.MaterialDivider
@@ -50,11 +55,11 @@ private fun CancelledVerificationRecoveryContent(
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ErrorStateCard(
             icon = Icons.Default.WarningAmber,
-            title = "Verification was cancelled",
-            body = "Try verification again or create a new passkey if your old one was deleted.",
+            title = stringResource(R.string.cloud_backup_verification_cancelled_title),
+            body = stringResource(R.string.cloud_backup_verification_cancelled_body),
         )
 
-        SectionHeader("Verification")
+        SectionHeader(stringResource(R.string.cloud_backup_verification_section_title))
         MaterialSection {
             Column {
                 CancelledVerificationActions(manager = manager)
@@ -68,7 +73,7 @@ private fun PasskeyConfirmedSectionContent(
     manager: CloudBackupManager,
 ) {
     CloudBackupSimpleActionCard(
-        title = "Passkey verified",
+        title = stringResource(R.string.cloud_backup_verification_passkey_verified),
         icon = Icons.Default.Security,
         tint = cloudBackupVisualColors().success,
         onClick = {
@@ -99,7 +104,7 @@ internal fun VerificationSection(
             CloudBackupVerificationState.Required,
             -> {
                 CloudBackupSimpleActionCard(
-                    title = "Verify Now",
+                    title = stringResource(R.string.cloud_backup_verification_verify_now),
                     icon = Icons.Default.Security,
                     tint = colors.cloudBlue,
                     onClick = {
@@ -114,8 +119,8 @@ internal fun VerificationSection(
 
             CloudBackupVerificationState.Running -> {
                 CloudBackupProgressCard(
-                    title = "Verifying backup integrity",
-                    message = "Confirming that wallet backups can be decrypted and restored",
+                    title = stringResource(R.string.cloud_backup_verification_integrity_title),
+                    message = stringResource(R.string.cloud_backup_verification_integrity_message),
                 )
             }
 
@@ -149,13 +154,13 @@ internal fun VerificationSection(
             }
         }
 
-        when (val sync = manager.syncState) {
-            is CloudBackupSyncState.Failed -> {
-                ErrorInlineMessage(sync.v1, modifier = Modifier.padding(horizontal = 14.dp))
+        when (manager.syncState) {
+            CloudBackupSyncState.FAILED -> {
+                ErrorInlineMessage(stringResource(R.string.cloud_backup_sync_failed), modifier = Modifier.padding(horizontal = 14.dp))
             }
 
-            is CloudBackupSyncState.Blocked -> {
-                ErrorInlineMessage(sync.v1, modifier = Modifier.padding(horizontal = 14.dp))
+            CloudBackupSyncState.BLOCKED -> {
+                ErrorInlineMessage(stringResource(R.string.cloud_backup_sync_blocked), modifier = Modifier.padding(horizontal = 14.dp))
             }
 
             else -> Unit
@@ -164,7 +169,7 @@ internal fun VerificationSection(
         val needsSync = manager.detail?.needsSync?.isNotEmpty() == true
         if (needsSync) {
             CloudBackupSimpleActionCard(
-                title = "Sync Now",
+                title = stringResource(R.string.cloud_backup_verification_sync_now),
                 icon = Icons.Default.Refresh,
                 tint = colors.cloudBlue,
                 onClick = { manager.dispatch(CloudBackupManagerAction.SyncUnsynced) },
@@ -190,8 +195,8 @@ private fun CancelledVerificationActions(
     manager: CloudBackupManager,
 ) {
     MaterialSettingsItem(
-        title = "Verification was cancelled",
-        subtitle = "Try verification again or create a new passkey if your old one was deleted",
+        title = stringResource(R.string.cloud_backup_verification_cancelled_title),
+        subtitle = stringResource(R.string.cloud_backup_verification_cancelled_subtitle),
         onClick = {
             manager.dispatch(
                 CloudBackupManagerAction.StartVerification(
@@ -203,7 +208,7 @@ private fun CancelledVerificationActions(
     )
     MaterialDivider()
     MaterialSettingsItem(
-        title = "Create New Passkey",
+        title = stringResource(R.string.settings_action_create_new_passkey),
         onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
         leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
     )
@@ -239,7 +244,7 @@ private fun VerifiedSectionContent(
                     modifier = Modifier.size(32.dp),
                 )
                 Text(
-                    "Backup verified",
+                    stringResource(R.string.cloud_backup_verification_backup_verified),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
@@ -252,11 +257,23 @@ private fun VerifiedSectionContent(
             )
 
             if (report.walletsFailed > 0u) {
-                ErrorInlineMessage("${report.walletsFailed} wallet backup(s) could not be decrypted")
+                ErrorInlineMessage(
+                    pluralStringResource(
+                        R.plurals.cloud_backup_wallets_failed_decryption,
+                        report.walletsFailed.toInt(),
+                        report.walletsFailed.toInt(),
+                    ),
+                )
             }
 
             if (report.walletsUnsupported > 0u) {
-                ErrorInlineMessage("${report.walletsUnsupported} wallet(s) use a newer backup format")
+                ErrorInlineMessage(
+                    pluralStringResource(
+                        R.plurals.cloud_backup_wallets_unsupported_format,
+                        report.walletsUnsupported.toInt(),
+                        report.walletsUnsupported.toInt(),
+                    ),
+                )
             }
         }
     }
@@ -291,18 +308,25 @@ private fun VerifiedSummary(
     )
 }
 
+@Composable
 private fun buildVerifiedSummaryItems(report: DeepVerificationReport): List<String> =
     buildList {
         if (report.credentialRecovered) {
-            add("passkey recovered")
+            add(stringResource(R.string.cloud_backup_verification_passkey_recovered))
         }
         if (report.masterKeyWrapperRepaired) {
-            add("cloud master key protection repaired")
+            add(stringResource(R.string.cloud_backup_verification_master_key_repaired))
         }
         if (report.localMasterKeyRepaired) {
-            add("local backup credentials repaired")
+            add(stringResource(R.string.cloud_backup_verification_local_credentials_repaired))
         }
-        add("${report.walletsVerified} wallet(s) verified")
+        add(
+            pluralStringResource(
+                R.plurals.cloud_backup_verified_wallets,
+                report.walletsVerified.toInt(),
+                report.walletsVerified.toInt(),
+            ),
+        )
     }
 
 @Composable
@@ -326,7 +350,7 @@ private fun VerifyAgainButton(onClick: () -> Unit) {
         Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            "Verify Again",
+            stringResource(R.string.cloud_backup_verification_verify_again),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -342,10 +366,10 @@ private fun VerificationFailureContent(
 ) {
     when (failure) {
         is DeepVerificationFailure.Retry -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+            ErrorInlineMessage(failure.localizedMessage().asString(), modifier = Modifier.padding(16.dp))
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Try Again",
+                title = stringResource(R.string.action_try_again),
                 onClick = {
                     manager.dispatch(
                         verificationRetryAction(failure),
@@ -355,43 +379,43 @@ private fun VerificationFailureContent(
             )
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Create New Passkey",
+                title = stringResource(R.string.settings_action_create_new_passkey),
                 onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
                 leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
             )
         }
 
         is DeepVerificationFailure.RecreateManifest -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+            ErrorInlineMessage(failure.localizedMessage().asString(), modifier = Modifier.padding(16.dp))
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Recreate Backup Index",
-                subtitle = failure.warning,
+                title = stringResource(R.string.cloud_backup_recreate_confirm_title),
+                subtitle = failure.localizedWarning()?.asString(),
                 onClick = onRecreate,
                 leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
             )
         }
 
         is DeepVerificationFailure.ReinitializeBackup -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+            ErrorInlineMessage(failure.localizedMessage().asString(), modifier = Modifier.padding(16.dp))
             MaterialDivider()
             MaterialSettingsItem(
-                title = "Reinitialize Cloud Backup",
-                subtitle = failure.warning,
+                title = stringResource(R.string.cloud_backup_reinitialize_confirm_title),
+                subtitle = failure.localizedWarning()?.asString(),
                 onClick = onReinitialize,
                 leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
             )
         }
 
         is DeepVerificationFailure.UnsupportedVersion -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+            ErrorInlineMessage(failure.localizedMessage().asString(), modifier = Modifier.padding(16.dp))
         }
     }
 
     val repairState = manager.passkeyRepairState
-    if (repairState is CloudBackupPasskeyRepairState.Failed) {
+    if (repairState == CloudBackupPasskeyRepairState.FAILED) {
         MaterialDivider()
-        ErrorInlineMessage(repairState.v1, modifier = Modifier.padding(16.dp))
+        ErrorInlineMessage(stringResource(R.string.cloud_backup_passkey_repair_failed), modifier = Modifier.padding(16.dp))
     }
 }
 

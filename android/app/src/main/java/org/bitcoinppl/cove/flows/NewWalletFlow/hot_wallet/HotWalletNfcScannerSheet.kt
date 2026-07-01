@@ -29,11 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.NfcReadingState
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -63,12 +66,12 @@ internal fun NfcScannerSheet(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    "Unable to access NFC",
+                    stringResource(R.string.new_wallet_flow_nfc_unable_to_access),
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                 )
                 TextButton(onClick = onDismiss) {
-                    Text("Close", color = Color.White)
+                    Text(stringResource(R.string.new_wallet_flow_close), color = Color.White)
                 }
             }
         }
@@ -80,7 +83,7 @@ internal fun NfcScannerSheet(
             org.bitcoinppl.cove.nfc
                 .NfcReader(activity)
         }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
 
     // start scanning when sheet opens
     LaunchedEffect(Unit) {
@@ -98,7 +101,7 @@ internal fun NfcScannerSheet(
                             val wordCount = words.flatten().size
                             val expectedCount = numberOfWordsToWordCount(numberOfWords).toInt()
                             if (wordCount != expectedCount) {
-                                errorMessage = "Invalid number of words: $wordCount, we only support 12 or 24 words"
+                                errorMessage = UiText.resource(R.string.new_wallet_flow_nfc_seed_invalid_word_count, wordCount)
                                 return@collect
                             }
                             nfcReader.reset()
@@ -114,7 +117,7 @@ internal fun NfcScannerSheet(
                                 val wordCount = words.flatten().size
                                 val expectedCount = numberOfWordsToWordCount(numberOfWords).toInt()
                                 if (wordCount != expectedCount) {
-                                    errorMessage = "Invalid number of words: $wordCount, we only support 12 or 24 words"
+                                    errorMessage = UiText.resource(R.string.new_wallet_flow_nfc_seed_invalid_word_count, wordCount)
                                     return@collect
                                 }
                                 nfcReader.reset()
@@ -124,10 +127,10 @@ internal fun NfcScannerSheet(
                             return@collect
                         }
 
-                        errorMessage = "No readable seed phrase found on NFC tag"
+                        errorMessage = UiText.resource(R.string.new_wallet_flow_nfc_seed_no_readable_phrase)
                     } catch (e: Exception) {
                         Log.e("NfcScannerSheet", "Error parsing NFC data")
-                        errorMessage = "Unable to parse seed phrase from NFC tag"
+                        errorMessage = UiText.resource(R.string.new_wallet_flow_nfc_seed_unable_to_parse)
                     }
                 }
                 is org.bitcoinppl.cove.nfc.NfcScanResult.Error -> {
@@ -176,7 +179,7 @@ internal fun NfcScannerSheet(
             if (errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = errorMessage!!,
+                    text = errorMessage!!.asString(),
                     style = MaterialTheme.typography.bodySmall,
                     color = CoveColor.ErrorRed,
                     textAlign = TextAlign.Center,
@@ -191,7 +194,7 @@ internal fun NfcScannerSheet(
                     onDismiss()
                 },
             ) {
-                Text("Cancel", color = Color.White)
+                Text(stringResource(R.string.new_wallet_flow_cancel), color = Color.White)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -200,16 +203,16 @@ internal fun NfcScannerSheet(
 }
 
 @Composable
-private fun NfcSuccessState(message: String) {
+private fun NfcSuccessState(message: UiText?) {
     Icon(
         imageVector = Icons.Default.CheckCircle,
-        contentDescription = "Success",
+        contentDescription = stringResource(R.string.new_wallet_flow_success),
         modifier = Modifier.size(48.dp),
         tint = Color(0xFF4CAF50),
     )
     Spacer(modifier = Modifier.height(8.dp))
     Text(
-        text = message.ifEmpty { "Tag read successfully!" },
+        text = message?.asString() ?: stringResource(R.string.new_wallet_flow_nfc_tag_read_successfully),
         style = MaterialTheme.typography.title3,
         fontWeight = FontWeight.Bold,
         color = Color.White,
@@ -240,14 +243,14 @@ private fun NfcReadingStateContent() {
     )
 
     Text(
-        text = "Reading" + ".".repeat(dotCount),
+        text = stringResource(R.string.new_wallet_flow_nfc_reading_progress, ".".repeat(dotCount)),
         style = MaterialTheme.typography.title3,
         fontWeight = FontWeight.Bold,
         color = Color.White,
     )
 
     Text(
-        text = "Please hold still",
+        text = stringResource(R.string.new_wallet_flow_nfc_please_hold_still),
         style = MaterialTheme.typography.bodyMedium,
         color = Color.White.copy(alpha = 0.7f),
         textAlign = TextAlign.Center,
@@ -255,7 +258,7 @@ private fun NfcReadingStateContent() {
 }
 
 @Composable
-private fun NfcWaitingState(isScanning: Boolean, message: String) {
+private fun NfcWaitingState(isScanning: Boolean, message: UiText?) {
     if (isScanning) {
         CircularProgressIndicator(
             color = Color.White,
@@ -270,14 +273,14 @@ private fun NfcWaitingState(isScanning: Boolean, message: String) {
         )
 
         Text(
-            text = "Ready to Scan",
+            text = stringResource(R.string.new_wallet_flow_nfc_ready_to_scan),
             style = MaterialTheme.typography.title3,
             fontWeight = FontWeight.Bold,
             color = Color.White,
         )
 
         Text(
-            text = message,
+            text = message?.asString().orEmpty(),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
@@ -292,7 +295,7 @@ private fun NfcWaitingState(isScanning: Boolean, message: String) {
         )
 
         Text(
-            text = "NFC Unavailable",
+            text = stringResource(R.string.new_wallet_flow_nfc_unavailable_title),
             style = MaterialTheme.typography.title3,
             fontWeight = FontWeight.Bold,
             color = Color.White,

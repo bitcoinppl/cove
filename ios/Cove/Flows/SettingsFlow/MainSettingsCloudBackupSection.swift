@@ -19,8 +19,10 @@ struct MainSettingsCloudBackupSection: View {
                     MainSettingsCloudBackupEnablingRow()
                 case .restoring:
                     MainSettingsCloudBackupRestoringRow()
-                case let .failed(failure):
-                    cloudBackupErrorContent(message: failure.message)
+                case .failed:
+                    cloudBackupErrorContent(
+                        message: manager.lifecycleFailureMessage ?? String(localized: "Cloud Backup failed. Please try again.")
+                    )
                 case .configured:
                     MainSettingsCloudBackupEnabledRow(
                         status: manager.settingsRowStatus,
@@ -177,19 +179,19 @@ struct MainSettingsCloudBackupEnabledStatus: View {
                 color: Color.statusWarning
             )
 
-        case let .authorizationRequired(message):
+        case .authorizationRequired:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
                 title: "iCloud Access Needed",
-                message: message,
+                message: "Open to reconnect iCloud Drive access",
                 color: Color.statusWarning
             )
 
-        case let .error(message):
+        case .error:
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
                 title: "Cloud Backup Error",
-                message: message,
+                message: "Open to review Cloud Backup",
                 color: Color.statusError
             )
         }

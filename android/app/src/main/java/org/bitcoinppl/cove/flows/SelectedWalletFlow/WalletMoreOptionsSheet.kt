@@ -27,10 +27,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AppSheetState
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.TapSignerFlow.rememberBackupExportLauncher
@@ -62,6 +64,10 @@ fun WalletMoreOptionsSheet(
     val hasLabels = manager.labelManager().use { it.hasLabels() }
     val hasTransactions = manager.hasTransactions
     val hardwareMetadata = metadata.hardwareMetadata
+    val backupNotAvailable = stringResource(R.string.wallet_send_backup_not_available)
+    val backupErrorTitle = stringResource(R.string.wallet_send_error)
+    val unknownError = stringResource(R.string.wallet_send_unknown_error)
+    val failedRetrieveBackup = stringResource(R.string.wallet_send_failed_retrieve_backup)
 
     // track coroutine scope for cancellable jobs
     val scope = rememberCoroutineScope()
@@ -86,7 +92,7 @@ fun WalletMoreOptionsSheet(
         ) {
             // title
             Text(
-                text = "More Options",
+                text = stringResource(R.string.wallet_send_more_options),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier =
@@ -101,7 +107,7 @@ fun WalletMoreOptionsSheet(
             // scan NFC
             MenuOption(
                 icon = { Icon(Icons.Default.Nfc, contentDescription = null) },
-                label = "Scan NFC",
+                label = stringResource(R.string.wallet_send_scan_nfc),
                 onClick = {
                     onScanNfc()
                     onDismiss()
@@ -113,7 +119,7 @@ fun WalletMoreOptionsSheet(
             // import labels
             MenuOption(
                 icon = { Icon(Icons.Default.Download, contentDescription = null) },
-                label = "Import Labels",
+                label = stringResource(R.string.wallet_send_import_labels),
                 onClick = {
                     onImportLabels()
                     onDismiss()
@@ -126,7 +132,7 @@ fun WalletMoreOptionsSheet(
             if (hasLabels) {
                 MenuOption(
                     icon = { Icon(Icons.Default.Upload, contentDescription = null) },
-                    label = "Export Labels",
+                    label = stringResource(R.string.wallet_send_export_labels),
                     onClick = {
                         onExportLabels()
                         onDismiss()
@@ -140,7 +146,7 @@ fun WalletMoreOptionsSheet(
             if (hasTransactions) {
                 MenuOption(
                     icon = { Icon(Icons.Default.SwapVert, contentDescription = null) },
-                    label = "Export Transactions",
+                    label = stringResource(R.string.wallet_send_export_transactions),
                     onClick = {
                         onExportTransactions()
                         onDismiss()
@@ -153,7 +159,7 @@ fun WalletMoreOptionsSheet(
             // export xpub (always visible)
             MenuOption(
                 icon = { Icon(Icons.Default.Key, contentDescription = null) },
-                label = "Export Xpub",
+                label = stringResource(R.string.wallet_send_export_xpub),
                 onClick = {
                     onExportXpub()
                     onDismiss()
@@ -170,13 +176,13 @@ fun WalletMoreOptionsSheet(
                 val createBackupLauncher =
                     rememberBackupExportLauncher(app) {
                         app.getTapSignerBackup(tapSigner) // throws KeychainException
-                            ?: throw IllegalStateException("Backup not available")
+                            ?: throw IllegalStateException(backupNotAvailable)
                     }
 
                 // change PIN
                 MenuOption(
                     icon = { Icon(Icons.Default.Key, contentDescription = null) },
-                    label = "Change PIN",
+                    label = stringResource(R.string.wallet_send_change_pin),
                     onClick = {
                         onDismiss()
                         val route =
@@ -193,7 +199,7 @@ fun WalletMoreOptionsSheet(
                 // download backup
                 MenuOption(
                     icon = { Icon(Icons.Default.Download, contentDescription = null) },
-                    label = "Download Backup",
+                    label = stringResource(R.string.wallet_send_download_backup),
                     onClick = {
                         onDismiss()
                         try {
@@ -213,8 +219,8 @@ fun WalletMoreOptionsSheet(
                             android.util.Log.e("WalletMoreOptions", "Failed to retrieve tap signer backup", e)
                             app.alertState = TaggedItem(
                                 AppAlertState.General(
-                                    title = "Error",
-                                    message = "Failed to retrieve backup: ${e.message ?: "Unknown error"}",
+                                    title = backupErrorTitle,
+                                    message = failedRetrieveBackup,
                                 )
                             )
                         }
@@ -228,7 +234,7 @@ fun WalletMoreOptionsSheet(
             if (hasTransactions) {
                 MenuOption(
                     icon = { Icon(Icons.Outlined.Circle, contentDescription = null) },
-                    label = "Manage UTXOs",
+                    label = stringResource(R.string.wallet_send_manage_utxos),
                     onClick = {
                         app.pushRoute(
                             Route.CoinControl(
@@ -245,7 +251,7 @@ fun WalletMoreOptionsSheet(
             // wallet settings (always visible)
             MenuOption(
                 icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                label = "Wallet Settings",
+                label = stringResource(R.string.wallet_send_wallet_settings),
                 onClick = {
                     app.pushRoute(
                         Route.Settings(

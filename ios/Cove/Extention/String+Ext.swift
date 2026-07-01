@@ -15,7 +15,7 @@ extension String {
     }
 
     init(_ walletAddressType: WalletAddressType) {
-        self = walletAddressType.description
+        self = walletAddressType.localizedDisplayName
     }
 
     init(_ address: Address) {
@@ -23,7 +23,7 @@ extension String {
     }
 
     init(_ walletType: WalletType) {
-        self = walletType.description
+        self = walletType.localizedDisplayName
     }
 
     init(_ fingeprint: Fingerprint) {
@@ -35,7 +35,7 @@ extension String {
     }
 
     init(_ network: Network) {
-        self = network.description
+        self = network.localizedDisplayName
     }
 
     func removingLeadingZeros() -> String {

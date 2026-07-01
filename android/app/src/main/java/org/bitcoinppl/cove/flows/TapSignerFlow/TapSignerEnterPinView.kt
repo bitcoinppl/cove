@@ -28,13 +28,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.AfterPinAction
@@ -62,13 +65,13 @@ fun TapSignerEnterPinView(
     val message =
         when (action) {
             is AfterPinAction.Derive ->
-                "Enter your TapSigner PIN to import the wallet"
+                stringResource(R.string.tap_signer_enter_pin_import)
             is AfterPinAction.Change ->
-                "Enter your current PIN to change it"
+                stringResource(R.string.tap_signer_enter_pin_change)
             is AfterPinAction.Backup ->
-                "Enter your PIN to backup your TapSigner"
+                stringResource(R.string.tap_signer_enter_pin_backup)
             is AfterPinAction.Sign ->
-                "Enter your PIN to sign the transaction"
+                stringResource(R.string.tap_signer_enter_pin_sign)
         }
 
     // reset pin when screen appears
@@ -80,7 +83,7 @@ fun TapSignerEnterPinView(
     val createBackupLauncher =
         rememberBackupExportLauncher(app) {
             app.getTapSignerBackup(tapSigner)
-                ?: throw IllegalStateException("Backup not available for this TapSigner")
+                ?: throw IllegalStateException(context.getString(R.string.tap_signer_backup_not_available))
         }
 
     Column(
@@ -100,14 +103,14 @@ fun TapSignerEnterPinView(
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_cancel), fontWeight = FontWeight.SemiBold)
             }
         }
 
         // lock icon
         Icon(
             imageVector = Icons.Default.Lock,
-            contentDescription = "Lock",
+            contentDescription = stringResource(R.string.tap_signer_lock),
             modifier = Modifier.size(100.dp).align(Alignment.CenterHorizontally),
             tint = MaterialTheme.colorScheme.primary,
         )
@@ -119,7 +122,7 @@ fun TapSignerEnterPinView(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                text = "Enter TAPSIGNER PIN",
+                text = stringResource(R.string.tap_signer_enter_pin_title),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -153,8 +156,8 @@ fun TapSignerEnterPinView(
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
-                                        title = "Error",
-                                        message = "Unable to access NFC. Please try again.",
+                                        title = context.getString(R.string.scoped_common_error),
+                                        message = context.getString(R.string.tap_signer_error_unable_access_nfc),
                                     ),
                                 )
                             isActionPending = false
@@ -226,7 +229,7 @@ private suspend fun deriveAction(
     }
     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-    manager.scanMessage = "Hold your phone near the TapSigner to import wallet"
+    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_import_wallet)
     manager.isTagDetected = false
     manager.isScanning = true
     try {
@@ -251,9 +254,9 @@ private suspend fun deriveAction(
         // show error in overlay - sheet stays open for retry
         if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.errorMessage = "Wrong PIN, please try again"
+            manager.errorMessage = UiText.resource(R.string.tap_signer_wrong_pin)
         } else {
-            manager.errorMessage = "Connection failed, please try again"
+            manager.errorMessage = UiText.resource(R.string.tap_signer_connection_failed)
         }
     }
 }
@@ -291,7 +294,7 @@ private suspend fun backupAction(
     }
     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-    manager.scanMessage = "Hold your phone near the TapSigner to backup"
+    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_backup)
     manager.isTagDetected = false
     manager.isScanning = true
     try {
@@ -316,9 +319,9 @@ private suspend fun backupAction(
         // show error in overlay - sheet stays open for retry
         if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.errorMessage = "Wrong PIN, please try again"
+            manager.errorMessage = UiText.resource(R.string.tap_signer_wrong_pin)
         } else {
-            manager.errorMessage = "Connection failed, please try again"
+            manager.errorMessage = UiText.resource(R.string.tap_signer_connection_failed)
         }
     }
 }
@@ -339,7 +342,7 @@ private suspend fun signAction(
     }
     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-    manager.scanMessage = "Hold your phone near the TapSigner to sign"
+    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_sign)
     manager.isTagDetected = false
     manager.isScanning = true
     try {
@@ -373,9 +376,9 @@ private suspend fun signAction(
         // show error in overlay - sheet stays open for retry
         if (isAuthError(e)) {
             Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.errorMessage = "Wrong PIN, please try again"
+            manager.errorMessage = UiText.resource(R.string.tap_signer_wrong_pin)
         } else {
-            manager.errorMessage = "Connection failed, please try again"
+            manager.errorMessage = UiText.resource(R.string.tap_signer_connection_failed)
         }
     }
 }

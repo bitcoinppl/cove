@@ -137,12 +137,15 @@ class AppManager private constructor() : FfiReconcile {
         block: suspend FfiApp.() -> T,
     ): T = rustGuard.withHandleSuspend(rust, block)
 
-    fun showInitialScanIncompleteAlert() {
+    fun showInitialScanIncompleteAlert(
+        title: String,
+        message: String,
+    ) {
         alertState =
             TaggedItem(
                 AppAlertState.General(
-                    title = "Initial Scan Incomplete",
-                    message = "Can't send until initial scan completes.",
+                    title = title,
+                    message = message,
                 ),
             )
     }

@@ -48,9 +48,10 @@ struct MoreInfoPopover: View {
                 let result = try await manager.rust.exportTransactionsCsv()
                 ShareSheet.presentFromMenu(data: result.content, filename: result.filename)
             } catch {
+                Log.error("Transaction export failed: \(error.localizedDescription)")
                 app.alertState = .init(.general(
-                    title: "Transaction Export Failed",
-                    message: "Unable to export transactions: \(error.localizedDescription)"
+                    title: String(localized: "Transaction Export Failed"),
+                    message: String(localized: "Unable to export transactions. Please try again.")
                 ))
             }
         }
@@ -80,9 +81,10 @@ struct MoreInfoPopover: View {
             }
         } else if let backupError = tapSignerBackupError {
             Button(action: {
+                Log.error("Failed to retrieve TAPSIGNER backup: \(backupError.localizedDescription)")
                 app.alertState = .init(.general(
-                    title: "Backup Error",
-                    message: "Failed to retrieve backup: \(backupError.localizedDescription)"
+                    title: String(localized: "Backup Error"),
+                    message: String(localized: "Failed to retrieve the backup. Please try again.")
                 ))
             }) {
                 Label("Download Backup", systemImage: "square.and.arrow.down")

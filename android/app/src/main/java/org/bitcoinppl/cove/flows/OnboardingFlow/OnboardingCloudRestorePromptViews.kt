@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -48,18 +49,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudRestoreProviderHint
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import java.util.Date
 
 @Composable
 internal fun CloudCheckContent() {
@@ -80,7 +83,7 @@ internal fun CloudCheckContent() {
             Spacer(modifier = Modifier.size(44.dp))
 
             Text(
-                text = "Looking for Google Drive backup...",
+                text = stringResource(R.string.onboarding_cloud_check_title),
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
@@ -90,7 +93,7 @@ internal fun CloudCheckContent() {
             Spacer(modifier = Modifier.size(10.dp))
 
             Text(
-                text = "This can take a few minutes, please be patient",
+                text = stringResource(R.string.onboarding_cloud_check_subtitle),
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
@@ -108,10 +111,15 @@ internal fun OnboardingRestoreOfferView(
     onRestore: () -> Unit,
     onSkip: () -> Unit,
 ) {
-    val title = if (warningMessage == null) "Google Drive Backup Found" else "Restore from Google Drive"
+    val title =
+        if (warningMessage == null) {
+            stringResource(R.string.onboarding_restore_found_title)
+        } else {
+            stringResource(R.string.onboarding_restore_from_drive_title)
+        }
     val body =
         if (warningMessage == null) {
-            "A previous Google Drive backup was found. Restore your wallet securely using your passkey."
+            stringResource(R.string.onboarding_restore_found_body)
         } else {
             null
         }
@@ -199,14 +207,14 @@ internal fun OnboardingRestoreOfferView(
                 Spacer(modifier = Modifier.size(26.dp))
 
                 OnboardingPrimaryButton(
-                    text = "Restore with Passkey",
+                    text = stringResource(R.string.onboarding_restore_with_passkey),
                     onClick = onRestore,
                 )
 
                 Spacer(modifier = Modifier.size(16.dp))
 
                 Text(
-                    text = "Set Up as New",
+                    text = stringResource(R.string.onboarding_set_up_as_new),
                     color = OnboardingGradientLight.copy(alpha = 0.95f),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -236,6 +244,11 @@ internal fun OnboardingRestoreOfferView(
 
 @Composable
 private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
+    val passkeyDisplayName =
+        providerHint?.let {
+            stringResource(R.string.onboarding_passkey_display_name, it.nameSuffix)
+        } ?: stringResource(R.string.onboarding_passkey_provider_fallback)
+
     Column(
         modifier =
             Modifier
@@ -252,7 +265,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                     .padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Text(
-                text = "Recommended",
+                text = stringResource(R.string.onboarding_recommended),
                 color = OnboardingGradientLight.copy(alpha = 0.92f),
                 style = MaterialTheme.typography.caption,
                 fontWeight = FontWeight.SemiBold,
@@ -277,14 +290,14 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Passkey Restore",
+                    text = stringResource(R.string.onboarding_passkey_restore),
                     color = Color.White,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.size(4.dp))
                 Text(
-                    text = providerHint?.passkeyDisplayName() ?: "Secured with your passkey provider",
+                    text = passkeyDisplayName,
                     color = CoveColor.coveLightGray.copy(alpha = 0.58f),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -296,7 +309,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
 
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
-                    text = "Provider Details",
+                    text = stringResource(R.string.onboarding_provider_details),
                     color = CoveColor.coveLightGray.copy(alpha = 0.72f),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
@@ -307,7 +320,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         ProviderDetailItem(
                             icon = Icons.Default.Key,
-                            label = "STORED IN",
+                            label = stringResource(R.string.onboarding_stored_in),
                             value = providerName,
                             modifier = Modifier.weight(1f),
                         )
@@ -322,16 +335,16 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
 
                         ProviderDetailItem(
                             icon = Icons.Default.CalendarToday,
-                            label = "CREATED",
-                            value = formatPasskeyProviderDate(providerHint.registeredAt),
+                            label = stringResource(R.string.onboarding_created),
+                            value = passkeyProviderDate(providerHint.registeredAt),
                             modifier = Modifier.weight(1f),
                         )
                     }
                 } else {
                     ProviderDetailItem(
                         icon = Icons.Default.CalendarToday,
-                        label = "CREATED",
-                        value = formatPasskeyProviderDate(providerHint.registeredAt),
+                        label = stringResource(R.string.onboarding_created),
+                        value = passkeyProviderDate(providerHint.registeredAt),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -354,7 +367,7 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
             }
 
             Text(
-                text = "Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in Google Drive app data.",
+                text = stringResource(R.string.onboarding_passkey_storage_body),
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                 modifier = Modifier.weight(1f),
@@ -362,9 +375,6 @@ private fun OnboardingPasskeyCard(providerHint: CloudRestoreProviderHint?) {
         }
     }
 }
-
-private fun CloudRestoreProviderHint.passkeyDisplayName(): String =
-    "Cove Cloud Backup ($nameSuffix)"
 
 @Composable
 private fun OnboardingCloudSearchHero() {
@@ -449,11 +459,15 @@ private fun OnboardingPasskeyDivider() {
     )
 }
 
-private fun formatPasskeyProviderDate(registeredAt: ULong): String =
-    DateTimeFormatter
-        .ofPattern("MMM d, yyyy")
-        .withZone(ZoneId.systemDefault())
-        .format(Instant.ofEpochSecond(registeredAt.toLong()))
+@Composable
+private fun passkeyProviderDate(registeredAt: ULong): String {
+    val context = LocalContext.current
+
+    return remember(context, registeredAt) {
+        val registeredDate = Date.from(Instant.ofEpochSecond(registeredAt.toLong()))
+        DateFormat.getMediumDateFormat(context).format(registeredDate)
+    }
+}
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable

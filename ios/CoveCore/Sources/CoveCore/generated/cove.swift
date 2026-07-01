@@ -7009,7 +7009,7 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     /**
      * Validate a new PIN doesn't conflict with existing PINs
      */
-    func validateNewPin(newPin: String)  -> String?
+    func validateNewPin(newPin: String)  -> PinUpdateFailure?
 
     /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
@@ -7285,8 +7285,8 @@ open func switchToMainMode()  {try! rustCall() {
     /**
      * Validate a new PIN doesn't conflict with existing PINs
      */
-open func validateNewPin(newPin: String) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
+open func validateNewPin(newPin: String) -> PinUpdateFailure?  {
+    return try!  FfiConverterOptionTypePinUpdateFailure.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustauthmanager_validate_new_pin(
             self.uniffiCloneHandle(),
@@ -7426,7 +7426,7 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     /**
      * Background startup health check for cloud backup integrity
      */
-    func verifyBackupIntegrity() async  -> String?
+    func verifyBackupIntegrity() async  -> [CloudBackupIntegrityIssue]
 
     func dispatch(action: CloudBackupManagerAction)
 
@@ -7620,7 +7620,7 @@ open func syncPersistedState()  {try! rustCall() {
     /**
      * Background startup health check for cloud backup integrity
      */
-open func verifyBackupIntegrity()async  -> String?  {
+open func verifyBackupIntegrity()async  -> [CloudBackupIntegrityIssue]  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -7632,7 +7632,7 @@ open func verifyBackupIntegrity()async  -> String?  {
             pollFunc: ffi_cove_rust_future_poll_rust_buffer,
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionString.lift,
+            liftFunc: FfiConverterSequenceTypeCloudBackupIntegrityIssue.lift,
             errorHandler: nil
 
         )
@@ -9085,11 +9085,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func deleteWallet() throws
 
     /**
-     * Returns the warning message for the first delete confirmation dialog
-     */
-    func deletionWarningMessage()  -> String
-
-    /**
      * Action from the frontend to change the state of the view model
      */
     func dispatch(action: WalletManagerAction)
@@ -9490,18 +9485,6 @@ open func deleteWallet()throws   {try rustCallWithError(FfiConverterTypeWalletMa
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
-}
-
-    /**
-     * Returns the warning message for the first delete confirmation dialog
-     */
-open func deletionWarningMessage() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_rustwalletmanager_deletion_warning_message(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
 }
 
     /**
@@ -13935,59 +13918,6 @@ public func FfiConverterTypeCloudBackupEnableContext_lower(_ value: CloudBackupE
 
 
 /**
- * Public terminal cloud backup failure
- */
-public struct CloudBackupFailure: Equatable, Hashable {
-    public var message: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(message: String) {
-        self.message = message
-    }
-
-
-
-
-}
-
-#if compiler(>=6)
-extension CloudBackupFailure: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCloudBackupFailure: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupFailure {
-        return
-            try CloudBackupFailure(
-                message: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CloudBackupFailure, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.message, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCloudBackupFailure_lift(_ buf: RustBuffer) throws -> CloudBackupFailure {
-    return try FfiConverterTypeCloudBackupFailure.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCloudBackupFailure_lower(_ value: CloudBackupFailure) -> RustBuffer {
-    return FfiConverterTypeCloudBackupFailure.lower(value)
-}
-
-
-/**
  * Aggregate count of recoverable backup data in other namespaces
  */
 public struct CloudBackupOtherBackupsSummary: Equatable, Hashable {
@@ -15682,28 +15612,28 @@ public struct OnboardingState: Equatable, Hashable {
     public var cloudBackupEnabled: Bool
     public var secretWordsSaved: Bool
     public var cloudRestoreState: OnboardingCloudRestoreState
-    public var cloudRestoreMessage: String?
+    public var cloudRestoreIssue: CloudCheckIssue?
     public var cloudRestoreProviderHint: CloudRestoreProviderHint?
     public var shouldOfferCloudRestore: Bool
     public var cloudRestoreAlertVisible: Bool
     public var restoreState: OnboardingRestoreState
-    public var errorMessage: String?
+    public var error: OnboardingError?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(step: OnboardingStep, branch: OnboardingBranch?, createdWords: [String], cloudBackupEnabled: Bool, secretWordsSaved: Bool, cloudRestoreState: OnboardingCloudRestoreState, cloudRestoreMessage: String?, cloudRestoreProviderHint: CloudRestoreProviderHint?, shouldOfferCloudRestore: Bool, cloudRestoreAlertVisible: Bool, restoreState: OnboardingRestoreState, errorMessage: String?) {
+    public init(step: OnboardingStep, branch: OnboardingBranch?, createdWords: [String], cloudBackupEnabled: Bool, secretWordsSaved: Bool, cloudRestoreState: OnboardingCloudRestoreState, cloudRestoreIssue: CloudCheckIssue?, cloudRestoreProviderHint: CloudRestoreProviderHint?, shouldOfferCloudRestore: Bool, cloudRestoreAlertVisible: Bool, restoreState: OnboardingRestoreState, error: OnboardingError?) {
         self.step = step
         self.branch = branch
         self.createdWords = createdWords
         self.cloudBackupEnabled = cloudBackupEnabled
         self.secretWordsSaved = secretWordsSaved
         self.cloudRestoreState = cloudRestoreState
-        self.cloudRestoreMessage = cloudRestoreMessage
+        self.cloudRestoreIssue = cloudRestoreIssue
         self.cloudRestoreProviderHint = cloudRestoreProviderHint
         self.shouldOfferCloudRestore = shouldOfferCloudRestore
         self.cloudRestoreAlertVisible = cloudRestoreAlertVisible
         self.restoreState = restoreState
-        self.errorMessage = errorMessage
+        self.error = error
     }
 
 
@@ -15728,12 +15658,12 @@ public struct FfiConverterTypeOnboardingState: FfiConverterRustBuffer {
                 cloudBackupEnabled: FfiConverterBool.read(from: &buf),
                 secretWordsSaved: FfiConverterBool.read(from: &buf),
                 cloudRestoreState: FfiConverterTypeOnboardingCloudRestoreState.read(from: &buf),
-                cloudRestoreMessage: FfiConverterOptionString.read(from: &buf),
+                cloudRestoreIssue: FfiConverterOptionTypeCloudCheckIssue.read(from: &buf),
                 cloudRestoreProviderHint: FfiConverterOptionTypeCloudRestoreProviderHint.read(from: &buf),
                 shouldOfferCloudRestore: FfiConverterBool.read(from: &buf),
                 cloudRestoreAlertVisible: FfiConverterBool.read(from: &buf),
                 restoreState: FfiConverterTypeOnboardingRestoreState.read(from: &buf),
-                errorMessage: FfiConverterOptionString.read(from: &buf)
+                error: FfiConverterOptionTypeOnboardingError.read(from: &buf)
         )
     }
 
@@ -15744,12 +15674,12 @@ public struct FfiConverterTypeOnboardingState: FfiConverterRustBuffer {
         FfiConverterBool.write(value.cloudBackupEnabled, into: &buf)
         FfiConverterBool.write(value.secretWordsSaved, into: &buf)
         FfiConverterTypeOnboardingCloudRestoreState.write(value.cloudRestoreState, into: &buf)
-        FfiConverterOptionString.write(value.cloudRestoreMessage, into: &buf)
+        FfiConverterOptionTypeCloudCheckIssue.write(value.cloudRestoreIssue, into: &buf)
         FfiConverterOptionTypeCloudRestoreProviderHint.write(value.cloudRestoreProviderHint, into: &buf)
         FfiConverterBool.write(value.shouldOfferCloudRestore, into: &buf)
         FfiConverterBool.write(value.cloudRestoreAlertVisible, into: &buf)
         FfiConverterTypeOnboardingRestoreState.write(value.restoreState, into: &buf)
-        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionTypeOnboardingError.write(value.error, into: &buf)
     }
 }
 
@@ -17101,15 +17031,6 @@ public enum AfterPinAction {
 
 
 
-public func userMessage() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_afterpinaction_usermessage(
-            FfiConverterTypeAfterPinAction_lower(self),uniffiCallStatus
-    )
-})
-}
-
 
 
 }
@@ -17557,39 +17478,31 @@ public enum AppAlertState {
     case hotWalletKeyMissing(walletId: WalletId
     )
     case invalidWordGroup
-    case errorImportingHotWallet(message: String
-    )
+    case errorImportingHotWallet
     case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network
     )
     case foundAddress(address: Address, amount: Amount?
     )
     case unableToSelectWallet
-    case errorImportingHardwareWallet(message: String
-    )
-    case invalidFileFormat(message: String
-    )
+    case errorImportingHardwareWallet
+    case invalidFileFormat
     case noWalletSelected(address: Address
     )
-    case invalidFormat(message: String
-    )
+    case invalidFormat
     case noUnsignedTransactionFound(txId: TxId
     )
-    case unableToGetAddress(error: String
-    )
+    case unableToGetAddress
     case noCameraPermission
-    case failedToScanQr(error: String
-    )
+    case failedToScanQr
     case cantSendOnWatchOnlyWallet
-    case tapSignerSetupFailed(message: String
-    )
-    case tapSignerDeriveFailed(message: String
-    )
+    case tapSignerSetupFailed
+    case tapSignerDeriveFailed
     case tapSignerInvalidAuth
     case tapSignerNoBackup(tapSigner: TapSigner
     )
     case tapSignerWrongPin(tapSigner: TapSigner, action: AfterPinAction
     )
-    case walletDatabaseCorrupted(walletId: WalletId, error: String
+    case walletDatabaseCorrupted(walletId: WalletId
     )
     case general(title: String, message: String
     )
@@ -17625,24 +17538,6 @@ public func isEqual(rhs: AppAlertState) -> Bool  {
 })
 }
 
-public func message() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_appalertstate_message(
-            FfiConverterTypeAppAlertState_lower(self),uniffiCallStatus
-    )
-})
-}
-
-public func title() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_appalertstate_title(
-            FfiConverterTypeAppAlertState_lower(self),uniffiCallStatus
-    )
-})
-}
-
 
 
 }
@@ -17673,8 +17568,7 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
 
         case 5: return .invalidWordGroup
 
-        case 6: return .errorImportingHotWallet(message: try FfiConverterString.read(from: &buf)
-        )
+        case 6: return .errorImportingHotWallet
 
         case 7: return .addressWrongNetwork(address: try FfiConverterTypeAddress.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), currentNetwork: try FfiConverterTypeNetwork.read(from: &buf)
         )
@@ -17684,36 +17578,29 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
 
         case 9: return .unableToSelectWallet
 
-        case 10: return .errorImportingHardwareWallet(message: try FfiConverterString.read(from: &buf)
-        )
+        case 10: return .errorImportingHardwareWallet
 
-        case 11: return .invalidFileFormat(message: try FfiConverterString.read(from: &buf)
-        )
+        case 11: return .invalidFileFormat
 
         case 12: return .noWalletSelected(address: try FfiConverterTypeAddress.read(from: &buf)
         )
 
-        case 13: return .invalidFormat(message: try FfiConverterString.read(from: &buf)
-        )
+        case 13: return .invalidFormat
 
         case 14: return .noUnsignedTransactionFound(txId: try FfiConverterTypeTxId.read(from: &buf)
         )
 
-        case 15: return .unableToGetAddress(error: try FfiConverterString.read(from: &buf)
-        )
+        case 15: return .unableToGetAddress
 
         case 16: return .noCameraPermission
 
-        case 17: return .failedToScanQr(error: try FfiConverterString.read(from: &buf)
-        )
+        case 17: return .failedToScanQr
 
         case 18: return .cantSendOnWatchOnlyWallet
 
-        case 19: return .tapSignerSetupFailed(message: try FfiConverterString.read(from: &buf)
-        )
+        case 19: return .tapSignerSetupFailed
 
-        case 20: return .tapSignerDeriveFailed(message: try FfiConverterString.read(from: &buf)
-        )
+        case 20: return .tapSignerDeriveFailed
 
         case 21: return .tapSignerInvalidAuth
 
@@ -17723,7 +17610,7 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
         case 23: return .tapSignerWrongPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), action: try FfiConverterTypeAfterPinAction.read(from: &buf)
         )
 
-        case 24: return .walletDatabaseCorrupted(walletId: try FfiConverterTypeWalletId.read(from: &buf), error: try FfiConverterString.read(from: &buf)
+        case 24: return .walletDatabaseCorrupted(walletId: try FfiConverterTypeWalletId.read(from: &buf)
         )
 
         case 25: return .general(title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
@@ -17776,9 +17663,8 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
 
 
-        case let .errorImportingHotWallet(message):
+        case .errorImportingHotWallet:
             writeInt(&buf, Int32(6))
-            FfiConverterString.write(message, into: &buf)
 
 
         case let .addressWrongNetwork(address,network,currentNetwork):
@@ -17798,14 +17684,12 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(9))
 
 
-        case let .errorImportingHardwareWallet(message):
+        case .errorImportingHardwareWallet:
             writeInt(&buf, Int32(10))
-            FfiConverterString.write(message, into: &buf)
 
 
-        case let .invalidFileFormat(message):
+        case .invalidFileFormat:
             writeInt(&buf, Int32(11))
-            FfiConverterString.write(message, into: &buf)
 
 
         case let .noWalletSelected(address):
@@ -17813,9 +17697,8 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             FfiConverterTypeAddress.write(address, into: &buf)
 
 
-        case let .invalidFormat(message):
+        case .invalidFormat:
             writeInt(&buf, Int32(13))
-            FfiConverterString.write(message, into: &buf)
 
 
         case let .noUnsignedTransactionFound(txId):
@@ -17823,32 +17706,28 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             FfiConverterTypeTxId.write(txId, into: &buf)
 
 
-        case let .unableToGetAddress(error):
+        case .unableToGetAddress:
             writeInt(&buf, Int32(15))
-            FfiConverterString.write(error, into: &buf)
 
 
         case .noCameraPermission:
             writeInt(&buf, Int32(16))
 
 
-        case let .failedToScanQr(error):
+        case .failedToScanQr:
             writeInt(&buf, Int32(17))
-            FfiConverterString.write(error, into: &buf)
 
 
         case .cantSendOnWatchOnlyWallet:
             writeInt(&buf, Int32(18))
 
 
-        case let .tapSignerSetupFailed(message):
+        case .tapSignerSetupFailed:
             writeInt(&buf, Int32(19))
-            FfiConverterString.write(message, into: &buf)
 
 
-        case let .tapSignerDeriveFailed(message):
+        case .tapSignerDeriveFailed:
             writeInt(&buf, Int32(20))
-            FfiConverterString.write(message, into: &buf)
 
 
         case .tapSignerInvalidAuth:
@@ -17866,10 +17745,9 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             FfiConverterTypeAfterPinAction.write(action, into: &buf)
 
 
-        case let .walletDatabaseCorrupted(walletId,error):
+        case let .walletDatabaseCorrupted(walletId):
             writeInt(&buf, Int32(24))
             FfiConverterTypeWalletId.write(walletId, into: &buf)
-            FfiConverterString.write(error, into: &buf)
 
 
         case let .general(title,message):
@@ -19656,6 +19534,86 @@ public func FfiConverterTypeByteReaderError_lower(_ value: ByteReaderError) -> R
 
 
 
+public enum CatastrophicCloudRestoreInconclusiveReason: Equatable, Hashable {
+
+    case authorizationRequired
+    case quotaExceeded
+    case providerUnavailable
+    case unknown
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CatastrophicCloudRestoreInconclusiveReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason: FfiConverterRustBuffer {
+    typealias SwiftType = CatastrophicCloudRestoreInconclusiveReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CatastrophicCloudRestoreInconclusiveReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .authorizationRequired
+
+        case 2: return .quotaExceeded
+
+        case 3: return .providerUnavailable
+
+        case 4: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CatastrophicCloudRestoreInconclusiveReason, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .authorizationRequired:
+            writeInt(&buf, Int32(1))
+
+
+        case .quotaExceeded:
+            writeInt(&buf, Int32(2))
+
+
+        case .providerUnavailable:
+            writeInt(&buf, Int32(3))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason_lift(_ buf: RustBuffer) throws -> CatastrophicCloudRestoreInconclusiveReason {
+    return try FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason_lower(_ value: CatastrophicCloudRestoreInconclusiveReason) -> RustBuffer {
+    return FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason.lower(value)
+}
+
+
+
+
 public enum CatastrophicCloudRestoreProvider: Equatable, Hashable {
 
     case iCloudDrive
@@ -19725,13 +19683,12 @@ public func FfiConverterTypeCatastrophicCloudRestoreProvider_lower(_ value: Cata
 public enum CatastrophicCloudRestoreResult: Equatable, Hashable {
 
     case backupFound
-    case noBackupFound(message: String
+    case noBackupFound(provider: CatastrophicCloudRestoreProvider
     )
-    case offline(message: String
+    case offline(provider: CatastrophicCloudRestoreProvider
     )
-    case unreadable(message: String
-    )
-    case inconclusive(message: String
+    case unreadable
+    case inconclusive(provider: CatastrophicCloudRestoreProvider, reason: CatastrophicCloudRestoreInconclusiveReason
     )
 
 
@@ -19756,16 +19713,15 @@ public struct FfiConverterTypeCatastrophicCloudRestoreResult: FfiConverterRustBu
 
         case 1: return .backupFound
 
-        case 2: return .noBackupFound(message: try FfiConverterString.read(from: &buf)
+        case 2: return .noBackupFound(provider: try FfiConverterTypeCatastrophicCloudRestoreProvider.read(from: &buf)
         )
 
-        case 3: return .offline(message: try FfiConverterString.read(from: &buf)
+        case 3: return .offline(provider: try FfiConverterTypeCatastrophicCloudRestoreProvider.read(from: &buf)
         )
 
-        case 4: return .unreadable(message: try FfiConverterString.read(from: &buf)
-        )
+        case 4: return .unreadable
 
-        case 5: return .inconclusive(message: try FfiConverterString.read(from: &buf)
+        case 5: return .inconclusive(provider: try FfiConverterTypeCatastrophicCloudRestoreProvider.read(from: &buf), reason: try FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -19780,24 +19736,24 @@ public struct FfiConverterTypeCatastrophicCloudRestoreResult: FfiConverterRustBu
             writeInt(&buf, Int32(1))
 
 
-        case let .noBackupFound(message):
+        case let .noBackupFound(provider):
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterTypeCatastrophicCloudRestoreProvider.write(provider, into: &buf)
 
 
-        case let .offline(message):
+        case let .offline(provider):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterTypeCatastrophicCloudRestoreProvider.write(provider, into: &buf)
 
 
-        case let .unreadable(message):
+        case .unreadable:
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(message, into: &buf)
 
 
-        case let .inconclusive(message):
+        case let .inconclusive(provider,reason):
             writeInt(&buf, Int32(5))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterTypeCatastrophicCloudRestoreProvider.write(provider, into: &buf)
+            FfiConverterTypeCatastrophicCloudRestoreInconclusiveReason.write(reason, into: &buf)
 
         }
     }
@@ -20047,7 +20003,7 @@ public enum CloudBackupDestructiveOperationState: Equatable, Hashable {
     case recreatingManifest
     case reinitializingBackup
     case disabling
-    case disableFailed(message: String, canKeepEnabled: Bool
+    case disableFailed(canKeepEnabled: Bool
     )
 
 
@@ -20078,7 +20034,7 @@ public struct FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverter
 
         case 4: return .disabling
 
-        case 5: return .disableFailed(message: try FfiConverterString.read(from: &buf), canKeepEnabled: try FfiConverterBool.read(from: &buf)
+        case 5: return .disableFailed(canKeepEnabled: try FfiConverterBool.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -20105,9 +20061,8 @@ public struct FfiConverterTypeCloudBackupDestructiveOperationState: FfiConverter
             writeInt(&buf, Int32(4))
 
 
-        case let .disableFailed(message,canKeepEnabled):
+        case let .disableFailed(canKeepEnabled):
             writeInt(&buf, Int32(5))
-            FfiConverterString.write(message, into: &buf)
             FfiConverterBool.write(canKeepEnabled, into: &buf)
 
         }
@@ -20141,8 +20096,7 @@ public enum CloudBackupDetailState: Equatable, Hashable {
     case loading
     case loaded(state: LoadedCloudBackupDetail
     )
-    case failed(String
-    )
+    case failed
 
 
 
@@ -20171,8 +20125,7 @@ public struct FfiConverterTypeCloudBackupDetailState: FfiConverterRustBuffer {
         case 3: return .loaded(state: try FfiConverterTypeLoadedCloudBackupDetail.read(from: &buf)
         )
 
-        case 4: return .failed(try FfiConverterString.read(from: &buf)
-        )
+        case 4: return .failed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20195,9 +20148,8 @@ public struct FfiConverterTypeCloudBackupDetailState: FfiConverterRustBuffer {
             FfiConverterTypeLoadedCloudBackupDetail.write(state, into: &buf)
 
 
-        case let .failed(v1):
+        case .failed:
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -20419,6 +20371,179 @@ public func FfiConverterTypeCloudBackupEnablePromptChoice_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeCloudBackupEnablePromptChoice_lower(_ value: CloudBackupEnablePromptChoice) -> RustBuffer {
     return FfiConverterTypeCloudBackupEnablePromptChoice.lower(value)
+}
+
+
+
+/**
+ * Public terminal cloud backup failure
+ */
+
+public enum CloudBackupFailure: Equatable, Hashable {
+
+    case failed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupFailure: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupFailure
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupFailure {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .failed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupFailure, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .failed:
+            writeInt(&buf, Int32(1))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupFailure_lift(_ buf: RustBuffer) throws -> CloudBackupFailure {
+    return try FfiConverterTypeCloudBackupFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupFailure_lower(_ value: CloudBackupFailure) -> RustBuffer {
+    return FfiConverterTypeCloudBackupFailure.lower(value)
+}
+
+
+
+/**
+ * Background cloud backup health issues returned as typed diagnostics
+ */
+
+public enum CloudBackupIntegrityIssue: Equatable, Hashable {
+
+    case masterKeyMissing
+    case passkeyCredentialMissing
+    case passkeySaltMissing
+    case namespaceMissing
+    case remoteWalletListUnreadable
+    case remoteBackupFreshnessUnknown
+    case localWalletInventoryUnreadable
+    case walletsNotBackedUp
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupIntegrityIssue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupIntegrityIssue: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupIntegrityIssue
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupIntegrityIssue {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .masterKeyMissing
+
+        case 2: return .passkeyCredentialMissing
+
+        case 3: return .passkeySaltMissing
+
+        case 4: return .namespaceMissing
+
+        case 5: return .remoteWalletListUnreadable
+
+        case 6: return .remoteBackupFreshnessUnknown
+
+        case 7: return .localWalletInventoryUnreadable
+
+        case 8: return .walletsNotBackedUp
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupIntegrityIssue, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .masterKeyMissing:
+            writeInt(&buf, Int32(1))
+
+
+        case .passkeyCredentialMissing:
+            writeInt(&buf, Int32(2))
+
+
+        case .passkeySaltMissing:
+            writeInt(&buf, Int32(3))
+
+
+        case .namespaceMissing:
+            writeInt(&buf, Int32(4))
+
+
+        case .remoteWalletListUnreadable:
+            writeInt(&buf, Int32(5))
+
+
+        case .remoteBackupFreshnessUnknown:
+            writeInt(&buf, Int32(6))
+
+
+        case .localWalletInventoryUnreadable:
+            writeInt(&buf, Int32(7))
+
+
+        case .walletsNotBackedUp:
+            writeInt(&buf, Int32(8))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupIntegrityIssue_lift(_ buf: RustBuffer) throws -> CloudBackupIntegrityIssue {
+    return try FfiConverterTypeCloudBackupIntegrityIssue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupIntegrityIssue_lower(_ value: CloudBackupIntegrityIssue) -> RustBuffer {
+    return FfiConverterTypeCloudBackupIntegrityIssue.lower(value)
 }
 
 
@@ -20811,8 +20936,7 @@ public enum CloudBackupOtherBackupsState: Equatable, Hashable {
 
     case loaded(summary: CloudBackupOtherBackupsSummary
     )
-    case loadFailed(error: String
-    )
+    case loadFailed
 
 
 
@@ -20837,8 +20961,7 @@ public struct FfiConverterTypeCloudBackupOtherBackupsState: FfiConverterRustBuff
         case 1: return .loaded(summary: try FfiConverterTypeCloudBackupOtherBackupsSummary.read(from: &buf)
         )
 
-        case 2: return .loadFailed(error: try FfiConverterString.read(from: &buf)
-        )
+        case 2: return .loadFailed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20853,9 +20976,8 @@ public struct FfiConverterTypeCloudBackupOtherBackupsState: FfiConverterRustBuff
             FfiConverterTypeCloudBackupOtherBackupsSummary.write(summary, into: &buf)
 
 
-        case let .loadFailed(error):
+        case .loadFailed:
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(error, into: &buf)
 
         }
     }
@@ -20959,8 +21081,7 @@ public enum CloudBackupPasskeyRepairState: Equatable, Hashable {
 
     case idle
     case running
-    case failed(String
-    )
+    case failed
 
 
 
@@ -20986,8 +21107,7 @@ public struct FfiConverterTypeCloudBackupPasskeyRepairState: FfiConverterRustBuf
 
         case 2: return .running
 
-        case 3: return .failed(try FfiConverterString.read(from: &buf)
-        )
+        case 3: return .failed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -21005,9 +21125,8 @@ public struct FfiConverterTypeCloudBackupPasskeyRepairState: FfiConverterRustBuf
             writeInt(&buf, Int32(2))
 
 
-        case let .failed(v1):
+        case .failed:
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -21524,10 +21643,8 @@ public enum CloudBackupSettingsRowStatus: Equatable, Hashable {
     case syncing
     case noFiles
     case driveUnavailable
-    case error(String
-    )
-    case authorizationRequired(String
-    )
+    case error
+    case authorizationRequired
 
 
 
@@ -21577,11 +21694,9 @@ public struct FfiConverterTypeCloudBackupSettingsRowStatus: FfiConverterRustBuff
 
         case 14: return .driveUnavailable
 
-        case 15: return .error(try FfiConverterString.read(from: &buf)
-        )
+        case 15: return .error
 
-        case 16: return .authorizationRequired(try FfiConverterString.read(from: &buf)
-        )
+        case 16: return .authorizationRequired
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -21647,14 +21762,12 @@ public struct FfiConverterTypeCloudBackupSettingsRowStatus: FfiConverterRustBuff
             writeInt(&buf, Int32(14))
 
 
-        case let .error(v1):
+        case .error:
             writeInt(&buf, Int32(15))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .authorizationRequired(v1):
+        case .authorizationRequired:
             writeInt(&buf, Int32(16))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -21685,10 +21798,8 @@ public enum CloudBackupSyncState: Equatable, Hashable {
 
     case idle
     case syncing
-    case blocked(String
-    )
-    case failed(String
-    )
+    case blocked
+    case failed
 
 
 
@@ -21714,11 +21825,9 @@ public struct FfiConverterTypeCloudBackupSyncState: FfiConverterRustBuffer {
 
         case 2: return .syncing
 
-        case 3: return .blocked(try FfiConverterString.read(from: &buf)
-        )
+        case 3: return .blocked
 
-        case 4: return .failed(try FfiConverterString.read(from: &buf)
-        )
+        case 4: return .failed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -21736,14 +21845,12 @@ public struct FfiConverterTypeCloudBackupSyncState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
 
 
-        case let .blocked(v1):
+        case .blocked:
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .failed(v1):
+        case .failed:
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -21879,7 +21986,7 @@ public enum CloudBackupVerificationPresentation: Equatable, Hashable {
     /**
      * Failure is a result, not another request to show the decision sheet
      */
-    case failed(source: CloudBackupVerificationSource, message: String
+    case failed(source: CloudBackupVerificationSource, failure: DeepVerificationFailure
     )
 
 
@@ -21920,7 +22027,7 @@ public struct FfiConverterTypeCloudBackupVerificationPresentation: FfiConverterR
         case 6: return .completed(source: try FfiConverterTypeCloudBackupVerificationSource.read(from: &buf)
         )
 
-        case 7: return .failed(source: try FfiConverterTypeCloudBackupVerificationSource.read(from: &buf), message: try FfiConverterString.read(from: &buf)
+        case 7: return .failed(source: try FfiConverterTypeCloudBackupVerificationSource.read(from: &buf), failure: try FfiConverterTypeDeepVerificationFailure.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -21962,10 +22069,10 @@ public struct FfiConverterTypeCloudBackupVerificationPresentation: FfiConverterR
             FfiConverterTypeCloudBackupVerificationSource.write(source, into: &buf)
 
 
-        case let .failed(source,message):
+        case let .failed(source,failure):
             writeInt(&buf, Int32(7))
             FfiConverterTypeCloudBackupVerificationSource.write(source, into: &buf)
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterTypeDeepVerificationFailure.write(failure, into: &buf)
 
         }
     }
@@ -22343,15 +22450,86 @@ public func FfiConverterTypeCloudBackupWalletStatus_lower(_ value: CloudBackupWa
 
 
 
+public enum CloudCheckIssue: Equatable, Hashable {
+
+    case offline
+    case cloudUnavailable
+    case unknown
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudCheckIssue: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudCheckIssue: FfiConverterRustBuffer {
+    typealias SwiftType = CloudCheckIssue
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudCheckIssue {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .offline
+
+        case 2: return .cloudUnavailable
+
+        case 3: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudCheckIssue, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .offline:
+            writeInt(&buf, Int32(1))
+
+
+        case .cloudUnavailable:
+            writeInt(&buf, Int32(2))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudCheckIssue_lift(_ buf: RustBuffer) throws -> CloudCheckIssue {
+    return try FfiConverterTypeCloudCheckIssue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudCheckIssue_lower(_ value: CloudCheckIssue) -> RustBuffer {
+    return FfiConverterTypeCloudCheckIssue.lower(value)
+}
+
+
+
+
 public enum CloudOnlyOperation: Equatable, Hashable {
 
     case idle
     case operating(recordId: String
     )
-    case warning(message: String, error: String
-    )
-    case failed(error: String
-    )
+    case warning
+    case failed
 
 
 
@@ -22378,11 +22556,9 @@ public struct FfiConverterTypeCloudOnlyOperation: FfiConverterRustBuffer {
         case 2: return .operating(recordId: try FfiConverterString.read(from: &buf)
         )
 
-        case 3: return .warning(message: try FfiConverterString.read(from: &buf), error: try FfiConverterString.read(from: &buf)
-        )
+        case 3: return .warning
 
-        case 4: return .failed(error: try FfiConverterString.read(from: &buf)
-        )
+        case 4: return .failed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22401,15 +22577,12 @@ public struct FfiConverterTypeCloudOnlyOperation: FfiConverterRustBuffer {
             FfiConverterString.write(recordId, into: &buf)
 
 
-        case let .warning(message,error):
+        case .warning:
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(message, into: &buf)
-            FfiConverterString.write(error, into: &buf)
 
 
-        case let .failed(error):
+        case .failed:
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(error, into: &buf)
 
         }
     }
@@ -22439,8 +22612,7 @@ public enum CloudOnlyState: Equatable, Hashable {
     case loading
     case loaded(wallets: [CloudBackupWalletItem]
     )
-    case failed(error: String
-    )
+    case failed
 
 
 
@@ -22469,8 +22641,7 @@ public struct FfiConverterTypeCloudOnlyState: FfiConverterRustBuffer {
         case 3: return .loaded(wallets: try FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf)
         )
 
-        case 4: return .failed(error: try FfiConverterString.read(from: &buf)
-        )
+        case 4: return .failed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22493,9 +22664,8 @@ public struct FfiConverterTypeCloudOnlyState: FfiConverterRustBuffer {
             FfiConverterSequenceTypeCloudBackupWalletItem.write(wallets, into: &buf)
 
 
-        case let .failed(error):
+        case .failed:
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(error, into: &buf)
 
         }
     }
@@ -23535,34 +23705,25 @@ public enum DeepVerificationFailure: Equatable, Hashable {
     /**
      * Transient iCloud/network/passkey error — safe to retry
      */
-    case retry(message: String, detail: CloudBackupDetail?, retryContext: CloudBackupRetryContext?
+    case retry(detail: CloudBackupDetail?, retryContext: CloudBackupRetryContext?
     )
     /**
      * Manifest missing, master key verified intact — recreate from local wallets
      */
-    case recreateManifest(message: String, warning: String, detail: CloudBackupDetail?
+    case recreateManifest(detail: CloudBackupDetail?
     )
     /**
      * No verified cloud or local master key available — full re-enable needed
      */
-    case reinitializeBackup(message: String, warning: String, detail: CloudBackupDetail?
+    case reinitializeBackup(detail: CloudBackupDetail?
     )
     /**
      * Backup uses a newer format — do not overwrite
      */
-    case unsupportedVersion(message: String, detail: CloudBackupDetail?
+    case unsupportedVersion(detail: CloudBackupDetail?
     )
 
 
-
-public func message() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_deepverificationfailure_message(
-            FfiConverterTypeDeepVerificationFailure_lower(self),uniffiCallStatus
-    )
-})
-}
 
 
 
@@ -23582,16 +23743,16 @@ public struct FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .retry(message: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf), retryContext: try FfiConverterOptionTypeCloudBackupRetryContext.read(from: &buf)
+        case 1: return .retry(detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf), retryContext: try FfiConverterOptionTypeCloudBackupRetryContext.read(from: &buf)
         )
 
-        case 2: return .recreateManifest(message: try FfiConverterString.read(from: &buf), warning: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        case 2: return .recreateManifest(detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
         )
 
-        case 3: return .reinitializeBackup(message: try FfiConverterString.read(from: &buf), warning: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        case 3: return .reinitializeBackup(detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
         )
 
-        case 4: return .unsupportedVersion(message: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
+        case 4: return .unsupportedVersion(detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23602,30 +23763,24 @@ public struct FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .retry(message,detail,retryContext):
+        case let .retry(detail,retryContext):
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(message, into: &buf)
             FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
             FfiConverterOptionTypeCloudBackupRetryContext.write(retryContext, into: &buf)
 
 
-        case let .recreateManifest(message,warning,detail):
+        case let .recreateManifest(detail):
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(message, into: &buf)
-            FfiConverterString.write(warning, into: &buf)
             FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
 
 
-        case let .reinitializeBackup(message,warning,detail):
+        case let .reinitializeBackup(detail):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(message, into: &buf)
-            FfiConverterString.write(warning, into: &buf)
             FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
 
 
-        case let .unsupportedVersion(message,detail):
+        case let .unsupportedVersion(detail):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(message, into: &buf)
             FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
 
         }
@@ -27773,6 +27928,72 @@ public func FfiConverterTypeOnboardingCloudRestoreState_lower(_ value: Onboardin
 
 
 
+public enum OnboardingError: Equatable, Hashable {
+
+    case walletCreationFailed
+    case completionFailed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnboardingError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingError: FfiConverterRustBuffer {
+    typealias SwiftType = OnboardingError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .walletCreationFailed
+
+        case 2: return .completionFailed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OnboardingError, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .walletCreationFailed:
+            writeInt(&buf, Int32(1))
+
+
+        case .completionFailed:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingError_lift(_ buf: RustBuffer) throws -> OnboardingError {
+    return try FfiConverterTypeOnboardingError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingError_lower(_ value: OnboardingError) -> RustBuffer {
+    return FfiConverterTypeOnboardingError.lower(value)
+}
+
+
+
+
 public enum OnboardingReconcileMessage: Equatable, Hashable {
 
     case step(OnboardingStep
@@ -27787,7 +28008,7 @@ public enum OnboardingReconcileMessage: Equatable, Hashable {
     )
     case cloudRestoreState(OnboardingCloudRestoreState
     )
-    case cloudRestoreMessageChanged(String?
+    case cloudRestoreIssueChanged(CloudCheckIssue?
     )
     case cloudRestoreProviderHintChanged(CloudRestoreProviderHint?
     )
@@ -27797,7 +28018,7 @@ public enum OnboardingReconcileMessage: Equatable, Hashable {
     )
     case restoreStateChanged(OnboardingRestoreState
     )
-    case errorMessageChanged(String?
+    case errorChanged(OnboardingError?
     )
     case complete
 
@@ -27839,7 +28060,7 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
         case 6: return .cloudRestoreState(try FfiConverterTypeOnboardingCloudRestoreState.read(from: &buf)
         )
 
-        case 7: return .cloudRestoreMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        case 7: return .cloudRestoreIssueChanged(try FfiConverterOptionTypeCloudCheckIssue.read(from: &buf)
         )
 
         case 8: return .cloudRestoreProviderHintChanged(try FfiConverterOptionTypeCloudRestoreProviderHint.read(from: &buf)
@@ -27854,7 +28075,7 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
         case 11: return .restoreStateChanged(try FfiConverterTypeOnboardingRestoreState.read(from: &buf)
         )
 
-        case 12: return .errorMessageChanged(try FfiConverterOptionString.read(from: &buf)
+        case 12: return .errorChanged(try FfiConverterOptionTypeOnboardingError.read(from: &buf)
         )
 
         case 13: return .complete
@@ -27897,9 +28118,9 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
             FfiConverterTypeOnboardingCloudRestoreState.write(v1, into: &buf)
 
 
-        case let .cloudRestoreMessageChanged(v1):
+        case let .cloudRestoreIssueChanged(v1):
             writeInt(&buf, Int32(7))
-            FfiConverterOptionString.write(v1, into: &buf)
+            FfiConverterOptionTypeCloudCheckIssue.write(v1, into: &buf)
 
 
         case let .cloudRestoreProviderHintChanged(v1):
@@ -27922,9 +28143,9 @@ public struct FfiConverterTypeOnboardingReconcileMessage: FfiConverterRustBuffer
             FfiConverterTypeOnboardingRestoreState.write(v1, into: &buf)
 
 
-        case let .errorMessageChanged(v1):
+        case let .errorChanged(v1):
             writeInt(&buf, Int32(12))
-            FfiConverterOptionString.write(v1, into: &buf)
+            FfiConverterOptionTypeOnboardingError.write(v1, into: &buf)
 
 
         case .complete:
@@ -27952,6 +28173,72 @@ public func FfiConverterTypeOnboardingReconcileMessage_lower(_ value: Onboarding
 
 
 
+public enum OnboardingRestoreFailure: Equatable, Hashable {
+
+    case timedOut
+    case failed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnboardingRestoreFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingRestoreFailure: FfiConverterRustBuffer {
+    typealias SwiftType = OnboardingRestoreFailure
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingRestoreFailure {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .timedOut
+
+        case 2: return .failed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OnboardingRestoreFailure, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .timedOut:
+            writeInt(&buf, Int32(1))
+
+
+        case .failed:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingRestoreFailure_lift(_ buf: RustBuffer) throws -> OnboardingRestoreFailure {
+    return try FfiConverterTypeOnboardingRestoreFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingRestoreFailure_lower(_ value: OnboardingRestoreFailure) -> RustBuffer {
+    return FfiConverterTypeOnboardingRestoreFailure.lower(value)
+}
+
+
+
+
 public enum OnboardingRestoreState: Equatable, Hashable {
 
     case idle
@@ -27959,7 +28246,7 @@ public enum OnboardingRestoreState: Equatable, Hashable {
     )
     case complete(CloudBackupRestoreReport
     )
-    case failed(message: String
+    case failed(failure: OnboardingRestoreFailure
     )
 
 
@@ -27990,7 +28277,7 @@ public struct FfiConverterTypeOnboardingRestoreState: FfiConverterRustBuffer {
         case 3: return .complete(try FfiConverterTypeCloudBackupRestoreReport.read(from: &buf)
         )
 
-        case 4: return .failed(message: try FfiConverterString.read(from: &buf)
+        case 4: return .failed(failure: try FfiConverterTypeOnboardingRestoreFailure.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -28015,9 +28302,9 @@ public struct FfiConverterTypeOnboardingRestoreState: FfiConverterRustBuffer {
             FfiConverterTypeCloudBackupRestoreReport.write(v1, into: &buf)
 
 
-        case let .failed(message):
+        case let .failed(failure):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterTypeOnboardingRestoreFailure.write(failure, into: &buf)
 
         }
     }
@@ -28310,8 +28597,7 @@ public enum OtherBackupsOperation: Equatable, Hashable {
     )
     case deleting
     case deleted
-    case failed(error: String
-    )
+    case failed
 
 
 
@@ -28344,8 +28630,7 @@ public struct FfiConverterTypeOtherBackupsOperation: FfiConverterRustBuffer {
 
         case 5: return .deleted
 
-        case 6: return .failed(error: try FfiConverterString.read(from: &buf)
-        )
+        case 6: return .failed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -28378,9 +28663,8 @@ public struct FfiConverterTypeOtherBackupsOperation: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
 
 
-        case let .failed(error):
+        case .failed:
             writeInt(&buf, Int32(6))
-            FfiConverterString.write(error, into: &buf)
 
         }
     }
@@ -28691,6 +28975,82 @@ public func FfiConverterTypePendingWalletManagerReconcileMessage_lift(_ buf: Rus
 #endif
 public func FfiConverterTypePendingWalletManagerReconcileMessage_lower(_ value: PendingWalletManagerReconcileMessage) -> RustBuffer {
     return FfiConverterTypePendingWalletManagerReconcileMessage.lower(value)
+}
+
+
+
+/**
+ * Why updating a PIN could not proceed
+ */
+
+public enum PinUpdateFailure: Equatable, Hashable {
+
+    case updateFailed
+    case sameAsWipeDataPin
+    case sameAsDecoyPin
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PinUpdateFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePinUpdateFailure: FfiConverterRustBuffer {
+    typealias SwiftType = PinUpdateFailure
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PinUpdateFailure {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .updateFailed
+
+        case 2: return .sameAsWipeDataPin
+
+        case 3: return .sameAsDecoyPin
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PinUpdateFailure, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .updateFailed:
+            writeInt(&buf, Int32(1))
+
+
+        case .sameAsWipeDataPin:
+            writeInt(&buf, Int32(2))
+
+
+        case .sameAsDecoyPin:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePinUpdateFailure_lift(_ buf: RustBuffer) throws -> PinUpdateFailure {
+    return try FfiConverterTypePinUpdateFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePinUpdateFailure_lower(_ value: PinUpdateFailure) -> RustBuffer {
+    return FfiConverterTypePinUpdateFailure.lower(value)
 }
 
 
@@ -29158,30 +29518,6 @@ public enum ScanProgress: Equatable, Hashable {
 
 
 
-    /**
-     * Detail text for the progress (e.g., "7 parts left"), or None for UR
-     */
-public func detailText() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_scanprogress_detail_text(
-            FfiConverterTypeScanProgress_lower(self),uniffiCallStatus
-    )
-})
-}
-
-    /**
-     * Display text for the progress (e.g., "Scanned 3 of 10" or "Scanned 45%")
-     */
-public func displayText() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_scanprogress_display_text(
-            FfiConverterTypeScanProgress_lower(self),uniffiCallStatus
-    )
-})
-}
-
 
 
 }
@@ -29501,7 +29837,7 @@ public enum SecurityAlertState: Equatable, Hashable {
      * Disabling biometric, then show confirm for decoy PIN
      */
     case noteFaceIdDisablingForDecoyPin
-    case extraSetPinError(message: String
+    case extraSetPinError(failure: PinUpdateFailure
     )
 
 
@@ -29543,7 +29879,7 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
 
         case 9: return .noteFaceIdDisablingForDecoyPin
 
-        case 10: return .extraSetPinError(message: try FfiConverterString.read(from: &buf)
+        case 10: return .extraSetPinError(failure: try FfiConverterTypePinUpdateFailure.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29591,9 +29927,9 @@ public struct FfiConverterTypeSecurityAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(9))
 
 
-        case let .extraSetPinError(message):
+        case let .extraSetPinError(failure):
             writeInt(&buf, Int32(10))
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterTypePinUpdateFailure.write(failure, into: &buf)
 
         }
     }
@@ -30159,6 +30495,11 @@ public enum SendFlowAlertState: Equatable, Hashable {
     )
     case general(title: String, message: String
     )
+    case unableToLoadFees
+    case feeTooHigh
+    case highFeeWarning
+    case unableToReadLockedCoins
+    case balanceStillLoading
 
 
 
@@ -30186,6 +30527,16 @@ public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
         case 2: return .general(title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
         )
 
+        case 3: return .unableToLoadFees
+
+        case 4: return .feeTooHigh
+
+        case 5: return .highFeeWarning
+
+        case 6: return .unableToReadLockedCoins
+
+        case 7: return .balanceStillLoading
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -30203,6 +30554,26 @@ public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterString.write(title, into: &buf)
             FfiConverterString.write(message, into: &buf)
+
+
+        case .unableToLoadFees:
+            writeInt(&buf, Int32(3))
+
+
+        case .feeTooHigh:
+            writeInt(&buf, Int32(4))
+
+
+        case .highFeeWarning:
+            writeInt(&buf, Int32(5))
+
+
+        case .unableToReadLockedCoins:
+            writeInt(&buf, Int32(6))
+
+
+        case .balanceStillLoading:
+            writeInt(&buf, Int32(7))
 
         }
     }
@@ -30307,19 +30678,14 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     )
     case NoBalance
     case ZeroAmount
-    case UnableToGetMaxSend(String
-    )
+    case UnableToGetMaxSend
     case InsufficientFunds
     case SendAmountToLow
     case UnableToGetFeeRate
-    case UnableToBuildTxn(String
-    )
-    case UnableToSaveUnsignedTransaction(String
-    )
-    case WalletManager(WalletManagerError
-    )
-    case UnableToGetFeeDetails(String
-    )
+    case UnableToBuildTxn
+    case UnableToSaveUnsignedTransaction
+    case WalletManager
+    case UnableToGetFeeDetails
 
 
 
@@ -30372,24 +30738,14 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             )
         case 5: return .NoBalance
         case 6: return .ZeroAmount
-        case 7: return .UnableToGetMaxSend(
-            try FfiConverterString.read(from: &buf)
-            )
+        case 7: return .UnableToGetMaxSend
         case 8: return .InsufficientFunds
         case 9: return .SendAmountToLow
         case 10: return .UnableToGetFeeRate
-        case 11: return .UnableToBuildTxn(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 12: return .UnableToSaveUnsignedTransaction(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 13: return .WalletManager(
-            try FfiConverterTypeWalletManagerError.read(from: &buf)
-            )
-        case 14: return .UnableToGetFeeDetails(
-            try FfiConverterString.read(from: &buf)
-            )
+        case 11: return .UnableToBuildTxn
+        case 12: return .UnableToSaveUnsignedTransaction
+        case 13: return .WalletManager
+        case 14: return .UnableToGetFeeDetails
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30430,9 +30786,8 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
 
 
-        case let .UnableToGetMaxSend(v1):
+        case .UnableToGetMaxSend:
             writeInt(&buf, Int32(7))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case .InsufficientFunds:
@@ -30447,24 +30802,20 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(10))
 
 
-        case let .UnableToBuildTxn(v1):
+        case .UnableToBuildTxn:
             writeInt(&buf, Int32(11))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .UnableToSaveUnsignedTransaction(v1):
+        case .UnableToSaveUnsignedTransaction:
             writeInt(&buf, Int32(12))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .WalletManager(v1):
+        case .WalletManager:
             writeInt(&buf, Int32(13))
-            FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
-        case let .UnableToGetFeeDetails(v1):
+        case .UnableToGetFeeDetails:
             writeInt(&buf, Int32(14))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -30489,10 +30840,8 @@ public func FfiConverterTypeSendFlowError_lower(_ value: SendFlowError) -> RustB
 
 public enum SendFlowErrorAlert: Equatable, Hashable {
 
-    case signAndBroadcast(String
-    )
-    case confirmDetails(String
-    )
+    case signAndBroadcast
+    case confirmDetails
 
 
 
@@ -30514,11 +30863,9 @@ public struct FfiConverterTypeSendFlowErrorAlert: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .signAndBroadcast(try FfiConverterString.read(from: &buf)
-        )
+        case 1: return .signAndBroadcast
 
-        case 2: return .confirmDetails(try FfiConverterString.read(from: &buf)
-        )
+        case 2: return .confirmDetails
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30528,14 +30875,12 @@ public struct FfiConverterTypeSendFlowErrorAlert: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .signAndBroadcast(v1):
+        case .signAndBroadcast:
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .confirmDetails(v1):
+        case .confirmDetails:
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(v1, into: &buf)
 
         }
     }
@@ -34331,8 +34676,7 @@ public func FfiConverterTypeWalletError_lower(_ value: WalletError) -> RustBuffe
 
 public enum WalletErrorAlert: Equatable, Hashable {
 
-    case nodeConnectionFailed(String
-    )
+    case nodeConnectionFailed
     case noBalance
 
 
@@ -34355,8 +34699,7 @@ public struct FfiConverterTypeWalletErrorAlert: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
-        )
+        case 1: return .nodeConnectionFailed
 
         case 2: return .noBalance
 
@@ -34368,9 +34711,8 @@ public struct FfiConverterTypeWalletErrorAlert: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .nodeConnectionFailed(v1):
+        case .nodeConnectionFailed:
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case .noBalance:
@@ -34790,7 +35132,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     )
     case OutputLabelsError(String
     )
-    case DatabaseCorruption(id: WalletId, error: String
+    case DatabaseCorruption(id: WalletId
     )
     case ReceiveAddressError(String
     )
@@ -34916,8 +35258,7 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 31: return .DatabaseCorruption(
-            id: try FfiConverterTypeWalletId.read(from: &buf),
-            error: try FfiConverterString.read(from: &buf)
+            id: try FfiConverterTypeWalletId.read(from: &buf)
             )
         case 32: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
@@ -35080,10 +35421,9 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .DatabaseCorruption(id):
             writeInt(&buf, Int32(31))
             FfiConverterTypeWalletId.write(id, into: &buf)
-            FfiConverterString.write(error, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
@@ -35129,16 +35469,14 @@ public enum WalletManagerReconcileMessage {
     )
     case transactionConfirmationsUpdated(TransactionConfirmationUpdate
     )
-    case nodeConnectionFailed(String
-    )
+    case nodeConnectionFailed
     case walletMetadataChanged(WalletMetadata
     )
     case walletBalanceChanged(Balance
     )
     case walletError(WalletManagerError
     )
-    case unknownError(String
-    )
+    case unknownError
     case walletScannerResponse(ScannerResponse
     )
     case unsignedTransactionsChanged
@@ -35152,8 +35490,7 @@ public enum WalletManagerReconcileMessage {
     )
     case receiveAddressLoadingChanged(Bool
     )
-    case receiveAddressError(String
-    )
+    case receiveAddressError
     case receiveAddressClosed(UInt64
     )
     case payjoinTxBroadcast
@@ -35202,8 +35539,7 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 8: return .transactionConfirmationsUpdated(try FfiConverterTypeTransactionConfirmationUpdate.read(from: &buf)
         )
 
-        case 9: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
-        )
+        case 9: return .nodeConnectionFailed
 
         case 10: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
@@ -35214,8 +35550,7 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 12: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
 
-        case 13: return .unknownError(try FfiConverterString.read(from: &buf)
-        )
+        case 13: return .unknownError
 
         case 14: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
         )
@@ -35237,8 +35572,7 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 20: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
         )
 
-        case 21: return .receiveAddressError(try FfiConverterString.read(from: &buf)
-        )
+        case 21: return .receiveAddressError
 
         case 22: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
@@ -35293,9 +35627,8 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterTypeTransactionConfirmationUpdate.write(v1, into: &buf)
 
 
-        case let .nodeConnectionFailed(v1):
+        case .nodeConnectionFailed:
             writeInt(&buf, Int32(9))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletMetadataChanged(v1):
@@ -35313,9 +35646,8 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
-        case let .unknownError(v1):
+        case .unknownError:
             writeInt(&buf, Int32(13))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletScannerResponse(v1):
@@ -35352,9 +35684,8 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterBool.write(v1, into: &buf)
 
 
-        case let .receiveAddressError(v1):
+        case .receiveAddressError:
             writeInt(&buf, Int32(21))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case let .receiveAddressClosed(v1):
@@ -35716,15 +36047,6 @@ public enum WalletSecretType: Equatable, Hashable {
 
 
 
-public func displayName() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_walletsecrettype_display_name(
-            FfiConverterTypeWalletSecretType_lower(self),uniffiCallStatus
-    )
-})
-}
-
 
 
 }
@@ -35972,15 +36294,6 @@ public enum WalletType: Equatable, Hashable, CustomStringConvertible {
     case watchOnly
 
 
-
-public func displayName() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_wallettype_display_name(
-            FfiConverterTypeWalletType_lower(self),uniffiCallStatus
-    )
-})
-}
 
 
 
@@ -38453,6 +38766,30 @@ fileprivate struct FfiConverterOptionTypeCloudBackupVerificationSource: FfiConve
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCloudCheckIssue: FfiConverterRustBuffer {
+    typealias SwiftType = CloudCheckIssue?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudCheckIssue.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudCheckIssue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeHardwareWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = HardwareWalletMetadata?
 
@@ -38517,6 +38854,54 @@ fileprivate struct FfiConverterOptionTypeOnboardingBranch: FfiConverterRustBuffe
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeOnboardingBranch.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeOnboardingError: FfiConverterRustBuffer {
+    typealias SwiftType = OnboardingError?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeOnboardingError.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeOnboardingError.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePinUpdateFailure: FfiConverterRustBuffer {
+    typealias SwiftType = PinUpdateFailure?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePinUpdateFailure.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePinUpdateFailure.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -39107,6 +39492,31 @@ fileprivate struct FfiConverterSequenceTypeBlockExplorerOption: FfiConverterRust
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeBlockExplorerOption.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudBackupIntegrityIssue: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudBackupIntegrityIssue]
+
+    public static func write(_ value: [CloudBackupIntegrityIssue], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudBackupIntegrityIssue.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudBackupIntegrityIssue] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudBackupIntegrityIssue]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudBackupIntegrityIssue.read(from: &buf))
         }
         return seq
     }
@@ -40760,7 +41170,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 9789) {
+    if (uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 60611) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 26176) {
@@ -40802,7 +41212,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state() != 19758) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 35162) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_verify_backup_integrity() != 2262) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_dispatch() != 7867) {
@@ -40995,9 +41405,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_delete_wallet() != 58138) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message() != 57956) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 57298) {

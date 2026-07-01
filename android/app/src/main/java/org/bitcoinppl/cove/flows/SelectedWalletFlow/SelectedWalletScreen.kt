@@ -132,7 +132,7 @@ fun SelectedWalletScreen(
     isCloudBackupEnabled: Boolean = app.cloudBackupManager.isCloudBackupEnabled,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val actualWalletName = manager.walletMetadata?.name ?: "Wallet"
+    val actualWalletName = manager.walletMetadata?.name ?: stringResource(R.string.wallet_send_default_wallet_name)
     val actualSatsAmount = manager.displayAmount(manager.balance.spendable(), showUnit = true)
 
     val actualSatsPending =
@@ -271,14 +271,14 @@ fun SelectedWalletScreen(
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
+                                contentDescription = stringResource(R.string.wallet_send_back),
                             )
                         }
                     } else {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.Filled.Menu,
-                                contentDescription = "Menu",
+                                contentDescription = stringResource(R.string.wallet_send_menu),
                             )
                         }
                     }
@@ -291,7 +291,7 @@ fun SelectedWalletScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.QrCode2,
-                                contentDescription = "QR Code",
+                                contentDescription = stringResource(R.string.wallet_send_qr_code),
                             )
                         }
                         IconButton(
@@ -300,7 +300,7 @@ fun SelectedWalletScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.MoreVert,
-                                contentDescription = "More",
+                                contentDescription = stringResource(R.string.wallet_send_more),
                             )
                         }
                     }

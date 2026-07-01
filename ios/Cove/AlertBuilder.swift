@@ -7,7 +7,7 @@
 import SwiftUI
 
 struct AnyAlertBuilder: AlertBuilderProtocol {
-    let title: String
+    let title: LocalizedStringKey
     let message: AnyView
     let actions: AnyView
 
@@ -22,18 +22,18 @@ protocol AlertBuilderProtocol {
     associatedtype Message: View
     associatedtype Actions: View
 
-    var title: String { get }
+    var title: LocalizedStringKey { get }
     var message: Message { get }
     var actions: Actions { get }
 }
 
 struct AlertBuilder<Actions: View, Message: View>: AlertBuilderProtocol {
-    let title: String
+    let title: LocalizedStringKey
     let message: Message
     let actions: Actions
 
     init(
-        title: String,
+        title: LocalizedStringKey,
         @ViewBuilder message: () -> Message,
         @ViewBuilder actions: () -> Actions
     ) {
@@ -43,8 +43,8 @@ struct AlertBuilder<Actions: View, Message: View>: AlertBuilderProtocol {
     }
 
     init(
-        title: String,
-        message: String,
+        title: LocalizedStringKey,
+        message: LocalizedStringKey,
         @ViewBuilder actions: () -> Actions
     ) where Message == Text {
         self.title = title

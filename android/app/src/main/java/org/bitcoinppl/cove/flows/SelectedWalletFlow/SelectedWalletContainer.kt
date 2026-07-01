@@ -84,9 +84,9 @@ fun SelectedWalletContainer(
         } catch (e: CancellationException) {
             throw e
         } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}", e)
             app.alertState = TaggedItem(
-                AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`)
+                AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`)
             )
         } catch (e: Exception) {
             android.util.Log.e(tag, "something went very wrong", e)
@@ -191,6 +191,9 @@ fun SelectedWalletContainer(
         else -> {
             val canGoBack = app.canGoBack()
             android.util.Log.d("SelectedWalletContainer", "canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}")
+            val initialScanIncompleteTitle = stringResource(R.string.common_remaining_initial_scan_incomplete_title)
+            val initialScanIncompleteMessage = stringResource(R.string.common_remaining_initial_scan_incomplete_message)
+            val noFundsAvailableMessage = stringResource(R.string.wallet_send_no_funds_available)
             val handleSend = send@{
                 if (wm.walletMetadata?.walletType == WalletType.WATCH_ONLY) {
                     app.alertState = TaggedItem(AppAlertState.CantSendOnWatchOnlyWallet)
@@ -198,7 +201,7 @@ fun SelectedWalletContainer(
                 }
 
                 if (wm.ledgerState.initialScanIncomplete) {
-                    app.showInitialScanIncompleteAlert()
+                    app.showInitialScanIncompleteAlert(initialScanIncompleteTitle, initialScanIncompleteMessage)
                     return@send
                 }
 
@@ -207,7 +210,7 @@ fun SelectedWalletContainer(
                     app.pushRoute(Route.Send(SendRoute.SetAmount(id, null, null)))
                 } else {
                     scope.launch {
-                        snackbarHostState.showSnackbar("No funds available to send")
+                        snackbarHostState.showSnackbar(noFundsAvailableMessage)
                     }
                 }
             }

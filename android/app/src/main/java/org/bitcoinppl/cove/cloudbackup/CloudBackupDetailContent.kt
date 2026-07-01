@@ -24,8 +24,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
@@ -55,7 +57,7 @@ internal fun cloudBackupDetailBodyState(
         manager.isPasskeyMissing -> CloudBackupDetailBodyState.MISSING_PASSKEY
         manager.verificationState is CloudBackupVerificationState.Running -> CloudBackupDetailBodyState.VERIFYING
         hasDetail -> CloudBackupDetailBodyState.DETAIL
-        manager.hasPendingUploadVerification && manager.syncState is CloudBackupSyncState.Blocked ->
+        manager.hasPendingUploadVerification && manager.syncState == CloudBackupSyncState.BLOCKED ->
             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED
         manager.verificationState !is CloudBackupVerificationState.Failed -> CloudBackupDetailBodyState.LOADING
         else -> null
@@ -106,8 +108,8 @@ internal fun CloudBackupDetailContent(
             }
             CloudBackupDetailBodyState.VERIFYING -> {
                 CloudBackupProgressCard(
-                    title = "Verifying cloud backup",
-                    message = "Confirming that your backups can be decrypted and restored",
+                    title = stringResource(R.string.cloud_backup_detail_verifying_title),
+                    message = stringResource(R.string.cloud_backup_detail_verifying_message),
                 )
             }
             CloudBackupDetailBodyState.DETAIL -> {
@@ -122,8 +124,8 @@ internal fun CloudBackupDetailContent(
             }
             CloudBackupDetailBodyState.LOADING -> {
                 CloudBackupProgressCard(
-                    title = "Loading cloud backup",
-                    message = "Finishing setup and fetching backup details",
+                    title = stringResource(R.string.cloud_backup_detail_loading_title),
+                    message = stringResource(R.string.cloud_backup_detail_loading_message),
                 )
             }
             null -> Unit
@@ -133,7 +135,7 @@ internal fun CloudBackupDetailContent(
             bodyState != CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED &&
                 shouldShowPendingUploadConfirmationStatus(manager)
         ) {
-            PendingUploadConfirmationStatus(isBlockedOnAuthorization = manager.syncState is CloudBackupSyncState.Blocked)
+            PendingUploadConfirmationStatus(isBlockedOnAuthorization = manager.syncState == CloudBackupSyncState.BLOCKED)
         }
 
         if (showFallbackVerificationSection) {
@@ -175,12 +177,12 @@ private fun PendingUploadConfirmationStatus(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Cloud storage authorization needed",
+                    stringResource(R.string.cloud_backup_authorization_needed_title),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 Text(
-                    "Cove needs cloud storage access to confirm the latest backup upload",
+                    stringResource(R.string.cloud_backup_authorization_needed_message),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
@@ -188,8 +190,8 @@ private fun PendingUploadConfirmationStatus(
         }
     } else {
         CloudBackupProgressCard(
-            title = "Confirming latest cloud upload",
-            message = "Cloud storage is finishing the newest backup update",
+            title = stringResource(R.string.cloud_backup_confirming_upload_title),
+            message = stringResource(R.string.cloud_backup_confirming_upload_message),
         )
     }
 }
@@ -201,8 +203,8 @@ private fun UnsupportedPasskeyProviderContent(
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ErrorStateCard(
             icon = Icons.Default.WarningAmber,
-            title = "Passkey not supported for Cloud Backup",
-            body = "This passkey provider can't create the secure passkey required for Cloud Backup. Try again with a supported password manager such as Google Password Manager, 1Password, or Bitwarden.",
+            title = stringResource(R.string.cloud_backup_unsupported_passkey_title),
+            body = stringResource(R.string.cloud_backup_unsupported_passkey_body),
         )
 
         Button(
@@ -215,7 +217,7 @@ private fun UnsupportedPasskeyProviderContent(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Try Again")
+            Text(stringResource(R.string.action_try_again))
         }
     }
 }
@@ -225,19 +227,14 @@ private fun MissingPasskeyContent(
     manager: CloudBackupManager,
 ) {
     val repairState = manager.passkeyRepairState
-    val isRepairing = repairState is CloudBackupPasskeyRepairState.Running
-    val repairError =
-        if (repairState is CloudBackupPasskeyRepairState.Failed) {
-            repairState.v1
-        } else {
-            null
-        }
+    val isRepairing = repairState == CloudBackupPasskeyRepairState.RUNNING
+    val repairFailed = repairState == CloudBackupPasskeyRepairState.FAILED
 
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ErrorStateCard(
             icon = Icons.Default.Key,
-            title = "Cloud Backup passkey missing",
-            body = "Your cloud backup is not accessible until you use an existing passkey or add a new one. Without it, your backups can't be restored.",
+            title = stringResource(R.string.cloud_backup_missing_passkey_title),
+            body = stringResource(R.string.cloud_backup_missing_passkey_body),
         )
 
         Button(
@@ -249,11 +246,17 @@ private fun MissingPasskeyContent(
                 CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Text(if (isRepairing) "Opening Passkey Options" else "Add Passkey")
+            Text(
+                if (isRepairing) {
+                    stringResource(R.string.settings_action_opening_passkey_options)
+                } else {
+                    stringResource(R.string.settings_action_add_passkey)
+                },
+            )
         }
 
-        repairError?.let {
-            ErrorInlineMessage(it)
+        if (repairFailed) {
+            ErrorInlineMessage(stringResource(R.string.cloud_backup_passkey_repair_failed))
         }
     }
 }
@@ -276,11 +279,11 @@ private fun DetailFormContent(
         CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
 
         if (detail.upToDate.isNotEmpty()) {
-            WalletSections(title = "Up to Date", wallets = detail.upToDate)
+            WalletSections(title = stringResource(R.string.cloud_backup_wallet_section_up_to_date), wallets = detail.upToDate)
         }
 
         if (detail.needsSync.isNotEmpty()) {
-            WalletSections(title = "Needs Sync", wallets = detail.needsSync)
+            WalletSections(title = stringResource(R.string.cloud_backup_wallet_section_needs_sync), wallets = detail.needsSync)
         }
 
         if (showCloudOnlySection) {
@@ -300,7 +303,7 @@ private fun DetailFormContent(
                 }
             }
             is CloudBackupOtherBackupsState.LoadFailed -> {
-                OtherBackupsLoadFailedSection(error = otherBackups.error)
+                OtherBackupsLoadFailedSection()
             }
         }
     }

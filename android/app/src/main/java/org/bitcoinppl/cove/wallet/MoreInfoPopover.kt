@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 
 // export type for tracking what is being exported
@@ -47,7 +48,7 @@ fun rememberWalletExportLaunchers(
                     // capture manager at coroutine start to avoid null during suspension
                     val currentManager =
                         manager ?: run {
-                            snackbarHostState.showSnackbar("Manager not available")
+                            snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_manager_not_available))
                             return@launch
                         }
 
@@ -58,25 +59,28 @@ fun rememberWalletExportLaunchers(
                                 context.contentResolver.openInputStream(uri)?.use { input ->
                                     input.bufferedReader().use { it.readText() }
                                 }
-                            } ?: throw Exception("Unable to read file")
+                            } ?: throw Exception(context.getString(R.string.wallet_send_unable_to_read_file))
 
                         // validate import was successful before showing success message
                         currentManager.labelManager().use { labelManager ->
                             labelManager.import(fileContents.trim())
                         }
 
-                        val refreshed =
-                            AppManager.getInstance()
-                                .reconcileAfterLabelImportAndWait(currentManager.id)
-                        if (!refreshed) {
-                            snackbarHostState.showSnackbar("Labels imported successfully, but transaction list may need manual refresh")
+                        // refresh transactions with updated labels
+                        try {
+                            currentManager.refreshTransactions()
+                        } catch (refreshError: Exception) {
+                            android.util.Log.e(tag, "failed to refresh transactions after label import", refreshError)
+                            snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_labels_imported_refresh_manual))
                             return@launch
                         }
 
-                        snackbarHostState.showSnackbar("Labels imported successfully")
+                        snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_labels_imported))
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error importing labels", e)
-                        snackbarHostState.showSnackbar("Unable to import labels: ${e.localizedMessage ?: e.message}")
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.wallet_send_unable_to_import_labels),
+                        )
                     } finally {
                         exportState.isImporting = false
                     }
@@ -117,29 +121,34 @@ fun rememberWalletExportLaunchers(
 
                             val message =
                                 when (currentExportType) {
-                                    is ExportType.Transactions -> "Transactions exported successfully"
-                                    is ExportType.Labels -> "Labels exported successfully"
-                                    null -> "Export completed"
+                                    is ExportType.Transactions -> context.getString(R.string.wallet_send_transactions_exported)
+                                    is ExportType.Labels -> context.getString(R.string.wallet_send_labels_exported)
+                                    null -> context.getString(R.string.wallet_send_export_completed)
                                 }
                             snackbarHostState.showSnackbar(message)
                         } ?: run {
                             val errorType =
                                 when (currentExportType) {
-                                    is ExportType.Transactions -> "transactions"
-                                    is ExportType.Labels -> "labels"
-                                    null -> "export"
+                                    is ExportType.Transactions -> context.getString(R.string.wallet_send_export_type_transactions)
+                                    is ExportType.Labels -> context.getString(R.string.wallet_send_export_type_labels)
+                                    null -> context.getString(R.string.wallet_send_export_type_generic)
                                 }
-                            snackbarHostState.showSnackbar("Unable to generate $errorType export data")
+                            snackbarHostState.showSnackbar(context.getString(R.string.wallet_send_unable_to_generate_export_data, errorType))
                         }
                     } catch (e: Exception) {
                         android.util.Log.e(tag, "error exporting file", e)
                         val errorType =
                             when (currentExportType) {
-                                is ExportType.Transactions -> "transactions"
-                                is ExportType.Labels -> "labels"
-                                null -> "export"
+                                is ExportType.Transactions -> context.getString(R.string.wallet_send_export_type_transactions)
+                                is ExportType.Labels -> context.getString(R.string.wallet_send_export_type_labels)
+                                null -> context.getString(R.string.wallet_send_export_type_generic)
                             }
-                        snackbarHostState.showSnackbar("Unable to export $errorType: ${e.localizedMessage ?: e.message}")
+                        snackbarHostState.showSnackbar(
+                            context.getString(
+                                R.string.wallet_send_unable_to_export,
+                                errorType,
+                            ),
+                        )
                     } finally {
                         exportState.isExporting = false
                         exportState.exportType = null

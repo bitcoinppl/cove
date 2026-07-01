@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +48,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.OnboardingManager
 import org.bitcoinppl.cove.QrCodeGenerator
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 
@@ -57,21 +59,24 @@ internal fun OnboardingExchangeFundingView(
     onContinue: () -> Unit,
 ) {
     val walletId = manager.currentWalletId()
-    val clipboard = LocalContext.current.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val context = LocalContext.current
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     var addressRaw by remember { mutableStateOf<String?>(null) }
     var addressText by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var didCopyAddress by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    val loadDepositAddressError = stringResource(R.string.onboarding_load_deposit_address_error)
+    val bitcoinAddressClipLabel = stringResource(R.string.onboarding_bitcoin_address_clip_label)
 
-    LaunchedEffect(walletId) {
+    LaunchedEffect(walletId, loadDepositAddressError) {
         addressRaw = null
         addressText = null
         errorMessage = null
         didCopyAddress = false
 
         if (walletId == null) {
-            errorMessage = "Unable to load a deposit address for this wallet."
+            errorMessage = loadDepositAddressError
             return@LaunchedEffect
         }
 
@@ -87,7 +92,7 @@ internal fun OnboardingExchangeFundingView(
             errorMessage = null
         } catch (error: Exception) {
             Log.e("OnboardingExchangeFunding", "failed to load first address", error)
-            errorMessage = error.message ?: "Unable to load a deposit address for this wallet."
+            errorMessage = loadDepositAddressError
         }
     }
 
@@ -110,7 +115,7 @@ internal fun OnboardingExchangeFundingView(
                             .padding(top = 32.dp, bottom = 14.dp),
                 ) {
                     Text(
-                        text = "Your wallet is ready to fund",
+                        text = stringResource(R.string.onboarding_wallet_ready_to_fund),
                         color = Color.White,
                         fontSize = 34.sp,
                         lineHeight = 38.sp,
@@ -120,7 +125,7 @@ internal fun OnboardingExchangeFundingView(
                     Spacer(modifier = Modifier.size(12.dp))
 
                     Text(
-                        text = "Move your Bitcoin off the exchange and into the wallet you now control.",
+                        text = stringResource(R.string.onboarding_wallet_ready_to_fund_subtitle),
                         color = OnboardingTextSecondary,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
@@ -154,7 +159,7 @@ internal fun OnboardingExchangeFundingView(
                                 ) {
                                     Image(
                                         bitmap = qrBitmap.asImageBitmap(),
-                                        contentDescription = "Deposit address QR",
+                                        contentDescription = stringResource(R.string.onboarding_deposit_address_qr),
                                         modifier =
                                             Modifier
                                                 .fillMaxWidth()
@@ -173,7 +178,7 @@ internal fun OnboardingExchangeFundingView(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Text(
-                                        text = "Deposit address",
+                                        text = stringResource(R.string.onboarding_deposit_address),
                                         color = CoveColor.coveLightGray.copy(alpha = 0.72f),
                                         style = MaterialTheme.typography.caption,
                                         fontWeight = FontWeight.SemiBold,
@@ -186,9 +191,16 @@ internal fun OnboardingExchangeFundingView(
                                 }
 
                                 OnboardingSecondaryButton(
-                                    text = if (didCopyAddress) "Copied" else "Copy Address",
+                                    text =
+                                        if (didCopyAddress) {
+                                            stringResource(R.string.onboarding_copied)
+                                        } else {
+                                            stringResource(R.string.onboarding_copy_address)
+                                        },
                                     onClick = {
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("Bitcoin Address", addressRaw!!))
+                                        clipboard.setPrimaryClip(
+                                            ClipData.newPlainText(bitcoinAddressClipLabel, addressRaw!!),
+                                        )
                                         didCopyAddress = true
                                     },
                                 )
@@ -202,7 +214,7 @@ internal fun OnboardingExchangeFundingView(
                             ) {
                                 CircularProgressIndicator(color = Color.White)
                                 Text(
-                                    text = "Loading deposit address",
+                                    text = stringResource(R.string.onboarding_loading_deposit_address),
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
@@ -213,7 +225,7 @@ internal fun OnboardingExchangeFundingView(
             }
 
             OnboardingPrimaryButton(
-                text = "Continue",
+                text = stringResource(R.string.scoped_common_continue),
                 onClick = onContinue,
                 modifier =
                     Modifier

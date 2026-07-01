@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingBackground
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
@@ -67,12 +69,13 @@ internal fun CloudBackupEnableOnboardingView(
     isBusy: Boolean,
     context: CloudBackupEnableOnboardingContext,
     primaryButtonTitle: String,
-    cancelButtonTitle: String = "Cancel",
+    cancelButtonTitle: String? = null,
     cancelButtonLeading: Boolean = false,
 ) {
     var checks by remember { mutableStateOf(listOf(false, false, false)) }
 
     val allChecked = checks.all { it }
+    val resolvedCancelButtonTitle = cancelButtonTitle ?: stringResource(R.string.action_cancel)
 
     OnboardingBackground {
         Column(
@@ -87,7 +90,7 @@ internal fun CloudBackupEnableOnboardingView(
                 horizontalArrangement = if (cancelButtonLeading) Arrangement.Start else Arrangement.End,
             ) {
                 Text(
-                    text = cancelButtonTitle,
+                    text = resolvedCancelButtonTitle,
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -107,14 +110,14 @@ internal fun CloudBackupEnableOnboardingView(
 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Cloud Backup",
+                        text = stringResource(R.string.cloud_backup_enable_title),
                         color = Color.White,
                         fontSize = 38.sp,
                         lineHeight = 42.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Cloud Backup is end-to-end encrypted before it leaves your device and stored in Google Drive, secured by a passkey that only you control.",
+                        text = stringResource(R.string.cloud_backup_enable_body),
                         color = OnboardingTextSecondary,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
@@ -148,13 +151,13 @@ internal fun CloudBackupEnableOnboardingView(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "How It Works",
+                                    text = stringResource(R.string.cloud_backup_enable_how_it_works),
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = "Secured with Passkey + Google Drive",
+                                    text = stringResource(R.string.cloud_backup_enable_secured_with),
                                     color = CoveColor.coveLightGray.copy(alpha = 0.75f),
                                     style = MaterialTheme.typography.caption,
                                 )
@@ -165,9 +168,9 @@ internal fun CloudBackupEnableOnboardingView(
                             text =
                                 when (context) {
                                     CloudBackupEnableOnboardingContext.STANDARD ->
-                                        "Your wallet backup is end-to-end encrypted before upload and stored in Google Drive. Only your passkey can decrypt it, so both are needed to restore your wallets."
+                                        stringResource(R.string.cloud_backup_enable_standard_message)
                                     CloudBackupEnableOnboardingContext.HARDWARE_IMPORT ->
-                                        "This backs up your imported hardware wallet configuration and labels in Google Drive, and it also enables backup for compatible wallets you create in Cove later. Your hardware wallet seed and private keys are not backed up by Cove."
+                                        stringResource(R.string.cloud_backup_enable_hardware_message)
                             },
                             color = CoveColor.coveLightGray.copy(alpha = 0.60f),
                             style = MaterialTheme.typography.caption.copy(lineHeight = 18.sp),
@@ -183,12 +186,12 @@ internal fun CloudBackupEnableOnboardingView(
                     OnboardingToggleCard(
                         checked = checks[0],
                         onCheckedChange = { checks = checks.toMutableList().apply { set(0, it) } },
-                        text = "I understand that my passkey is required to access my Cloud Backup. I must not delete my passkey.",
+                        text = stringResource(R.string.cloud_backup_enable_understand_passkey),
                     )
                     OnboardingToggleCard(
                         checked = checks[1],
                         onCheckedChange = { checks = checks.toMutableList().apply { set(1, it) } },
-                        text = "I understand that I need access to my Google account. If I lose access to my passkey or my Google account, my Cloud Backup won't be recoverable.",
+                        text = stringResource(R.string.cloud_backup_enable_understand_google),
                     )
                     OnboardingToggleCard(
                         checked = checks[2],
@@ -196,9 +199,9 @@ internal fun CloudBackupEnableOnboardingView(
                         text =
                             when (context) {
                                 CloudBackupEnableOnboardingContext.STANDARD ->
-                                    "I understand that for maximum safety, I should still manually back up my 12 or 24 words offline on pen and paper."
+                                    stringResource(R.string.cloud_backup_enable_understand_offline_backup)
                                 CloudBackupEnableOnboardingContext.HARDWARE_IMPORT ->
-                                    "I understand that Cloud Backup does not replace the offline backup for my hardware wallet seed or recovery phrase."
+                                    stringResource(R.string.cloud_backup_enable_understand_hardware_backup)
                             },
                     )
                 }
@@ -255,27 +258,32 @@ internal fun CloudBackupEnableBusyOverlay(enableFlow: CloudBackupEnableFlow?) {
     }
 }
 
+@Composable
 private fun cloudBackupEnableBusyCopy(enableFlow: CloudBackupEnableFlow?): Pair<String, String> =
     when (enableFlow) {
         CloudBackupEnableFlow.CreatingPasskey ->
-            "Creating your passkey..." to "Cloud Backup will continue automatically"
+            stringResource(R.string.cloud_backup_enable_busy_creating_passkey_title) to
+                stringResource(R.string.cloud_backup_enable_busy_continue_message)
         CloudBackupEnableFlow.WaitingForPasskeyAvailability ->
-            "Checking that your passkey is available..." to
-                "This can take a few seconds after saving it in your passkey/password manager app"
+            stringResource(R.string.cloud_backup_enable_busy_checking_passkey_title) to
+                stringResource(R.string.cloud_backup_enable_busy_checking_passkey_message)
         is CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation ->
-            "Checking that your passkey is available..." to
-                "This can take a few seconds after saving it in your passkey/password manager app"
+            stringResource(R.string.cloud_backup_enable_busy_checking_passkey_title) to
+                stringResource(R.string.cloud_backup_enable_busy_checking_passkey_message)
         CloudBackupEnableFlow.ConfirmingSavedPasskey ->
-            "Confirming your passkey..." to "Cloud Backup will continue automatically"
+            stringResource(R.string.cloud_backup_enable_busy_confirming_passkey_title) to
+                stringResource(R.string.cloud_backup_enable_busy_continue_message)
         is CloudBackupEnableFlow.UploadingInitialBackup,
         is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial,
         ->
-            "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+            stringResource(R.string.cloud_backup_enable_busy_creating_backup_title) to
+                stringResource(R.string.cloud_backup_enable_busy_continue_message)
         is CloudBackupEnableFlow.AwaitingForceNewConfirmation,
         is CloudBackupEnableFlow.AwaitingPasskeyChoice,
         CloudBackupEnableFlow.DiscoveringExistingBackup,
         null,
-        -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+        -> stringResource(R.string.cloud_backup_enable_busy_creating_backup_title) to
+            stringResource(R.string.cloud_backup_enable_busy_continue_message)
     }
 
 @Composable
@@ -284,6 +292,9 @@ private fun OnboardingToggleCard(
     onCheckedChange: (Boolean) -> Unit,
     text: String,
 ) {
+    val checkedStateDescription = stringResource(R.string.settings_state_checked)
+    val uncheckedStateDescription = stringResource(R.string.settings_state_unchecked)
+
     Row(
         modifier =
             Modifier
@@ -296,7 +307,12 @@ private fun OnboardingToggleCard(
                     onValueChange = onCheckedChange,
                 )
                 .semantics {
-                    stateDescription = if (checked) "checked" else "unchecked"
+                    stateDescription =
+                        if (checked) {
+                            checkedStateDescription
+                        } else {
+                            uncheckedStateDescription
+                        }
                 }
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(18.dp),

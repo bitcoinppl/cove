@@ -18,7 +18,7 @@ impl RustCloudBackupManager {
             Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
             Err(error) => {
                 warn!("Failed to summarize other cloud backups: {error}");
-                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
+                CloudBackupOtherBackupsState::LoadFailed
             }
         }
     }
@@ -175,7 +175,8 @@ impl RustCloudBackupManager {
             CloudBackupOtherBackupsOutcome::Deleting => OtherBackupsOperation::Deleting,
             CloudBackupOtherBackupsOutcome::Deleted => OtherBackupsOperation::Deleted,
             CloudBackupOtherBackupsOutcome::Failed(error) => {
-                OtherBackupsOperation::Failed { error }
+                warn!("Other cloud backup operation failed: {error}");
+                OtherBackupsOperation::Failed
             }
         };
 

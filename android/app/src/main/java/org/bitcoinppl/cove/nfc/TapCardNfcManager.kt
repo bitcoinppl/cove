@@ -13,6 +13,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.TapcardTransportProtocol
 import org.bitcoinppl.cove_core.TransportException
@@ -38,7 +40,7 @@ class TapCardNfcManager private constructor() {
     private var pendingDisableRunnable: Runnable? = null
 
     // message callback for UI updates (setMessage/appendMessage from transport)
-    var onMessageUpdate: ((String) -> Unit)? = null
+    var onMessageUpdate: ((UiText) -> Unit)? = null
 
     // callback when NFC tag is first detected (before reading starts)
     var onTagDetected: (() -> Unit)? = null
@@ -61,11 +63,11 @@ class TapCardNfcManager private constructor() {
         successResult: (TapSignerResponse?) -> T?,
     ): Pair<T, TapSignerResponse?> =
         operationMutex.withLock {
-            val activity = activityRef?.get() ?: throw Exception("Activity no longer available")
-            val nfcAdapter = this.nfcAdapter ?: throw Exception("NFC not available on this device")
+            val activity = activityRef?.get() ?: throw Exception(appString(R.string.tap_signer_activity_unavailable))
+            val nfcAdapter = this.nfcAdapter ?: throw Exception(appString(R.string.tap_signer_nfc_not_available))
 
             if (!nfcAdapter.isEnabled) {
-                throw Exception("NFC is disabled. Please enable it in Settings")
+                throw Exception(activity.getString(R.string.nfc_disabled))
             }
 
             Log.d(tag, "Starting NFC scan for command: $cmd")
@@ -111,14 +113,14 @@ class TapCardNfcManager private constructor() {
                             val detectedTag =
                                 withTimeoutOrNull(NFC_SCAN_TIMEOUT_MS) {
                                     tagDetected.await()
-                                } ?: throw Exception("NFC scan timed out. Please try again")
+                                } ?: throw Exception(activity.getString(R.string.tap_signer_nfc_scan_timeout))
 
                             Log.d(tag, "Processing detected tag")
 
                             // get IsoDep tech (ISO7816)
                             isoDep =
                                 IsoDep.get(detectedTag)
-                                    ?: throw Exception("Tag doesn't support IsoDep (ISO7816)")
+                                    ?: throw Exception(activity.getString(R.string.tap_signer_iso_dep_missing))
 
                             // connect to tag with increased timeout for reliability
                             if (!isoDep.isConnected) {
@@ -143,13 +145,17 @@ class TapCardNfcManager private constructor() {
 
                             // send proactive UX guidance for heavy NFC operations
                             if (needsLongTimeout) {
-                                onMessageUpdate?.invoke(
-                                    "Keep your phone steady on the card \u2014 this may take a few seconds"
-                                )
+                                onMessageUpdate?.invoke(UiText.resource(R.string.tap_signer_keep_steady))
                             }
 
                             // create transport with message callback and appropriate timeout
-                            val transport = TapCardTransport(isoDep, onMessageUpdate, timeout)
+                            val transport =
+                                TapCardTransport(
+                                    isoDep = isoDep,
+                                    onMessageUpdate = onMessageUpdate,
+                                    timeoutMs = timeout,
+                                    connectionLostMessage = activity.getString(R.string.tap_signer_connection_lost),
+                                )
 
                             // create TapSignerReader using factory function (workaround for UniFFI async constructor limitation)
                             Log.d(tag, "Creating TapSignerReader with command using factory function")
@@ -164,7 +170,7 @@ class TapCardNfcManager private constructor() {
                             // extract result using successResult function
                             val result =
                                 successResult(response)
-                                    ?: throw Exception("Command completed but result extraction failed")
+                                    ?: throw Exception(activity.getString(R.string.tap_signer_result_extraction_failed))
 
                             // return both extracted result and raw response for retry scenarios
                             val resultPair = Pair(result, response)
@@ -243,6 +249,9 @@ class TapCardNfcManager private constructor() {
                 instance ?: TapCardNfcManager().also { instance = it }
             }
     }
+
+    private fun appString(id: Int): String =
+        activityRef?.get()?.getString(id) ?: ""
 }
 
 /**
@@ -251,8 +260,9 @@ class TapCardNfcManager private constructor() {
  */
 private class TapCardTransport(
     private val isoDep: IsoDep,
-    private val onMessageUpdate: ((String) -> Unit)?,
+    private val onMessageUpdate: ((UiText) -> Unit)?,
     private val timeoutMs: Int = ISODEP_TIMEOUT_MS,
+    private val connectionLostMessage: String,
 ) : TapcardTransportProtocol {
     private val tag = "TapCardTransport"
     private var currentMessage = ""
@@ -260,13 +270,13 @@ private class TapCardTransport(
     override fun setMessage(message: String) {
         Log.d(tag, "Message: $message")
         currentMessage = message
-        onMessageUpdate?.invoke(currentMessage)
+        onMessageUpdate?.invoke(currentMessage.toUiText())
     }
 
     override fun appendMessage(message: String) {
         Log.d(tag, "Append: $message")
         currentMessage += message
-        onMessageUpdate?.invoke(currentMessage)
+        onMessageUpdate?.invoke(currentMessage.toUiText())
     }
 
     override suspend fun transmitApdu(commandApdu: ByteArray): ByteArray {
@@ -284,7 +294,7 @@ private class TapCardTransport(
         } catch (e: Exception) {
             Log.e(tag, "APDU error", e)
             throw TransportException.UnknownException(
-                "Tag connection lost, please hold your phone still and try again"
+                connectionLostMessage,
             )
         }
     }
@@ -295,5 +305,17 @@ private class TapCardTransport(
 
         // higher timeout for backup operations (heavier multi-step APDU exchange)
         const val ISODEP_BACKUP_TIMEOUT_MS = 8000
+
+        private val pinAttemptsWaitPattern = Regex("""Too many PIN attempts, waiting for (\d+) seconds\.\.\.""")
+    }
+
+    private fun String.toUiText(): UiText {
+        val pinAttemptsWait = pinAttemptsWaitPattern.matchEntire(this)
+        if (pinAttemptsWait != null) {
+            val seconds = pinAttemptsWait.groupValues[1].toIntOrNull() ?: return UiText.resource(R.string.tap_signer_keep_steady)
+            return UiText.resource(R.string.tap_signer_too_many_pin_attempts_waiting, seconds)
+        }
+
+        return UiText.resource(R.string.tap_signer_keep_steady)
     }
 }

@@ -27,14 +27,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableBusyOverlay
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
@@ -110,8 +113,8 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
     } else {
         OnboardingPromptScreen(
             icon = Icons.Default.CloudDownload,
-            title = "Protect this wallet with Cloud Backup?",
-            subtitle = "Cloud Backup makes it easier to recover this wallet if you lose this device.",
+            title = stringResource(R.string.onboarding_cloud_backup_software_title),
+            subtitle = stringResource(R.string.onboarding_cloud_backup_software_subtitle),
         ) {
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -125,12 +128,12 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
                 ) {
                     Text(
-                        text = "Your wallet backup is end-to-end encrypted before it leaves your device, stored in Google Drive, and locked with a passkey only you control.",
+                        text = stringResource(R.string.onboarding_cloud_backup_software_body),
                         color = OnboardingTextSecondary,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
                     Text(
-                        text = "You can skip this now and enable it later from Settings.",
+                        text = stringResource(R.string.onboarding_cloud_backup_skip_later),
                         color = CoveColor.coveLightGray.copy(alpha = 0.64f),
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
@@ -139,13 +142,13 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
             Spacer(modifier = Modifier.size(14.dp))
             OnboardingPrimaryButton(
-                text = "Enable Cloud Backup",
+                text = stringResource(R.string.onboarding_enable_cloud_backup),
                 onClick = { showingDetails = true },
                 modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
             )
             Spacer(modifier = Modifier.size(14.dp))
             OnboardingSecondaryButton(
-                text = "Not Now",
+                text = stringResource(R.string.onboarding_not_now),
                 onClick = onSkip,
                 modifier = Modifier.testTag("onboarding.cloudBackup.skip"),
             )
@@ -171,8 +174,8 @@ private fun OnboardingHardwareImportCloudBackupStepView(
     } else {
         OnboardingPromptScreen(
             icon = Icons.Default.CloudDownload,
-            title = "Protect this hardware wallet with Cloud Backup?",
-            subtitle = "Cloud Backup makes it easier to restore this wallet's configuration and labels if you lose this device.",
+            title = stringResource(R.string.onboarding_cloud_backup_hardware_title),
+            subtitle = stringResource(R.string.onboarding_cloud_backup_hardware_subtitle),
         ) {
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -186,23 +189,23 @@ private fun OnboardingHardwareImportCloudBackupStepView(
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp),
                 ) {
                     Text(
-                        text = "This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later.",
+                        text = stringResource(R.string.onboarding_cloud_backup_hardware_body),
                         color = OnboardingTextSecondary,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
                     Text(
-                        text = "Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up.",
+                        text = stringResource(R.string.onboarding_cloud_backup_hardware_broader_body),
                         color = OnboardingTextSecondary,
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
                     Text(
-                        text = "This does not back up your hardware wallet seed or private keys.",
+                        text = stringResource(R.string.onboarding_cloud_backup_hardware_seed_notice),
                         color = Color.White.copy(alpha = 0.86f),
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "You can skip this now and enable it later from Settings.",
+                        text = stringResource(R.string.onboarding_cloud_backup_skip_later),
                         color = CoveColor.coveLightGray.copy(alpha = 0.64f),
                         style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                     )
@@ -211,13 +214,13 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
             Spacer(modifier = Modifier.size(14.dp))
             OnboardingPrimaryButton(
-                text = "Enable Cloud Backup",
+                text = stringResource(R.string.onboarding_enable_cloud_backup),
                 onClick = { showingDetails = true },
                 modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
             )
             Spacer(modifier = Modifier.size(14.dp))
             OnboardingSecondaryButton(
-                text = "Not Now",
+                text = stringResource(R.string.onboarding_not_now),
                 onClick = onSkip,
                 modifier = Modifier.testTag("onboarding.cloudBackup.skip"),
             )
@@ -235,13 +238,13 @@ private fun OnboardingCloudBackupDetailsStepView(
     val backupManager = remember { CloudBackupManager.getInstance() }
     var didReportEnabled by remember { mutableStateOf(false) }
 
-    val lifecycleMsg = backupManager.lifecycleFailureMessage
+    val lifecycleMsg = backupManager.lifecycleFailure?.localizedMessage()?.asString()
     val onboardingMessage =
         when {
             backupManager.isUnsupportedPasskeyProvider ->
-                "This passkey provider did not confirm support for Cloud Backup. Try another supported provider such as 1Password or Bitwarden."
+                stringResource(R.string.onboarding_unsupported_passkey_provider)
             lifecycleMsg != null -> lifecycleMsg
-            else -> (backupManager.verificationState as? CloudBackupVerificationState.Failed)?.v1?.message()
+            else -> (backupManager.verificationState as? CloudBackupVerificationState.Failed)?.v1?.localizedMessage()?.asString()
         }
     val isVerifying = backupManager.verificationState is CloudBackupVerificationState.Running
     val verificationFailed = backupManager.verificationState is CloudBackupVerificationState.Failed
@@ -258,11 +261,11 @@ private fun OnboardingCloudBackupDetailsStepView(
             isEnabling
     val primaryButtonTitle =
         when {
-            verificationFailed -> "Try Again"
-            needsManualPasskeyConfirmation -> "Confirm Passkey"
+            verificationFailed -> stringResource(R.string.scoped_common_try_again)
+            needsManualPasskeyConfirmation -> stringResource(R.string.onboarding_confirm_passkey)
             else -> null
         }
-            ?: "Enable Cloud Backup"
+            ?: stringResource(R.string.onboarding_enable_cloud_backup)
     val rootPrompt = backupManager.rootPrompt
     val isPromptingForEnableChoice =
         rootPrompt is CloudBackupRootPrompt.ExistingBackupFound ||
@@ -336,7 +339,7 @@ private fun OnboardingCloudBackupDetailsStepView(
             isBusy = isBusy || isPromptingForEnableChoice,
             context = context,
             primaryButtonTitle = primaryButtonTitle,
-            cancelButtonTitle = "Back",
+            cancelButtonTitle = stringResource(R.string.scoped_common_back),
             cancelButtonLeading = true,
         )
 
@@ -370,7 +373,7 @@ internal fun OnboardingCloudBackupSuccessView(
             Spacer(modifier = Modifier.height(36.dp))
 
             Text(
-                text = "Cloud Backup enabled successfully",
+                text = stringResource(R.string.onboarding_cloud_backup_success),
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
@@ -381,7 +384,7 @@ internal fun OnboardingCloudBackupSuccessView(
             Spacer(modifier = Modifier.weight(1f, fill = true))
 
             OnboardingPrimaryButton(
-                text = "Continue",
+                text = stringResource(R.string.scoped_common_continue),
                 onClick = onContinue,
                 modifier = Modifier.testTag("onboarding.cloudBackup.success.continue"),
             )

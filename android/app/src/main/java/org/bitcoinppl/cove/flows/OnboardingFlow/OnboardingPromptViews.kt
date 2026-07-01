@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -79,8 +80,8 @@ internal fun OnboardingWelcomeScreen(
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.AutoAwesome,
-        title = "Welcome to Cove",
-        subtitle = "A self-custody Bitcoin wallet focused on secure backups, clear flows, and hardware wallet support.",
+        title = stringResource(R.string.onboarding_welcome_title),
+        subtitle = stringResource(R.string.onboarding_welcome_subtitle),
     ) {
         if (errorMessage != null) {
             OnboardingInlineMessage(text = errorMessage)
@@ -88,7 +89,7 @@ internal fun OnboardingWelcomeScreen(
         }
 
         OnboardingPrimaryButton(
-            text = "Get Started",
+            text = stringResource(R.string.onboarding_get_started),
             onClick = onContinue,
             modifier = Modifier.testTag("onboarding.getStarted"),
         )
@@ -104,8 +105,8 @@ internal fun OnboardingBitcoinChoiceScreen(
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.CurrencyBitcoin,
-        title = "Do you already have Bitcoin?",
-        subtitle = "We'll tailor the setup based on where you're starting from.",
+        title = stringResource(R.string.onboarding_bitcoin_choice_title),
+        subtitle = stringResource(R.string.onboarding_bitcoin_choice_subtitle),
     ) {
         if (errorMessage != null) {
             OnboardingInlineMessage(text = errorMessage)
@@ -114,15 +115,15 @@ internal fun OnboardingBitcoinChoiceScreen(
 
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             OnboardingChoiceCard(
-                title = "No, I'm new here",
-                subtitle = "Create a new wallet and learn the basics",
+                title = stringResource(R.string.onboarding_new_here_title),
+                subtitle = stringResource(R.string.onboarding_new_here_subtitle),
                 icon = Icons.Default.AutoAwesome,
                 onClick = onNewHere,
                 modifier = Modifier.testTag("onboarding.bitcoinChoice.new"),
             )
             OnboardingChoiceCard(
-                title = "Yes, I have Bitcoin",
-                subtitle = "Import or connect the wallet you already use",
+                title = stringResource(R.string.onboarding_have_bitcoin_title),
+                subtitle = stringResource(R.string.onboarding_have_bitcoin_subtitle),
                 icon = Icons.Default.Download,
                 onClick = onHasBitcoin,
                 modifier = Modifier.testTag("onboarding.bitcoinChoice.existing"),
@@ -144,12 +145,12 @@ internal fun OnboardingRestoreUnavailableScreen(
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.CloudOff,
-        title = "No Backups Found",
-        subtitle = "We couldn't find a Cove backup in Google Drive for this account. Continue without a backup, then set up Cloud Backup when you're ready.",
+        title = stringResource(R.string.onboarding_no_backups_title),
+        subtitle = stringResource(R.string.onboarding_no_backups_subtitle),
         onBack = onBack,
     ) {
         OnboardingPrimaryButton(
-            text = "Continue Without Backup",
+            text = stringResource(R.string.onboarding_continue_without_backup),
             onClick = onContinue,
         )
     }
@@ -162,12 +163,12 @@ internal fun OnboardingRestoreOfflineScreen(
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.WifiOff,
-        title = "You're Offline",
-        subtitle = "Cove can't check for a Google Drive backup right now. You can continue onboarding and check Cloud Backup later in Settings.",
+        title = stringResource(R.string.onboarding_offline_title),
+        subtitle = stringResource(R.string.onboarding_offline_subtitle),
         onBack = onBack,
     ) {
         OnboardingPrimaryButton(
-            text = "Continue Without Cloud Restore",
+            text = stringResource(R.string.onboarding_continue_without_cloud_restore),
             onClick = onContinue,
         )
     }
@@ -182,8 +183,8 @@ internal fun OnboardingStorageChoiceScreen(
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.Storage,
-        title = "How do you store your Bitcoin?",
-        subtitle = "Choose the option that best matches what you use today.",
+        title = stringResource(R.string.onboarding_storage_title),
+        subtitle = stringResource(R.string.onboarding_storage_subtitle),
         onBack = onBack,
     ) {
         if (errorMessage != null) {
@@ -193,22 +194,22 @@ internal fun OnboardingStorageChoiceScreen(
 
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             OnboardingChoiceCard(
-                title = "On an exchange",
-                subtitle = "Move funds into a wallet you control",
+                title = stringResource(R.string.onboarding_storage_exchange_title),
+                subtitle = stringResource(R.string.onboarding_storage_exchange_subtitle),
                 icon = Icons.Default.AccountBalance,
                 onClick = { onSelectStorage(OnboardingStorageSelection.EXCHANGE) },
                 modifier = Modifier.testTag("onboarding.storage.exchange"),
             )
             OnboardingChoiceCard(
-                title = "Hardware wallet",
-                subtitle = "Import a watch-only wallet from an existing device",
+                title = stringResource(R.string.onboarding_storage_hardware_title),
+                subtitle = stringResource(R.string.onboarding_storage_hardware_subtitle),
                 icon = Icons.Default.Security,
                 onClick = { onSelectStorage(OnboardingStorageSelection.HARDWARE_WALLET) },
                 modifier = Modifier.testTag("onboarding.storage.hardware"),
             )
             OnboardingChoiceCard(
-                title = "Software wallet",
-                subtitle = "Import recovery data from another wallet app",
+                title = stringResource(R.string.onboarding_storage_software_title),
+                subtitle = stringResource(R.string.onboarding_storage_software_subtitle),
                 icon = Icons.Default.PhoneIphone,
                 onClick = { onSelectStorage(OnboardingStorageSelection.SOFTWARE_WALLET) },
                 modifier = Modifier.testTag("onboarding.storage.software"),
@@ -217,8 +218,8 @@ internal fun OnboardingStorageChoiceScreen(
                 OnboardingCloudRestoreChoiceSection(
                     onClick = onRestoreFromCoveBackup,
                     showDivider = false,
-                    title = "I'm already using Cove",
-                    subtitle = "Restore your Cove backup from Google Drive, secured by passkeys",
+                    title = stringResource(R.string.onboarding_storage_restore_title),
+                    subtitle = stringResource(R.string.onboarding_storage_restore_subtitle),
                     cardModifier = Modifier.testTag("onboarding.storage.restore"),
                 )
             }

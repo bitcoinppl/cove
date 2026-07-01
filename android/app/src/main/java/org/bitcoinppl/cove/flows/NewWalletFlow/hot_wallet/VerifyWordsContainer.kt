@@ -1,10 +1,10 @@
 package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
 
+import android.view.WindowManager
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -13,8 +13,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
@@ -113,10 +115,10 @@ fun VerifyWordsContainer(
     if (showSecretWordsAlert) {
         AlertDialog(
             onDismissRequest = { showSecretWordsAlert = false },
-            title = { Text("See Secret Words?") },
+            title = { Text(stringResource(R.string.new_wallet_flow_see_secret_words_title)) },
             text = {
                 Text(
-                    "Whoever has your secret words has access to your bitcoin. Please keep these safe and don't show them to anyone else.",
+                    stringResource(R.string.new_wallet_flow_see_secret_words_message),
                 )
             },
             confirmButton = {
@@ -126,12 +128,12 @@ fun VerifyWordsContainer(
                         app.pushRoute(Route.SecretWords(id))
                     },
                 ) {
-                    Text("Yes, Show Me")
+                    Text(stringResource(R.string.new_wallet_flow_yes_show_me))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSecretWordsAlert = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.new_wallet_flow_cancel))
                 }
             },
         )

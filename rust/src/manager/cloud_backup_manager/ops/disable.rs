@@ -179,7 +179,7 @@ impl RustCloudBackupManager {
             state.cloud_only(),
             crate::manager::cloud_backup_manager::CloudOnlyState::NotFetched
                 | crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { .. }
-                | crate::manager::cloud_backup_manager::CloudOnlyState::Failed { .. }
+                | crate::manager::cloud_backup_manager::CloudOnlyState::Failed
         ) {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
         }
@@ -189,7 +189,7 @@ impl RustCloudBackupManager {
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
+                | OtherBackupsOperation::Failed
         ) {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
         }
@@ -212,9 +212,7 @@ impl RustCloudBackupManager {
 
         if !matches!(
             state.cloud_only_operation(),
-            CloudOnlyOperation::Idle
-                | CloudOnlyOperation::Warning { .. }
-                | CloudOnlyOperation::Failed { .. }
+            CloudOnlyOperation::Idle | CloudOnlyOperation::Warning | CloudOnlyOperation::Failed
         ) {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
         }

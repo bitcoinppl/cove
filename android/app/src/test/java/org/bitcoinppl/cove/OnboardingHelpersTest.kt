@@ -17,7 +17,9 @@ import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.DeepVerificationReport
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
+import org.bitcoinppl.cove_core.OnboardingError
 import org.bitcoinppl.cove_core.OnboardingReconcileMessage
+import org.bitcoinppl.cove_core.OnboardingRestoreFailure
 import org.bitcoinppl.cove_core.OnboardingRestoreState
 import org.bitcoinppl.cove_core.OnboardingState
 import org.bitcoinppl.cove_core.OnboardingStep
@@ -52,7 +54,7 @@ class OnboardingHelpersTest {
         val failure = classifyBootstrapFailure(AppInitException.AlreadyCalled("already called"))
 
         assertEquals(
-            BootstrapFailure.Fatal("App initialization error. Please force-quit and restart."),
+            BootstrapFailure.Fatal(UiText.resource(R.string.common_remaining_startup_init_error)),
             failure,
         )
     }
@@ -79,9 +81,16 @@ class OnboardingHelpersTest {
             )
         assertEquals(listOf("alpha", "beta"), withWords.state.createdWords)
 
-        val complete =
+        val withError =
             reduceOnboardingSnapshot(
                 withWords,
+                OnboardingReconcileMessage.ErrorChanged(OnboardingError.WALLET_CREATION_FAILED),
+            )
+        assertEquals(OnboardingError.WALLET_CREATION_FAILED, withError.state.error)
+
+        val complete =
+            reduceOnboardingSnapshot(
+                withError,
                 OnboardingReconcileMessage.Complete,
             )
         assertTrue(complete.isComplete)
@@ -89,7 +98,7 @@ class OnboardingHelpersTest {
 
     @Test
     fun reduceOnboardingSnapshotAppliesRestoreStateUpdates() {
-        val failedState = OnboardingRestoreState.Failed("restore failed")
+        val failedState = OnboardingRestoreState.Failed(OnboardingRestoreFailure.FAILED)
         val initial =
             OnboardingSnapshot(
                 state = defaultOnboardingState(),
@@ -175,7 +184,7 @@ class OnboardingHelpersTest {
                     configuredState(
                         passkey =
                             CloudBackupPasskeyState.NeedsRepair(
-                                CloudBackupPasskeyRepairState.Idle,
+                                CloudBackupPasskeyRepairState.IDLE,
                             ),
                         verification =
                             CloudBackupVerificationState.Verified(
@@ -211,7 +220,10 @@ class OnboardingHelpersTest {
                     configuredState(
                         verification =
                             CloudBackupVerificationState.Failed(
-                                DeepVerificationFailure.Retry("verification failed", null, null),
+                                DeepVerificationFailure.Retry(
+                                    detail = null,
+                                    retryContext = null,
+                                ),
                             ),
                     ),
                 hasPendingUploadVerification = false,
@@ -222,7 +234,7 @@ class OnboardingHelpersTest {
     private fun configuredState(
         passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
         verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
-        sync: CloudBackupSyncState = CloudBackupSyncState.Idle,
+        sync: CloudBackupSyncState = CloudBackupSyncState.IDLE,
     ): CloudBackupConfiguredState =
         CloudBackupConfiguredState(
             passkey = passkey,
@@ -231,7 +243,7 @@ class OnboardingHelpersTest {
             destructiveOperation = CloudBackupDestructiveOperationState.Idle,
             detail = CloudBackupDetailState.NotLoaded,
             rootPrompt = CloudBackupRootPrompt.None,
-            syncHealth = CloudSyncHealth.Unknown,
+            syncHealth = CloudSyncHealth.UNKNOWN,
             verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
         )
 
@@ -254,11 +266,11 @@ class OnboardingHelpersTest {
             cloudBackupEnabled = false,
             secretWordsSaved = false,
             cloudRestoreState = OnboardingCloudRestoreState.CHECKING,
-            cloudRestoreMessage = null,
+            cloudRestoreIssue = null,
             cloudRestoreProviderHint = null,
             shouldOfferCloudRestore = false,
             cloudRestoreAlertVisible = false,
             restoreState = OnboardingRestoreState.Idle,
-            errorMessage = null,
+            error = null,
         )
 }

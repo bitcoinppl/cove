@@ -28,12 +28,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.title3
@@ -61,12 +63,12 @@ fun NfcLabelImportSheet(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    "Unable to access NFC",
+                    stringResource(R.string.nfc_label_unable_to_access),
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                 )
                 TextButton(onClick = onDismiss) {
-                    Text("Close", color = Color.White)
+                    Text(stringResource(R.string.scoped_common_close), color = Color.White)
                 }
             }
         }
@@ -95,16 +97,16 @@ fun NfcLabelImportSheet(
                         }
 
                         nfcReader.reset()
-                        onError("No text data found on NFC tag")
+                        onError(context.getString(R.string.nfc_no_text_data))
                     } catch (e: Exception) {
                         Log.e("NfcLabelImportSheet", "Error importing labels from NFC", e)
                         nfcReader.reset()
-                        onError("Unable to import labels, please try again")
+                        onError(context.getString(R.string.nfc_unable_to_import_labels))
                     }
                 }
                 is NfcScanResult.Error -> {
                     nfcReader.reset()
-                    onError(result.message)
+                    onError(result.message.resolve(context))
                 }
             }
         }
@@ -145,13 +147,13 @@ fun NfcLabelImportSheet(
                     // success state - show checkmark
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Success",
+                        contentDescription = stringResource(R.string.scoped_common_success),
                         modifier = Modifier.size(48.dp),
                         tint = Color(0xFF4CAF50), // green
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = nfcReader.message.ifEmpty { "Tag read successfully!" },
+                        text = nfcReader.message?.asString() ?: stringResource(R.string.nfc_tag_read_successfully),
                         style = MaterialTheme.typography.title3,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -181,14 +183,14 @@ fun NfcLabelImportSheet(
                     )
 
                     Text(
-                        text = "Reading" + ".".repeat(dotCount),
+                        text = stringResource(R.string.nfc_reading_progress, ".".repeat(dotCount)),
                         style = MaterialTheme.typography.title3,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                     )
 
                     Text(
-                        text = "Please hold still",
+                        text = stringResource(R.string.nfc_please_hold_still),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
@@ -209,14 +211,14 @@ fun NfcLabelImportSheet(
                         )
 
                         Text(
-                            text = "Ready to Scan",
+                            text = stringResource(R.string.nfc_ready_to_scan),
                             style = MaterialTheme.typography.title3,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                         )
 
                         Text(
-                            text = nfcReader.message,
+                            text = nfcReader.message?.asString().orEmpty(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.7f),
                             textAlign = TextAlign.Center,
@@ -231,7 +233,7 @@ fun NfcLabelImportSheet(
                         )
 
                         Text(
-                            text = "NFC Unavailable",
+                            text = stringResource(R.string.nfc_unavailable_title),
                             style = MaterialTheme.typography.title3,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -248,7 +250,7 @@ fun NfcLabelImportSheet(
                     onDismiss()
                 },
             ) {
-                Text("Cancel", color = Color.White)
+                Text(stringResource(R.string.scoped_common_cancel), color = Color.White)
             }
 
             Spacer(modifier = Modifier.height(24.dp))

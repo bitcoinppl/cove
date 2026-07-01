@@ -53,11 +53,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.findActivity
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import androidx.credentials.CreatePasswordRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -96,9 +99,9 @@ fun BackupExportScreen(
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var infoMessage by remember { mutableStateOf<String?>(null) }
-    var warningMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
+    var infoMessage by remember { mutableStateOf<UiText?>(null) }
+    var warningMessage by remember { mutableStateOf<UiText?>(null) }
     var pendingResult by remember { mutableStateOf<BackupResult?>(null) }
     var showSaveToPasswordManager by remember { mutableStateOf(false) }
 
@@ -130,13 +133,17 @@ fun BackupExportScreen(
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(result.data)
                         output.flush()
-                    } ?: throw java.io.IOException("Failed to open output stream")
+                    } ?: throw java.io.IOException(context.getString(R.string.settings_backup_error_open_output_stream))
                 }
                 isExporting = false
                 pendingResult = null
 
                 if (result.warnings.isNotEmpty()) {
-                    warningMessage = "Some data could not be exported:\n" + result.warnings.joinToString("\n")
+                    warningMessage =
+                        UiText.resource(
+                            R.string.settings_backup_export_warning_some_data_not_exported,
+                            result.warnings.joinToString("\n"),
+                        )
                 } else {
                     handleDismiss()
                 }
@@ -147,7 +154,7 @@ fun BackupExportScreen(
                 android.util.Log.e("BackupExport", "Failed to save backup", e)
                 isExporting = false
                 pendingResult = null
-                errorMessage = "Failed to save backup: ${e.message}"
+                errorMessage = UiText.resource(R.string.settings_backup_export_save_failed)
             }
         }
     }
@@ -158,10 +165,10 @@ fun BackupExportScreen(
             .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = {
             TopAppBar(
-                title = { Text("Export Backup") },
+                title = { Text(stringResource(R.string.settings_backup_export_title)) },
                 navigationIcon = {
                     IconButton(onClick = handleDismiss) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 },
             )
@@ -175,12 +182,12 @@ fun BackupExportScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Backup Password", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.settings_backup_password_label), style = MaterialTheme.typography.bodySmall)
 
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.settings_password_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -188,12 +195,17 @@ fun BackupExportScreen(
                     IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                         Icon(
                             if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                            contentDescription =
+                                if (isPasswordVisible) {
+                                    stringResource(R.string.settings_content_description_hide_password)
+                                } else {
+                                    stringResource(R.string.settings_content_description_show_password)
+                                },
                         )
                     }
                 },
                 supportingText = if (password.isNotEmpty() && !isPasswordValid) {
-                    { Text("Password must be at least 20 characters (whitespace is removed)") }
+                    { Text(stringResource(R.string.settings_backup_password_supporting_text)) }
                 } else null,
                 isError = password.isNotEmpty() && !isPasswordValid,
                 singleLine = false,
@@ -204,13 +216,17 @@ fun BackupExportScreen(
                     password = backupManager.generatePassword()
                     showSaveToPasswordManager = true
                 }) {
-                    Text("Generate Password")
+                    Text(stringResource(R.string.settings_action_generate_password))
                 }
 
                 if (password.isNotEmpty()) {
                     OutlinedButton(onClick = {
                         val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                        val clipData = android.content.ClipData.newPlainText("password", password)
+                        val clipData =
+                            android.content.ClipData.newPlainText(
+                                context.getString(R.string.settings_backup_password_label),
+                                password,
+                            )
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                             clipData.description.extras = android.os.PersistableBundle().apply {
                                 putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
@@ -219,7 +235,7 @@ fun BackupExportScreen(
                         clipboard?.setPrimaryClip(clipData)
                         passwordCopied = true
                     }) {
-                        Text("Copy")
+                        Text(stringResource(R.string.settings_action_copy))
                     }
                 }
             }
@@ -239,7 +255,7 @@ fun BackupExportScreen(
                                 password = credential.password
                             }
                         } catch (e: androidx.credentials.exceptions.NoCredentialException) {
-                            infoMessage = "No saved passwords found"
+                            infoMessage = UiText.resource(R.string.settings_backup_no_saved_passwords)
                         } catch (e: GetCredentialException) {
                             android.util.Log.w("BackupExport", "Failed to retrieve password: ${e.message}")
                         }
@@ -249,7 +265,7 @@ fun BackupExportScreen(
             ) {
                 Icon(Icons.Default.Key, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Retrieve from Password Manager")
+                Text(stringResource(R.string.settings_action_retrieve_from_password_manager))
             }
 
             Card(
@@ -263,7 +279,7 @@ fun BackupExportScreen(
                 ) {
                     Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Text(
-                        "This backup contains all your wallet private keys. Keep the file and password secure.",
+                        stringResource(R.string.settings_backup_export_private_keys_warning),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -276,7 +292,7 @@ fun BackupExportScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = isPasswordValid && !isExporting,
             ) {
-                Text("Export Backup")
+                Text(stringResource(R.string.settings_backup_export_button))
             }
         }
     }
@@ -299,7 +315,7 @@ fun BackupExportScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CircularProgressIndicator()
-                    Text("Exporting backup...")
+                    Text(stringResource(R.string.settings_backup_export_progress))
                 }
             }
         }
@@ -308,8 +324,8 @@ fun BackupExportScreen(
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
-            title = { Text("Export Backup?") },
-            text = { Text("This backup will contain all your wallet private keys. Make sure you keep the file and password secure.") },
+            title = { Text(stringResource(R.string.settings_backup_export_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_backup_export_confirm_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showConfirmDialog = false
@@ -330,12 +346,12 @@ fun BackupExportScreen(
                         }
                     }
                 }) {
-                    Text("Export")
+                    Text(stringResource(R.string.settings_action_export))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -344,11 +360,11 @@ fun BackupExportScreen(
     errorMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { errorMessage = null },
-            title = { Text("Export Failed") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_backup_export_failed_title)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = { errorMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -357,11 +373,11 @@ fun BackupExportScreen(
     infoMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { infoMessage = null },
-            title = { Text("Password Manager") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_title_password_manager)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = { infoMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -373,14 +389,14 @@ fun BackupExportScreen(
                 warningMessage = null
                 handleDismiss()
             },
-            title = { Text("Export Warnings") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_backup_export_warnings_title)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = {
                     warningMessage = null
                     handleDismiss()
                 }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -389,8 +405,8 @@ fun BackupExportScreen(
     if (showSaveToPasswordManager) {
         AlertDialog(
             onDismissRequest = { showSaveToPasswordManager = false },
-            title = { Text("Save Password?") },
-            text = { Text("Save the backup password to your password manager so you can retrieve it later during import.") },
+            title = { Text(stringResource(R.string.settings_backup_export_save_password_title)) },
+            text = { Text(stringResource(R.string.settings_backup_export_save_password_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showSaveToPasswordManager = false
@@ -410,7 +426,11 @@ fun BackupExportScreen(
                         } catch (e: CreateCredentialException) {
                             android.util.Log.w("BackupExport", "Failed to save to password manager: ${e.type}: ${e.message}")
                             val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                            val clipData = android.content.ClipData.newPlainText("password", password)
+                            val clipData =
+                                android.content.ClipData.newPlainText(
+                                    context.getString(R.string.settings_backup_password_label),
+                                    password,
+                                )
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                                 clipData.description.extras = android.os.PersistableBundle().apply {
                                     putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
@@ -418,24 +438,24 @@ fun BackupExportScreen(
                             }
                             clipboard?.setPrimaryClip(clipData)
                             passwordCopied = true
-                            infoMessage = "Unable to save to password manager. Make sure a password manager is set up on your device. Password has been copied to your clipboard."
+                            infoMessage = UiText.resource(R.string.settings_backup_password_manager_save_failed)
                         }
                     }
                 }) {
-                    Text("Save")
+                    Text(stringResource(R.string.settings_action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSaveToPasswordManager = false }) {
-                    Text("Skip")
+                    Text(stringResource(R.string.settings_action_skip))
                 }
             },
         )
     }
 }
 
-private fun backupExportErrorMessage(e: Exception): String = when (e) {
-    is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-    is BackupException -> e.message?.takeIf { it.isNotEmpty() } ?: "Backup export failed"
-    else -> e.message ?: "Unknown error"
+private fun backupExportErrorMessage(e: Exception): UiText = when (e) {
+    is BackupException.PasswordTooShort -> UiText.resource(R.string.settings_backup_password_minimum)
+    is BackupException -> UiText.resource(R.string.settings_backup_export_error_failed)
+    else -> UiText.resource(R.string.settings_backup_error_unknown)
 }

@@ -37,18 +37,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import kotlin.math.roundToInt
 
 @Composable
 fun NumberPadPinView(
-    title: String = "Enter Pin",
+    title: String? = null,
     isPinCorrect: (String) -> Boolean,
     showPin: Boolean = false,
     pinLength: Int = 6,
@@ -60,6 +62,8 @@ fun NumberPadPinView(
     var animateField by remember { mutableStateOf(false) }
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val resolvedTitle = title ?: stringResource(R.string.number_pad_enter_pin)
+    val cancel = stringResource(R.string.scoped_common_cancel)
 
     // shake animation on wrong PIN
     LaunchedEffect(animateField) {
@@ -95,7 +99,7 @@ fun NumberPadPinView(
                 horizontalArrangement = Arrangement.End,
             ) {
                 Text(
-                    text = "Cancel",
+                    text = cancel,
                     color = Color.White,
                     fontSize = 17.sp,
                     modifier =
@@ -110,7 +114,7 @@ fun NumberPadPinView(
 
         // title
         Text(
-            text = title,
+            text = resolvedTitle,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -200,7 +204,7 @@ fun NumberPadPinView(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "Cancel",
+                            text = cancel,
                             color = Color.White,
                             fontSize = 17.sp,
                         )
@@ -251,7 +255,7 @@ fun NumberPadPinView(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Backspace,
-                        contentDescription = "Delete",
+                        contentDescription = stringResource(R.string.number_pad_delete),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp),
                     )

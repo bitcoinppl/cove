@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.QrCodeGenerator
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
@@ -75,6 +77,10 @@ fun ReceiveAddressSheet(
     val currentRequestId = rememberUpdatedState(receiveState?.requestId)
     var showPaidCopyConfirmation by remember { mutableStateOf(false) }
     val presentation = manager.receiveAddressPresentation
+    val addressClipboardLabel = stringResource(R.string.wallet_send_bitcoin_address_clip_label)
+    val addressCopied = stringResource(R.string.wallet_send_address_copied)
+    val defaultWalletName = stringResource(R.string.wallet_send_default_wallet_name)
+    val unableToGetAddress = stringResource(R.string.app_alert_unable_get_address_message)
 
     fun closeReceiveAddress() {
         currentRequestId.value?.let { requestId ->
@@ -97,11 +103,11 @@ fun ReceiveAddressSheet(
     fun copyVisibleAddress() {
         addressInfo?.let { info ->
             val clipboard = context.getSystemService(ClipboardManager::class.java)
-            val clip = ClipData.newPlainText("Bitcoin Address", info.addressUnformatted())
+            val clip = ClipData.newPlainText(addressClipboardLabel, info.addressUnformatted())
             clipboard.setPrimaryClip(clip)
 
             scope.launch {
-                snackbarHostState.showSnackbar("Address Copied")
+                snackbarHostState.showSnackbar(addressCopied)
             }
 
             onDismiss()
@@ -118,8 +124,8 @@ fun ReceiveAddressSheet(
     }
 
     LaunchedEffect(manager.receiveAddressError) {
-        val error = manager.receiveAddressError ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(error.item)
+        manager.receiveAddressError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(unableToGetAddress)
         if (addressInfo == null) {
             onDismiss()
         }
@@ -133,7 +139,7 @@ fun ReceiveAddressSheet(
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         ReceiveAddressSheetContent(
-            walletName = manager.walletMetadata?.name ?: "Wallet",
+            walletName = manager.walletMetadata?.name ?: defaultWalletName,
             addressText = addressInfo?.addressSpacedOut(),
             addressRaw = addressInfo?.addressUnformatted(),
             derivationPath = addressInfo?.derivationPath(),
@@ -147,9 +153,9 @@ fun ReceiveAddressSheet(
     if (showPaidCopyConfirmation) {
         AlertDialog(
             onDismissRequest = { showPaidCopyConfirmation = false },
-            title = { Text("Copy paid address?") },
+            title = { Text(stringResource(R.string.wallet_send_copy_paid_address_title)) },
             text = {
-                Text("This address has already received funds. For better privacy, create a new address before sharing.")
+                Text(stringResource(R.string.wallet_send_copy_paid_address_message))
             },
             confirmButton = {
                 TextButton(
@@ -158,7 +164,7 @@ fun ReceiveAddressSheet(
                         copyVisibleAddress()
                     },
                 ) {
-                    Text("Copy Anyway", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.wallet_send_copy_anyway), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -168,7 +174,7 @@ fun ReceiveAddressSheet(
                         createNewAddress()
                     },
                 ) {
-                    Text("Create New Address")
+                    Text(stringResource(R.string.wallet_send_create_new_address))
                 }
             },
         )
@@ -260,7 +266,7 @@ private fun ReceiveAddressSheetContent(
                                 }
                             Image(
                                 bitmap = qrBitmap.asImageBitmap(),
-                                contentDescription = "QR Code",
+                                contentDescription = stringResource(R.string.wallet_send_qr_code),
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.FillBounds,
                             )
@@ -272,7 +278,7 @@ private fun ReceiveAddressSheetContent(
                     presentation.copyPolicy == ReceiveAddressCopyPolicy.CONFIRM_PAID_ADDRESS -> {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Payment Received",
+                            text = stringResource(R.string.wallet_send_payment_received),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White,
@@ -282,7 +288,7 @@ private fun ReceiveAddressSheetContent(
                     presentation.refreshState == ReceiveAddressRefreshState.REFRESHING -> {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Refreshing...",
+                            text = stringResource(R.string.wallet_send_refreshing),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.65f),
                             textAlign = TextAlign.Center,
@@ -294,7 +300,7 @@ private fun ReceiveAddressSheetContent(
                 derivationPath?.let { path ->
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Derivation: $path",
+                        text = stringResource(R.string.wallet_send_derivation_format, path),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxWidth(),
@@ -317,7 +323,7 @@ private fun ReceiveAddressSheetContent(
                         ).padding(16.dp),
             ) {
                 Text(
-                    text = "Wallet Address",
+                    text = stringResource(R.string.wallet_send_wallet_address),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.7f),
@@ -338,7 +344,7 @@ private fun ReceiveAddressSheetContent(
                 if (presentation.refreshState == ReceiveAddressRefreshState.FAILED) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Unable to refresh address",
+                        text = stringResource(R.string.wallet_send_unable_to_refresh_address),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.65f),
                     )
@@ -366,7 +372,7 @@ private fun ReceiveAddressSheetContent(
             shape = RoundedCornerShape(10.dp),
         ) {
             Text(
-                text = "Copy Address",
+                text = stringResource(R.string.wallet_send_copy_address),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -374,7 +380,7 @@ private fun ReceiveAddressSheetContent(
 
         // create new address button
         Text(
-            text = "Create New Address",
+            text = stringResource(R.string.wallet_send_create_new_address),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,

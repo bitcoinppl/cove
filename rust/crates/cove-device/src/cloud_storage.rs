@@ -43,9 +43,9 @@ pub enum CloudSyncHealth {
     Unknown,
     AllUploaded,
     Uploading,
-    Failed(String),
+    Failed,
     NoFiles,
-    AuthorizationRequired(String),
+    AuthorizationRequired,
     Unavailable,
 }
 
@@ -412,7 +412,8 @@ pub fn cloud_backup_locations_sync_health(
         return CloudSyncHealth::AllUploaded;
     }
 
-    CloudSyncHealth::Failed("cloud backup is incomplete".into())
+    warn!("cloud backup sync health failed: cloud backup is incomplete");
+    CloudSyncHealth::Failed
 }
 
 #[cfg(test)]
@@ -797,7 +798,7 @@ mod tests {
             cloud_backup_locations_sync_health(vec![vec![
                 remote_layout::wallet_location_from_record_id("record-a")
             ]]),
-            CloudSyncHealth::Failed("cloud backup is incomplete".into()),
+            CloudSyncHealth::Failed,
         );
     }
 }

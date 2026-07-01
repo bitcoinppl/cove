@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -89,7 +90,7 @@ fun QrCodeScanView(
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.content_description_back),
                     tint = Color.White,
                 )
             }
@@ -110,7 +111,7 @@ private fun PermissionDeniedContent(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = "Camera Access Required",
+            text = stringResource(R.string.common_remaining_camera_access_required),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -119,7 +120,7 @@ private fun PermissionDeniedContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Please allow camera access to scan QR codes.",
+            text = stringResource(R.string.common_remaining_camera_access_scan_qr),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f),
         )
@@ -131,7 +132,7 @@ private fun PermissionDeniedContent(
                 permissionState.launchPermissionRequest()
             },
         ) {
-            Text("Grant Permission")
+            Text(stringResource(R.string.common_remaining_grant_permission))
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -139,7 +140,7 @@ private fun PermissionDeniedContent(
         TextButton(
             onClick = onDismiss,
         ) {
-            Text("Cancel", color = Color.White)
+            Text(stringResource(R.string.action_cancel), color = Color.White)
         }
     }
 }
@@ -256,7 +257,7 @@ private fun QrScannerContent(
                                                                     app.alertState =
                                                                         TaggedItem(
                                                                             AppAlertState.General(
-                                                                                title = "QR Scan Error",
+                                                                                title = ctx.getString(R.string.common_remaining_qr_scan_error_title),
                                                                                 message = error,
                                                                             ),
                                                                         )
@@ -296,8 +297,8 @@ private fun QrScannerContent(
                             app.alertState =
                                 TaggedItem(
                                     AppAlertState.General(
-                                        title = "QR Scan Error",
-                                        message = "Failed to initialize camera: ${e.message ?: "Unknown error"}",
+                                        title = ctx.getString(R.string.common_remaining_qr_scan_error_title),
+                                        message = ctx.getString(R.string.common_remaining_camera_initialize_failed),
                                     ),
                                 )
                         }
@@ -329,7 +330,12 @@ private fun QrScannerContent(
                 ) {
                     Icon(
                         imageVector = if (isFlashOn) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
-                        contentDescription = if (isFlashOn) "Turn off flashlight" else "Turn on flashlight",
+                        contentDescription =
+                            if (isFlashOn) {
+                                stringResource(R.string.common_remaining_flashlight_turn_off)
+                            } else {
+                                stringResource(R.string.common_remaining_flashlight_turn_on)
+                            },
                         tint = Color.White,
                         modifier = Modifier.size(24.dp),
                     )
@@ -398,7 +404,7 @@ private fun QrScannerContent(
                 Spacer(modifier = Modifier.weight(1f))
 
                 Text(
-                    text = "Scan QR Code",
+                    text = stringResource(R.string.common_remaining_scan_qr_code_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
@@ -406,7 +412,7 @@ private fun QrScannerContent(
 
                 Spacer(modifier = Modifier.weight(5f))
 
-                // multi-part progress (uses displayText/detailText from Rust)
+                // multi-part progress
                 progress?.let { prog ->
                     Column(
                         modifier =
@@ -416,17 +422,17 @@ private fun QrScannerContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            text = prog.displayText(),
+                            text = prog.localizedDisplayText().asString(),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = Color.White,
                         )
 
-                        prog.detailText()?.let { detail ->
+                        prog.localizedDetailText()?.let { detail ->
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text(
-                                text = detail,
+                                text = detail.asString(),
                                 style = MaterialTheme.typography.caption,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White.copy(alpha = 0.7f),
@@ -492,6 +498,7 @@ private fun handleQrCode(
         // scanner was destroyed during async callback, ignore
         Log.d("QrCodeScanView", "Scanner already destroyed, ignoring: ${e.message}")
     } catch (e: Exception) {
-        onError("Unable to scan QR code: ${e.message ?: "Unknown scanning error"}")
+        Log.e("QrCodeScanView", "QR scan failed", e)
+        onError(context.getString(R.string.common_remaining_scan_qr_code_failed))
     }
 }

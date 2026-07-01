@@ -65,7 +65,7 @@ pub enum CloudBackupVerificationPresentation {
     /// Failure is a result, not another request to show the decision sheet
     Failed {
         source: CloudBackupVerificationSource,
-        message: String,
+        failure: DeepVerificationFailure,
     },
 }
 
@@ -80,7 +80,7 @@ pub enum PendingUploadVerificationState {
 pub enum SyncState {
     Idle,
     Syncing,
-    Failed(String),
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,15 +95,15 @@ pub enum CloudOnlyState {
     NotFetched,
     Loading,
     Loaded { wallets: Vec<CloudBackupWalletItem> },
-    Failed { error: String },
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudOnlyOperation {
     Idle,
     Operating { record_id: String },
-    Warning { message: String, error: String },
-    Failed { error: String },
+    Warning,
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -350,7 +350,7 @@ impl RustCloudBackupManager {
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
+                | OtherBackupsOperation::Failed
         ) {
             return;
         }
@@ -364,7 +364,7 @@ impl RustCloudBackupManager {
             OtherBackupsOperation::Idle
                 | OtherBackupsOperation::Recovered { .. }
                 | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
+                | OtherBackupsOperation::Failed
         ) {
             return;
         }
@@ -487,7 +487,8 @@ impl RustCloudBackupManager {
                 self.apply_loaded_cloud_only(wallets);
             }
             CloudBackupCloudOnlyFetchOutcome::Failed(error) => {
-                self.apply_cloud_only_state(CloudOnlyState::Failed { error });
+                tracing::warn!("Cloud-only wallet fetch failed: {error}");
+                self.apply_cloud_only_state(CloudOnlyState::Failed);
             }
         }
     }
@@ -516,7 +517,8 @@ impl RustCloudBackupManager {
                 self.apply_finished_cloud_only_wallet_operation(record_id, None);
             }
             CloudBackupCloudOnlyWalletOutcome::Failed(error) => {
-                self.apply_cloud_only_operation(CloudOnlyOperation::Failed { error });
+                tracing::warn!("Cloud-only wallet operation failed: {error}");
+                self.apply_cloud_only_operation(CloudOnlyOperation::Failed);
             }
         }
     }
@@ -527,10 +529,12 @@ impl RustCloudBackupManager {
         warning: Option<CloudBackupCloudOnlyOperationWarning>,
     ) {
         if let Some(warning) = warning {
-            self.apply_cloud_only_operation(CloudOnlyOperation::Warning {
-                message: warning.message,
-                error: warning.error,
-            });
+            tracing::warn!(
+                "Cloud-only wallet restored with warning: {}; error={}",
+                warning.message,
+                warning.error
+            );
+            self.apply_cloud_only_operation(CloudOnlyOperation::Warning);
         } else {
             self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
         }

@@ -41,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.HotWalletImportScreen
 import org.bitcoinppl.cove.nfc.NfcReader
@@ -108,8 +111,8 @@ internal fun OnboardingSoftwareImportFlowView(
 
             OnboardingPromptScreen(
                 icon = Icons.Default.Download,
-                title = "Import your software wallet",
-                subtitle = "Choose how you want to bring your existing wallet into Cove.",
+                title = stringResource(R.string.onboarding_import_software_title),
+                subtitle = stringResource(R.string.onboarding_import_software_subtitle),
                 onBack = onBack,
             ) {
                 if (errorMessage != null) {
@@ -119,14 +122,14 @@ internal fun OnboardingSoftwareImportFlowView(
 
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
-                        title = "Enter recovery words",
-                        subtitle = "Import a 12- or 24-word recovery phrase",
+                        title = stringResource(R.string.onboarding_enter_recovery_words),
+                        subtitle = stringResource(R.string.onboarding_enter_recovery_words_subtitle),
                         icon = Icons.Default.Keyboard,
                         onClick = { mode = SoftwareImportMode.WordCount },
                     )
                     OnboardingChoiceCard(
-                        title = "Scan QR code",
-                        subtitle = "Scan a mnemonic QR from another wallet",
+                        title = stringResource(R.string.onboarding_scan_qr_code),
+                        subtitle = stringResource(R.string.onboarding_scan_mnemonic_qr_subtitle),
                         icon = Icons.Default.QrCodeScanner,
                         onClick = { mode = SoftwareImportMode.Qr },
                     )
@@ -142,7 +145,7 @@ internal fun OnboardingSoftwareImportFlowView(
                             .testTag("onboarding.software.create"),
                 ) {
                     Text(
-                        text = "Create a new wallet instead",
+                        text = stringResource(R.string.onboarding_create_new_wallet_instead),
                         color = OnboardingTextSecondary,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -157,20 +160,20 @@ internal fun OnboardingSoftwareImportFlowView(
 
             OnboardingPromptScreen(
                 icon = Icons.Default.Description,
-                title = "How many words do you have?",
-                subtitle = "Select the recovery phrase length before entering your words.",
+                title = stringResource(R.string.onboarding_word_count_title),
+                subtitle = stringResource(R.string.onboarding_word_count_subtitle),
                 onBack = { mode = SoftwareImportMode.Chooser },
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
-                        title = "12 words",
-                        subtitle = "Most modern wallet backups",
+                        title = stringResource(R.string.onboarding_12_words),
+                        subtitle = stringResource(R.string.onboarding_12_words_subtitle),
                         icon = Icons.Default.Description,
                         onClick = { mode = SoftwareImportMode.Words(NumberOfBip39Words.TWELVE) },
                     )
                     OnboardingChoiceCard(
-                        title = "24 words",
-                        subtitle = "Some wallets use a longer phrase",
+                        title = stringResource(R.string.onboarding_24_words),
+                        subtitle = stringResource(R.string.onboarding_24_words_subtitle),
                         icon = Icons.Default.Description,
                         onClick = { mode = SoftwareImportMode.Words(NumberOfBip39Words.TWENTY_FOUR) },
                     )
@@ -240,7 +243,11 @@ private fun OnboardingHotWalletImportView(
     }
 
     when {
-        loading -> OnboardingImportLoadingView(title = "Preparing import", subtitle = "Loading recovery word import")
+        loading ->
+            OnboardingImportLoadingView(
+                title = stringResource(R.string.onboarding_preparing_import),
+                subtitle = stringResource(R.string.onboarding_loading_recovery_import),
+            )
         manager != null ->
             HotWalletImportScreen(
                 app = app,
@@ -254,8 +261,8 @@ private fun OnboardingHotWalletImportView(
             )
         else ->
             OnboardingImportErrorView(
-                title = "Unable to start import",
-                message = "Hot wallet import could not be initialized.",
+                title = stringResource(R.string.onboarding_unable_start_import),
+                message = stringResource(R.string.onboarding_hot_wallet_import_unavailable),
                 onBack = onBack,
             )
     }
@@ -277,26 +284,26 @@ internal fun OnboardingHardwareImportFlowView(
 
             OnboardingPromptScreen(
                 icon = Icons.Default.Download,
-                title = "Import your hardware wallet",
-                subtitle = "Choose how your hardware wallet exports its public data.",
+                title = stringResource(R.string.onboarding_import_hardware_title),
+                subtitle = stringResource(R.string.onboarding_import_hardware_subtitle),
                 onBack = onBack,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OnboardingChoiceCard(
-                        title = "Scan export QR",
-                        subtitle = "Use the QR export from your hardware wallet",
+                        title = stringResource(R.string.onboarding_scan_export_qr),
+                        subtitle = stringResource(R.string.onboarding_scan_export_qr_subtitle),
                         icon = Icons.Default.QrCodeScanner,
                         onClick = { mode = HardwareImportMode.Qr },
                     )
                     OnboardingChoiceCard(
-                        title = "Import export file",
-                        subtitle = "Use a wallet export file from your device",
+                        title = stringResource(R.string.onboarding_import_export_file),
+                        subtitle = stringResource(R.string.onboarding_import_export_file_subtitle),
                         icon = Icons.Default.Description,
                         onClick = { mode = HardwareImportMode.File },
                     )
                     OnboardingChoiceCard(
-                        title = "Scan with NFC",
-                        subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
+                        title = stringResource(R.string.onboarding_scan_with_nfc),
+                        subtitle = stringResource(R.string.onboarding_scan_with_nfc_subtitle),
                         icon = Icons.Default.Nfc,
                         onClick = { mode = HardwareImportMode.Nfc },
                     )
@@ -345,16 +352,16 @@ private fun CloudRestoreFoundAlert(
 
     AlertDialog(
         onDismissRequest = onContinue,
-        title = { Text("Cove backup found") },
-        text = { Text("We found a cloud backup for this account.") },
+        title = { Text(stringResource(R.string.onboarding_backup_found_title)) },
+        text = { Text(stringResource(R.string.onboarding_backup_found_message)) },
         confirmButton = {
             TextButton(onClick = onRestore) {
-                Text("Restore from Cove backup")
+                Text(stringResource(R.string.onboarding_restore_from_cove_backup))
             }
         },
         dismissButton = {
             TextButton(onClick = onContinue) {
-                Text("Continue setup")
+                Text(stringResource(R.string.onboarding_continue_setup))
             }
         },
     )
@@ -366,6 +373,7 @@ private fun OnboardingHardwareQrImportView(
     onBack: () -> Unit,
 ) {
     val app = remember { AppManager.getInstance() }
+    val context = LocalContext.current
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     BackHandler(onBack = onBack)
@@ -378,10 +386,11 @@ private fun OnboardingHardwareQrImportView(
     ) {
         QrCodeScanView(
             onScanned = { multiFormat ->
-                runCatching { importHardwareWalletFromMultiFormat(multiFormat) }
+                runCatching { importHardwareWalletFromMultiFormat(context, multiFormat) }
                     .onSuccess(onImported)
                     .onFailure { error ->
-                        errorMessage = error.message ?: "Unable to import hardware wallet from QR."
+                        Log.e("OnboardingImportHardwareQr", "Unable to import hardware wallet from QR", error)
+                        errorMessage = context.getString(R.string.onboarding_import_hardware_qr_error)
                     }
             },
             onDismiss = onBack,
@@ -401,12 +410,12 @@ private fun OnboardingHardwareQrImportView(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.scoped_common_back),
                     tint = Color.White,
                 )
             }
             Text(
-                text = "Scan Hardware QR",
+                text = stringResource(R.string.onboarding_scan_hardware_qr),
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -417,11 +426,11 @@ private fun OnboardingHardwareQrImportView(
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { errorMessage = null },
-            title = { Text("Invalid QR Code") },
+            title = { Text(stringResource(R.string.onboarding_invalid_qr_code)) },
             text = { Text(errorMessage!!) },
             confirmButton = {
                 TextButton(onClick = { errorMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.scoped_common_ok))
                 }
             },
         )
@@ -433,7 +442,7 @@ private fun OnboardingHardwareFileImportView(
     onImported: (WalletId) -> Unit,
     onBack: () -> Unit,
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isImporting by remember { mutableStateOf(false) }
@@ -457,7 +466,8 @@ private fun OnboardingHardwareFileImportView(
                         }
                     onImported(walletId)
                 } catch (error: Exception) {
-                    errorMessage = error.message ?: "Unable to import hardware wallet from file."
+                    Log.e("OnboardingImportHardwareFile", "Unable to import hardware wallet from file", error)
+                    errorMessage = context.getString(R.string.onboarding_import_hardware_file_error)
                 } finally {
                     isImporting = false
                 }
@@ -466,8 +476,8 @@ private fun OnboardingHardwareFileImportView(
 
     OnboardingPromptScreen(
         icon = Icons.Default.Description,
-        title = "Import a hardware export file",
-        subtitle = "Choose the wallet export file from your hardware wallet.",
+        title = stringResource(R.string.onboarding_import_hardware_file_title),
+        subtitle = stringResource(R.string.onboarding_import_hardware_file_subtitle),
         onBack = onBack,
         backEnabled = !isImporting,
     ) {
@@ -484,14 +494,14 @@ private fun OnboardingHardwareFileImportView(
             ) {
                 CircularProgressIndicator(color = Color.White)
                 Text(
-                    text = "Importing file...",
+                    text = stringResource(R.string.onboarding_importing_file),
                     color = Color.White,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
         } else {
             OnboardingPrimaryButton(
-                text = "Choose File",
+                text = stringResource(R.string.onboarding_choose_file),
                 onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
             )
         }
@@ -503,7 +513,8 @@ private fun OnboardingHardwareNfcImportView(
     onImported: (WalletId) -> Unit,
     onBack: () -> Unit,
 ) {
-    val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+    val context = LocalContext.current
+    val activity = context.findActivity()
     val nfcReader = remember(activity) { activity?.let { NfcReader(it) } }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -519,16 +530,17 @@ private fun OnboardingHardwareNfcImportView(
                     try {
                         val walletId =
                             NfcMessage.tryNew(result.text, result.data).use { message ->
-                                importHardwareWalletFromMultiFormat(multiFormatTryFromNfcMessage(message))
+                                importHardwareWalletFromMultiFormat(context, multiFormatTryFromNfcMessage(message))
                             }
                         nfcReader.reset()
                         onImported(walletId)
                     } catch (error: Exception) {
-                        errorMessage = error.message ?: "Unable to import hardware wallet from NFC."
+                        Log.e("OnboardingImportHardwareNfc", "Unable to import hardware wallet from NFC", error)
+                        errorMessage = context.getString(R.string.onboarding_import_hardware_nfc_error)
                     }
                 }
                 is NfcScanResult.Error -> {
-                    errorMessage = result.message
+                    errorMessage = result.message.resolve(context)
                 }
             }
         }
@@ -542,15 +554,15 @@ private fun OnboardingHardwareNfcImportView(
 
     OnboardingPromptScreen(
         icon = Icons.Default.Nfc,
-        title = "Scan your hardware wallet with NFC",
-        subtitle = "Hold your hardware wallet or export tag near the top of your phone.",
+        title = stringResource(R.string.onboarding_scan_hardware_nfc_title),
+        subtitle = stringResource(R.string.onboarding_scan_with_nfc_subtitle),
         onBack = {
             nfcReader?.reset()
             onBack()
         },
     ) {
         if (activity == null || nfcReader == null) {
-            OnboardingInlineMessage(text = "NFC is not available on this device.")
+            OnboardingInlineMessage(text = stringResource(R.string.nfc_unavailable_on_device))
             Spacer(modifier = Modifier.size(14.dp))
         } else if (errorMessage != null) {
             OnboardingInlineMessage(text = errorMessage!!)
@@ -559,7 +571,7 @@ private fun OnboardingHardwareNfcImportView(
 
         if (nfcReader != null && nfcReader.readingState != NfcReadingState.WAITING) {
             Text(
-                text = nfcReader.message.ifEmpty { "Hold the top of your phone near the NFC tag" },
+                text = nfcReader.message?.asString() ?: stringResource(R.string.nfc_hold_top_near_tag),
                 color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -567,7 +579,12 @@ private fun OnboardingHardwareNfcImportView(
         }
 
         OnboardingPrimaryButton(
-            text = if (nfcReader?.isScanning == true) "Scanning..." else "Start NFC Scan",
+            text =
+                if (nfcReader?.isScanning == true) {
+                    stringResource(R.string.nfc_scanning)
+                } else {
+                    stringResource(R.string.nfc_scan_start)
+                },
             onClick = {
                 errorMessage = null
                 nfcReader?.startScanning()
@@ -633,23 +650,29 @@ private fun importHardwareWalletFromUri(
             tempFile.outputStream().use { output ->
                 input.copyTo(output)
             }
-        } ?: throw IllegalArgumentException("Unable to read the selected file.")
+        } ?: throw IllegalArgumentException(context.getString(R.string.onboarding_read_selected_file_error))
 
-        return importHardwareWalletFromPath(tempFile.absolutePath)
+        return importHardwareWalletFromPath(context, tempFile.absolutePath)
     } finally {
         tempFile.delete()
     }
 }
 
-private fun importHardwareWalletFromPath(filePath: String): WalletId =
+private fun importHardwareWalletFromPath(
+    context: Context,
+    filePath: String,
+): WalletId =
     FileHandler(filePath).use { fileHandler ->
-        importHardwareWalletFromMultiFormat(fileHandler.read())
+        importHardwareWalletFromMultiFormat(context, fileHandler.read())
     }
 
-private fun importHardwareWalletFromMultiFormat(multiFormat: MultiFormat): WalletId =
+private fun importHardwareWalletFromMultiFormat(
+    context: Context,
+    multiFormat: MultiFormat,
+): WalletId =
     when (multiFormat) {
         is MultiFormat.HardwareExport -> multiFormat.v1.use(::importHardwareWalletFromExport)
-        else -> throw IllegalArgumentException("That data doesn't contain a hardware wallet export.")
+        else -> throw IllegalArgumentException(context.getString(R.string.onboarding_hardware_export_missing_error))
     }
 
 private fun importHardwareWalletFromExport(export: HardwareExport): WalletId =

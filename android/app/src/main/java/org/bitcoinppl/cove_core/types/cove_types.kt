@@ -1269,8 +1269,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_feespeed_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_types_fn_method_network_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_network_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -10348,16 +10346,6 @@ enum class Network {
     TESTNET,
     TESTNET4,
     SIGNET;
-
-     fun `displayName`(): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_network_display_name(FfiConverterTypeNetwork.lower(this),
-        _status)
-}
-    )
-    }
-
 
 
 

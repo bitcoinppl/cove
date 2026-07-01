@@ -126,8 +126,9 @@ struct NewWalletSelectScreen: View {
                 let fileContents = try FileReader(for: file).read()
                 newWalletFromXpub(fileContents)
             } catch {
+                Log.error("Unable to import wallet file: \(error)")
                 alert = AlertItem(
-                    type: .error(error.localizedDescription)
+                    type: .error(String(localized: "Unable to import this file. Please try again."))
                 )
             }
         }
@@ -179,7 +180,8 @@ struct NewWalletSelectScreen: View {
             try app.selectWalletOrThrow(id)
             app.alertState = TaggedItem(.importedSuccessfully)
         } catch {
-            alert = AlertItem(type: .error(error.localizedDescription))
+            Log.error("Unable to import wallet: \(error)")
+            alert = AlertItem(type: .error(String(localized: "Unable to import this wallet. Please try again.")))
         }
     }
 
@@ -197,7 +199,7 @@ struct NewWalletSelectScreen: View {
         let text = UIPasteboard.general.string ?? ""
         if text.isEmpty {
             alert = AlertItem(
-                type: .error("No text found on the clipboard.")
+                type: .error(String(localized: "No text found on the clipboard."))
             )
             return
         }
@@ -241,8 +243,8 @@ private enum AlertType: Equatable {
 
     var title: String {
         switch self {
-        case .success: "Success"
-        case .error: "Error"
+        case .success: String(localized: "Success")
+        case .error: String(localized: "Error")
         }
     }
 }

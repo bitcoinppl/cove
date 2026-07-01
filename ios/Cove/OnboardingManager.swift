@@ -45,8 +45,8 @@ final class OnboardingManager: AnyReconciler, OnboardingManagerReconciler, @unch
                 state.secretWordsSaved = saved
             case let .cloudRestoreState(cloudRestoreState):
                 state.cloudRestoreState = cloudRestoreState
-            case let .cloudRestoreMessageChanged(cloudRestoreMessage):
-                state.cloudRestoreMessage = cloudRestoreMessage
+            case let .cloudRestoreIssueChanged(cloudRestoreIssue):
+                state.cloudRestoreIssue = cloudRestoreIssue
             case let .cloudRestoreProviderHintChanged(cloudRestoreProviderHint):
                 state.cloudRestoreProviderHint = cloudRestoreProviderHint
             case let .shouldOfferCloudRestore(shouldOfferCloudRestore):
@@ -55,8 +55,8 @@ final class OnboardingManager: AnyReconciler, OnboardingManagerReconciler, @unch
                 state.cloudRestoreAlertVisible = cloudRestoreAlertVisible
             case let .restoreStateChanged(restoreState):
                 state.restoreState = restoreState
-            case let .errorMessageChanged(errorMessage):
-                state.errorMessage = errorMessage
+            case let .errorChanged(error):
+                state.error = error
             case .complete:
                 isComplete = true
             }

@@ -117,7 +117,7 @@ fun HotWalletSelectScreen(
                     IconButton(onClick = { app.popRoute() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.new_wallet_flow_back),
                         )
                     }
                 },

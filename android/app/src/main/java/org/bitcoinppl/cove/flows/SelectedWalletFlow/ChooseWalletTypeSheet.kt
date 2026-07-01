@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,8 +31,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.localizedDisplayText
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FoundAddress
@@ -54,6 +57,8 @@ fun ChooseWalletTypeSheet(
 
     var currentAddress by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
+    val switchFailedTitle = stringResource(R.string.wallet_send_switch_failed_title)
+    val switchFailedFallback = stringResource(R.string.wallet_send_could_not_switch_wallet_address_type)
 
     LaunchedEffect(manager) {
         try {
@@ -102,8 +107,8 @@ fun ChooseWalletTypeSheet(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(
-                                    title = "Switch Failed",
-                                    message = e.message ?: "Could not switch wallet address type",
+                                    title = switchFailedTitle,
+                                    message = switchFailedFallback,
                                 ),
                             )
                     } finally {
@@ -132,7 +137,7 @@ private fun ChooseWalletTypeSheetContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Multiple wallets found, please choose one",
+            text = stringResource(R.string.wallet_send_choose_wallet_type_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -154,7 +159,7 @@ private fun ChooseWalletTypeSheetContent(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Keep Current",
+                    text = stringResource(R.string.wallet_send_keep_current),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -181,7 +186,7 @@ private fun ChooseWalletTypeSheetContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = foundAddress.type.displayName(),
+                        text = foundAddress.type.localizedDisplayText().asString(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -197,13 +202,6 @@ private fun ChooseWalletTypeSheetContent(
         }
     }
 }
-
-private fun WalletAddressType.displayName(): String =
-    when (this) {
-        WalletAddressType.NATIVE_SEGWIT -> "Native Segwit"
-        WalletAddressType.WRAPPED_SEGWIT -> "Wrapped Segwit"
-        WalletAddressType.LEGACY -> "Legacy"
-    }
 
 @Preview(showBackground = true)
 @Composable

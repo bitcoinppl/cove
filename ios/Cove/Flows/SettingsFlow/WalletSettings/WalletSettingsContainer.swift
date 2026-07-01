@@ -41,8 +41,8 @@ struct WalletSettingsContainer: View {
                 app.trySelectLatestOrNewWallet()
             }
         }, onError: { error in
-            self.error = "Failed to get wallet \(error.localizedDescription)"
-            Log.error(self.error!)
+            Log.error("Failed to get wallet settings: \(error.localizedDescription)")
+            self.error = String(localized: "Unable to load wallet settings. Please try again.")
         }) { manager in
             WalletSettingsRoute(manager: manager, route: route)
         }

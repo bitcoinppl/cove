@@ -24,19 +24,19 @@ struct WalletSettingsView: View {
     }
 
     var deleteConfirmationMessage: String {
-        manager.rust.deletionWarningMessage()
+        metadata.localizedDeletionWarningMessage
     }
 
     var finalDeleteConfirmationMessage: String {
         if cloudBackupManager.isCloudBackupEnabled {
-            return "This wallet will be deleted from this device. You can recover it from the Cloud Backup screen, or permanently delete it from there."
+            return String(localized: "This wallet will be deleted from this device. You can recover it from the Cloud Backup screen, or permanently delete it from there.")
         }
 
-        return "This wallet is not backed up and contains funds. You will lose access to these funds forever."
+        return String(localized: "This wallet is not backed up and contains funds. You will lose access to these funds forever.")
     }
 
     var finalDeleteButtonTitle: String {
-        cloudBackupManager.isCloudBackupEnabled ? "Delete" : "Delete Forever"
+        cloudBackupManager.isCloudBackupEnabled ? String(localized: "Delete") : String(localized: "Delete Forever")
     }
 
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
@@ -56,7 +56,7 @@ struct WalletSettingsView: View {
                 HStack {
                     Text("Network")
                     Spacer()
-                    Text(metadata.network.description)
+                    Text(metadata.network.localizedDisplayName)
                         .foregroundColor(.secondary)
                 }
                 .font(.subheadline)

@@ -60,11 +60,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.findActivity
 import androidx.credentials.CredentialManager
@@ -72,6 +76,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPasswordOption
 import androidx.credentials.PasswordCredential
 import androidx.credentials.exceptions.GetCredentialException
+import org.bitcoinppl.cove.localizedDisplayText
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -102,8 +107,8 @@ fun BackupVerifyScreen(
     val handleDismiss = { password = ""; fileData = null; onDismiss() }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isVerifying by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var infoMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
+    var infoMessage by remember { mutableStateOf<UiText?>(null) }
     var verifyReport by remember { mutableStateOf<BackupVerifyReport?>(null) }
 
     DisposableEffect(Unit) {
@@ -115,6 +120,7 @@ fun BackupVerifyScreen(
     }
 
     val isPasswordValid = backupManager.isPasswordValid(password)
+    val defaultBackupFileName = stringResource(R.string.settings_backup_file_default_name)
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -141,11 +147,11 @@ fun BackupVerifyScreen(
                                 buffer.write(chunk, 0, read)
                             }
                             buffer.toByteArray()
-                        } ?: throw java.io.IOException("Failed to read file")
+                        } ?: throw java.io.IOException("read failed")
 
                         backupManager.validateFormat(bytes)
 
-                        bytes to (DocumentFile.fromSingleUri(context, uri)?.name ?: "backup file")
+                        bytes to (DocumentFile.fromSingleUri(context, uri)?.name ?: defaultBackupFileName)
                     }
 
                     fileData = bytes
@@ -168,10 +174,10 @@ fun BackupVerifyScreen(
             .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = {
             TopAppBar(
-                title = { Text("Verify Backup") },
+                title = { Text(stringResource(R.string.settings_backup_verify_title)) },
                 navigationIcon = {
                     IconButton(onClick = handleDismiss) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 },
             )
@@ -188,7 +194,7 @@ fun BackupVerifyScreen(
             if (verifyReport != null) {
                 VerifyResultContent(verifyReport!!)
             } else {
-                Text("Backup File", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.settings_backup_file_label), style = MaterialTheme.typography.bodySmall)
 
                 OutlinedButton(
                     onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
@@ -200,16 +206,16 @@ fun BackupVerifyScreen(
                         tint = if (fileData != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(fileName ?: "Select Backup File")
+                    Text(fileName ?: stringResource(R.string.settings_backup_file_select))
                 }
 
                 if (fileData != null) {
-                    Text("Backup Password", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.settings_backup_password_label), style = MaterialTheme.typography.bodySmall)
 
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password") },
+                        label = { Text(stringResource(R.string.settings_password_label)) },
                         modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -217,12 +223,17 @@ fun BackupVerifyScreen(
                             IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                                 Icon(
                                     if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                                    contentDescription =
+                                        if (isPasswordVisible) {
+                                            stringResource(R.string.settings_content_description_hide_password)
+                                        } else {
+                                            stringResource(R.string.settings_content_description_show_password)
+                                        },
                                 )
                             }
                         },
                         supportingText = if (password.isNotEmpty() && !isPasswordValid) {
-                            { Text("Password must be at least 20 characters (whitespace is removed)") }
+                            { Text(stringResource(R.string.settings_backup_password_supporting_text)) }
                         } else null,
                         isError = password.isNotEmpty() && !isPasswordValid,
                         singleLine = false,
@@ -243,7 +254,7 @@ fun BackupVerifyScreen(
                                         password = credential.password
                                     }
                                 } catch (e: androidx.credentials.exceptions.NoCredentialException) {
-                                    infoMessage = "No saved passwords found"
+                                    infoMessage = UiText.resource(R.string.settings_backup_no_saved_passwords)
                                 } catch (e: GetCredentialException) {
                                     android.util.Log.w("BackupVerify", "Password retrieval failed: ${e.message}")
                                 }
@@ -253,7 +264,7 @@ fun BackupVerifyScreen(
                     ) {
                         Icon(Icons.Default.Key, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Retrieve from Password Manager")
+                        Text(stringResource(R.string.settings_action_retrieve_from_password_manager))
                     }
 
                     Spacer(modifier = Modifier.size(32.dp))
@@ -265,7 +276,7 @@ fun BackupVerifyScreen(
                                 try {
                                     val data = fileData ?: run {
                                         isVerifying = false
-                                        errorMessage = "No backup file loaded, please select a file first"
+                                        errorMessage = UiText.resource(R.string.settings_backup_error_no_file_loaded)
                                         return@launch
                                     }
                                     val report = withContext(Dispatchers.IO) {
@@ -284,7 +295,7 @@ fun BackupVerifyScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = isPasswordValid && !isVerifying,
                     ) {
-                        Text("Verify Backup")
+                        Text(stringResource(R.string.settings_backup_verify_title))
                     }
                 }
             }
@@ -309,7 +320,7 @@ fun BackupVerifyScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CircularProgressIndicator()
-                    Text("Verifying backup...")
+                    Text(stringResource(R.string.settings_backup_verify_progress))
                 }
             }
         }
@@ -318,11 +329,11 @@ fun BackupVerifyScreen(
     errorMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { errorMessage = null },
-            title = { Text("Verification Failed") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_backup_verify_failed_title)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = { errorMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -331,11 +342,11 @@ fun BackupVerifyScreen(
     infoMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { infoMessage = null },
-            title = { Text("Password Manager") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_title_password_manager)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = { infoMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -356,52 +367,52 @@ fun VerifyResultContent(report: BackupVerifyReport) {
         ) {
             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Text(
-                "Backup Verified Successfully",
+                stringResource(R.string.settings_backup_verify_result_success),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
         }
     }
 
-    Text("Backup Info", style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.settings_backup_info_label), style = MaterialTheme.typography.bodySmall)
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Created", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_backup_verify_result_created), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formatTimestamp(report.createdAt))
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Wallets", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_backup_verify_result_wallets), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("${report.walletCount}")
             }
         }
     }
 
-    Text("Wallets", style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.settings_backup_verify_result_wallets), style = MaterialTheme.typography.bodySmall)
     report.wallets.forEach { wallet ->
         WalletSummaryCard(wallet)
     }
 
-    Text("Settings", style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.settings_backup_verify_result_settings), style = MaterialTheme.typography.bodySmall)
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             report.fiatCurrency?.let { fiat ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Fiat Currency", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_backup_verify_result_fiat_currency), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(fiat)
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
             report.colorScheme?.let { scheme ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Color Scheme", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_backup_verify_result_color_scheme), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(scheme)
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Node Configs", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_backup_verify_result_node_configs), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("${report.nodeConfigCount}")
             }
         }
@@ -424,7 +435,11 @@ fun WalletSummaryCard(wallet: BackupWalletSummary) {
             ) {
                 Text(wallet.name, fontWeight = FontWeight.Medium)
                 Text(
-                    if (wallet.alreadyOnDevice) "Already on device" else "New",
+                    if (wallet.alreadyOnDevice) {
+                        stringResource(R.string.settings_backup_verify_result_wallet_already_on_device)
+                    } else {
+                        stringResource(R.string.settings_backup_verify_result_wallet_new)
+                    },
                     style = MaterialTheme.typography.caption,
                     fontWeight = FontWeight.Medium,
                     color = if (wallet.alreadyOnDevice) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
@@ -445,12 +460,12 @@ fun WalletSummaryCard(wallet: BackupWalletSummary) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 MetadataItem(
                     icon = Icons.Default.Public,
-                    text = wallet.network.displayName(),
+                    text = wallet.network.localizedDisplayText().asString(),
                     modifier = Modifier.weight(1f),
                 )
                 MetadataItem(
                     icon = Icons.Default.AccountBalanceWallet,
-                    text = wallet.walletType.displayName(),
+                    text = wallet.walletType.localizedDisplayText().asString(),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -467,7 +482,7 @@ fun WalletSummaryCard(wallet: BackupWalletSummary) {
                 }
                 MetadataItem(
                     icon = Icons.Default.Key,
-                    text = wallet.secretType.displayName(),
+                    text = wallet.secretType.localizedDisplayText().asString(),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -476,7 +491,12 @@ fun WalletSummaryCard(wallet: BackupWalletSummary) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     MetadataItem(
                         icon = Icons.Default.Label,
-                        text = "${wallet.labelCount} labels",
+                        text =
+                            pluralStringResource(
+                                R.plurals.settings_backup_label_count,
+                                wallet.labelCount.toInt(),
+                                wallet.labelCount.toInt(),
+                            ),
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(modifier = Modifier.weight(1f))
@@ -525,13 +545,14 @@ fun formatTimestamp(timestamp: ULong): String {
     return format.format(date)
 }
 
-private fun backupVerifyErrorMessage(e: Exception): String = when (e) {
-    is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-    is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
-    is BackupException.InvalidFormat -> "Not a valid Cove backup file"
-    is BackupException.FileTooLarge -> "Backup file is too large (max 50 MB)"
-    is BackupException.Truncated -> "Backup file is truncated or corrupted"
-    is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
-    is BackupException -> e.message?.takeIf { it.isNotEmpty() } ?: "Backup operation failed"
-    else -> e.message ?: "Unknown error"
+private fun backupVerifyErrorMessage(e: Exception): UiText = when (e) {
+    is BackupException.PasswordTooShort -> UiText.resource(R.string.settings_backup_password_minimum)
+    is BackupException.DecryptionFailed -> UiText.resource(R.string.settings_backup_error_corrupt_or_wrong_password)
+    is BackupException.InvalidFormat -> UiText.resource(R.string.settings_backup_error_invalid_format)
+    is BackupException.FileTooLarge -> UiText.resource(R.string.settings_backup_error_file_too_large)
+    is BackupException.Truncated -> UiText.resource(R.string.settings_backup_error_truncated)
+    is BackupException.UnsupportedVersion -> UiText.resource(R.string.settings_backup_error_unsupported_version)
+    is BackupException -> UiText.resource(R.string.settings_backup_error_operation_failed)
+    is java.io.IOException -> UiText.resource(R.string.settings_backup_error_read_file)
+    else -> UiText.resource(R.string.settings_backup_error_unknown)
 }

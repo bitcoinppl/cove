@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,9 +27,10 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayDate
-import org.bitcoinppl.cove.flows.CoinControlFlow.displayName
+import org.bitcoinppl.cove.flows.CoinControlFlow.localizedDisplayName
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.types.Amount
@@ -198,14 +200,14 @@ fun CoinControlCustomAmountSheet(
             ) {
                 Column(modifier = Modifier.weight(1f).padding(top = 16.dp)) {
                     Text(
-                        "Sending UTXO Details",
+                        stringResource(R.string.wallet_send_sending_utxo_details),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "You are sending the following UTXOs to the recipient.",
+                        stringResource(R.string.wallet_send_sending_utxo_details_subtitle),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -223,7 +225,7 @@ fun CoinControlCustomAmountSheet(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = stringResource(R.string.wallet_send_close),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                         modifier = Modifier.size(16.dp),
                     )
@@ -265,7 +267,7 @@ fun CoinControlCustomAmountSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Set Amount",
+                        stringResource(R.string.wallet_send_set_amount),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -307,7 +309,7 @@ fun CoinControlCustomAmountSheet(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    "Use the slider to set the amount.",
+                    stringResource(R.string.wallet_send_slider_set_amount),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -358,7 +360,7 @@ private fun UtxoDetailRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = utxo.displayName,
+                    text = utxo.localizedDisplayName(),
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,

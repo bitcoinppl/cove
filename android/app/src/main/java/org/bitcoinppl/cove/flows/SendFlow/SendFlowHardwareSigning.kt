@@ -20,6 +20,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +30,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.nfc.NfcWriteSheet
@@ -65,7 +68,7 @@ internal fun HardwareConfirmationDialogs(
         ConfirmationState.ExportTxn -> {
             AlertDialog(
                 onDismissRequest = { onConfirmationStateChange(null) },
-                title = { Text("Export Transaction") },
+                title = { Text(stringResource(R.string.wallet_send_export_transaction)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(
@@ -76,7 +79,7 @@ internal fun HardwareConfirmationDialogs(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.QrCode, contentDescription = null)
-                            Text("QR Code", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_qr_code), modifier = Modifier.padding(start = 8.dp))
                         }
 
                         TextButton(
@@ -87,7 +90,7 @@ internal fun HardwareConfirmationDialogs(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.Nfc, contentDescription = null)
-                            Text("NFC", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_nfc), modifier = Modifier.padding(start = 8.dp))
                         }
 
                         TextButton(
@@ -97,20 +100,23 @@ internal fun HardwareConfirmationDialogs(
                                     try {
                                         sharePsbtFile(context, details)
                                     } catch (e: Exception) {
-                                        onAlert(AlertState.FileError, e.message ?: "Unknown error")
+                                        onAlert(
+                                            AlertState.FileError,
+                                            context.getString(R.string.wallet_send_unable_to_share_psbt),
+                                        )
                                     }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null)
-                            Text("Share...", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_share), modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { onConfirmationStateChange(null) }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.wallet_send_cancel))
                     }
                 },
             )
@@ -118,7 +124,7 @@ internal fun HardwareConfirmationDialogs(
         ConfirmationState.ImportSignature -> {
             AlertDialog(
                 onDismissRequest = { onConfirmationStateChange(null) },
-                title = { Text("Import Signature") },
+                title = { Text(stringResource(R.string.wallet_send_import_signature)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(
@@ -129,7 +135,7 @@ internal fun HardwareConfirmationDialogs(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.QrCode, contentDescription = null)
-                            Text("QR", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_qr), modifier = Modifier.padding(start = 8.dp))
                         }
 
                         TextButton(
@@ -140,7 +146,7 @@ internal fun HardwareConfirmationDialogs(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null)
-                            Text("File", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_file), modifier = Modifier.padding(start = 8.dp))
                         }
 
                         TextButton(
@@ -155,7 +161,7 @@ internal fun HardwareConfirmationDialogs(
                                 if (code.isEmpty()) {
                                     onAlert(
                                         AlertState.PasteError,
-                                        TransactionImportErrors.CLIPBOARD_EMPTY,
+                                        context.getString(R.string.wallet_send_clipboard_empty),
                                     )
                                 } else {
                                     scope.launch {
@@ -164,7 +170,7 @@ internal fun HardwareConfirmationDialogs(
                                         } catch (e: Exception) {
                                             onAlert(
                                                 AlertState.PasteError,
-                                                e.message ?: TransactionImportErrors.FAILED_TO_IMPORT,
+                                                context.getString(e.signedImportErrorStringRes()),
                                             )
                                         }
                                     }
@@ -173,7 +179,7 @@ internal fun HardwareConfirmationDialogs(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Input, contentDescription = null)
-                            Text("Paste", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_paste), modifier = Modifier.padding(start = 8.dp))
                         }
 
                         TextButton(
@@ -184,13 +190,13 @@ internal fun HardwareConfirmationDialogs(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Default.Nfc, contentDescription = null)
-                            Text("NFC", modifier = Modifier.padding(start = 8.dp))
+                            Text(stringResource(R.string.wallet_send_nfc), modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = { onConfirmationStateChange(null) }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.wallet_send_cancel))
                     }
                 },
             )
@@ -211,17 +217,17 @@ internal fun HardwareErrorAlert(
             title = {
                 Text(
                     when (state) {
-                        AlertState.BbqrError -> "QR Error"
-                        AlertState.FileError -> "File Import Error"
-                        AlertState.NfcError -> "NFC Error"
-                        AlertState.PasteError -> "Paste Error"
+                        AlertState.BbqrError -> stringResource(R.string.wallet_send_qr_error_title)
+                        AlertState.FileError -> stringResource(R.string.wallet_send_file_import_error_title)
+                        AlertState.NfcError -> stringResource(R.string.wallet_send_nfc_error_title)
+                        AlertState.PasteError -> stringResource(R.string.wallet_send_paste_error_title)
                     },
                 )
             },
             text = { Text(alertMessage) },
             confirmButton = {
                 TextButton(onClick = onDismiss) {
-                    Text("OK")
+                    Text(stringResource(R.string.wallet_send_ok))
                 }
             },
         )
@@ -235,10 +241,12 @@ internal fun HardwareQrScanner(
     onDismiss: () -> Unit,
 ) {
     if (showQrScanner) {
+        val context = LocalContext.current
+
         QrCodeScanView(
             onScanned = { multiFormat ->
                 onDismiss()
-                Scanner.handleMultiFormat(multiFormat)
+                Scanner.handleMultiFormat(context, multiFormat)
             },
             onDismiss = onDismiss,
             app = app,
@@ -284,6 +292,6 @@ private suspend fun sharePsbtFile(
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-        context.startActivity(Intent.createChooser(intent, "Share PSBT"))
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.wallet_send_share_psbt)))
     }
 }

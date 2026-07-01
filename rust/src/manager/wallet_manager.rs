@@ -80,12 +80,12 @@ pub enum WalletManagerReconcileMessage {
     TransactionDetailsUpdated(Arc<TransactionDetails>),
     TransactionConfirmationsUpdated(TransactionConfirmationUpdate),
 
-    NodeConnectionFailed(String),
+    NodeConnectionFailed,
     WalletMetadataChanged(Box<WalletMetadata>),
     WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
-    UnknownError(String),
+    UnknownError,
 
     WalletScannerResponse(ScannerResponse),
     UnsignedTransactionsChanged,
@@ -95,7 +95,7 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressUpdated(ReceiveAddressState),
     ReceiveAddressPresentationUpdated(ReceiveAddressPresentation),
     ReceiveAddressLoadingChanged(bool),
-    ReceiveAddressError(String),
+    ReceiveAddressError,
     ReceiveAddressClosed(u64),
 
     PayjoinTxBroadcast,
@@ -158,14 +158,14 @@ pub enum WalletScanStatus {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletErrorAlert {
-    NodeConnectionFailed(String),
+    NodeConnectionFailed,
     NoBalance,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendFlowErrorAlert {
-    SignAndBroadcast(String),
-    ConfirmDetails(String),
+    SignAndBroadcast,
+    ConfirmDetails,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -312,8 +312,8 @@ pub enum WalletManagerError {
     #[error("Unable to get output labels: {0}")]
     OutputLabelsError(String),
 
-    #[error("Wallet database corrupted for {id}: {error}")]
-    DatabaseCorruption { id: WalletId, error: String },
+    #[error("Wallet database corrupted for {id}")]
+    DatabaseCorruption { id: WalletId },
 
     #[error("Receive address error: {0}")]
     ReceiveAddressError(String),
@@ -622,22 +622,6 @@ impl RustWalletManager {
 
         // hot wallets: verified → 2, not verified → 3
         if verified { 2 } else { 3 }
-    }
-
-    /// Returns the warning message for the first delete confirmation dialog
-    #[uniffi::method]
-    pub fn deletion_warning_message(&self) -> String {
-        let (wallet_type, verified) = {
-            let metadata = self.metadata.read();
-            (metadata.wallet_type, metadata.verified)
-        };
-
-        match (wallet_type, verified) {
-            (WalletType::Hot, false) => {
-                "This wallet is not backed up. Make sure you have your secret words saved before deleting.".to_string()
-            }
-            _ => "This action cannot be undone.".to_string(),
-        }
     }
 
     // only called from the frontend, to make sure all metadata places are up to date,

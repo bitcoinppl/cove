@@ -31,8 +31,8 @@ private struct CustomAlert: Equatable, Identifiable {
 }
 
 private enum AlertType {
-    case success(String, String = "Success", () -> Void = {})
-    case error(String, String = "Error", () -> Void = {})
+    case success(String, String = String(localized: "Success"), () -> Void = {})
+    case error(String, String = String(localized: "Error"), () -> Void = {})
     case custom(CustomAlert)
 
     init(_ alert: Alert) {
@@ -112,12 +112,12 @@ struct QrCodeImportScreen: View {
 
                         if let progress {
                             VStack(spacing: 8) {
-                                Text(progress.displayText())
+                                Text(progress.localizedDisplayText)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .padding(.top, 8)
 
-                                if let detailText = progress.detailText() {
+                                if let detailText = progress.localizedDetailText {
                                     Text(detailText)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -144,7 +144,7 @@ struct QrCodeImportScreen: View {
                     wallet = try Wallet.newFromExport(export: export)
                 default:
                     Log.warn("Unexpected format for wallet import: \(multiFormat)")
-                    alert = AlertItem(type: .error("Unexpected format for wallet import"))
+                    alert = AlertItem(type: .error(String(localized: "This QR code is not a hardware wallet export.")))
                     // reset state so user can retry
                     scanComplete = false
                     self.scannedMultiFormat = nil
@@ -159,14 +159,19 @@ struct QrCodeImportScreen: View {
                     try app.selectWalletOrThrow(id)
                     app.alertState = TaggedItem(.importedSuccessfully)
                 }
-            } catch let WalletError.MultiFormat(error) {
+            } catch WalletError.MultiFormat {
                 app.popRoute()
-                self.alert = AlertItem(type: .error(error.description, "Invalid Format"))
+                self.alert = AlertItem(
+                    type: .error(
+                        String(localized: "This QR code is not in a format Cove can import."),
+                        String(localized: "Invalid Format")
+                    )
+                )
             } catch let WalletError.WalletAlreadyExists(id) {
                 handleWalletAlreadyExists(id)
             } catch {
                 Log.warn("Error importing hardware wallet: \(error)")
-                alert = AlertItem(type: .error(error.localizedDescription))
+                alert = AlertItem(type: .error(String(localized: "Unable to import this hardware wallet. Please try again.")))
             }
         }
         .toolbar {
@@ -206,10 +211,11 @@ struct QrCodeImportScreen: View {
                 }
             } catch {
                 scanner.reset()
+                Log.error("Unable to scan cold wallet QR code: \(error.localizedDescription)")
                 app.alertState = TaggedItem(
                     .general(
-                        title: "QR Scan Error",
-                        message: "Unable to scan QR code, error: \(error.localizedDescription)"
+                        title: String(localized: "QR Scan Error"),
+                        message: String(localized: "Unable to scan QR code. Please try again.")
                     )
                 )
             }
@@ -252,10 +258,10 @@ struct QrCodeImportScreen: View {
             return
         }
 
-        self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
+        self.alert = AlertItem(type: .success(String(localized: "Wallet already exists: \(id)")))
         if (try? app.selectWalletOrThrow(id)) == nil {
             app.popRoute()
-            self.alert = AlertItem(type: .error("Unable to select wallet"))
+            self.alert = AlertItem(type: .error(String(localized: "Unable to select wallet. Please try again.")))
         }
     }
 }

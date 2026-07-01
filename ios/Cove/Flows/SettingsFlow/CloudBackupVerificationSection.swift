@@ -85,7 +85,7 @@ struct VerificationSection: View {
 
             if report.walletsFailed > 0 {
                 Label(
-                    "\(report.walletsFailed) wallet backup(s) could not be decrypted",
+                    failedWalletsMessage(report.walletsFailed),
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .foregroundStyle(Color.statusError)
@@ -94,7 +94,7 @@ struct VerificationSection: View {
 
             if report.walletsUnsupported > 0 {
                 Label(
-                    "\(report.walletsUnsupported) wallet(s) use a newer backup format",
+                    unsupportedWalletsMessage(report.walletsUnsupported),
                     systemImage: "info.circle.fill"
                 )
                 .foregroundStyle(Color.statusWarning)
@@ -121,7 +121,7 @@ struct VerificationSection: View {
         }
 
         if report.walletsVerified > 0 {
-            parts.append("\(report.walletsVerified) wallet(s) verified")
+            parts.append(verifiedWalletsMessage(report.walletsVerified))
         }
 
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
@@ -131,20 +131,26 @@ struct VerificationSection: View {
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
             switch failure {
-            case let .retry(message, _, retryContext):
-                retryFailureContent(message, retryContext: retryContext)
-            case let .recreateManifest(message, warning, _):
-                recreateManifestContent(message: message, warning: warning)
-            case let .reinitializeBackup(message, warning, _):
-                reinitializeBackupContent(message: message, warning: warning)
-            case let .unsupportedVersion(message, _):
-                unsupportedVersionContent(message)
+            case let .retry(_, retryContext):
+                retryFailureContent(failure.localizedMessage, retryContext: retryContext)
+            case .recreateManifest:
+                recreateManifestContent(
+                    message: failure.localizedMessage,
+                    warning: failure.localizedWarning ?? ""
+                )
+            case .reinitializeBackup:
+                reinitializeBackupContent(
+                    message: failure.localizedMessage,
+                    warning: failure.localizedWarning ?? ""
+                )
+            case .unsupportedVersion:
+                unsupportedVersionContent(failure.localizedMessage)
             }
         }
 
-        if case let .failed(error) = manager.passkeyRepairState {
+        if case .failed = manager.passkeyRepairState {
             Section {
-                Label(error, systemImage: "xmark.circle.fill")
+                Label(String(localized: "Unable to repair passkey. Please try again."), systemImage: "xmark.circle.fill")
                     .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
@@ -207,8 +213,8 @@ struct VerificationSection: View {
     }
 
     private func destructiveActionButton(
-        title: String,
-        progressTitle: String,
+        title: LocalizedStringKey,
+        progressTitle: LocalizedStringKey,
         systemImage: String,
         operation: CloudBackupDestructiveOperationState,
         action: @escaping () -> Void
@@ -306,12 +312,36 @@ private struct CloudBackupVerificationSyncButton: View {
         }
         .disabled(manager.syncState == .syncing)
 
-        if case let .failed(error) = manager.syncState {
-            Text(error)
+        if case .failed = manager.syncState {
+            Text("Unable to sync Cloud Backup. Please try again.")
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
         }
     }
+}
+
+private func failedWalletsMessage(_ count: UInt32) -> String {
+    if count == 1 {
+        return String(localized: "1 wallet backup could not be decrypted")
+    }
+
+    return String(localized: "\(count) wallet backups could not be decrypted")
+}
+
+private func unsupportedWalletsMessage(_ count: UInt32) -> String {
+    if count == 1 {
+        return String(localized: "1 wallet uses a newer backup format")
+    }
+
+    return String(localized: "\(count) wallets use a newer backup format")
+}
+
+private func verifiedWalletsMessage(_ count: UInt32) -> String {
+    if count == 1 {
+        return String(localized: "1 wallet verified")
+    }
+
+    return String(localized: "\(count) wallets verified")
 }
 
 private struct CloudBackupRepairPasskeyButton: View {

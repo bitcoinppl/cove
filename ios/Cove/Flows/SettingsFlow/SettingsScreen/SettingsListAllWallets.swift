@@ -20,7 +20,7 @@ struct SettingsListAllWallets: View {
     var body: some View {
         List(filteredWallets, id: \.self) { wallet in
             SettingsRow(
-                title: wallet.name,
+                verbatimTitle: wallet.name,
                 route: .wallet(id: wallet.id, route: .main),
                 icon: SettingsIcon(symbol: "wallet.bifold", backgroundColor: wallet.swiftColor)
             )

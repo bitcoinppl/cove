@@ -29,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
@@ -43,7 +45,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.ChoiceAlertDialog
@@ -109,11 +114,11 @@ enum class CloudBackupPresentationBlocker {
 }
 
 internal sealed class CloudBackupVerificationFeedback {
-    data class SuccessFloater(val text: String) : CloudBackupVerificationFeedback()
+    data class SuccessFloater(val text: UiText) : CloudBackupVerificationFeedback()
 
     data class FailureAlert(
-        val title: String,
-        val message: String,
+        val title: UiText,
+        val message: UiText,
     ) : CloudBackupVerificationFeedback()
 }
 
@@ -123,7 +128,7 @@ internal fun cloudBackupVerificationFeedback(
     when (presentation) {
         is CloudBackupVerificationPresentation.Completed ->
             if (presentation.source == CloudBackupVerificationSource.ROOT_PROMPT) {
-                CloudBackupVerificationFeedback.SuccessFloater("Cloud Backup Verified")
+                CloudBackupVerificationFeedback.SuccessFloater(UiText.resource(R.string.cloud_backup_verified_floater))
             } else {
                 null
             }
@@ -131,8 +136,8 @@ internal fun cloudBackupVerificationFeedback(
         is CloudBackupVerificationPresentation.Failed ->
             if (presentation.source == CloudBackupVerificationSource.ROOT_PROMPT) {
                 CloudBackupVerificationFeedback.FailureAlert(
-                    title = "Cloud Backup Verification Failed",
-                    message = presentation.message,
+                    title = UiText.resource(R.string.cloud_backup_verification_failed_title),
+                    message = presentation.failure.localizedMessage(),
                 )
             } else {
                 null
@@ -340,13 +345,14 @@ private fun CloudBackupRootPrompt.toRootPresentation(): CloudBackupRootPresentat
         is CloudBackupRootPrompt.Verification -> CloudBackupRootPresentation.VerificationPrompt
     }
 
-private fun existingPasskeyButtonTitle(hint: CloudBackupPasskeyHint?): String =
-    hint?.let { "Use Existing Passkey (${it.nameSuffix})" } ?: "Use Existing Passkey"
+private fun existingPasskeyButtonTitle(hint: CloudBackupPasskeyHint?): UiText =
+    hint?.let { UiText.resource(R.string.settings_action_use_existing_passkey_named, it.nameSuffix) }
+        ?: UiText.resource(R.string.settings_action_use_existing_passkey)
 
-private fun existingBackupMessage(hint: CloudBackupPasskeyHint?): String =
+private fun existingBackupMessage(hint: CloudBackupPasskeyHint?): UiText =
     hint?.let {
-        "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (${it.nameSuffix}), use that passkey instead."
-    } ?: "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey for that backup, use the existing passkey instead."
+        UiText.resource(R.string.cloud_backup_existing_backup_message_named, it.nameSuffix)
+    } ?: UiText.resource(R.string.cloud_backup_existing_backup_message)
 
 @Composable
 fun CloudBackupPresentationHost(
@@ -358,6 +364,7 @@ fun CloudBackupPresentationHost(
 ) {
     val manager = remember { CloudBackupManager.getInstance() }
     val coordinator = remember { CloudBackupPresentationCoordinator() }
+    val androidContext = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var isActivityResumed by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     var observedVerificationPresentation by remember { mutableStateOf(manager.verificationPresentation) }
@@ -413,14 +420,14 @@ fun CloudBackupPresentationHost(
         observedVerificationPresentation = presentation
         when (val feedback = cloudBackupVerificationFeedback(presentation)) {
             is CloudBackupVerificationFeedback.SuccessFloater -> {
-                successFloaterText = feedback.text
+                successFloaterText = feedback.text.resolve(androidContext)
             }
             is CloudBackupVerificationFeedback.FailureAlert -> {
                 app.alertState =
                     TaggedItem(
                         AppAlertState.General(
-                            title = feedback.title,
-                            message = feedback.message,
+                            title = feedback.title.resolve(androidContext),
+                            message = feedback.message.resolve(androidContext),
                         ),
                     )
             }
@@ -457,11 +464,11 @@ fun CloudBackupPresentationHost(
     when (val presentation = coordinator.currentPresentation) {
         is CloudBackupRootPresentation.ExistingBackupFound -> {
             ChoiceAlertDialog(
-                title = "Existing Cloud Backup Found",
-                message = existingBackupMessage(presentation.passkeyHint),
+                title = stringResource(R.string.cloud_backup_existing_backup_found_title),
+                message = existingBackupMessage(presentation.passkeyHint).asString(),
                 choices =
                     listOf(
-                        DialogChoice("Create New Backup") {
+                        DialogChoice(stringResource(R.string.settings_action_create_new_backup)) {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
                                 CloudBackupManagerAction.AcceptEnablePrompt(
@@ -469,7 +476,7 @@ fun CloudBackupPresentationHost(
                                 ),
                             )
                         },
-                        DialogChoice("Try Existing Passkey") {
+                        DialogChoice(stringResource(R.string.settings_action_try_existing_passkey)) {
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(
                                 CloudBackupManagerAction.AcceptEnablePrompt(
@@ -492,14 +499,14 @@ fun CloudBackupPresentationHost(
 
         is CloudBackupRootPresentation.PasskeyChoice -> {
             ChoiceAlertDialog(
-                title = "Passkey Options",
-                message = "Would you like to use an existing passkey or create a new one?",
+                title = stringResource(R.string.cloud_backup_passkey_choice_title),
+                message = stringResource(R.string.cloud_backup_passkey_choice_message),
                 choices =
                     listOf(
                         DialogChoice(
                             existingPasskeyButtonTitle(
                                 (presentation.intent as? CloudBackupPasskeyChoiceIntent.Enable)?.v2,
-                            ),
+                            ).asString(),
                         ) {
                             coordinator.dismissCurrentPresentation()
                             when (val intent = presentation.intent) {
@@ -513,7 +520,7 @@ fun CloudBackupPresentationHost(
                                     manager.dispatch(CloudBackupManagerAction.RepairPasskey)
                             }
                         },
-                        DialogChoice("Create New Passkey") {
+                        DialogChoice(stringResource(R.string.settings_action_create_new_passkey)) {
                             coordinator.dismissCurrentPresentation()
                             when (val intent = presentation.intent) {
                                 is CloudBackupPasskeyChoiceIntent.Enable ->
@@ -546,10 +553,10 @@ fun CloudBackupPresentationHost(
                         manager.dispatch(CloudBackupManagerAction.DismissMissingPasskeyReminder)
                     }
                 },
-                title = { Text("Cloud Backup Passkey Missing") },
+                title = { Text(stringResource(R.string.cloud_backup_passkey_missing_reminder_title)) },
                 text = {
                     Text(
-                        "Add a new passkey to restore access to your cloud backup. Until you do, your backups can't be restored.",
+                        stringResource(R.string.cloud_backup_passkey_missing_reminder_message),
                     )
                 },
                 confirmButton = {
@@ -560,7 +567,7 @@ fun CloudBackupPresentationHost(
                                 app.pushRoute(Route.Settings(SettingsRoute.CloudBackup))
                             }
                         },
-                    ) { Text("Open Cloud Backup") }
+                    ) { Text(stringResource(R.string.settings_action_open_cloud_backup)) }
                 },
                 dismissButton = {
                     TextButton(
@@ -568,7 +575,7 @@ fun CloudBackupPresentationHost(
                             coordinator.dismissCurrentPresentation()
                             manager.dispatch(CloudBackupManagerAction.DismissMissingPasskeyReminder)
                         },
-                    ) { Text("Not Now") }
+                    ) { Text(stringResource(R.string.settings_action_not_now)) }
                 },
             )
         }
@@ -643,18 +650,18 @@ private fun CloudBackupVerificationPrompt(
 
     val title =
         when {
-            isVerifying -> "Verifying cloud backup"
-            failure != null -> "Verification failed"
-            else -> "Verify cloud backup?"
+            isVerifying -> stringResource(R.string.cloud_backup_verification_prompt_running_title)
+            failure != null -> stringResource(R.string.cloud_backup_verification_prompt_failed_title)
+            else -> stringResource(R.string.cloud_backup_verification_prompt_title)
         }
 
     val message =
         when {
-            failure != null -> failure.message()
+            failure != null -> failure.localizedMessage().asString()
             isVerifying ->
-                "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey."
+                stringResource(R.string.cloud_backup_verification_prompt_running_message)
             else ->
-                "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
+                stringResource(R.string.cloud_backup_verification_prompt_message)
         }
 
     CloudBackupVerificationPromptDialog(
@@ -710,13 +717,19 @@ internal fun CloudBackupVerificationPromptDialog(
                 onClick = onVerify,
                 enabled = !isVerifying,
             ) {
-                Text(if (hasFailure) "Try Again" else "Verify")
+                Text(
+                    if (hasFailure) {
+                        stringResource(R.string.action_try_again)
+                    } else {
+                        stringResource(R.string.settings_action_verify)
+                    },
+                )
             }
         },
         dismissButton = {
             if (!isVerifying) {
                 TextButton(onClick = onDismiss) {
-                    Text("Not Now")
+                    Text(stringResource(R.string.settings_action_not_now))
                 }
             }
         },
@@ -732,8 +745,8 @@ internal fun CloudBackupVerificationPromptDialog(
 internal fun CloudBackupVerificationPromptPreviewContent() {
     CloudBackupVerificationPromptPreviewScaffold {
         CloudBackupVerificationPromptDialog(
-            title = "Verify cloud backup?",
-            message = "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey.",
+            title = stringResource(R.string.cloud_backup_verification_prompt_title),
+            message = stringResource(R.string.cloud_backup_verification_prompt_message),
             isVerifying = false,
             hasFailure = false,
             onDismissRequest = {},
@@ -747,8 +760,8 @@ internal fun CloudBackupVerificationPromptPreviewContent() {
 internal fun CloudBackupVerificationPromptRunningPreviewContent() {
     CloudBackupVerificationPromptPreviewScaffold {
         CloudBackupVerificationPromptDialog(
-            title = "Verifying cloud backup",
-            message = "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey.",
+            title = stringResource(R.string.cloud_backup_verification_prompt_running_title),
+            message = stringResource(R.string.cloud_backup_verification_prompt_running_message),
             isVerifying = true,
             hasFailure = false,
             onDismissRequest = {},
@@ -762,8 +775,8 @@ internal fun CloudBackupVerificationPromptRunningPreviewContent() {
 internal fun CloudBackupVerificationPromptFailurePreviewContent() {
     CloudBackupVerificationPromptPreviewScaffold {
         CloudBackupVerificationPromptDialog(
-            title = "Verification failed",
-            message = "Cove could not decrypt the latest cloud backup with the selected passkey.",
+            title = stringResource(R.string.cloud_backup_verification_prompt_failed_title),
+            message = stringResource(R.string.deep_verification_retry),
             isVerifying = false,
             hasFailure = true,
             onDismissRequest = {},

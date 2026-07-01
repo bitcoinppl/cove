@@ -173,13 +173,13 @@ struct ReceiveView: View {
             closeReceiveAddress()
         }
         .onChange(of: manager.receiveAddressError) { _, error in
-            guard let error else { return }
+            guard error != nil else { return }
 
-            Log.error("Unable to update receive address: \(error.value)")
+            Log.error("Unable to update receive address")
             if !addressLoaded {
                 dismiss()
             }
-            app.alertState = .init(.unableToGetAddress(error: error.value))
+            app.alertState = .init(.unableToGetAddress)
         }
         .alert("Copy paid address?", isPresented: $showPaidCopyConfirmation) {
             Button("Create New Address", role: .cancel) {

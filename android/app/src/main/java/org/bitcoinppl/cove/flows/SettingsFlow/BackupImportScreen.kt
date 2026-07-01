@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
@@ -53,11 +54,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.findActivity
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPasswordOption
@@ -90,8 +94,8 @@ fun BackupImportScreen(
     val handleDismiss = { password = ""; fileData = null; onDismiss() }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var infoMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
+    var infoMessage by remember { mutableStateOf<UiText?>(null) }
     var verifyReport by remember { mutableStateOf<BackupVerifyReport?>(null) }
     var isVerifying by remember { mutableStateOf(false) }
     var importReport by remember { mutableStateOf<BackupImportReport?>(null) }
@@ -106,6 +110,7 @@ fun BackupImportScreen(
     }
 
     val isPasswordValid = backupManager.isPasswordValid(password)
+    val defaultBackupFileName = stringResource(R.string.settings_backup_file_default_name)
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -133,11 +138,11 @@ fun BackupImportScreen(
                                 buffer.write(chunk, 0, read)
                             }
                             buffer.toByteArray()
-                        } ?: throw java.io.IOException("Failed to read file")
+                        } ?: throw java.io.IOException(context.getString(R.string.settings_backup_error_read_file))
 
                         backupManager.validateFormat(bytes)
 
-                        bytes to (DocumentFile.fromSingleUri(context, uri)?.name ?: "backup file")
+                        bytes to (DocumentFile.fromSingleUri(context, uri)?.name ?: defaultBackupFileName)
                     }
 
                     fileData = bytes
@@ -160,10 +165,13 @@ fun BackupImportScreen(
             .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = {
             TopAppBar(
-                title = { Text("Import Backup") },
+                title = { Text(stringResource(R.string.settings_backup_import_title)) },
                 navigationIcon = {
                     IconButton(onClick = handleDismiss) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
             )
@@ -187,17 +195,17 @@ fun BackupImportScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isImporting,
                 ) {
-                    Text("Confirm Import")
+                    Text(stringResource(R.string.settings_action_confirm_import))
                 }
 
                 OutlinedButton(
                     onClick = { verifyReport = null },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Back")
+                    Text(stringResource(R.string.settings_action_back))
                 }
             } else {
-                Text("Backup File", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.settings_backup_file_label), style = MaterialTheme.typography.bodySmall)
 
                 OutlinedButton(
                     onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
@@ -209,16 +217,16 @@ fun BackupImportScreen(
                         tint = if (fileData != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(fileName ?: "Select Backup File")
+                    Text(fileName ?: stringResource(R.string.settings_backup_file_select))
                 }
 
                 if (fileData != null) {
-                    Text("Backup Password", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.settings_backup_password_label), style = MaterialTheme.typography.bodySmall)
 
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password") },
+                        label = { Text(stringResource(R.string.settings_password_label)) },
                         modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -226,12 +234,17 @@ fun BackupImportScreen(
                             IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                                 Icon(
                                     if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                                    contentDescription =
+                                        if (isPasswordVisible) {
+                                            stringResource(R.string.settings_content_description_hide_password)
+                                        } else {
+                                            stringResource(R.string.settings_content_description_show_password)
+                                        },
                                 )
                             }
                         },
                         supportingText = if (password.isNotEmpty() && !isPasswordValid) {
-                            { Text("Password must be at least 20 characters (whitespace is removed)") }
+                            { Text(stringResource(R.string.settings_backup_password_supporting_text)) }
                         } else null,
                         isError = password.isNotEmpty() && !isPasswordValid,
                         singleLine = false,
@@ -252,7 +265,7 @@ fun BackupImportScreen(
                                         password = credential.password
                                     }
                                 } catch (e: androidx.credentials.exceptions.NoCredentialException) {
-                                    infoMessage = "No saved passwords found"
+                                    infoMessage = UiText.resource(R.string.settings_backup_no_saved_passwords)
                                 } catch (e: GetCredentialException) {
                                     android.util.Log.w("BackupImport", "Password retrieval failed: ${e.message}")
                                 }
@@ -262,7 +275,7 @@ fun BackupImportScreen(
                     ) {
                         Icon(Icons.Default.Key, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Retrieve from Password Manager")
+                        Text(stringResource(R.string.settings_action_retrieve_from_password_manager))
                     }
 
                     Spacer(modifier = Modifier.size(32.dp))
@@ -274,7 +287,7 @@ fun BackupImportScreen(
                                 try {
                                     val data = fileData ?: run {
                                         isVerifying = false
-                                        errorMessage = "No backup file loaded, please select a file first"
+                                        errorMessage = UiText.resource(R.string.settings_backup_error_no_file_loaded)
                                         return@launch
                                     }
                                     val report = withContext(Dispatchers.IO) {
@@ -293,7 +306,7 @@ fun BackupImportScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = isPasswordValid && !isVerifying,
                     ) {
-                        Text("Preview Backup")
+                        Text(stringResource(R.string.settings_action_preview_backup))
                     }
                 }
             }
@@ -318,7 +331,7 @@ fun BackupImportScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CircularProgressIndicator()
-                    Text("Loading backup preview...")
+                    Text(stringResource(R.string.settings_backup_verify_preview_progress))
                 }
             }
         }
@@ -342,7 +355,7 @@ fun BackupImportScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CircularProgressIndicator()
-                    Text("Importing backup...")
+                    Text(stringResource(R.string.settings_backup_import_progress))
                 }
             }
         }
@@ -351,8 +364,8 @@ fun BackupImportScreen(
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
-            title = { Text("Import Backup?") },
-            text = { Text("This will import wallets and restore settings from the backup. Existing wallets with the same fingerprint will be skipped.") },
+            title = { Text(stringResource(R.string.settings_backup_import_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_backup_import_confirm_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showConfirmDialog = false
@@ -361,7 +374,7 @@ fun BackupImportScreen(
                         try {
                             val data = fileData ?: run {
                                 isImporting = false
-                                errorMessage = "No backup file loaded, please select a file first"
+                                errorMessage = UiText.resource(R.string.settings_backup_error_no_file_loaded)
                                 return@launch
                             }
                             val report = withContext(Dispatchers.IO) {
@@ -378,12 +391,12 @@ fun BackupImportScreen(
                         }
                     }
                 }) {
-                    Text("Import")
+                    Text(stringResource(R.string.settings_action_import))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -392,11 +405,11 @@ fun BackupImportScreen(
     errorMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { errorMessage = null },
-            title = { Text("Import Failed") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_backup_import_failed_title)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = { errorMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -405,11 +418,11 @@ fun BackupImportScreen(
     infoMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { infoMessage = null },
-            title = { Text("Password Manager") },
-            text = { Text(msg) },
+            title = { Text(stringResource(R.string.settings_title_password_manager)) },
+            text = { Text(msg.asString()) },
             confirmButton = {
                 TextButton(onClick = { infoMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -422,64 +435,105 @@ fun BackupImportScreen(
                 app.dispatch(AppAction.RefreshAfterImport)
                 handleDismiss()
             },
-            title = { Text("Import Complete") },
-            text = { Text(formatReport(report)) },
+            title = { Text(stringResource(R.string.settings_backup_import_complete_title)) },
+            text = { Text(formatReport(context, report)) },
             confirmButton = {
                 TextButton(onClick = {
                     importReport = null
                     app.dispatch(AppAction.RefreshAfterImport)
                     handleDismiss()
                 }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
     }
 }
 
-private fun backupErrorMessage(e: Exception): String = when (e) {
-    is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-    is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
-    is BackupException.InvalidFormat -> "Not a valid Cove backup file"
-    is BackupException.FileTooLarge -> "Backup file is too large (max 50 MB)"
-    is BackupException.Truncated -> "Backup file is truncated or corrupted"
-    is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
-    is BackupException -> e.message?.takeIf { it.isNotEmpty() } ?: "Backup operation failed"
-    else -> e.message ?: "Unknown error"
+private fun backupErrorMessage(e: Exception): UiText = when (e) {
+    is BackupException.PasswordTooShort -> UiText.resource(R.string.settings_backup_password_minimum)
+    is BackupException.DecryptionFailed -> UiText.resource(R.string.settings_backup_error_corrupt_or_wrong_password)
+    is BackupException.InvalidFormat -> UiText.resource(R.string.settings_backup_error_invalid_format)
+    is BackupException.FileTooLarge -> UiText.resource(R.string.settings_backup_error_file_too_large)
+    is BackupException.Truncated -> UiText.resource(R.string.settings_backup_error_truncated)
+    is BackupException.UnsupportedVersion -> UiText.resource(R.string.settings_backup_error_unsupported_version)
+    is BackupException -> UiText.resource(R.string.settings_backup_error_operation_failed)
+    is java.io.IOException -> UiText.resource(R.string.settings_backup_error_read_file)
+    else -> UiText.resource(R.string.settings_backup_error_unknown)
 }
 
-private fun formatReport(report: BackupImportReport): String {
+private fun formatReport(
+    context: Context,
+    report: BackupImportReport,
+): String {
+    val resources = context.resources
     val lines = mutableListOf<String>()
-    lines.add("${report.walletsImported} wallet(s) imported")
+    lines.add(
+        resources.getQuantityString(
+            R.plurals.settings_backup_report_wallets_imported,
+            report.walletsImported.toInt(),
+            report.walletsImported.toInt(),
+        ),
+    )
     if (report.walletsSkipped > 0u) {
-        lines.add("${report.walletsSkipped} wallet(s) skipped: ${report.skippedWalletNames.joinToString(", ")}")
+        lines.add(
+            resources.getQuantityString(
+                R.plurals.settings_backup_report_wallets_skipped,
+                report.walletsSkipped.toInt(),
+                report.walletsSkipped.toInt(),
+                report.skippedWalletNames.joinToString(", "),
+            ),
+        )
     }
     if (report.walletsFailed > 0u) {
-        lines.add("${report.walletsFailed} wallet(s) failed: ${report.failedWalletNames.joinToString(", ")}")
+        lines.add(
+            resources.getQuantityString(
+                R.plurals.settings_backup_report_wallets_failed,
+                report.walletsFailed.toInt(),
+                report.walletsFailed.toInt(),
+                report.failedWalletNames.joinToString(", "),
+            ),
+        )
     }
     if (report.walletsWithLabelsImported > 0u) {
-        lines.add("${report.walletsWithLabelsImported} label set(s) imported")
+        lines.add(
+            resources.getQuantityString(
+                R.plurals.settings_backup_report_label_sets_imported,
+                report.walletsWithLabelsImported.toInt(),
+                report.walletsWithLabelsImported.toInt(),
+            ),
+        )
     }
     if (report.labelsFailedWalletNames.isNotEmpty()) {
         val names = report.labelsFailedWalletNames.joinToString(", ")
         if (report.labelsFailedErrors.isNotEmpty()) {
             val errors = report.labelsFailedErrors.joinToString("; ")
-            lines.add("Labels failed for $names: $errors")
+            lines.add(context.getString(R.string.settings_backup_warning_labels_failed_with_errors, names, errors))
         } else {
-            lines.add("Labels failed for: $names")
+            lines.add(context.getString(R.string.settings_backup_warning_labels_failed_for, names))
         }
     }
     if (report.settingsRestored) {
-        lines.add("Settings restored")
+        lines.add(context.getString(R.string.settings_backup_import_settings_restored))
     }
     report.settingsError?.let { error ->
-        lines.add("Settings partially restored: $error")
+        lines.add(context.getString(R.string.settings_backup_warning_settings_partial, error))
     }
     if (report.degradedWalletNames.isNotEmpty()) {
-        lines.add("Wallets imported with limited functionality: ${report.degradedWalletNames.joinToString(", ")}")
+        lines.add(
+            context.getString(
+                R.string.settings_backup_warning_degraded_wallets,
+                report.degradedWalletNames.joinToString(", "),
+            ),
+        )
     }
     if (report.cleanupWarnings.isNotEmpty()) {
-        lines.add("Cleanup warnings: ${report.cleanupWarnings.joinToString(", ")}")
+        lines.add(
+            context.getString(
+                R.string.settings_backup_warning_cleanup,
+                report.cleanupWarnings.joinToString(", "),
+            ),
+        )
     }
     return lines.joinToString("\n")
 }

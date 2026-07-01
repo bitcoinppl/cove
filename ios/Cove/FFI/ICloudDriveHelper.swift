@@ -967,7 +967,10 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         if !hasFiles { return .noFiles }
-        if anyFailed { return .failed(failureMessage ?? "upload error") }
+        if anyFailed {
+            Log.warn("iCloud sync health failed: \(failureMessage ?? "upload error")")
+            return .failed
+        }
         if allUploaded { return .allUploaded }
         return .uploading
     }

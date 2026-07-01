@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 
 internal data class DialogChoice(
@@ -45,7 +47,7 @@ internal fun ChoiceAlertDialog(
     choices: List<DialogChoice>,
     onDismiss: () -> Unit,
     onCancel: () -> Unit = onDismiss,
-    cancelText: String = "Cancel",
+    cancelText: String? = null,
     showCancelButton: Boolean = true,
 ) {
     AlertDialog(
@@ -70,7 +72,7 @@ internal fun ChoiceAlertDialog(
         confirmButton = {
             if (showCancelButton) {
                 TextButton(onClick = onCancel) {
-                    Text(cancelText)
+                    Text(cancelText ?: stringResource(R.string.action_cancel))
                 }
             }
         },

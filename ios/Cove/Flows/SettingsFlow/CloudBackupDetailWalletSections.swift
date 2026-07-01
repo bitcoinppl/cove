@@ -36,10 +36,10 @@ struct WalletItemRow: View {
 
             HStack(spacing: 12) {
                 if let network = item.network {
-                    IconLabel("globe", network.displayName())
+                    IconLabel("globe", network.displayName)
                 }
                 if let walletType = item.walletType {
-                    IconLabel("wallet.bifold", walletType.displayName())
+                    IconLabel("wallet.bifold", walletType.localizedDisplayName)
                 }
                 if let fingerprint = item.fingerprint {
                     IconLabel("touchid", fingerprint)
@@ -139,8 +139,8 @@ private struct GroupKey: Hashable, Comparable {
         }
 
         return switch walletMode {
-        case .decoy: "\(network.displayName()) · Decoy"
-        default: network.displayName()
+        case .decoy: "\(network.displayName) · Decoy"
+        default: network.displayName
         }
     }
 
@@ -155,7 +155,7 @@ private struct GroupKey: Hashable, Comparable {
         let lhsNetwork = lhs.network!
         let rhsNetwork = rhs.network!
         if lhsNetwork != rhsNetwork {
-            return lhsNetwork.displayName() < rhsNetwork.displayName()
+            return lhsNetwork.displayName < rhsNetwork.displayName
         }
         return lhs.walletMode == .main && rhs.walletMode != .main
     }

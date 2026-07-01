@@ -36,9 +36,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
+import org.bitcoinppl.cove.localizedDisplayText
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
@@ -125,13 +130,24 @@ internal fun CloudBackupHeaderSection(
 
     val (icon, tint, label) =
         when (syncHealth) {
-            is CloudSyncHealth.Unknown -> Triple(Icons.Default.CloudOff, colors.secondaryText, "Checking sync status")
-            is CloudSyncHealth.AllUploaded -> Triple(Icons.Default.CloudDone, colors.success, "All files confirmed")
-            is CloudSyncHealth.Uploading -> Triple(Icons.Default.CloudUpload, colors.cloudBlue, "Syncing to cloud...")
-            is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, colors.danger, "Sync error: ${syncHealth.v1}")
-            is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, colors.secondaryText, "No cloud backup files uploaded yet")
-            is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, colors.danger, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
-            is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, colors.secondaryText, "Google Drive is unavailable")
+            CloudSyncHealth.UNKNOWN ->
+                Triple(Icons.Default.CloudOff, colors.secondaryText, stringResource(R.string.cloud_backup_health_checking))
+            CloudSyncHealth.ALL_UPLOADED ->
+                Triple(Icons.Default.CloudDone, colors.success, stringResource(R.string.cloud_backup_health_all_confirmed))
+            CloudSyncHealth.UPLOADING ->
+                Triple(Icons.Default.CloudUpload, colors.cloudBlue, stringResource(R.string.cloud_backup_health_uploading))
+            CloudSyncHealth.FAILED ->
+                Triple(Icons.Default.WarningAmber, colors.danger, stringResource(R.string.cloud_backup_health_failed))
+            CloudSyncHealth.NO_FILES ->
+                Triple(Icons.Default.CloudOff, colors.secondaryText, stringResource(R.string.cloud_backup_health_no_files))
+            CloudSyncHealth.AUTHORIZATION_REQUIRED ->
+                Triple(
+                    Icons.Default.WarningAmber,
+                    colors.danger,
+                    stringResource(R.string.cloud_backup_health_authorization_required),
+                )
+            CloudSyncHealth.UNAVAILABLE ->
+                Triple(Icons.Default.CloudOff, colors.secondaryText, stringResource(R.string.cloud_backup_health_unavailable))
         }
 
     CloudBackupGlassCard(
@@ -172,7 +188,7 @@ internal fun CloudBackupHeaderSection(
                 lastSync?.let {
                     CloudBackupIconText(
                         icon = Icons.Default.Schedule,
-                        text = "Last synced ${cloudBackupFormattedDate(it)}",
+                        text = stringResource(R.string.cloud_backup_last_synced, cloudBackupFormattedDate(it)),
                         color = colors.secondaryText,
                         iconSize = 14.dp,
                         textStyle = MaterialTheme.typography.caption,
@@ -183,7 +199,7 @@ internal fun CloudBackupHeaderSection(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (syncHealth is CloudSyncHealth.Uploading) {
+                    if (syncHealth == CloudSyncHealth.UPLOADING) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             color = colors.cloudBlue,
@@ -205,16 +221,20 @@ internal fun CloudBackupHeaderSection(
     }
 }
 
+@Composable
 internal fun cloudBackupHeaderTitle(syncHealth: CloudSyncHealth): String =
+    cloudBackupHeaderTitleText(syncHealth).asString()
+
+internal fun cloudBackupHeaderTitleText(syncHealth: CloudSyncHealth): UiText =
     when (syncHealth) {
-        is CloudSyncHealth.AllUploaded -> "Cloud Backup Active"
-        is CloudSyncHealth.Uploading -> "Cloud Backup Syncing"
-        is CloudSyncHealth.Unknown -> "Checking Cloud Backup"
-        is CloudSyncHealth.NoFiles,
-        is CloudSyncHealth.AuthorizationRequired,
-        is CloudSyncHealth.Unavailable,
-        is CloudSyncHealth.Failed,
-        -> "Cloud Backup Needs Attention"
+        CloudSyncHealth.ALL_UPLOADED -> UiText.resource(R.string.cloud_backup_header_active)
+        CloudSyncHealth.UPLOADING -> UiText.resource(R.string.cloud_backup_header_syncing)
+        CloudSyncHealth.UNKNOWN -> UiText.resource(R.string.cloud_backup_header_checking)
+        CloudSyncHealth.NO_FILES,
+        CloudSyncHealth.AUTHORIZATION_REQUIRED,
+        CloudSyncHealth.UNAVAILABLE,
+        CloudSyncHealth.FAILED,
+        -> UiText.resource(R.string.cloud_backup_header_attention)
     }
 
 @Composable
@@ -222,19 +242,28 @@ internal fun WalletSections(
     title: String,
     wallets: List<CloudBackupWalletItem>,
 ) {
+    val upToDateTitle = stringResource(R.string.cloud_backup_wallet_section_up_to_date)
+    val bitcoinTitle = Network.BITCOIN.localizedDisplayText().asString()
+    val unsupportedTitle = stringResource(R.string.cloud_backup_wallet_unsupported_network)
     val grouped =
         wallets
-            .groupBy { GroupKey(it.network?.cloudBackupDisplayName() ?: "Unsupported", it.walletMode) }
+            .groupBy { GroupKey(it.network?.localizedDisplayText()?.asString() ?: unsupportedTitle, it.walletMode) }
             .toSortedMap()
 
     Column(verticalArrangement = Arrangement.spacedBy(CloudBackupSectionTitleContentSpacing)) {
         grouped.forEach { (group, items) ->
-            val sectionTitle = if (title == "Up to Date") group.title else "${group.title} — $title"
+            val groupTitle = group.localizedTitle()
+            val sectionTitle =
+                if (title == upToDateTitle) {
+                    groupTitle
+                } else {
+                    stringResource(R.string.cloud_backup_wallet_group_with_status, groupTitle, title)
+                }
             WalletRowsSection(
                 title = sectionTitle,
                 wallets = items,
-                icon = if (group.network == "Bitcoin") null else Icons.Default.AccountBalanceWallet,
-                bitcoinIcon = group.network == "Bitcoin",
+                icon = if (group.network == bitcoinTitle) null else Icons.Default.AccountBalanceWallet,
+                bitcoinIcon = group.network == bitcoinTitle,
             )
         }
     }
@@ -244,32 +273,16 @@ private data class GroupKey(
     val network: String,
     val walletMode: WalletMode?,
 ) : Comparable<GroupKey> {
-    val title: String
-        get() =
-            if (walletMode == WalletMode.DECOY) {
-                "$network · Decoy"
-            } else {
-                network
-            }
-
     override fun compareTo(other: GroupKey): Int =
         compareValuesBy(this, other, GroupKey::network, { it.walletMode?.ordinal ?: Int.MAX_VALUE })
 }
 
-private fun Network.cloudBackupDisplayName(): String =
-    when (this) {
-        Network.BITCOIN -> "Bitcoin"
-        Network.TESTNET -> "Testnet"
-        Network.TESTNET4 -> "Testnet4"
-        Network.SIGNET -> "Signet"
-    }
-
-private fun WalletType.cloudBackupDisplayName(): String =
-    when (this) {
-        WalletType.HOT -> "Hot"
-        WalletType.COLD -> "Cold"
-        WalletType.XPUB_ONLY -> "Xpub Only"
-        WalletType.WATCH_ONLY -> "Watch Only"
+@Composable
+private fun GroupKey.localizedTitle(): String =
+    if (walletMode == WalletMode.DECOY) {
+        stringResource(R.string.cloud_backup_wallet_group_decoy, network)
+    } else {
+        network
     }
 
 @Composable
@@ -283,11 +296,12 @@ private fun WalletItemRow(
     val colors = cloudBackupVisualColors()
     val primaryMetadata =
         buildList {
-            item.network?.cloudBackupDisplayName()?.let(::add)
-            item.walletType?.cloudBackupDisplayName()?.let(::add)
+            item.network?.localizedDisplayText()?.asString()?.let(::add)
+            item.walletType?.localizedDisplayText()?.asString()?.let(::add)
             item.fingerprint?.let(::add)
         }.joinToString(" • ")
-    val labelText = "${item.labelCount ?: 0UL} labels"
+    val labelCount = (item.labelCount ?: 0u).toLong().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    val labelText = pluralStringResource(R.plurals.cloud_backup_label_count, labelCount, labelCount)
     val updatedAt = item.backupUpdatedAt?.let(::cloudBackupFormattedDate)
     val shape = RoundedCornerShape(18.dp)
 
@@ -380,15 +394,15 @@ private fun StatusBadge(
     val colors = cloudBackupVisualColors()
     val (label, color, fill, border, icon) =
         when (status) {
-            CloudBackupWalletStatus.DIRTY -> StatusBadgeStyle("Dirty", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
+            CloudBackupWalletStatus.DIRTY -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_dirty), colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
             CloudBackupWalletStatus.UPLOADING,
             CloudBackupWalletStatus.UPLOADED_PENDING_CONFIRMATION,
-            -> StatusBadgeStyle("Syncing", colors.cloudBlue, colors.cloudBlueFill, colors.cloudBlue.copy(alpha = 0.48f), Icons.Default.Refresh)
-            CloudBackupWalletStatus.CONFIRMED -> StatusBadgeStyle("Confirmed", colors.success, colors.successFill, colors.successBorder, Icons.Default.Check)
-            CloudBackupWalletStatus.FAILED -> StatusBadgeStyle("Failed", colors.danger, colors.dangerFill, colors.dangerBorder, Icons.Default.WarningAmber)
-            CloudBackupWalletStatus.DELETED_FROM_DEVICE -> StatusBadgeStyle("Not on device", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.DoNotDisturbOn)
-            CloudBackupWalletStatus.UNSUPPORTED_VERSION -> StatusBadgeStyle("Unsupported", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
-            CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> StatusBadgeStyle("Unknown", colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber)
+            -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_syncing), colors.cloudBlue, colors.cloudBlueFill, colors.cloudBlue.copy(alpha = 0.48f), Icons.Default.Refresh)
+            CloudBackupWalletStatus.CONFIRMED -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_confirmed), colors.success, colors.successFill, colors.successBorder, Icons.Default.Check)
+            CloudBackupWalletStatus.FAILED -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_failed), colors.danger, colors.dangerFill, colors.dangerBorder, Icons.Default.WarningAmber)
+            CloudBackupWalletStatus.DELETED_FROM_DEVICE -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_not_on_device), colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.DoNotDisturbOn)
+            CloudBackupWalletStatus.UNSUPPORTED_VERSION -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_unsupported), colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
+            CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> StatusBadgeStyle(stringResource(R.string.cloud_backup_wallet_status_unknown), colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber)
         }
 
     Surface(

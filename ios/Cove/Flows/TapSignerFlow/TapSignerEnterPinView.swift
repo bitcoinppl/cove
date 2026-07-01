@@ -15,7 +15,7 @@ struct TapSignerEnterPin: View {
     let action: AfterPinAction
 
     var message: String {
-        action.userMessage()
+        action.localizedUserMessage
     }
 
     // private
@@ -55,7 +55,9 @@ struct TapSignerEnterPin: View {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
                 } else {
-                    app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
+                    app.alertState = .init(
+                        .tapSignerDeriveFailed
+                    )
                 }
             }
 
@@ -85,7 +87,10 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .backup))
                 } else {
                     app.alertState = .init(
-                        .general(title: "Backup Failed!", message: error.description)
+                        .general(
+                            title: String(localized: "Backup Failed"),
+                            message: String(localized: "Unable to back up this TAPSIGNER. Please try again.")
+                        )
                     )
                 }
 
@@ -117,7 +122,10 @@ struct TapSignerEnterPin: View {
                 } catch {
                     await MainActor.run {
                         app.alertState = .init(
-                            .general(title: "Error", message: error.localizedDescription)
+                            .general(
+                                title: String(localized: "Error"),
+                                message: String(localized: "Unable to load the unsigned transaction. Please try again.")
+                            )
                         )
 
                         self.pin = ""
@@ -130,7 +138,10 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .sign(psbt)))
                 } else {
                     app.alertState = .init(
-                        .general(title: "Signing Failed!", message: error.description)
+                        .general(
+                            title: String(localized: "Signing Failed"),
+                            message: String(localized: "Unable to sign this transaction. Please try again.")
+                        )
                     )
                     app.sheetState = .none
                 }

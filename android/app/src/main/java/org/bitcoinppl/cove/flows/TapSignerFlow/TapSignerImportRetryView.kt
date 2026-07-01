@@ -21,12 +21,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -43,6 +47,7 @@ fun TapSignerImportRetryView(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier =
@@ -60,7 +65,7 @@ fun TapSignerImportRetryView(
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
-                Text("Cancel", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.scoped_common_cancel), fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -75,7 +80,7 @@ fun TapSignerImportRetryView(
         ) {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = "Warning",
+                contentDescription = stringResource(R.string.scoped_common_warning),
                 modifier = Modifier.size(100.dp),
                 tint = Color.Yellow,
             )
@@ -87,14 +92,13 @@ fun TapSignerImportRetryView(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "Import Failed",
+                    text = stringResource(R.string.tap_signer_import_failed_title),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
 
                 Text(
-                    text =
-                        "The import process failed. Please try again.",
+                    text = stringResource(R.string.tap_signer_import_failed_body),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
@@ -109,7 +113,10 @@ fun TapSignerImportRetryView(
                 if (pin == null) {
                     app.alertState =
                         TaggedItem(
-                            AppAlertState.TapSignerDeriveFailed("No PIN entered"),
+                            AppAlertState.General(
+                                context.getString(R.string.app_alert_tapsigner_import_failed_title),
+                                context.getString(R.string.tap_signer_no_pin_entered),
+                            ),
                         )
                     return@Button
                 }
@@ -122,7 +129,7 @@ fun TapSignerImportRetryView(
                     }
                     nfcManager.onTagDetected = { manager.isTagDetected = true }
 
-                    manager.scanMessage = "Hold your phone near the TapSigner to import wallet"
+                    manager.scanMessage = UiText.resource(R.string.tap_signer_hold_import_wallet)
                     manager.isTagDetected = false
                     manager.isScanning = true
 
@@ -142,16 +149,14 @@ fun TapSignerImportRetryView(
 
                         app.alertState =
                             TaggedItem(
-                                AppAlertState.TapSignerDeriveFailed(
-                                    e.message ?: "Unknown error occurred",
-                                ),
+                                AppAlertState.TapSignerDeriveFailed,
                             )
                     }
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
         ) {
-            Text("Retry Import")
+            Text(stringResource(R.string.tap_signer_retry_import))
         }
     }
 }

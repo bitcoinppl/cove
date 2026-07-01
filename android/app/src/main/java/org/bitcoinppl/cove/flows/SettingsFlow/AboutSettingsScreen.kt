@@ -39,11 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
@@ -119,8 +121,24 @@ fun AboutSettingsScreen(
         val currentlyEnabled = isBetaEnabled
         AlertDialog(
             onDismissRequest = { showBetaDialog = false },
-            title = { Text(if (currentlyEnabled) "Disable Beta Features?" else "Enable Beta Features?") },
-            text = { Text(if (currentlyEnabled) "This will hide experimental features" else "This will enable experimental features") },
+            title = {
+                Text(
+                    if (currentlyEnabled) {
+                        stringResource(R.string.settings_about_beta_disable_title)
+                    } else {
+                        stringResource(R.string.settings_about_beta_enable_title)
+                    },
+                )
+            },
+            text = {
+                Text(
+                    if (currentlyEnabled) {
+                        stringResource(R.string.settings_about_beta_disable_message)
+                    } else {
+                        stringResource(R.string.settings_about_beta_enable_message)
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     val newValue = !currentlyEnabled
@@ -128,17 +146,25 @@ fun AboutSettingsScreen(
                         Database().globalFlag().set(GlobalFlagKey.BETA_FEATURES_ENABLED, newValue)
                         isBetaEnabled = newValue
                     } catch (e: Exception) {
-                        betaError = "Failed to update beta features: ${e.message}"
+                        android.util.Log.e("AboutSettingsScreen", "Failed to update beta features", e)
+                        betaError =
+                            context.getString(R.string.settings_about_beta_error)
                     }
                     showBetaDialog = false
                     if (newValue) showBetaEnabledDialog = true
                 }) {
-                    Text(if (currentlyEnabled) "Disable" else "Enable")
+                    Text(
+                        if (currentlyEnabled) {
+                            stringResource(R.string.settings_action_disable)
+                        } else {
+                            stringResource(R.string.settings_action_enable)
+                        },
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showBetaDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -147,8 +173,8 @@ fun AboutSettingsScreen(
     if (showWipeCloudDialog) {
         AlertDialog(
             onDismissRequest = { showWipeCloudDialog = false },
-            title = { Text("Wipe Cloud Backup?") },
-            text = { Text("Deletes all Google Drive backup files and resets local backup state") },
+            title = { Text(stringResource(R.string.settings_about_wipe_cloud_backup_title)) },
+            text = { Text(stringResource(R.string.settings_about_wipe_cloud_backup_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -158,12 +184,12 @@ fun AboutSettingsScreen(
                         }
                     },
                 ) {
-                    Text("Wipe")
+                    Text(stringResource(R.string.settings_action_wipe))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showWipeCloudDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -172,11 +198,19 @@ fun AboutSettingsScreen(
     wipeCloudResult?.let { result ->
         AlertDialog(
             onDismissRequest = { wipeCloudResult = null },
-            title = { Text(if (result.succeeded) "Cloud Backup Wiped" else "Cloud Backup Wipe Failed") },
+            title = {
+                Text(
+                    if (result.succeeded) {
+                        stringResource(R.string.settings_about_wipe_cloud_backup_success)
+                    } else {
+                        stringResource(R.string.settings_about_wipe_cloud_backup_failed)
+                    },
+                )
+            },
             text = { Text(result.message) },
             confirmButton = {
                 TextButton(onClick = { wipeCloudResult = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -185,9 +219,9 @@ fun AboutSettingsScreen(
     if (showResetLocalStateDialog) {
         AlertDialog(
             onDismissRequest = { showResetLocalStateDialog = false },
-            title = { Text("Reset Local Backup State?") },
+            title = { Text(stringResource(R.string.settings_about_reset_local_state_title)) },
             text = {
-                Text("Clears local keychain and DB backup state but keeps Google Drive files intact. Use this to test the recovery flow.")
+                Text(stringResource(R.string.settings_about_reset_local_state_message))
             },
             confirmButton = {
                 TextButton(
@@ -197,16 +231,15 @@ fun AboutSettingsScreen(
                         }
                         clearCloudBackupDriveAccountBinding(context)
                         showResetLocalStateDialog = false
-                        resetLocalStateMessage =
-                            "Local backup state and Google Drive account selection reset. Google Drive files are untouched."
+                        resetLocalStateMessage = context.getString(R.string.settings_about_reset_local_state_result)
                     },
                 ) {
-                    Text("Reset")
+                    Text(stringResource(R.string.settings_action_reset))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showResetLocalStateDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -215,11 +248,11 @@ fun AboutSettingsScreen(
     resetLocalStateMessage?.let { message ->
         AlertDialog(
             onDismissRequest = { resetLocalStateMessage = null },
-            title = { Text("Local State Reset") },
+            title = { Text(stringResource(R.string.settings_about_local_state_reset_title)) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { resetLocalStateMessage = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -228,11 +261,11 @@ fun AboutSettingsScreen(
     betaError?.let { error ->
         AlertDialog(
             onDismissRequest = { betaError = null },
-            title = { Text("Something went wrong!") },
+            title = { Text(stringResource(R.string.settings_security_generic_error_title)) },
             text = { Text(error) },
             confirmButton = {
                 TextButton(onClick = { betaError = null }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -244,14 +277,14 @@ fun AboutSettingsScreen(
                 showBetaEnabledDialog = false
                 app.popRoute()
             },
-            title = { Text("Beta Features Enabled") },
-            text = { Text("Beta features have been enabled") },
+            title = { Text(stringResource(R.string.settings_about_beta_enabled_title)) },
+            text = { Text(stringResource(R.string.settings_about_beta_enabled_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showBetaEnabledDialog = false
                     app.popRoute()
                 }) {
-                    Text("OK")
+                    Text(stringResource(R.string.btn_ok))
                 }
             },
         )
@@ -282,14 +315,17 @@ internal fun AboutSettingsContent(
                 title = {
                     Text(
                         style = MaterialTheme.typography.bodyLarge,
-                        text = "About",
+                        text = stringResource(R.string.settings_title_about),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = { },
@@ -303,32 +339,32 @@ internal fun AboutSettingsContent(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader("App Info", showDivider = false)
+                SectionHeader(stringResource(R.string.settings_title_app_info), showDivider = false)
                 MaterialSection {
                     Column {
                         AboutRow(
-                            label = "Version",
+                            label = stringResource(R.string.settings_about_version),
                             value = version,
                         )
                         MaterialDivider()
                         AboutRow(
-                            label = "Build Number",
+                            label = stringResource(R.string.settings_about_build_number),
                             value = buildNumber,
                             onClick = onBuildNumberClick,
                         )
                         MaterialDivider()
                         AboutRow(
-                            label = "Git Commit",
+                            label = stringResource(R.string.settings_about_git_commit),
                             value = gitCommit,
                         )
                     }
                 }
 
-                SectionHeader("Support")
+                SectionHeader(stringResource(R.string.settings_title_support))
                 MaterialSection {
                     Column {
                         AboutRow(
-                            label = "Feedback",
+                            label = stringResource(R.string.settings_about_feedback),
                             value = "feedback@covebitcoinwallet.com",
                             valueStyle = MaterialTheme.typography.bodySmall,
                             onClick = onFeedbackClick,
@@ -337,11 +373,11 @@ internal fun AboutSettingsContent(
                 }
 
                 if (isBetaEnabled) {
-                    SectionHeader("Debug")
+                    SectionHeader(stringResource(R.string.settings_title_debug))
                     MaterialSection {
                         Column {
                             DebugRow(
-                                title = "Wipe Cloud Backup",
+                                title = stringResource(R.string.settings_about_wipe_cloud_backup),
                                 color = MaterialTheme.colorScheme.error,
                                 icon = {
                                     Icon(
@@ -354,7 +390,7 @@ internal fun AboutSettingsContent(
                             )
                             MaterialDivider()
                             DebugRow(
-                                title = "Reset Local Backup State",
+                                title = stringResource(R.string.settings_about_reset_local_backup_state),
                                 icon = {
                                     Icon(
                                         Icons.Default.Refresh,
@@ -428,11 +464,15 @@ private suspend fun debugWipeCloudBackup(context: Context): WipeCloudResult {
             it.debugResetCloudBackupState()
         }
 
-        WipeCloudResult(succeeded = true, message = "All cloud backup data deleted and local state reset")
+        WipeCloudResult(
+            succeeded = true,
+            message = context.getString(R.string.settings_about_wipe_cloud_backup_success_message),
+        )
     } catch (error: Exception) {
+        android.util.Log.e("AboutSettingsScreen", "Google Drive wipe failed", error)
         WipeCloudResult(
             succeeded = false,
-            message = "Google Drive wipe failed: ${error.message ?: error.javaClass.simpleName}",
+            message = context.getString(R.string.settings_about_wipe_cloud_failed_message),
         )
     }
 }

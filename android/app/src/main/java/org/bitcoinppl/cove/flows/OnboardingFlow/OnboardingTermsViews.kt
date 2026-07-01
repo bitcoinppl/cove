@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Composable
@@ -69,7 +71,7 @@ internal fun OnboardingTermsScreen(
                         .verticalScroll(rememberScrollState()),
             ) {
                 Text(
-                    text = "Terms & Conditions",
+                    text = stringResource(R.string.onboarding_terms_title),
                     color = Color.White,
                     fontSize = 34.sp,
                     lineHeight = 38.sp,
@@ -79,7 +81,7 @@ internal fun OnboardingTermsScreen(
                 Spacer(modifier = Modifier.size(12.dp))
 
                 Text(
-                    text = "By continuing, you agree to the following:",
+                    text = stringResource(R.string.onboarding_terms_intro),
                     color = OnboardingTextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -90,25 +92,25 @@ internal fun OnboardingTermsScreen(
                     OnboardingTermsCheckboxCard(
                         checked = checks[0],
                         onCheckedChange = { checks[0] = it },
-                        text = "I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.",
+                        text = stringResource(R.string.onboarding_terms_backup),
                         modifier = Modifier.testTag("onboarding.terms.check.backup"),
                     )
                     OnboardingTermsCheckboxCard(
                         checked = checks[1],
                         onCheckedChange = { checks[1] = it },
-                        text = "I understand that any unlawful use of Cove is strictly prohibited.",
+                        text = stringResource(R.string.onboarding_terms_legal),
                         modifier = Modifier.testTag("onboarding.terms.check.legal"),
                     )
                     OnboardingTermsCheckboxCard(
                         checked = checks[2],
                         onCheckedChange = { checks[2] = it },
-                        text = "I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.",
+                        text = stringResource(R.string.onboarding_terms_financial),
                         modifier = Modifier.testTag("onboarding.terms.check.financial"),
                     )
                     OnboardingTermsCheckboxCard(
                         checked = checks[3],
                         onCheckedChange = { checks[3] = it },
-                        text = "I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.",
+                        text = stringResource(R.string.onboarding_terms_recovery),
                         modifier = Modifier.testTag("onboarding.terms.check.recovery"),
                     )
                     OnboardingTermsAgreementCard(
@@ -127,7 +129,7 @@ internal fun OnboardingTermsScreen(
                 }
 
                 Text(
-                    text = "By checking these boxes, you accept and agree to the above terms.",
+                    text = stringResource(R.string.onboarding_terms_acceptance),
                     color = CoveColor.coveLightGray.copy(alpha = 0.50f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -136,7 +138,7 @@ internal fun OnboardingTermsScreen(
             }
 
             OnboardingPrimaryButton(
-                text = "Agree and Continue",
+                text = stringResource(R.string.onboarding_terms_agree_continue),
                 onClick = onAgree,
                 modifier = Modifier.testTag("onboarding.terms.agree"),
                 enabled = allChecked,
@@ -186,10 +188,21 @@ private fun OnboardingTermsAgreementCard(
     onOpenUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val agreementPrefix = stringResource(R.string.onboarding_terms_agreement_prefix)
+    val privacyPolicy = stringResource(R.string.onboarding_terms_privacy_policy)
+    val agreementAnd = stringResource(R.string.onboarding_terms_and)
+    val termsAndConditions = stringResource(R.string.onboarding_terms_title)
+    val agreementSuffix = stringResource(R.string.onboarding_terms_agreement_suffix)
     val text =
-        remember {
+        remember(
+            agreementPrefix,
+            privacyPolicy,
+            agreementAnd,
+            termsAndConditions,
+            agreementSuffix,
+        ) {
             buildAnnotatedString {
-                append("I have read and agree to Cove's ")
+                append(agreementPrefix)
                 pushStringAnnotation(tag = "URL", annotation = "https://covebitcoinwallet.com/privacy")
                 withStyle(
                     SpanStyle(
@@ -198,10 +211,10 @@ private fun OnboardingTermsAgreementCard(
                         fontWeight = FontWeight.Bold,
                     ),
                 ) {
-                    append("Privacy Policy")
+                    append(privacyPolicy)
                 }
                 pop()
-                append(" and ")
+                append(agreementAnd)
                 pushStringAnnotation(tag = "URL", annotation = "https://covebitcoinwallet.com/terms")
                 withStyle(
                     SpanStyle(
@@ -210,10 +223,10 @@ private fun OnboardingTermsAgreementCard(
                         fontWeight = FontWeight.Bold,
                     ),
                 ) {
-                    append("Terms & Conditions")
+                    append(termsAndConditions)
                 }
                 pop()
-                append(" as a condition of use.")
+                append(agreementSuffix)
             }
         }
 

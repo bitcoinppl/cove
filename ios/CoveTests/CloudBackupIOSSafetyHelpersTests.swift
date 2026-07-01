@@ -41,31 +41,39 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             .available
         )
         XCTAssertEqual(
-            CatastrophicErrorView.cloudProbeState(result: .noBackupFound(message: "no backup")),
+            CatastrophicErrorView.cloudProbeState(result: .noBackupFound(provider: .iCloudDrive)),
             .noBackup
         )
         XCTAssertEqual(
-            CatastrophicErrorView.cloudProbeState(result: .offline(message: "offline")),
-            .offline("offline")
+            CatastrophicErrorView.cloudProbeState(result: .offline(provider: .iCloudDrive)),
+            .offline
         )
         XCTAssertEqual(
-            CatastrophicErrorView.cloudProbeState(result: .inconclusive(message: "icloud unavailable")),
-            .inconclusive("icloud unavailable")
+            CatastrophicErrorView.cloudProbeState(
+                result: .inconclusive(provider: .iCloudDrive, reason: .providerUnavailable)
+            ),
+            .inconclusive(provider: .iCloudDrive, reason: .providerUnavailable)
         )
         XCTAssertEqual(
-            CatastrophicErrorView.cloudProbeState(result: .inconclusive(message: "auth required")),
-            .inconclusive("auth required")
+            CatastrophicErrorView.cloudProbeState(
+                result: .inconclusive(provider: .iCloudDrive, reason: .authorizationRequired)
+            ),
+            .inconclusive(provider: .iCloudDrive, reason: .authorizationRequired)
         )
         XCTAssertEqual(
-            CatastrophicErrorView.cloudProbeState(result: .unreadable(message: "bad data")),
-            .unreadable("bad data")
+            CatastrophicErrorView.cloudProbeState(result: .unreadable),
+            .unreadable
         )
 
-        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.inconclusive("cold metadata").allowsRestoreAttempt)
-        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.unreadable("bad data").allowsRestoreAttempt)
+        XCTAssertFalse(
+            CatastrophicErrorView.CloudProbeState
+                .inconclusive(provider: .iCloudDrive, reason: .unknown)
+                .allowsRestoreAttempt
+        )
+        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.unreadable.allowsRestoreAttempt)
         XCTAssertTrue(CatastrophicErrorView.CloudProbeState.available.allowsRestoreAttempt)
-        XCTAssertTrue(CatastrophicErrorView.CloudProbeState.offline("offline").allowsRetry)
-        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.offline("offline").allowsRestoreAttempt)
+        XCTAssertTrue(CatastrophicErrorView.CloudProbeState.offline.allowsRetry)
+        XCTAssertFalse(CatastrophicErrorView.CloudProbeState.offline.allowsRestoreAttempt)
         XCTAssertFalse(CatastrophicErrorView.CloudProbeState.noBackup.allowsRestoreAttempt)
     }
 
@@ -83,9 +91,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             .unknown,
             .uploading,
             .noFiles,
-            .authorizationRequired("auth required"),
+            .authorizationRequired,
             .unavailable,
-            .failed("sync failed"),
+            .failed,
         ]
 
         for state in unhealthyStates {

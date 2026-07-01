@@ -136,13 +136,15 @@ struct BackupVerifyView: View {
                 fileData = data
                 fileName = url.lastPathComponent
             } catch {
+                Log.error("Unable to read backup file for verification: \(error.localizedDescription)")
                 fileData = nil
                 fileName = nil
-                errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                errorMessage = (error as? BackupError)?.localizedMessage ?? String(localized: "Unable to read this backup file. Please try again.")
             }
 
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            Log.error("Unable to select backup file for verification: \(error.localizedDescription)")
+            errorMessage = String(localized: "Unable to select this backup file. Please try again.")
         }
     }
 
@@ -158,8 +160,9 @@ struct BackupVerifyView: View {
                 }
             } catch {
                 await MainActor.run {
+                    Log.error("Unable to verify backup: \(error.localizedDescription)")
                     isVerifying = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    errorMessage = (error as? BackupError)?.localizedMessage ?? String(localized: "Unable to verify this backup. Please try again.")
                 }
             }
         }
@@ -225,8 +228,8 @@ struct VerifyResultView: View {
 
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                         GridRow {
-                            IconLabel("globe", wallet.network.displayName())
-                            IconLabel("wallet.bifold", wallet.walletType.displayName())
+                            IconLabel("globe", wallet.network.localizedDisplayName)
+                            IconLabel("wallet.bifold", wallet.walletType.localizedDisplayName)
                         }
 
                         GridRow {
@@ -235,7 +238,7 @@ struct VerifyResultView: View {
                             } else {
                                 Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
                             }
-                            IconLabel("key", wallet.secretType.displayName())
+                            IconLabel("key", wallet.secretType.localizedDisplayName)
                         }
 
                         if wallet.labelCount > 0 {

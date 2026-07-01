@@ -90,8 +90,8 @@ struct SendFlowCustomFeeRateView: View {
                     self.feeOptions = feeOptions
                     presenter.lastWorkingFeeRate = feeRate.satPerVb()
                 }
-            } catch let SendFlowError.WalletManager(.InsufficientFunds(error)) {
-                Log.error("Unable to get accurate total sats \(error), setting max fee rate to \(feeRate.satPerVb())")
+            } catch SendFlowError.InsufficientFunds {
+                Log.error("Unable to get accurate total sats, setting max fee rate to \(feeRate.satPerVb())")
                 let feeRate = feeRate.satPerVb()
 
                 await MainActor.run { presenter.erroredFeeRate = feeRate }
@@ -101,7 +101,12 @@ struct SendFlowCustomFeeRateView: View {
                 Task {
                     try? await Task.sleep(for: .milliseconds(850))
                     await MainActor.run {
-                        presenter.alertState = .init(.general(title: "Fee too high!", message: "The fee rate you entered is too high, we automatically selected a lower fee"))
+                        presenter.alertState = .init(
+                            .general(
+                                title: String(localized: "Fee Too High"),
+                                message: String(localized: "The fee rate you entered is too high. Cove selected a lower fee.")
+                            )
+                        )
                     }
                 }
             } catch {

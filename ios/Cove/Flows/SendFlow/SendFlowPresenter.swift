@@ -52,14 +52,7 @@ import SwiftUI
     }
 
     var alertTitle: String {
-        switch alertState?.item {
-        case let .error(error):
-            errorAlertTitle(error)
-        case let .some(.general(title: title, message: _)):
-            title
-        case .none:
-            ""
-        }
+        alertState?.item.localizedTitle ?? ""
     }
 
     func setDisappearing() {
@@ -69,70 +62,12 @@ import SwiftUI
         }
     }
 
-    private func errorAlertTitle(_ error: SendFlowError) -> String {
-        switch error {
-        case .EmptyAddress, .InvalidAddress, .WrongNetwork:
-            "Invalid Address"
-        case .InvalidNumber, .ZeroAmount: "Invalid Amount"
-        case .InsufficientFunds, .NoBalance: "Insufficient Funds"
-        case .SendAmountToLow: "Send Amount Too Low"
-        case .UnableToGetFeeRate: "Unable to get fee rate"
-        case .UnableToBuildTxn: "Unable to build transaction"
-        case .UnableToGetMaxSend:
-            "Unable to get max send"
-        case .UnableToSaveUnsignedTransaction:
-            "Unable to Save Unsigned Transaction"
-        case .WalletManager(.LockedOutputsSelected):
-            "Insufficient Funds"
-        case .WalletManager:
-            "Error"
-        case .UnableToGetFeeDetails:
-            "Fee Details Error"
-        }
-    }
-
     @ViewBuilder
     func alertMessage(alert: TaggedItem<SendFlowAlertState>) -> some View {
         switch alert.item {
-        case let .error(error):
-            Text(errorAlertMessage(error))
-        case let .general(title: _, message: message):
-            Text(message)
-        }
-    }
-
-    private func errorAlertMessage(_ error: SendFlowError) -> String {
-        switch error {
-        case .EmptyAddress:
-            "Please enter an address"
-        case .InvalidNumber:
-            "Please enter a valid number for the amout to send"
-        case .ZeroAmount:
-            "Can't send an empty transaction. Please enter a valid amount"
-        case .NoBalance:
-            "You do not have any bitcoin in your wallet. Please add some to send a transaction"
-        case let .InvalidAddress(address):
-            "The address \(address) is invalid"
-        case let .WrongNetwork(address: address, validFor: validFor, current: currentNetwork):
-            "The address \(address) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
-        case .InsufficientFunds:
-            "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-        case .SendAmountToLow:
-            "Send amount is too low. Please send atleast 5000 sats"
-        case .UnableToGetFeeRate:
-            "Are you connected to the internet?"
-        case .WalletManager(.LockedOutputsSelected):
-            "Selected coins include locked coins. Unlock them or choose different coins."
-        case let .WalletManager(msg):
-            msg.description
-        case let .UnableToGetFeeDetails(msg):
-            msg
-        case let .UnableToBuildTxn(msg):
-            msg
-        case let .UnableToGetMaxSend(msg):
-            msg
-        case let .UnableToSaveUnsignedTransaction(msg):
-            msg
+        case .error, .general, .unableToLoadFees, .feeTooHigh, .highFeeWarning,
+             .unableToReadLockedCoins, .balanceStillLoading:
+            Text(alert.item.localizedMessage)
         }
     }
 
@@ -141,7 +76,8 @@ import SwiftUI
         switch alert.item {
         case let .error(error):
             errorAlertButtons(error)
-        case .general:
+        case .general, .unableToLoadFees, .feeTooHigh, .highFeeWarning,
+             .unableToReadLockedCoins, .balanceStillLoading:
             Button("OK") { self.alertState = .none }
         }
     }

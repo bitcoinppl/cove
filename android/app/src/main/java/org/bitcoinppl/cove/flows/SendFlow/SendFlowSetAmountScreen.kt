@@ -134,12 +134,12 @@ fun SendFlowSetAmountScreen(
     val feeEta =
         sendFlowManager.selectedFeeRate?.let {
             when (it.feeSpeed()) {
-                is FeeSpeed.Slow -> "~1 hour"
-                is FeeSpeed.Medium -> "~30 minutes"
-                is FeeSpeed.Fast -> "~10 minutes"
-                is FeeSpeed.Custom -> "Custom"
+                is FeeSpeed.Slow -> stringResource(R.string.wallet_send_fee_eta_slow)
+                is FeeSpeed.Medium -> stringResource(R.string.wallet_send_fee_eta_medium)
+                is FeeSpeed.Fast -> stringResource(R.string.wallet_send_fee_eta_fast)
+                is FeeSpeed.Custom -> stringResource(R.string.label_fee_custom)
             }
-        } ?: "~30 minutes"
+        } ?: stringResource(R.string.wallet_send_fee_eta_medium)
     val feeAmount = sendFlowManager.totalFeeString
     val totalSpendingCrypto = sendFlowManager.totalSpentInBtc
     val totalSpendingFiat = sendFlowManager.totalSpentInFiat
@@ -474,7 +474,7 @@ private fun KeyboardToolbar(
     hasAddress: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val buttonText = if (!hasAddress) "Next" else "Done"
+    val buttonText = stringResource(if (!hasAddress) R.string.wallet_send_next else R.string.wallet_send_done)
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -496,13 +496,13 @@ private fun KeyboardToolbar(
             // Right: Max + Clear
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = onMaxSelected) {
-                    Text("Max")
+                    Text(stringResource(R.string.wallet_send_max))
                 }
 
                 FilledTonalButton(onClick = onClear) {
                     Icon(
                         Icons.Filled.Cancel,
-                        contentDescription = "Clear",
+                        contentDescription = stringResource(R.string.wallet_send_clear),
                         modifier = Modifier.size(20.dp),
                     )
                 }

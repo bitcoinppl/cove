@@ -30,7 +30,7 @@ private enum AlertState: Equatable {
     case notePinRequired
     indirect case noteFaceIdDisabling(AlertState)
     case confirmBetaImportExport
-    case extraSetPinError(String)
+    case extraSetPinError(PinUpdateFailure)
 }
 
 struct MainSettingsScreen: View {
@@ -323,7 +323,7 @@ struct MainSettingsScreen: View {
         )
     }
 
-    private var alertTitle: String {
+    private var alertTitle: LocalizedStringKey {
         guard let alertState else { return "Error" }
         return MyAlert(alertState).title
     }
@@ -480,10 +480,10 @@ struct MainSettingsScreen: View {
                 }
             ).eraseToAny()
 
-        case let .extraSetPinError(error):
+        case let .extraSetPinError(failure):
             AlertBuilder(
                 title: "Something went wrong!",
-                message: error,
+                message: failure.localizedMessage,
                 actions: { Button("OK") { alertState = .none } }
             )
             .eraseToAny()
@@ -592,11 +592,9 @@ struct MainSettingsScreen: View {
                     }
 
                     sheetState = .none
-                    if auth.checkWipeDataPin(pin) {
+                    if let failure = auth.rust.validateNewPin(newPin: pin) {
                         alertState = .init(
-                            .extraSetPinError(
-                                "Can't update PIN because its the same as your wipe data PIN"
-                            )
+                            .extraSetPinError(failure)
                         )
                         return
                     }
@@ -735,7 +733,8 @@ struct MainSettingsScreen: View {
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.description))
+            Log.error("Unable to set wipe data PIN: \(error.description)")
+            alertState = .init(.extraSetPinError(.updateFailed))
         }
     }
 
@@ -748,7 +747,8 @@ struct MainSettingsScreen: View {
 
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.extraSetPinError(error.description))
+            Log.error("Unable to set decoy PIN: \(error.description)")
+            alertState = .init(.extraSetPinError(.updateFailed))
         }
     }
 }

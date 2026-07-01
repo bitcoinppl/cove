@@ -26,18 +26,11 @@ pub(crate) fn unavailable_spendable_balance_alert(
     lock_state_load_failed: bool,
 ) -> Option<SendFlowAlertState> {
     if lock_state_load_failed {
-        return Some(SendFlowAlertState::General {
-            title: "Unable to Read Locked Coins".to_string(),
-            message: "Cove could not read the lock state for this wallet. Locked coins are excluded for safety. Please try again shortly.".to_string(),
-        });
+        return Some(SendFlowAlertState::UnableToReadLockedCoins);
     }
 
     if unlocked_spendable_sats.is_none() {
-        return Some(SendFlowAlertState::General {
-            title: "Balance Still Loading".to_string(),
-            message: "Cove is still checking which coins are unlocked. Please try again shortly."
-                .to_string(),
-        });
+        return Some(SendFlowAlertState::BalanceStillLoading);
     }
 
     None
@@ -64,20 +57,14 @@ mod tests {
     fn unavailable_balance_alert_distinguishes_lock_state_failures() {
         let alert = super::unavailable_spendable_balance_alert(None, true);
 
-        assert!(matches!(
-            alert,
-            Some(super::SendFlowAlertState::General { title, .. }) if title.contains("Locked")
-        ));
+        assert!(matches!(alert, Some(super::SendFlowAlertState::UnableToReadLockedCoins)));
     }
 
     #[test]
     fn unavailable_balance_alert_distinguishes_loading_state() {
         let alert = super::unavailable_spendable_balance_alert(None, false);
 
-        assert!(matches!(
-            alert,
-            Some(super::SendFlowAlertState::General { title, .. }) if title.contains("Loading")
-        ));
+        assert!(matches!(alert, Some(super::SendFlowAlertState::BalanceStillLoading)));
         assert_eq!(super::unavailable_spendable_balance_alert(Some(5_000), false), None);
     }
 }

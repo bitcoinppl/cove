@@ -16,6 +16,7 @@ import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupFailure
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
@@ -126,8 +127,8 @@ class CloudBackupManager private constructor(
     val syncState: CloudBackupSyncState?
         get() = configuredState?.sync
 
-    val lifecycleFailureMessage: String?
-        get() = (state.lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message
+    val lifecycleFailure: CloudBackupFailure?
+        get() = (state.lifecycle as? CloudBackupLifecycle.Failed)?.v1
 
     val isLifecycleDisabled: Boolean
         get() = state.lifecycle is CloudBackupLifecycle.Disabled
@@ -165,7 +166,7 @@ class CloudBackupManager private constructor(
             }
 
     val syncHealth: CloudSyncHealth
-        get() = configuredState?.syncHealth ?: CloudSyncHealth.Unknown
+        get() = configuredState?.syncHealth ?: CloudSyncHealth.UNKNOWN
 
     val progress: CloudBackupProgress?
         get() =
@@ -198,7 +199,7 @@ class CloudBackupManager private constructor(
                         is CloudBackupDetailState.NotLoaded -> CloudOnlyState.NotFetched
                         is CloudBackupDetailState.Loading -> CloudOnlyState.Loading
                         is CloudBackupDetailState.Loaded -> detail.state.cloudOnly
-                        is CloudBackupDetailState.Failed -> CloudOnlyState.Failed(detail.v1)
+                        is CloudBackupDetailState.Failed -> CloudOnlyState.Failed
                     }
                 else -> CloudOnlyState.NotFetched
             }

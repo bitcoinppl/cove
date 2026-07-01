@@ -27,7 +27,7 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
         }
 
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
-        session?.alertMessage = "Hold your iPhone near an NFC tag to write"
+        session?.alertMessage = String(localized: "Hold your iPhone near an NFC tag to write.")
         session?.begin()
     }
 
@@ -39,28 +39,28 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
         logger.debug("detected \(tags.count) tags, continuing...")
 
         guard let data, !data.isEmpty else {
-            session.invalidate(errorMessage: "No data to write to NFC tag")
+            session.invalidate(errorMessage: String(localized: "No data to write to NFC tag."))
             return
         }
 
         guard let tag = tags.first else {
-            session.invalidate(errorMessage: "No tag found")
+            session.invalidate(errorMessage: String(localized: "No tag found."))
             return
         }
 
         session.connect(to: tag) { error in
             self.logger.debug("connected to tag")
-            let message = "Writing to tag, please hold still..."
+            let message = String(localized: "Writing to tag. Please hold still.")
             session.alertMessage = message
 
-            if let error {
-                session.invalidate(errorMessage: error.localizedDescription)
+            if error != nil {
+                session.invalidate(errorMessage: String(localized: "Unable to connect to NFC tag. Please try again."))
                 return
             }
 
             tag.queryNDEFStatus { _, _, error in
                 guard error == nil else {
-                    session.invalidate(errorMessage: "Failed to query tag")
+                    session.invalidate(errorMessage: String(localized: "Unable to read NFC tag status. Please try again."))
                     return
                 }
 
@@ -76,12 +76,12 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
                 self.logger.debug("Writing message with \(message.records.count) records")
 
                 tag.writeNDEF(message) { error in
-                    if let error {
+                    if error != nil {
                         self.isScanning = false
-                        session.invalidate(errorMessage: "Write failed: \(error.localizedDescription)")
+                        session.invalidate(errorMessage: String(localized: "Unable to write NFC tag. Please try again."))
                     } else {
                         self.isScanning = false
-                        session.alertMessage = "Successfully wrote to tag!"
+                        session.alertMessage = String(localized: "Successfully wrote to tag.")
                         session.invalidate()
                         self.task?.cancel()
                     }

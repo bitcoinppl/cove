@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_action_back">Back</string>
+    <string name="settings_action_go_back">Go Back</string>
+    <string name="settings_dialog_are_you_sure_title">Are you sure?</string>
+    <string name="settings_error_unknown">Unknown error</string>
+    <string name="settings_block_explorer_invalid_url">Enter a valid block explorer URL.</string>
+    <string name="settings_block_explorer_reset_error">Unable to reset the block explorer. Please try again.</string>
+    <string name="settings_backup_export_auth_title">Unlock Backup Export</string>
+    <string name="settings_backup_export_auth_subtitle">Verify your identity to export</string>
+    <string name="settings_backup_error_open_output_stream">Failed to open output stream</string>
+</resources>

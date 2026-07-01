@@ -363,7 +363,7 @@ impl GlobalConfigTable {
                     GlobalConfigTableError::InvalidCustomBlockExplorer(format!(
                         "{} is not supported on {}",
                         option.display_name(),
-                        network.display_name()
+                        network
                     ))
                 })?;
                 let canonical = template.as_str().to_string();

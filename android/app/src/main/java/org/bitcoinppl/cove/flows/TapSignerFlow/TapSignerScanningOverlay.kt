@@ -27,9 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.UiText
 
 /**
  * Overlay shown during TapSigner NFC operations
@@ -37,9 +40,9 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun TapSignerScanningOverlay(
-    message: String,
+    message: UiText,
     isTagDetected: Boolean,
-    errorMessage: String? = null,
+    errorMessage: UiText? = null,
     modifier: Modifier = Modifier,
 ) {
     var dotCount by remember { mutableIntStateOf(1) }
@@ -72,7 +75,12 @@ fun TapSignerScanningOverlay(
             ) {
                 Icon(
                     imageVector = if (hasError) Icons.Default.Error else Icons.Default.Nfc,
-                    contentDescription = if (hasError) "Error" else "NFC",
+                    contentDescription =
+                        if (hasError) {
+                            stringResource(R.string.scoped_common_error)
+                        } else {
+                            stringResource(R.string.new_wallet_nfc)
+                        },
                     modifier = Modifier.size(64.dp),
                     tint = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
@@ -82,11 +90,11 @@ fun TapSignerScanningOverlay(
                 Text(
                     text =
                         if (hasError) {
-                            errorMessage!!
+                            errorMessage.asString()
                         } else if (isTagDetected) {
-                            "Scanning please hold still" + ".".repeat(dotCount)
+                            stringResource(R.string.tap_signer_overlay_scanning, ".".repeat(dotCount))
                         } else {
-                            "Ready to scan"
+                            stringResource(R.string.tap_signer_overlay_ready)
                         },
                     style = MaterialTheme.typography.titleLarge,
                     color = if (hasError) MaterialTheme.colorScheme.error else Color.Unspecified,
@@ -96,7 +104,7 @@ fun TapSignerScanningOverlay(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = message,
+                        text = message.asString(),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

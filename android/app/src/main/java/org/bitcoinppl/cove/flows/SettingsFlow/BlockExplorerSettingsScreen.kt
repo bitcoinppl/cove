@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.UiText
+import org.bitcoinppl.cove.localizedDisplayText
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
@@ -195,7 +197,10 @@ fun BlockExplorerSettingsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = {
@@ -279,7 +284,7 @@ fun BlockExplorerSettingsScreen(
             }
 
             if (selectedOption == BlockExplorerOption.CUSTOM) {
-                SectionHeader(BlockExplorerOption.CUSTOM.displayName())
+                SectionHeader(BlockExplorerOption.CUSTOM.localizedDisplayText().asString())
                 MaterialSection {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         OutlinedTextField(
@@ -341,7 +346,7 @@ private fun BlockExplorerOptionRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = option.displayName(),
+            text = option.localizedDisplayText().asString(),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
@@ -371,7 +376,7 @@ private fun NetworkPickerRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = network.displayName(),
+            text = network.localizedDisplayText().asString(),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
@@ -385,3 +390,12 @@ private fun NetworkPickerRow(
         }
     }
 }
+
+private fun BlockExplorerOption.localizedDisplayText(): UiText =
+    when (this) {
+        BlockExplorerOption.MEMPOOL_SPACE -> UiText.resource(R.string.block_explorer_option_default)
+        BlockExplorerOption.MEMPOOL_GUIDE -> UiText.resource(R.string.block_explorer_option_mempool_guide)
+        BlockExplorerOption.BULL_BITCOIN -> UiText.resource(R.string.block_explorer_option_bull_bitcoin)
+        BlockExplorerOption.BLOCKSTREAM -> UiText.resource(R.string.block_explorer_option_blockstream)
+        BlockExplorerOption.CUSTOM -> UiText.resource(R.string.block_explorer_option_custom)
+    }

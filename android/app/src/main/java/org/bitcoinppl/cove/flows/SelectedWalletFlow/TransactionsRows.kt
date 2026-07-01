@@ -515,6 +515,9 @@ internal fun UnsignedTransactionWidget(
             }
         }
 
+        val deleteFailedTitle = stringResource(R.string.wallet_send_delete_failed_title)
+        val unableToDeleteTransactionMessage = stringResource(R.string.wallet_send_unable_to_delete_transaction)
+
         // delete dropdown menu
         DropdownMenu(
             expanded = showDeleteMenu,
@@ -536,8 +539,8 @@ internal fun UnsignedTransactionWidget(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.General(
-                                    title = "Delete Failed",
-                                    message = "Unable to delete transaction: ${e.localizedMessage ?: e.message ?: "Unknown error"}",
+                                    title = deleteFailedTitle,
+                                    message = unableToDeleteTransactionMessage,
                                 ),
                             )
                     }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import org.bitcoinppl.cove.views.ChoiceAlertDialog
@@ -44,8 +45,6 @@ import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletType
 
-
-
 @Composable
 internal fun GlobalAlertHandler(
     app: AppManager,
@@ -55,9 +54,10 @@ internal fun GlobalAlertHandler(
     val state = alertState.item
 
     if (state.displayType() == AlertDisplayType.TOAST) {
+        val message = state.localizedMessage().asString()
         LaunchedEffect(alertState.id) {
             snackbarHostState.showSnackbar(
-                message = state.message(),
+                message = message,
                 duration = SnackbarDuration.Short,
             )
             app.alertState = null
@@ -81,15 +81,15 @@ private fun GlobalAlertDialog(
 
     fun copyToClipboard(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("address", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.wallet_send_address_clip_label), text))
     }
 
     when (val state = alert.item) {
         is AppAlertState.DuplicateWallet -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -100,7 +100,7 @@ private fun GlobalAlertDialog(
                             Log.e("GlobalAlert", "Failed to select wallet", e)
                             app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
-                    }) { Text("OK") }
+                    }) { Text(stringResource(R.string.action_ok)) }
                 },
             )
         }
@@ -112,26 +112,26 @@ private fun GlobalAlertDialog(
                 buildList {
                     if (cloudBackupEnabled) {
                         add(
-                            DialogChoice("Open Cloud Backup") {
+                            DialogChoice(stringResource(R.string.action_open_cloud_backup)) {
                                 onDismiss()
                                 app.loadAndReset(Route.Settings(SettingsRoute.CloudBackup))
                             },
                         )
                     }
                     add(
-                        DialogChoice("Import 12 Words") {
+                        DialogChoice(stringResource(R.string.action_import_12_words)) {
                             onDismiss()
                             app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
                         },
                     )
                     add(
-                        DialogChoice("Import 24 Words") {
+                        DialogChoice(stringResource(R.string.action_import_24_words)) {
                             onDismiss()
                             app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         },
                     )
                     add(
-                        DialogChoice("Use with Hardware Wallet") {
+                        DialogChoice(stringResource(R.string.action_use_with_hardware_wallet)) {
                             onDismiss()
                             try {
                                 app.getWalletManager(walletId).setWalletType(WalletType.COLD)
@@ -140,25 +140,26 @@ private fun GlobalAlertDialog(
                                 app.alertState =
                                     TaggedItem(
                                         AppAlertState.General(
-                                            title = "Error",
-                                            message = e.message ?: "Failed to convert wallet",
+                                            title = context.getString(R.string.app_alert_error_title),
+                                            message = context.getString(R.string.common_remaining_failed_to_convert_wallet),
                                         ),
                                     )
                             }
                         },
                     )
                     add(
-                        DialogChoice("Use as Watch Only") {
+                        DialogChoice(stringResource(R.string.action_use_as_watch_only)) {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.ConfirmWatchOnly)
                         },
                     )
                 }
             ChoiceAlertDialog(
-                title = state.title(),
-                message = state.message(),
+                title = state.localizedTitle().asString(),
+                message = state.localizedMessage().asString(),
                 choices = choices,
                 onDismiss = onDismiss,
+                cancelText = stringResource(R.string.action_cancel),
                 showCancelButton = false,
             )
         }
@@ -166,10 +167,10 @@ private fun GlobalAlertDialog(
         is AppAlertState.ConfirmWatchOnly -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text("I Understand") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_i_understand)) }
                 },
             )
         }
@@ -178,8 +179,8 @@ private fun GlobalAlertDialog(
             val context = LocalContext.current
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -188,10 +189,10 @@ private fun GlobalAlertDialog(
                                 data = Uri.fromParts("package", context.packageName, null)
                             }
                         context.startActivity(intent)
-                    }) { Text("Open Settings") }
+                    }) { Text(stringResource(R.string.action_open_settings)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -199,16 +200,16 @@ private fun GlobalAlertDialog(
         is AppAlertState.AddressWrongNetwork -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         copyToClipboard(state.address.unformatted())
                         onDismiss()
-                    }) { Text("Copy Address") }
+                    }) { Text(stringResource(R.string.action_copy_address)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -220,7 +221,7 @@ private fun GlobalAlertDialog(
                     if (selectedWallet != null) {
                         add(
                             DialogChoice(
-                                label = "Send To Address",
+                                label = stringResource(R.string.action_send_to_address),
                                 emphasized = true,
                                 onClick = {
                                     val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)
@@ -231,33 +232,34 @@ private fun GlobalAlertDialog(
                         )
                     }
                     add(
-                        DialogChoice("Copy Address") {
+                        DialogChoice(stringResource(R.string.action_copy_address)) {
                             copyToClipboard(state.address.unformatted())
                             onDismiss()
                         },
                     )
                 }
             ChoiceAlertDialog(
-                title = state.title(),
-                message = state.message(),
+                title = state.localizedTitle().asString(),
+                message = state.localizedMessage().asString(),
                 choices = choices,
                 onDismiss = onDismiss,
+                cancelText = stringResource(R.string.action_cancel),
             )
         }
 
         is AppAlertState.NoWalletSelected -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         copyToClipboard(state.address.unformatted())
                         onDismiss()
-                    }) { Text("Copy Address") }
+                    }) { Text(stringResource(R.string.action_copy_address)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -265,8 +267,8 @@ private fun GlobalAlertDialog(
         is AppAlertState.UninitializedTapSigner -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -274,10 +276,10 @@ private fun GlobalAlertDialog(
                             TaggedItem(
                                 AppSheetState.TapSigner(TapSignerRoute.InitSelect(state.tapSigner)),
                             )
-                    }) { Text("Yes") }
+                    }) { Text(stringResource(R.string.action_yes)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -285,8 +287,8 @@ private fun GlobalAlertDialog(
         is AppAlertState.TapSignerWalletFound -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         try {
@@ -297,10 +299,10 @@ private fun GlobalAlertDialog(
                             Log.e("GlobalAlert", "Failed to select wallet", e)
                             app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
                         }
-                    }) { Text("Yes") }
+                    }) { Text(stringResource(R.string.action_yes)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -308,8 +310,8 @@ private fun GlobalAlertDialog(
         is AppAlertState.InitializedTapSigner -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -319,10 +321,10 @@ private fun GlobalAlertDialog(
                                     TapSignerRoute.EnterPin(state.tapSigner, AfterPinAction.Derive),
                                 ),
                             )
-                    }) { Text("Yes") }
+                    }) { Text(stringResource(R.string.action_yes)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -330,8 +332,8 @@ private fun GlobalAlertDialog(
         is AppAlertState.TapSignerNoBackup -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -339,10 +341,10 @@ private fun GlobalAlertDialog(
                             TaggedItem(
                                 AppSheetState.TapSigner(TapSignerRoute.InitSelect(state.tapSigner)),
                             )
-                    }) { Text("Yes") }
+                    }) { Text(stringResource(R.string.action_yes)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -350,8 +352,8 @@ private fun GlobalAlertDialog(
         is AppAlertState.TapSignerWrongPin -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -361,10 +363,10 @@ private fun GlobalAlertDialog(
                                     TapSignerRoute.EnterPin(state.tapSigner, state.action),
                                 ),
                             )
-                    }) { Text("Try Again") }
+                    }) { Text(stringResource(R.string.action_try_again)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -372,10 +374,10 @@ private fun GlobalAlertDialog(
         is AppAlertState.General -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text("OK") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
                 },
             )
         }
@@ -392,7 +394,7 @@ private fun GlobalAlertDialog(
                     ) {
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(state.title())
+                        Text(state.localizedTitle().asString())
                     }
                 }
             }
@@ -401,8 +403,8 @@ private fun GlobalAlertDialog(
         is AppAlertState.ImportedSuccessfully -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -412,45 +414,46 @@ private fun GlobalAlertDialog(
                         } else {
                             app.resetRoute(Route.NewWallet(NewWalletRoute.Select))
                         }
-                    }) { Text("OK") }
+                    }) { Text(stringResource(R.string.action_ok)) }
                 },
             )
         }
 
         is AppAlertState.CantSendOnWatchOnlyWallet -> {
             ChoiceAlertDialog(
-                title = state.title(),
-                message = state.message(),
+                title = state.localizedTitle().asString(),
+                message = state.localizedMessage().asString(),
                 choices =
                     listOf(
-                        DialogChoice("Import Hardware Wallet") {
+                        DialogChoice(stringResource(R.string.action_import_hardware_wallet)) {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.WatchOnlyImportHardware)
                         },
-                        DialogChoice("Import Words") {
+                        DialogChoice(stringResource(R.string.action_import_words)) {
                             onDismiss()
                             app.alertState = TaggedItem(AppAlertState.WatchOnlyImportWords)
                         },
-                    ),
+                ),
                 onDismiss = onDismiss,
+                cancelText = stringResource(R.string.action_cancel),
             )
         }
 
         is AppAlertState.WatchOnlyImportHardware -> {
             ChoiceAlertDialog(
-                title = state.title(),
-                message = state.message(),
+                title = state.localizedTitle().asString(),
+                message = state.localizedMessage().asString(),
                 choices =
                     listOf(
-                        DialogChoice("QR Code") {
+                        DialogChoice(stringResource(R.string.action_qr_code)) {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.ColdWallet(ColdWalletRoute.QR_CODE)))
                         },
-                        DialogChoice("NFC") {
+                        DialogChoice(stringResource(R.string.btn_nfc)) {
                             onDismiss()
                             app.scanNfc()
                         },
-                        DialogChoice("Paste") {
+                        DialogChoice(stringResource(R.string.action_paste)) {
                             onDismiss()
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val text =
@@ -468,61 +471,63 @@ private fun GlobalAlertDialog(
                                 } catch (e: Exception) {
                                     app.alertState =
                                         TaggedItem(
-                                            AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                                            AppAlertState.ErrorImportingHardwareWallet,
                                         )
                                 }
                             }
                         },
-                    ),
+                ),
                 onDismiss = onDismiss,
+                cancelText = stringResource(R.string.action_cancel),
             )
         }
 
         is AppAlertState.WatchOnlyImportWords -> {
             ChoiceAlertDialog(
-                title = state.title(),
-                message = state.message(),
+                title = state.localizedTitle().asString(),
+                message = state.localizedMessage().asString(),
                 choices =
                     listOf(
-                        DialogChoice("Scan QR") {
+                        DialogChoice(stringResource(R.string.btn_scan_qr)) {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))
                         },
-                        DialogChoice("NFC") {
+                        DialogChoice(stringResource(R.string.btn_nfc)) {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))
                         },
-                        DialogChoice("12 Words") {
+                        DialogChoice(stringResource(R.string.btn_12_words)) {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))
                         },
-                        DialogChoice("24 Words") {
+                        DialogChoice(stringResource(R.string.btn_24_words)) {
                             onDismiss()
                             app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))
                         },
-                    ),
+                ),
                 onDismiss = onDismiss,
+                cancelText = stringResource(R.string.action_cancel),
             )
         }
 
         is AppAlertState.WalletDatabaseCorrupted -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
                         app.deleteCorruptedWallet(state.walletId)
                     }) {
-                        Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.action_delete_wallet), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = {
                         onDismiss()
                         app.trySelectLatestOrNewWallet()
-                    }) { Text("Cancel") }
+                    }) { Text(stringResource(R.string.action_cancel)) }
                 },
             )
         }
@@ -530,10 +535,10 @@ private fun GlobalAlertDialog(
         else -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text(state.title()) },
-                text = { Text(state.message()) },
+                title = { Text(state.localizedTitle().asString()) },
+                text = { Text(state.localizedMessage().asString()) },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text("OK") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
                 },
             )
         }

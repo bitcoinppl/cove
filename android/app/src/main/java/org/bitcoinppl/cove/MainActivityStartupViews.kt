@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 
@@ -57,13 +58,13 @@ internal fun CatastrophicRecoveryView(
             modifier = Modifier.fillMaxWidth().padding(28.dp),
         ) {
             Text(
-                "Encryption Key Error",
+                stringResource(R.string.common_remaining_encryption_key_error_title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                "Cove can't safely open the local wallet data on this device.",
+                stringResource(R.string.common_remaining_encryption_key_error_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.76f),
             )
@@ -82,17 +83,17 @@ internal fun CatastrophicRecoveryView(
                 }
                 Text(
                     if (cloudRestoreCheck is CatastrophicCloudRestoreCheck.Checking) {
-                        "Checking Cloud Backup"
+                        stringResource(R.string.common_remaining_checking_cloud_backup)
                     } else {
-                        "Restore from Cloud Backup"
+                        stringResource(R.string.common_remaining_restore_from_cloud_backup)
                     },
                 )
             }
-            val failureMessage = cloudRestoreResult?.failureMessage
+            val failureMessage = cloudRestoreResult?.localizedFailureMessage()
             if (failureMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    failureMessage,
+                    failureMessage.asString(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -102,14 +103,14 @@ internal fun CatastrophicRecoveryView(
                 onClick = onContactSupport,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Contact Support")
+                Text(stringResource(R.string.common_remaining_contact_support))
             }
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(
                 onClick = { showWipeConfirmation = true },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Wipe Local Data", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.common_remaining_wipe_local_data), color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -117,10 +118,10 @@ internal fun CatastrophicRecoveryView(
     if (showWipeConfirmation) {
         AlertDialog(
             onDismissRequest = { showWipeConfirmation = false },
-            title = { Text("Wipe Local Data?") },
+            title = { Text(stringResource(R.string.common_remaining_wipe_local_data_title)) },
             text = {
                 Text(
-                    "This will permanently delete wallet data on this device. Make sure your recovery phrases are backed up before continuing.",
+                    stringResource(R.string.common_remaining_wipe_local_data_message),
                 )
             },
             confirmButton = {
@@ -130,11 +131,11 @@ internal fun CatastrophicRecoveryView(
                         onWipeLocalData()
                     },
                 ) {
-                    Text("Wipe Data", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.common_remaining_wipe_data), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showWipeConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showWipeConfirmation = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -142,19 +143,19 @@ internal fun CatastrophicRecoveryView(
     if (cloudRestoreResult is CatastrophicCloudRestoreResult.BackupFound) {
         AlertDialog(
             onDismissRequest = onDismissRestoreFromCloud,
-            title = { Text("Restore from Cloud Backup?") },
+            title = { Text(stringResource(R.string.common_remaining_restore_cloud_backup_title)) },
             text = {
                 Text(
-                    "Cove found Cloud Backup data for the selected Google account. This will erase the damaged local data on this device, then verify your passkey during restore.",
+                    stringResource(R.string.common_remaining_restore_cloud_backup_message),
                 )
             },
             confirmButton = {
                 TextButton(onClick = onConfirmRestoreFromCloud) {
-                    Text("Erase and Restore", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.common_remaining_erase_and_restore), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = onDismissRestoreFromCloud) { Text("Cancel") }
+                TextButton(onClick = onDismissRestoreFromCloud) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -175,7 +176,7 @@ internal fun BootstrapErrorView(
             modifier = Modifier.padding(16.dp),
         ) {
             Text(
-                "Storage Error",
+                stringResource(R.string.common_remaining_storage_error_title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
             )
@@ -187,16 +188,16 @@ internal fun BootstrapErrorView(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "Please contact feedback@covebitcoinwallet.com for help",
+                stringResource(R.string.common_remaining_storage_error_help),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
             )
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(onClick = onCopyDiagnostics) {
-                Text("Copy Diagnostics", color = Color.White)
+                Text(stringResource(R.string.common_remaining_copy_diagnostics), color = Color.White)
             }
             TextButton(onClick = onShareDiagnostics) {
-                Text("Share Diagnostics", color = Color.White)
+                Text(stringResource(R.string.common_remaining_share_diagnostics), color = Color.White)
             }
         }
     }

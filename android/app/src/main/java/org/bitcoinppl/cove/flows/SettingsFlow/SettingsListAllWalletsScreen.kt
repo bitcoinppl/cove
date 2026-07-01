@@ -41,9 +41,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.RoundRectImage
 import org.bitcoinppl.cove_core.Database
@@ -88,14 +90,17 @@ fun SettingsListAllWalletsScreen(
                 title = {
                     Text(
                         style = MaterialTheme.typography.bodyLarge,
-                        text = "All Wallets",
+                        text = stringResource(R.string.settings_wallet_all_title),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { app.popRoute() }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 actions = {},
@@ -126,7 +131,12 @@ fun SettingsListAllWalletsScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = if (searchText.isEmpty()) "No wallets found" else "No wallets match your search",
+                            text =
+                                if (searchText.isEmpty()) {
+                                    stringResource(R.string.settings_wallet_empty_state)
+                                } else {
+                                    stringResource(R.string.settings_wallet_empty_search)
+                                },
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -135,7 +145,7 @@ fun SettingsListAllWalletsScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(filteredWallets, key = { it.id.toString() }) { wallet ->
+                        items(filteredWallets, key = { it.id }) { wallet ->
                             WalletRow(
                                 wallet = wallet,
                                 onClick = {
@@ -192,7 +202,7 @@ private fun SearchBar(
             decorationBox = { innerTextField ->
                 if (query.isEmpty()) {
                     Text(
-                        "Search Wallets",
+                        stringResource(R.string.settings_wallet_search_placeholder),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 17.sp,
                     )
@@ -242,7 +252,7 @@ private fun WalletRow(
         Icon(
             modifier = Modifier.size(40.dp),
             imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
-            contentDescription = "Go",
+            contentDescription = stringResource(R.string.settings_content_description_go),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.util.hexEncode
@@ -40,21 +41,22 @@ fun rememberBackupExportLauncher(
                         val hexBackup = hexEncode(backup)
                         context.contentResolver.openOutputStream(uri)?.use { output ->
                             output.write(hexBackup.toByteArray())
-                        } ?: throw java.io.IOException("Failed to open output stream")
+                        } ?: throw java.io.IOException(context.getString(R.string.tap_signer_failed_open_output_stream))
                     }
                     app.alertState =
                         TaggedItem(
                             AppAlertState.General(
-                                title = "Backup Saved!",
-                                message = "Your backup has been saved successfully!",
+                                title = context.getString(R.string.tap_signer_backup_saved_title),
+                                message = context.getString(R.string.tap_signer_backup_saved_message),
                             ),
                         )
                 } catch (e: Exception) {
+                    android.util.Log.e("BackupExportUtils", "Failed to save TAPSIGNER backup", e)
                     app.alertState =
                         TaggedItem(
                             AppAlertState.General(
-                                title = "Saving Backup Failed!",
-                                message = "Failed to save backup: ${e.message ?: "Unknown error occurred"}",
+                                title = context.getString(R.string.tap_signer_saving_backup_failed_title),
+                                message = context.getString(R.string.tap_signer_saving_backup_failed_message),
                             ),
                         )
                 }

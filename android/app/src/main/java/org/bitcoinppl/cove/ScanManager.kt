@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove
 
+import android.content.Context
 import androidx.compose.runtime.Stable
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
@@ -12,7 +13,10 @@ class ScanManager private constructor() {
 
     private val app: AppManager get() = AppManager.getInstance()
 
-    fun handleMultiFormat(multiFormat: MultiFormat) {
+    fun handleMultiFormat(
+        context: Context,
+        multiFormat: MultiFormat,
+    ) {
         try {
             when (multiFormat) {
                 is MultiFormat.Mnemonic -> {
@@ -51,26 +55,30 @@ class ScanManager private constructor() {
                 }
 
                 is MultiFormat.Bip329Labels -> {
-                    importLabels(multiFormat.v1)
+                    importLabels(context, multiFormat.v1)
                 }
             }
         } catch (e: Exception) {
             Log.e(tag, "Unable to handle scanned code", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
+                    AppAlertState.InvalidFileFormat,
                 )
         }
     }
 
-    private fun importLabels(labels: Bip329Labels) {
+    private fun importLabels(
+        context: Context,
+        labels: Bip329Labels,
+    ) {
         val manager = app.walletManager
         val selectedWallet = Database().globalConfig().selectedWallet()
         if (manager == null || selectedWallet != manager.id) {
             app.alertState =
                 TaggedItem(
-                    AppAlertState.InvalidFileFormat(
-                        "Currently BIP329 labels must be imported through the wallet actions",
+                    AppAlertState.General(
+                        context.getString(R.string.app_alert_invalid_file_format_title),
+                        context.getString(R.string.common_remaining_labels_import_wallet_actions),
                     ),
                 )
             return
@@ -83,8 +91,9 @@ class ScanManager private constructor() {
             Log.e(tag, "Failed to import labels", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.InvalidFileFormat(
-                        e.message ?: "Failed to import labels",
+                    AppAlertState.General(
+                        context.getString(R.string.app_alert_invalid_file_format_title),
+                        context.getString(R.string.common_remaining_failed_to_import_labels),
                     ),
                 )
         }
@@ -110,7 +119,7 @@ class ScanManager private constructor() {
             Log.e(tag, "Unable to import wallet", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.ErrorImportingHotWallet(e.message ?: "Unknown error"),
+                    AppAlertState.ErrorImportingHotWallet,
                 )
         } finally {
             manager.close()
@@ -151,7 +160,7 @@ class ScanManager private constructor() {
             Log.e(tag, "Error importing hardware wallet", e)
             app.alertState =
                 TaggedItem(
-                    AppAlertState.ErrorImportingHardwareWallet(e.message ?: "Unknown error"),
+                    AppAlertState.ErrorImportingHardwareWallet,
                 )
         }
     }

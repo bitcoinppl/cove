@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AppSheetState
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -92,7 +94,7 @@ internal fun BalanceHeader(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Balance",
+                    text = stringResource(R.string.label_balance),
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 13.sp,
                 )
@@ -171,7 +173,7 @@ internal fun AddressSection(
                 .padding(vertical = 8.dp),
     ) {
         Text(
-            text = "Address",
+            text = stringResource(R.string.label_address),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -233,7 +235,7 @@ private fun SignTransactionSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(17.dp)) {
         Text(
-            text = "Sign Transaction",
+            text = stringResource(R.string.wallet_send_sign_transaction),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -264,7 +266,7 @@ private fun SignTransactionSection(
                     modifier = Modifier.size(14.dp),
                 )
                 AutoSizeText(
-                    text = "Export Transaction",
+                    text = stringResource(R.string.wallet_send_export_transaction),
                     modifier = Modifier.padding(start = 6.dp),
                     maxFontSize = 12.sp,
                     minimumScaleFactor = 0.75f,
@@ -294,7 +296,7 @@ private fun SignTransactionSection(
                     modifier = Modifier.size(14.dp),
                 )
                 AutoSizeText(
-                    text = "Import Signature",
+                    text = stringResource(R.string.wallet_send_import_signature),
                     modifier = Modifier.padding(start = 6.dp),
                     maxFontSize = 12.sp,
                     minimumScaleFactor = 0.75f,
@@ -313,7 +315,7 @@ private fun SignTapSignerSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
-            text = "Sign Transaction",
+            text = stringResource(R.string.wallet_send_sign_transaction),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -329,7 +331,7 @@ private fun SignTapSignerSection(
         ) {
             Icon(Icons.Default.Key, contentDescription = null)
             Text(
-                "Sign using TAPSIGNER",
+                stringResource(R.string.wallet_send_sign_using_tapsigner),
                 modifier = Modifier.padding(start = 8.dp),
             )
         }

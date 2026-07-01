@@ -5,21 +5,7 @@ use cove_cspp::backup_data::{EncryptedMasterKeyBackup, PasskeyProviderHint};
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use tracing::{debug, info, warn};
 
-use super::{CloudCheckIssue, CloudCheckOutcome, CloudRestoreProviderHint};
-
-pub(crate) fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String {
-    match issue {
-        CloudCheckIssue::Offline => {
-            "You're offline, so Cove can't check for a cloud backup right now. You can continue onboarding now and check Cloud Backup later in Settings.".into()
-        }
-        CloudCheckIssue::CloudUnavailable => {
-            "We couldn't confirm whether a cloud backup is available because cloud storage may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
-        }
-        CloudCheckIssue::Unknown => {
-            "We couldn't confirm whether a cloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
-        }
-    }
-}
+use super::{CloudCheckOutcome, CloudRestoreProviderHint};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct CloudRestoreBackupSnapshot {

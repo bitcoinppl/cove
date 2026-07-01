@@ -265,7 +265,14 @@ private fun BalanceWidget(
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = if (isHidden) "Hidden" else "Visible",
+                    contentDescription =
+                        stringResource(
+                            if (isHidden) {
+                                R.string.wallet_send_hidden
+                            } else {
+                                R.string.wallet_send_visible
+                            },
+                        ),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp),
                 )
@@ -585,7 +592,7 @@ private fun SwipeToSendStub(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "sending",
+                        text = stringResource(R.string.wallet_send_sending_status),
                         color = Color.White,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -600,7 +607,7 @@ private fun SwipeToSendStub(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "sent",
+                        text = stringResource(R.string.wallet_send_sent_status),
                         color = Color.White,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -619,7 +626,7 @@ private fun SwipeToSendStub(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "error",
+                        text = stringResource(R.string.wallet_send_error_status),
                         color = Color.White,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,

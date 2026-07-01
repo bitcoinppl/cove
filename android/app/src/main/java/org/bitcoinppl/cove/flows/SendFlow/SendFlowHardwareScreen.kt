@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -126,7 +127,7 @@ fun SendFlowHardwareScreen(
                     }) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = "Delete",
+                            contentDescription = stringResource(R.string.wallet_send_delete),
                             tint = Color.White,
                         )
                     }
@@ -179,7 +180,7 @@ fun SendFlowHardwareScreen(
                     ) {
                         Column(modifier = Modifier.padding(top = 16.dp)) {
                             Text(
-                                text = "You're sending",
+                                text = stringResource(R.string.label_you_are_sending),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -187,7 +188,7 @@ fun SendFlowHardwareScreen(
                             )
 
                             Text(
-                                text = "The amount they will receive",
+                                text = stringResource(R.string.label_amount_they_will_receive),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                                 fontWeight = FontWeight.Medium,
@@ -244,7 +245,11 @@ fun SendFlowHardwareScreen(
                             onCopy = {
                                 val clipboard =
                                     context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("address", details.sendingTo().unformatted())
+                                val clip =
+                                    ClipData.newPlainText(
+                                        context.getString(R.string.wallet_send_address_clip_label),
+                                        details.sendingTo().unformatted(),
+                                    )
                                 clipboard.setPrimaryClip(clip)
                             },
                             onClick = { sheetState = HardwareSheetState.AdvancedDetails },
@@ -271,7 +276,7 @@ fun SendFlowHardwareScreen(
                                 .padding(vertical = 16.dp),
                     ) {
                         Text(
-                            text = "More details",
+                            text = stringResource(R.string.wallet_send_more_details),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             fontWeight = FontWeight.Medium,

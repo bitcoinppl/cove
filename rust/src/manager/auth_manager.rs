@@ -70,6 +70,14 @@ pub enum SecuritySheetState {
     RemoveAllTrickPins,
 }
 
+/// Why updating a PIN could not proceed
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum PinUpdateFailure {
+    UpdateFailed,
+    SameAsWipeDataPin,
+    SameAsDecoyPin,
+}
+
 /// What alert to show for validation messages
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SecurityAlertState {
@@ -87,7 +95,7 @@ pub enum SecurityAlertState {
     /// Disabling biometric, then show confirm for decoy PIN
     NoteFaceIdDisablingForDecoyPin,
     ExtraSetPinError {
-        message: String,
+        failure: PinUpdateFailure,
     },
 }
 
@@ -517,15 +525,13 @@ impl RustAuthManager {
     }
 
     /// Validate a new PIN doesn't conflict with existing PINs
-    pub fn validate_new_pin(&self, new_pin: String) -> Option<String> {
+    pub fn validate_new_pin(&self, new_pin: String) -> Option<PinUpdateFailure> {
         if self.check_wipe_data_pin(&new_pin) {
-            return Some(
-                "Can't update PIN because it's the same as your wipe data PIN".to_string(),
-            );
+            return Some(PinUpdateFailure::SameAsWipeDataPin);
         }
 
         if self.check_decoy_pin(&new_pin) {
-            return Some("Can't update PIN because it's the same as your decoy PIN".to_string());
+            return Some(PinUpdateFailure::SameAsDecoyPin);
         }
 
         None

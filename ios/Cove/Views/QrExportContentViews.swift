@@ -10,7 +10,7 @@ struct QrExportContent: View {
 
     var body: some View {
         if let error {
-            Text(error)
+            Text(verbatim: error)
                 .font(.footnote)
                 .foregroundStyle(.red)
                 .padding(.top, 8)

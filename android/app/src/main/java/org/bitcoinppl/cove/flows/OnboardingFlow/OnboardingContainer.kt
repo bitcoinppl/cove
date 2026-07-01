@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import org.bitcoinppl.cove.OnboardingManager
+import org.bitcoinppl.cove.localizedMessage
 import org.bitcoinppl.cove_core.OnboardingAction
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingStep
@@ -23,15 +24,16 @@ internal fun OnboardingContainer(
         if (manager.state.step == OnboardingStep.RESTORE_OFFER &&
             manager.state.cloudRestoreState == OnboardingCloudRestoreState.INCONCLUSIVE
         ) {
-            manager.state.cloudRestoreMessage
+            manager.state.cloudRestoreIssue?.localizedMessage()?.asString()
         } else {
             null
         }
+    val localizedErrorMessage = manager.state.error?.localizedMessage()?.asString()
 
     val stepContent: Unit = when (manager.state.step) {
         OnboardingStep.TERMS ->
             OnboardingTermsScreen(
-                errorMessage = manager.state.errorMessage,
+                errorMessage = localizedErrorMessage,
                 onAgree = {
                     manager.dispatch(OnboardingAction.AcceptTerms)
                 },
@@ -43,7 +45,7 @@ internal fun OnboardingContainer(
             BackableOnboardingStep(manager) {
                 OnboardingRestoreOfferView(
                     warningMessage = restoreWarningMessage,
-                    errorMessage = manager.state.errorMessage,
+                    errorMessage = localizedErrorMessage,
                     providerHint = manager.state.cloudRestoreProviderHint,
                     onBack = { manager.dispatch(OnboardingAction.Back) },
                     onRestore = { manager.dispatch(OnboardingAction.StartRestore) },
@@ -79,13 +81,13 @@ internal fun OnboardingContainer(
 
         OnboardingStep.WELCOME ->
             OnboardingWelcomeScreen(
-                errorMessage = manager.state.errorMessage,
+                errorMessage = localizedErrorMessage,
                 onContinue = { manager.dispatch(OnboardingAction.ContinueFromWelcome) },
             )
 
         OnboardingStep.BITCOIN_CHOICE ->
             OnboardingBitcoinChoiceScreen(
-                errorMessage = manager.state.errorMessage,
+                errorMessage = localizedErrorMessage,
                 onRestoreFromCoveBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
                 onNewHere = { manager.dispatch(OnboardingAction.SelectHasBitcoin(false)) },
                 onHasBitcoin = { manager.dispatch(OnboardingAction.SelectHasBitcoin(true)) },
@@ -94,7 +96,7 @@ internal fun OnboardingContainer(
         OnboardingStep.STORAGE_CHOICE ->
             BackableOnboardingStep(manager) {
                 OnboardingStorageChoiceScreen(
-                    errorMessage = manager.state.errorMessage,
+                    errorMessage = localizedErrorMessage,
                     onRestoreFromCoveBackup = { manager.dispatch(OnboardingAction.OpenCloudRestore) },
                     onSelectStorage = { selection ->
                         manager.dispatch(OnboardingAction.SelectStorage(selection))
@@ -163,7 +165,7 @@ internal fun OnboardingContainer(
 
         OnboardingStep.SOFTWARE_IMPORT ->
             OnboardingSoftwareImportFlowView(
-                errorMessage = manager.state.errorMessage,
+                errorMessage = localizedErrorMessage,
                 cloudRestoreAlertVisible = manager.state.cloudRestoreAlertVisible,
                 onImported = { walletId ->
                     manager.dispatch(OnboardingAction.SoftwareImportCompleted(walletId))

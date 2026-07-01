@@ -61,12 +61,12 @@ fun WalletSettingsChangeNameScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Failed to load wallet settings",
+                    text = stringResource(R.string.settings_wallet_failed_load),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
                 TextButton(onClick = { app.popRoute() }) {
-                    Text("Go Back")
+                    Text(stringResource(R.string.settings_action_go_back))
                 }
             }
         }
@@ -98,7 +98,10 @@ fun WalletSettingsChangeNameScreen(
                     IconButton(onClick = {
                         app.popRoute()
                     }) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.content_description_back),
+                        )
                     }
                 },
                 modifier = Modifier.height(56.dp),
@@ -128,7 +131,7 @@ fun WalletSettingsChangeNameScreen(
                             IconButton(onClick = { name = "" }) {
                                 Icon(
                                     imageVector = Icons.Filled.Clear,
-                                    contentDescription = "Clear",
+                                    contentDescription = stringResource(R.string.settings_content_description_clear),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -137,7 +140,7 @@ fun WalletSettingsChangeNameScreen(
                     isError = isError,
                     supportingText =
                         if (isError) {
-                            { Text("Name cannot be empty") }
+                            { Text(stringResource(R.string.settings_wallet_name_empty)) }
                         } else {
                             null
                         },

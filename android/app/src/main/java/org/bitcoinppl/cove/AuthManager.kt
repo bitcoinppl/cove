@@ -292,7 +292,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
             validateSecurityAction(action, unverifiedWalletIds)
         }
 
-    fun validateNewPin(pin: String): String? =
+    fun validateNewPin(pin: String): PinUpdateFailure? =
         withRustOr(null) {
             validateNewPin(pin)
         }
