@@ -337,10 +337,10 @@ impl LabelManager {
                 continue;
             }
 
-            if record.item.spendable {
+            if record.item.spendable.is_none() {
                 labels_to_delete.push(Label::from(record.item));
 
-                // spendable outputs do not need a lock-only replacement record
+                // outputs without explicit spendability do not need a replacement record
                 continue;
             }
 
@@ -598,7 +598,7 @@ impl LabelManager {
             .map(|vout| OutputRecord {
                 ref_: bitcoin::OutPoint { txid: tx_id.0, vout: *vout },
                 label: Some(output_label.clone()),
-                spendable: true,
+                spendable: None,
             })
             .collect()
     }
@@ -649,7 +649,7 @@ mod tests {
             .get_output_record(outpoint)
             .expect("failed to get output record")
             .expect("missing output record");
-        record.item.spendable = spendable;
+        record.item.spendable = Some(spendable);
 
         manager
             .db
@@ -742,7 +742,7 @@ mod tests {
             .item;
 
         assert_eq!(output.label, Some("second (received)".to_string()));
-        assert!(!output.spendable);
+        assert_eq!(output.spendable, Some(false));
     }
 
     #[test]
@@ -769,7 +769,7 @@ mod tests {
 
         assert!(changed);
         assert_eq!(output.label, None);
-        assert!(!output.spendable);
+        assert_eq!(output.spendable, Some(false));
         assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
     }
 
