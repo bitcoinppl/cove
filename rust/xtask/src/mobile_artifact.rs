@@ -700,7 +700,7 @@ fn validate_and_extract_zip(zip_path: &Path, dest: &Path) -> Result<()> {
             .ok_or_else(|| eyre!("Artifact ZIP entry is unsafe: {}", file.name()))?;
 
         validate_zip_entry_path(&enclosed_name)?;
-        reject_zip_link_entry(file.name(), file.unix_mode())?;
+        reject_zip_unsafe_entry_type(file.name(), file.unix_mode())?;
     }
 
     recreate_dir(dest)?;
@@ -730,6 +730,7 @@ fn validate_and_extract_zip(zip_path: &Path, dest: &Path) -> Result<()> {
             .wrap_err_with(|| format!("Failed to create {}", out_path.display()))?;
         io::copy(&mut file, &mut output)
             .wrap_err_with(|| format!("Failed to extract {}", out_path.display()))?;
+        apply_zip_file_permissions(&out_path, file.unix_mode())?;
     }
 
     Ok(())
@@ -740,16 +741,17 @@ fn validate_zip_entry_path(path: &Path) -> Result<()> {
     validate_artifact_top_level(path)
 }
 
-fn reject_zip_link_entry(name: &str, unix_mode: Option<u32>) -> Result<()> {
+fn reject_zip_unsafe_entry_type(name: &str, unix_mode: Option<u32>) -> Result<()> {
     let Some(unix_mode) = unix_mode else {
         return Ok(());
     };
-    let file_type = unix_mode & 0o170000;
-    if matches!(file_type, 0o120000 | 0o10000) {
-        color_eyre::eyre::bail!("Artifact ZIP entry is a link: {name}");
-    }
 
-    Ok(())
+    let file_type = unix_mode & 0o170000;
+    match file_type {
+        0o120000 => color_eyre::eyre::bail!("Artifact ZIP entry is a symlink: {name}"),
+        0o010000 => color_eyre::eyre::bail!("Artifact ZIP entry is a FIFO: {name}"),
+        _ => Ok(()),
+    }
 }
 
 fn validate_tree_safety(root: &Path) -> Result<()> {
@@ -845,6 +847,29 @@ fn reject_hardlink(path: &Path, metadata: &fs::Metadata) -> Result<()> {
 
 #[cfg(not(unix))]
 fn reject_hardlink(_path: &Path, _metadata: &fs::Metadata) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn apply_zip_file_permissions(path: &Path, unix_mode: Option<u32>) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some(unix_mode) = unix_mode else {
+        return Ok(());
+    };
+
+    let permission_bits = unix_mode & 0o777;
+    if permission_bits == 0 {
+        return Ok(());
+    }
+
+    let permissions = fs::Permissions::from_mode(permission_bits);
+    fs::set_permissions(path, permissions)
+        .wrap_err_with(|| format!("Failed to set permissions on {}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn apply_zip_file_permissions(_path: &Path, _unix_mode: Option<u32>) -> Result<()> {
     Ok(())
 }
 
@@ -1076,7 +1101,14 @@ fn ensure_clean_ios_targets() -> Result<()> {
 }
 
 fn git_status_paths(paths: &[&str]) -> Result<String> {
+    let root = repo_root()?;
+
+    git_status_paths_at(&root, paths)
+}
+
+fn git_status_paths_at(root: &Path, paths: &[&str]) -> Result<String> {
     let output = Command::new("git")
+        .current_dir(root)
         .args(["status", "--porcelain", "--untracked-files=all", "--"])
         .args(paths)
         .output()
@@ -1453,10 +1485,52 @@ mod tests {
     }
 
     #[test]
-    fn rejects_zip_link_modes() {
-        assert!(reject_zip_link_entry("link", Some(0o120777)).is_err());
-        assert!(reject_zip_link_entry("hardlink", Some(0o010777)).is_err());
-        assert!(reject_zip_link_entry("file", Some(0o100644)).is_ok());
+    fn rejects_zip_unsafe_entry_types() {
+        assert!(reject_zip_unsafe_entry_type("link", Some(0o120777)).is_err());
+        assert!(reject_zip_unsafe_entry_type("fifo", Some(0o010777)).is_err());
+        assert!(reject_zip_unsafe_entry_type("file", Some(0o100644)).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_zip_preserves_unix_file_permissions() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        use zip::write::SimpleFileOptions;
+
+        let root = tempfile::tempdir().unwrap();
+        let zip_path = root.path().join("artifact.zip");
+        let zip_file = File::create(&zip_path).unwrap();
+        let mut zip = zip::ZipWriter::new(zip_file);
+        let options = SimpleFileOptions::default().unix_permissions(0o755);
+
+        zip.start_file(ANDROID_APK_PATH, options).unwrap();
+        zip.write_all(b"apk").unwrap();
+        zip.finish().unwrap();
+
+        let dest = root.path().join("dest");
+        validate_and_extract_zip(&zip_path, &dest).unwrap();
+
+        let mode = fs::metadata(dest.join(ANDROID_APK_PATH)).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755);
+    }
+
+    #[test]
+    fn git_status_paths_at_uses_repo_root_relative_pathspecs() {
+        let root = tempfile::tempdir().unwrap();
+        let repo_root = root.path();
+
+        let status =
+            Command::new("git").current_dir(repo_root).args(["init", "--quiet"]).status().unwrap();
+        assert!(status.success());
+
+        let dirty_path = repo_root.join(IOS_GENERATED_PATH).join("dirty.swift");
+        fs::create_dir_all(dirty_path.parent().unwrap()).unwrap();
+        fs::write(&dirty_path, "dirty").unwrap();
+
+        let dirty = git_status_paths_at(repo_root, &[IOS_GENERATED_PATH]).unwrap();
+
+        assert!(dirty.contains("ios/CoveCore/Sources/CoveCore/generated/dirty.swift"));
     }
 
     #[test]
