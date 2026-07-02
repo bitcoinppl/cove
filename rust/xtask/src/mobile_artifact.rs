@@ -404,6 +404,8 @@ fn download_validate_and_stage(
     expected_ref: Option<&str>,
     allow_mismatch: bool,
 ) -> Result<SelectedArtifact> {
+    validate_run_id(run_id)?;
+
     let artifact_name = platform.artifact_name();
     let tmp_dir = repo_root.join(ARTIFACT_ROOT).join("tmp").join(unique_tmp_name(run_id));
     let artifact_tmp = tmp_dir.join(artifact_name);
@@ -614,6 +616,14 @@ fn validate_sha(sha: &str) -> Result<()> {
     }
 
     color_eyre::eyre::bail!("Manifest git_sha is not a 40-character SHA: {sha}");
+}
+
+fn validate_run_id(run_id: &str) -> Result<()> {
+    if !run_id.is_empty() && run_id.chars().all(|c| c.is_ascii_digit()) {
+        return Ok(());
+    }
+
+    color_eyre::eyre::bail!("Workflow run_id must be numeric: {run_id}");
 }
 
 fn validate_required_text(field: &str, value: &str) -> Result<()> {
@@ -1068,6 +1078,10 @@ fn rollback_ios_core_inputs(
         let backup = backup_root.join(relative);
         let target = repo_root.join(relative);
         if backup.exists() {
+            if target.exists() {
+                remove_path(&target)?;
+            }
+
             move_path(&backup, &target)?;
         }
     }
@@ -1554,6 +1568,14 @@ mod tests {
     }
 
     #[test]
+    fn validates_run_id_shape() {
+        assert!(validate_run_id("123").is_ok());
+        assert!(validate_run_id("").is_err());
+        assert!(validate_run_id("../123").is_err());
+        assert!(validate_run_id("12/3").is_err());
+    }
+
+    #[test]
     fn missing_expected_path_is_rejected() {
         let root = tempfile::tempdir().unwrap();
         fs::write(root.path().join(MANIFEST_PATH), "{}").unwrap();
@@ -1642,6 +1664,31 @@ mod tests {
         rollback_ios_core_inputs(&repo_root, &backup_root, &IosReplacement::default()).unwrap();
 
         assert_eq!(fs::read_to_string(original).unwrap(), "old swift");
+    }
+
+    #[test]
+    fn ios_rollback_removes_partial_target_before_restoring_backup() {
+        let root = tempfile::tempdir().unwrap();
+        let repo_root = root.path().join("repo");
+        let backup_root = root.path().join("backup");
+        let backup_file = backup_root.join(IOS_XCFRAMEWORK_PATH).join("old.txt");
+        let partial_file = repo_root.join(IOS_XCFRAMEWORK_PATH).join("new.txt");
+
+        fs::create_dir_all(backup_file.parent().unwrap()).unwrap();
+        fs::create_dir_all(partial_file.parent().unwrap()).unwrap();
+        fs::write(&backup_file, "old framework").unwrap();
+        fs::write(&partial_file, "partial framework").unwrap();
+
+        let replacement = IosReplacement {
+            moved_targets: vec![IOS_XCFRAMEWORK_PATH.to_string()],
+            copied_targets: Vec::new(),
+        };
+
+        rollback_ios_core_inputs(&repo_root, &backup_root, &replacement).unwrap();
+
+        let restored_file = repo_root.join(IOS_XCFRAMEWORK_PATH).join("old.txt");
+        assert_eq!(fs::read_to_string(restored_file).unwrap(), "old framework");
+        assert!(!partial_file.exists());
     }
 
     #[test]
