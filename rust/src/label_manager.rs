@@ -842,8 +842,13 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn label_bbqr_export_uses_unicode_text_file_type() {
-        use bbqr::{file_type::FileType, header::Header};
+        use bbqr::{
+            continuous_join::{ContinuousJoinResult, ContinuousJoiner},
+            file_type::FileType,
+            header::Header,
+        };
 
+        crate::test_support::ensure_tokio_runtime();
         let (manager, _tmp) = test_manager();
         manager
             .import_without_cloud_backup_dirty(
@@ -858,5 +863,21 @@ mod tests {
         let header = Header::try_from_str(&parts[0]).expect("failed to parse BBQr header");
 
         assert_eq!(header.file_type, FileType::UnicodeText);
+
+        let mut joiner = ContinuousJoiner::new();
+        let mut joined = None;
+        for part in parts {
+            if let ContinuousJoinResult::Complete(result) =
+                joiner.add_part(part).expect("failed to join BBQr part")
+            {
+                joined = Some(result);
+            }
+        }
+
+        let joined = joined.expect("BBQr parts never completed");
+        let jsonl = String::from_utf8(joined.data).expect("BBQr payload is not UTF-8");
+        let labels = parse_labels(&jsonl).expect("BBQr payload is not BIP329 JSONL");
+
+        assert_eq!(labels.labels.transaction_label(), Some("exported"));
     }
 }
