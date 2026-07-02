@@ -600,6 +600,13 @@ private let navigationSettleDelayMs = 800
     }
 
     @MainActor
+    func startLoadAndResetTargetPrewarm(generation: GenerationToken, routes: [Route]) {
+        Task { [weak self] in
+            await self?.prewarmLoadAndResetTargetIfCurrent(generation: generation, routes: routes)
+        }
+    }
+
+    @MainActor
     func prewarmLoadAndResetTargetIfCurrent(generation: GenerationToken, routes: [Route]) async {
         guard isNavigationGenerationCurrent(generation) else { return }
         guard case let .selectedWallet(id) = routes.first else { return }

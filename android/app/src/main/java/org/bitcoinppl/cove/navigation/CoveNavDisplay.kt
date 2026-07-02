@@ -15,8 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
@@ -204,11 +202,8 @@ private fun LoadAndResetContent(
 
     LaunchedEffect(route) {
         val generation = app.captureLoadAndResetGeneration()
-        coroutineScope {
-            val prewarm = async { app.prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes) }
-            delay(loadingTimeMs)
-            prewarm.await()
-        }
+        app.startLoadAndResetTargetPrewarm(generation, nextRoutes)
+        delay(loadingTimeMs)
         app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
     }
 }

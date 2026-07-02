@@ -21,14 +21,13 @@ struct LoadAndResetContainer: View {
         FullPageLoadingView(title: loadingTitle)
             .task(id: route) {
                 do {
-                    let generation = await app.captureLoadAndResetGeneration()
-                    async let prewarm: Void = app.prewarmLoadAndResetTargetIfCurrent(
+                    let generation = app.captureLoadAndResetGeneration()
+                    app.startLoadAndResetTargetPrewarm(
                         generation: generation,
                         routes: nextRoute
                     )
                     try await Task.sleep(for: .milliseconds(loadingTimeMs))
-                    await prewarm
-                    await app.resetAfterLoadingIfCurrent(
+                    app.resetAfterLoadingIfCurrent(
                         generation: generation,
                         route: route,
                         nextRoute: nextRoute

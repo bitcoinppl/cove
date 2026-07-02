@@ -626,6 +626,15 @@ class AppManager private constructor() : FfiReconcile {
 
     fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
 
+    fun startLoadAndResetTargetPrewarm(
+        generation: GenerationToken,
+        nextRoutes: List<Route>,
+    ) {
+        mainScope.launch {
+            prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes)
+        }
+    }
+
     suspend fun prewarmLoadAndResetTargetIfCurrent(
         generation: GenerationToken,
         nextRoutes: List<Route>,

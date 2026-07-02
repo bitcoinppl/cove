@@ -4,8 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
@@ -106,11 +104,8 @@ private fun LoadAndResetContainer(
     // execute reset after delay
     LaunchedEffect(route) {
         val generation = app.captureLoadAndResetGeneration()
-        coroutineScope {
-            val prewarm = async { app.prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes) }
-            delay(loadingTimeMs)
-            prewarm.await()
-        }
+        app.startLoadAndResetTargetPrewarm(generation, nextRoutes)
+        delay(loadingTimeMs)
 
         app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
     }
