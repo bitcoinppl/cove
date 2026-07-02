@@ -97,12 +97,19 @@ mobile-artifact-fetch-ios-core ref:
 # build
 # ------------------------------------------------------------------------------
 
-# Build Android debug APK
+# Build Android debug Rust FFI and Kotlin bindings for all ABIs
 [group('build')]
 build-android:
-    just xtask build-android debug --connected-device && just say "done android"
+    just xtask build-android debug && just say "done android"
 
 alias ba := build-android
+
+# Build Android debug Rust FFI and Kotlin bindings for the connected device ABI
+[group('build')]
+build-android-connected-device:
+    just xtask build-android debug --connected-device && just say "done android connected device"
+
+alias bad := build-android-connected-device
 
 # Build Android release APK
 [group('build')]
