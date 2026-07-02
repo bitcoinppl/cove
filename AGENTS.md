@@ -15,6 +15,7 @@
 - never manually edit generated files
 - use `cove_util::ResultExt::map_err_str` and `..map_err_prefix` instead of `.map_err(|e| Error::Variant(e.to_string()))`, and `.map_err(|e| Error::Variant(format!("context: {e}")))`
 - for local UniFFI updates use `just build-ios`/`just build-android`; `just rb` runs GitHub Actions for committed branch changes
+- to install and launch iOS from the CLI without Xcode, use `just build-run-ios --udid <device-udid>` and keep the phone unlocked
 - no mod.rs files use the other format module_name.rs module_name/new_module.rs
 - data structures and UniFFI-derived Rust types may change when they directly serve the requested work; update generated bindings and affected Swift/Kotlin call sites when exported APIs change
 - don't mix test-only code into production code; `#[cfg(test)]` helpers should live in `mod tests` or dedicated `test_support` modules

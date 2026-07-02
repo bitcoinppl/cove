@@ -5,6 +5,7 @@ mod android;
 mod common;
 mod github;
 mod ios;
+mod mobile_artifact;
 mod rebase;
 mod util;
 mod version;
@@ -86,6 +87,22 @@ enum Commands {
         udid: Option<String>,
     },
 
+    /// Rebuild iOS bindings, then build, install, and run the iOS app
+    #[command(name = "build-run-ios")]
+    BuildRunIos {
+        /// Run in the iOS simulator instead of on a physical device
+        #[arg(long)]
+        simulator: bool,
+
+        /// Physical device name to target
+        #[arg(long, env = "IOS_DEVICE_NAME")]
+        device_name: Option<String>,
+
+        /// Physical device UDID to target
+        #[arg(long, env = "IOS_DEVICE_UDID")]
+        udid: Option<String>,
+    },
+
     /// Run manual iOS full-launch UI tests
     #[command(name = "ios-ui")]
     IosUi {
@@ -141,6 +158,13 @@ enum Commands {
     /// Regenerate UniFFI bindings in GitHub Actions for the current branch
     #[command(name = "regenerate-bindings")]
     RegenerateBindings,
+
+    /// Build, download, validate, install, and clean mobile artifacts
+    #[command(name = "mobile-artifact")]
+    MobileArtifact {
+        #[command(subcommand)]
+        command: mobile_artifact::MobileArtifactCommand,
+    },
 
     /// Rebase the current branch onto a new base after choosing the old base
     #[command(name = "rebase")]
@@ -240,6 +264,11 @@ fn main() -> Result<()> {
             ios::run_ios(options, cli.verbose)
         }
 
+        Commands::BuildRunIos { simulator, device_name, udid } => {
+            let options = ios::IosRunOptions::new(simulator, device_name, udid);
+            ios::build_run_ios(options, cli.verbose)
+        }
+
         Commands::IosUi { device, test, foreground } => {
             let options = ios::IosUiOptions::new(device, test, foreground);
             ios::run_ios_ui_tests(options, cli.verbose)
@@ -260,6 +289,8 @@ fn main() -> Result<()> {
         Commands::InstallDeps => install_deps(cli.verbose),
 
         Commands::RegenerateBindings => github::regenerate_bindings(),
+
+        Commands::MobileArtifact { command } => mobile_artifact::run(command, cli.verbose),
 
         Commands::Rebase { new_base } => rebase::rebase(&new_base),
 

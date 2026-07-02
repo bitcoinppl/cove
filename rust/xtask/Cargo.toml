@@ -9,6 +9,7 @@ clap = { version = "4.6.1", features = ["derive", "env"] }
 color-eyre = "0.6.5"
 xshell = "0.2.7"
 colored = "3.1.1"
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 # for util sign-psbt
@@ -23,3 +24,7 @@ gif = "0.14.2"
 bbqr = { version = "0.3.5", default-features = false }
 foundation-ur = { version = "0.4.0", default-features = false, features = ["std"] }
 hex = "0.4.3"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

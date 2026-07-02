@@ -1,0 +1,205 @@
+name: Mobile Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Mobile artifact platform to build
+        required: true
+        type: choice
+        default: both
+        options:
+          - android
+          - ios-core
+          - both
+      profile:
+        description: Build profile
+        required: true
+        type: choice
+        default: debug
+        options:
+          - debug
+      label:
+        description: Optional display label
+        required: false
+        type: string
+
+concurrency:
+  group: mobile-artifacts-${{ github.ref_name }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  android:
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
+
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install build dependencies
+        run: cd rust && cargo xtask install-deps
+
+      - name: Build Rust FFI and generate Kotlin bindings
+        run: just build-android
+
+      - name: Assemble Android dev debug APK
+        run: cd android && ./gradlew assembleDevDebug
+
+      - name: Stage Android artifact
+        shell: bash
+        env:
+          ARTIFACT_NAME: cove-android-dev-debug
+          PLATFORM: android
+          PROFILE: ${{ inputs.profile }}
+          LABEL: ${{ inputs.label }}
+        run: |
+          set -euo pipefail
+          mkdir -p mobile-artifact/android
+          cp android/app/build/outputs/apk/dev/debug/app-dev-debug.apk mobile-artifact/android/app-dev-debug.apk
+          cp android/app/build/outputs/apk/dev/debug/output-metadata.json mobile-artifact/android/output-metadata.json
+
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from datetime import datetime, timezone
+
+          manifest = {
+              "schema_version": 1,
+              "platform": os.environ["PLATFORM"],
+              "profile": os.environ["PROFILE"],
+              "git_ref": os.environ["GITHUB_REF_NAME"],
+              "git_sha": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "rustc_version": subprocess.check_output(["rustc", "--version"], text=True).strip(),
+              "runner_os": os.environ["RUNNER_OS"],
+          }
+          label = os.environ.get("LABEL", "").strip()
+          if label:
+              manifest["label"] = label
+          with open("mobile-artifact/manifest.json", "w", encoding="utf-8") as manifest_file:
+              json.dump(manifest, manifest_file, indent=2)
+              manifest_file.write("\n")
+          PY
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cove-android-dev-debug
+          retention-days: 2
+          path: |
+            mobile-artifact/manifest.json
+            mobile-artifact/android/app-dev-debug.apk
+            mobile-artifact/android/output-metadata.json
+
+  ios-core:
+    if: ${{ inputs.platform == 'ios-core' || inputs.platform == 'both' }}
+    runs-on: macos-26
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
+
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build iOS debug device CoveCore inputs
+        run: just build-ios debug --device
+
+      - name: Stage iOS CoveCore artifact
+        shell: bash
+        env:
+          ARTIFACT_NAME: cove-ios-core-debug-device
+          PLATFORM: ios-core
+          PROFILE: ${{ inputs.profile }}
+          LABEL: ${{ inputs.label }}
+        run: |
+          set -euo pipefail
+          mkdir -p mobile-artifact/ios/CoveCore/Sources/CoveCore
+          cp -R ios/CoveCore/Sources/cove_core_ffi.xcframework mobile-artifact/ios/CoveCore/Sources/
+          cp -R ios/CoveCore/Sources/CoveCore/generated mobile-artifact/ios/CoveCore/Sources/CoveCore/generated
+
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from datetime import datetime, timezone
+
+          manifest = {
+              "schema_version": 1,
+              "platform": os.environ["PLATFORM"],
+              "profile": os.environ["PROFILE"],
+              "git_ref": os.environ["GITHUB_REF_NAME"],
+              "git_sha": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "rustc_version": subprocess.check_output(["rustc", "--version"], text=True).strip(),
+              "runner_os": os.environ["RUNNER_OS"],
+              "xcodebuild_version": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
+          }
+          label = os.environ.get("LABEL", "").strip()
+          if label:
+              manifest["label"] = label
+          with open("mobile-artifact/manifest.json", "w", encoding="utf-8") as manifest_file:
+              json.dump(manifest, manifest_file, indent=2)
+              manifest_file.write("\n")
+          PY
+
+      - name: Upload iOS CoveCore artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cove-ios-core-debug-device
+          retention-days: 2
+          path: |
+            mobile-artifact/manifest.json
+            mobile-artifact/ios/CoveCore/Sources/cove_core_ffi.xcframework
+            mobile-artifact/ios/CoveCore/Sources/CoveCore/generated

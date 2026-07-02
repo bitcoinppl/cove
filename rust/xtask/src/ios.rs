@@ -6,8 +6,12 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
+use serde::Deserialize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use xshell::{cmd, Shell};
@@ -44,11 +48,11 @@ const IOS_REQUIRED_SIGNED_ENTITLEMENTS: [&str; 4] = [
 ];
 const IOS_SIMULATOR_DESTINATION: &str = "platform=iOS Simulator,name=iPhone 15 Pro,OS=latest";
 const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
-const IOS_SIMULATOR_DERIVED_DATA_DIR: &str = "Cove-simulator-run";
-const IOS_DEVICE_DERIVED_DATA_DIR: &str = "Cove-device-run";
+const COVE_BUILD_SLOT_ENV: &str = "COVE_BUILD_SLOT";
+const IOS_SIMULATOR_DERIVED_DATA_SUFFIX: &str = "simulator-run";
+const IOS_DEVICE_DERIVED_DATA_SUFFIX: &str = "device-run";
 const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
-const IOS_CONNECTED_DEVICE_FILTER: &str = "state == \"connected\"";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
 const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
@@ -104,7 +108,7 @@ impl IosRunOptions {
         }
     }
 
-    fn target(&self) -> Result<IosRunTarget> {
+    fn target(&self, sh: &Shell) -> Result<IosRunTarget> {
         if self.simulator && (self.device_name.is_some() || self.udid.is_some()) {
             color_eyre::eyre::bail!("--simulator cannot be combined with --device-name or --udid");
         }
@@ -113,7 +117,9 @@ impl IosRunOptions {
             return Ok(IosRunTarget::Simulator);
         }
 
-        Ok(IosRunTarget::Device(DeviceSelector::new(self.device_name.clone(), self.udid.clone())))
+        let selector = DeviceSelector::new(self.device_name.clone(), self.udid.clone());
+
+        Ok(IosRunTarget::Device(selector.resolve(sh)?))
     }
 }
 
@@ -150,7 +156,7 @@ impl TestflightUploadOptions {
 #[derive(Debug, Clone)]
 enum IosRunTarget {
     Simulator,
-    Device(DeviceSelector),
+    Device(ResolvedDevice),
 }
 
 #[derive(Debug, Clone)]
@@ -176,21 +182,22 @@ impl DeviceSelector {
     fn resolve(&self, sh: &Shell) -> Result<ResolvedDevice> {
         match self {
             Self::Auto => {
-                print_error(
-                    "No simulator or device passed via arg or env. Falling back to the first connected iOS device",
+                print_info(
+                    "No simulator or device passed via arg or env. Using the first available iOS device",
                 );
 
-                let device_name = first_connected_device_name(sh)?;
-                resolve_connected_device(sh, &device_name)
+                first_available_ios_device(sh)
             }
-            Self::Name(device_name) => resolve_connected_device(sh, device_name),
-            Self::Udid(udid) => resolve_connected_device_by_udid(sh, udid),
+            Self::Name(device_name) => resolve_available_ios_device_by_name(sh, device_name),
+            Self::Udid(udid) => resolve_available_ios_device_by_udid(sh, udid),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 struct ResolvedDevice {
+    name: String,
+    udid: String,
     destination: String,
     device_identifier: String,
     description: String,
@@ -199,11 +206,49 @@ struct ResolvedDevice {
 impl ResolvedDevice {
     fn new(name: String, device_identifier: String, udid: String) -> Self {
         Self {
+            name: name.clone(),
+            udid: udid.clone(),
             destination: format!("platform=iOS,id={udid}"),
             device_identifier,
-            description: format!("device '{name}'"),
+            description: format!("device '{name}' ({udid})"),
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicectlListDevicesOutput {
+    result: DevicectlListDevicesResult,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicectlListDevicesResult {
+    devices: Vec<DevicectlDevice>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevicectlDevice {
+    identifier: String,
+    connection_properties: DevicectlConnectionProperties,
+    device_properties: DevicectlDeviceProperties,
+    hardware_properties: DevicectlHardwareProperties,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevicectlConnectionProperties {
+    tunnel_state: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicectlDeviceProperties {
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicectlHardwareProperties {
+    platform: Option<String>,
+    udid: Option<String>,
 }
 
 pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: bool) -> Result<()> {
@@ -354,9 +399,26 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
 }
 
 pub fn run_ios(options: IosRunOptions, verbose: bool) -> Result<()> {
-    let sh = Shell::new()?;
-    let run_target = options.target()?;
+    ensure_ios_run_commands()?;
 
+    let sh = Shell::new()?;
+    let run_target = options.target(&sh)?;
+
+    run_ios_target(&sh, run_target, verbose)
+}
+
+pub fn build_run_ios(options: IosRunOptions, verbose: bool) -> Result<()> {
+    ensure_ios_run_commands()?;
+
+    let sh = Shell::new()?;
+    let run_target = options.target(&sh)?;
+    let build_for_device = matches!(run_target, IosRunTarget::Device(_));
+
+    build_ios(IosBuildType::Debug, build_for_device, false, verbose)?;
+    run_ios_target(&sh, run_target, verbose)
+}
+
+fn ensure_ios_run_commands() -> Result<()> {
     if !command_exists("xcodebuild") {
         print_error("xcodebuild not found. Please install Xcode");
         color_eyre::eyre::bail!("xcodebuild command not found");
@@ -367,11 +429,15 @@ pub fn run_ios(options: IosRunOptions, verbose: bool) -> Result<()> {
         color_eyre::eyre::bail!("xcrun command not found");
     }
 
+    Ok(())
+}
+
+fn run_ios_target(sh: &Shell, run_target: IosRunTarget, verbose: bool) -> Result<()> {
     sh.change_dir("../ios");
 
     match run_target {
-        IosRunTarget::Simulator => run_ios_simulator(&sh, verbose),
-        IosRunTarget::Device(selector) => run_ios_device(&sh, &selector, verbose),
+        IosRunTarget::Simulator => run_ios_simulator(sh, verbose),
+        IosRunTarget::Device(device) => run_ios_device(sh, &device, verbose),
     }
 }
 
@@ -1048,7 +1114,7 @@ fn normalize_arg(value: String) -> Option<String> {
 }
 
 fn run_ios_simulator(sh: &Shell, verbose: bool) -> Result<()> {
-    let derived_data_path = derived_data_path(IOS_SIMULATOR_DERIVED_DATA_DIR)?;
+    let derived_data_path = derived_data_path(IOS_SIMULATOR_DERIVED_DATA_SUFFIX)?;
     let app_path = build_ios_app(
         sh,
         IOS_SIMULATOR_DESTINATION,
@@ -1072,12 +1138,11 @@ fn run_ios_simulator(sh: &Shell, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-fn run_ios_device(sh: &Shell, selector: &DeviceSelector, verbose: bool) -> Result<()> {
-    let device = selector.resolve(sh)?;
+fn run_ios_device(sh: &Shell, device: &ResolvedDevice, verbose: bool) -> Result<()> {
     let device_identifier = device.device_identifier.clone();
     print_info(&format!("Running iOS app on {}", device.description));
 
-    let derived_data_path = derived_data_path(IOS_DEVICE_DERIVED_DATA_DIR)?;
+    let derived_data_path = derived_data_path(IOS_DEVICE_DERIVED_DATA_SUFFIX)?;
     let app_path = build_ios_app(
         sh,
         &device.destination,
@@ -1134,77 +1199,159 @@ fn build_ios_app(
     Ok(app_path)
 }
 
-fn derived_data_path(dir_name: &str) -> Result<String> {
+fn derived_data_path(target_suffix: &str) -> Result<String> {
     let home_dir = std::env::var("HOME").wrap_err("Failed to get HOME environment variable")?;
+    let dir_name = derived_data_dir_name(target_suffix)?;
+
     Ok(format!("{home_dir}/{XCODE_DERIVED_DATA_PATH}/{dir_name}"))
 }
 
-fn resolve_connected_device(sh: &Shell, selector: &str) -> Result<ResolvedDevice> {
-    let output = cmd!(sh, "xcrun devicectl device info details --device {selector}")
-        .read()
-        .wrap_err_with(|| format!("Failed to load iOS device details for {selector}"))?;
-
-    parse_device_details(&output)
+fn derived_data_dir_name(target_suffix: &str) -> Result<String> {
+    Ok(derived_data_dir_name_for_slot(target_suffix, &ios_build_slot()?))
 }
 
-fn resolve_connected_device_by_udid(sh: &Shell, udid: &str) -> Result<ResolvedDevice> {
-    let device_names = connected_device_names(sh)?;
+fn derived_data_dir_name_for_slot(target_suffix: &str, slot: &str) -> String {
+    format!("Cove-{}-{target_suffix}", sanitize_build_slot(slot))
+}
 
-    for device_name in device_names {
-        let device = resolve_connected_device(sh, &device_name)?;
-        if device.destination == format!("platform=iOS,id={udid}") {
-            return Ok(device);
-        }
+fn ios_build_slot() -> Result<String> {
+    if let Some(slot) = std::env::var_os(COVE_BUILD_SLOT_ENV).filter(|slot| !slot.is_empty()) {
+        return Ok(sanitize_build_slot(&slot.to_string_lossy()));
     }
 
-    color_eyre::eyre::bail!("No connected iOS device found for udid={udid}");
+    let current_dir = std::env::current_dir().wrap_err("Failed to get current directory")?;
+
+    Ok(default_build_slot_from_cwd(&current_dir))
 }
 
-fn first_connected_device_name(sh: &Shell) -> Result<String> {
-    connected_device_names(sh)?
+fn default_build_slot_from_cwd(cwd: &Path) -> String {
+    let workspace_dir = if cwd.file_name().is_some_and(|name| name == "rust") {
+        cwd.parent().unwrap_or(cwd)
+    } else {
+        cwd
+    };
+
+    let slot = workspace_dir
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_else(|| "workspace".into());
+
+    sanitize_build_slot(&slot)
+}
+
+fn sanitize_build_slot(slot: &str) -> String {
+    let sanitized = slot
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "workspace".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn first_available_ios_device(sh: &Shell) -> Result<ResolvedDevice> {
+    available_ios_devices(sh)?
         .into_iter()
         .next()
-        .ok_or_else(|| eyre!("No connected iOS device found"))
+        .ok_or_else(|| eyre!("No available paired iOS device found"))
 }
 
-fn connected_device_names(sh: &Shell) -> Result<Vec<String>> {
-    let output = cmd!(
-        sh,
-        "xcrun devicectl list devices --filter {IOS_CONNECTED_DEVICE_FILTER} --columns name --hide-default-columns --hide-headers"
-    )
-    .read()
-    .wrap_err("Failed to list connected iOS devices")?;
+fn resolve_available_ios_device_by_name(sh: &Shell, device_name: &str) -> Result<ResolvedDevice> {
+    let devices = available_ios_devices(sh)?;
 
-    Ok(output
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(ToOwned::to_owned)
-        .collect())
+    devices
+        .iter()
+        .find(|device| device.name == device_name)
+        .cloned()
+        .ok_or_else(|| eyre!("No available paired iOS device named '{device_name}' found"))
+        .with_context(|| available_device_context(&devices))
 }
 
-fn parse_device_details(output: &str) -> Result<ResolvedDevice> {
-    let identifier = parse_device_detail(output, "• identifier: ")?;
-    let name = parse_device_detail(output, "• name: ")?;
-    let udid = parse_device_detail(output, "• udid: ")?;
+fn resolve_available_ios_device_by_udid(sh: &Shell, udid: &str) -> Result<ResolvedDevice> {
+    let devices = available_ios_devices(sh)?;
 
-    Ok(ResolvedDevice::new(name, identifier, udid))
+    devices
+        .iter()
+        .find(|device| device.udid == udid)
+        .cloned()
+        .ok_or_else(|| eyre!("No available paired iOS device found for udid={udid}"))
+        .with_context(|| available_device_context(&devices))
 }
 
-fn parse_device_detail(output: &str, prefix: &str) -> Result<String> {
-    output
-        .lines()
-        .map(str::trim)
-        .find_map(|line| line.strip_prefix(prefix))
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| eyre!("Missing `{prefix}` in devicectl device details"))
+fn available_ios_devices(sh: &Shell) -> Result<Vec<ResolvedDevice>> {
+    let output_path = devicectl_json_output_path()?;
+
+    let result = (|| -> Result<Vec<ResolvedDevice>> {
+        cmd!(sh, "xcrun devicectl list devices --quiet --json-output {output_path}")
+            .quiet()
+            .run()
+            .wrap_err("Failed to list iOS devices")?;
+
+        let output = sh
+            .read_file(&output_path)
+            .wrap_err_with(|| format!("Failed to read {}", output_path.display()))?;
+        let list = serde_json::from_str::<DevicectlListDevicesOutput>(&output)
+            .wrap_err("Failed to parse devicectl device list JSON")?;
+
+        Ok(list.result.devices.into_iter().filter_map(resolved_available_ios_device).collect())
+    })();
+
+    let _ = fs::remove_file(&output_path);
+
+    result
+}
+
+fn resolved_available_ios_device(device: DevicectlDevice) -> Option<ResolvedDevice> {
+    if !devicectl_device_is_available_ios(&device) {
+        return None;
+    }
+
+    let name = device.device_properties.name?;
+    let udid = device.hardware_properties.udid?;
+
+    Some(ResolvedDevice::new(name, device.identifier, udid))
+}
+
+fn devicectl_device_is_available_ios(device: &DevicectlDevice) -> bool {
+    device.hardware_properties.platform.as_deref() == Some("iOS")
+        && device.connection_properties.tunnel_state.as_deref() == Some("connected")
+}
+
+fn devicectl_json_output_path() -> Result<PathBuf> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .wrap_err("System clock is before UNIX epoch")?
+        .as_nanos();
+
+    Ok(std::env::temp_dir()
+        .join(format!("cove-devicectl-devices-{}-{timestamp}.json", std::process::id())))
+}
+
+fn available_device_context(devices: &[ResolvedDevice]) -> String {
+    if devices.is_empty() {
+        return "No available paired iOS devices found".to_string();
+    }
+
+    let devices = devices
+        .iter()
+        .map(|device| format!("{} ({})", device.name, device.udid))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!("Available paired iOS devices: {devices}")
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_aasa_webcredentials_app, normalize_pem_text, simulator_line_matches_device,
-        simulator_state_from_line,
+        devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, normalize_pem_text,
+        simulator_line_matches_device, simulator_state_from_line, DevicectlConnectionProperties,
+        DevicectlDevice, DevicectlDeviceProperties, DevicectlHardwareProperties,
     };
 
     const VALID_PEM: &str = "\
@@ -1246,6 +1393,27 @@ ABC123
             .as_deref(),
             Some("Shutdown"),
         );
+    }
+
+    #[test]
+    fn devicectl_device_is_available_ios_accepts_connected_ios_device() {
+        let device = devicectl_device("iOS", "connected");
+
+        assert!(devicectl_device_is_available_ios(&device));
+    }
+
+    #[test]
+    fn devicectl_device_is_available_ios_rejects_unavailable_ios_device() {
+        let device = devicectl_device("iOS", "unavailable");
+
+        assert!(!devicectl_device_is_available_ios(&device));
+    }
+
+    #[test]
+    fn devicectl_device_is_available_ios_rejects_non_ios_device() {
+        let device = devicectl_device("macOS", "connected");
+
+        assert!(!devicectl_device_is_available_ios(&device));
     }
 
     #[test]
@@ -1338,5 +1506,21 @@ ABC123
         let body = r#"{"applinks": {"apps": []}}"#;
 
         assert!(ensure_aasa_webcredentials_app(body, "Q8UP8C53Y8.org.bitcoinppl.cove").is_err());
+    }
+
+    fn devicectl_device(platform: &str, tunnel_state: &str) -> DevicectlDevice {
+        DevicectlDevice {
+            identifier: "device-id".to_string(),
+            connection_properties: DevicectlConnectionProperties {
+                tunnel_state: Some(tunnel_state.to_string()),
+            },
+            device_properties: DevicectlDeviceProperties {
+                name: Some("Praveens iPhone 15".to_string()),
+            },
+            hardware_properties: DevicectlHardwareProperties {
+                platform: Some(platform.to_string()),
+                udid: Some("00008120-0006243420214032".to_string()),
+            },
+        }
     }
 }
