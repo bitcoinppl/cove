@@ -626,6 +626,22 @@ class AppManager private constructor() : FfiReconcile {
 
     fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
 
+    suspend fun prewarmLoadAndResetTargetIfCurrent(
+        generation: GenerationToken,
+        nextRoutes: List<Route>,
+    ) {
+        if (!isNavigationGenerationCurrent(generation)) return
+        val selectedWalletRoute = nextRoutes.firstOrNull() as? Route.SelectedWallet ?: return
+
+        try {
+            getWalletManager(selectedWalletRoute.v1).startWalletScanIfNeeded()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(tag, "Unable to prewarm selected wallet ${selectedWalletRoute.v1}", e)
+        }
+    }
+
     fun resetAfterLoadingIfCurrent(
         generation: GenerationToken,
         route: Route.LoadAndReset,

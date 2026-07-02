@@ -600,6 +600,19 @@ private let navigationSettleDelayMs = 800
     }
 
     @MainActor
+    func prewarmLoadAndResetTargetIfCurrent(generation: GenerationToken, routes: [Route]) async {
+        guard isNavigationGenerationCurrent(generation) else { return }
+        guard case let .selectedWallet(id) = routes.first else { return }
+
+        do {
+            let manager = try ensureWalletManager(id: id)
+            try await manager.startWalletScanIfNeeded()
+        } catch {
+            logger.error("Unable to prewarm selected wallet \(id): \(error)")
+        }
+    }
+
+    @MainActor
     func resetAfterLoadingIfCurrent(generation: GenerationToken, route: Route, nextRoute: [Route]) {
         guard isNavigationGenerationCurrent(generation) else { return }
         guard router.default == route else { return }

@@ -139,7 +139,7 @@ fun SelectedWalletContainer(
     LaunchedEffect(manager) {
         val wm = manager ?: return@LaunchedEffect
         try {
-            wm.startWalletScan()
+            wm.startWalletScanIfNeeded()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

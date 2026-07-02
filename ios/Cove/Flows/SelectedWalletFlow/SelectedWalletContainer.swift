@@ -51,7 +51,7 @@ struct SelectedWalletContainer: View {
                 .task {
                     // start scan immediately (sends cached data first, then scans)
                     do {
-                        try await manager.rust.startWalletScan()
+                        try await manager.startWalletScanIfNeeded()
                     } catch {
                         Log.error("Wallet Scan Failed \(error.localizedDescription)")
                     }
@@ -103,10 +103,6 @@ private struct SelectedWalletLoadingScreen: View {
         .white
     }
 
-    private var canGoBack: Bool {
-        app.rust.canGoBack()
-    }
-
     private var titleContent: some View {
         HStack(spacing: 10) {
             if case .cold = metadata.walletType {
@@ -126,26 +122,6 @@ private struct SelectedWalletLoadingScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarLeading) {
-            Button(action: {
-                if canGoBack {
-                    app.popRoute()
-                } else {
-                    withAnimation {
-                        app.toggleSidebar()
-                    }
-                }
-            }) {
-                Image(systemName: canGoBack ? "chevron.left" : "line.horizontal.3")
-                    .adaptiveToolbarItemStyle(isPastHeader: false)
-                    .font(.callout)
-            }
-            .contentShape(Rectangle())
-            .accessibilityLabel(
-                Text(canGoBack ? String(localized: "Back") : String(localized: "Menu"))
-            )
-        }
-
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             HStack(spacing: 5) {
                 Button(action: {

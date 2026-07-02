@@ -54,6 +54,7 @@ class WalletManager :
 
     val id: WalletId
     private val rust: RustWalletManager
+    private val walletScanStarted = AtomicBoolean(false)
 
     // observable state
     var walletMetadata by mutableStateOf<WalletMetadata?>(null)
@@ -261,6 +262,17 @@ class WalletManager :
     suspend fun startWalletScan() {
         withRustSuspend {
             startWalletScan()
+        }
+    }
+
+    suspend fun startWalletScanIfNeeded() {
+        if (!walletScanStarted.compareAndSet(false, true)) return
+
+        try {
+            startWalletScan()
+        } catch (e: Exception) {
+            walletScanStarted.set(false)
+            throw e
         }
     }
 

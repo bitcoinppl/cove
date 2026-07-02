@@ -7,19 +7,20 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
 import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.SelectedWalletContainer
@@ -192,14 +193,22 @@ private fun LoadAndResetContent(
 ) {
     val nextRoutes = route.resetTo.map { it.route() }
     val loadingTimeMs = route.afterMillis.toLong()
+    val loadingMessage =
+        if (nextRoutes.firstOrNull() is Route.SelectedWallet) {
+            stringResource(R.string.label_loading_wallet)
+        } else {
+            null
+        }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
+    FullPageLoadingView(message = loadingMessage)
 
     LaunchedEffect(route) {
         val generation = app.captureLoadAndResetGeneration()
-        delay(loadingTimeMs)
+        coroutineScope {
+            val prewarm = async { app.prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes) }
+            delay(loadingTimeMs)
+            prewarm.await()
+        }
         app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
     }
 }

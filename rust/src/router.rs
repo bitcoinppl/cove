@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 /// Default delay for load-and-reset transitions (in milliseconds)
 pub const LOAD_AND_RESET_DELAY_MS: u32 = 250;
+/// Delay for wallet-selection transitions (in milliseconds)
+pub const WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS: u32 = 250;
 
 use crate::{
     app::FfiApp,
@@ -247,6 +249,20 @@ impl Route {
     }
 }
 
+pub(crate) fn load_and_reset_nested_to_after(
+    default_route: Route,
+    nested_routes: Vec<Route>,
+    after_millis: u32,
+) -> Route {
+    let boxed_nested_routes = nested_routes.into_iter().map(BoxedRoute::new).map(Arc::new);
+
+    let mut routes = Vec::with_capacity(boxed_nested_routes.len() + 1);
+    routes.push(BoxedRoute::new(default_route).into());
+    routes.extend(boxed_nested_routes);
+
+    Route::LoadAndReset { reset_to: routes, after_millis }
+}
+
 use std::hash::{Hash as _, Hasher as _};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
@@ -307,13 +323,7 @@ impl RouteFactory {
         default_route: Route,
         nested_routes: Vec<Route>,
     ) -> Route {
-        let boxed_nested_routes = nested_routes.into_iter().map(BoxedRoute::new).map(Arc::new);
-
-        let mut routes = Vec::with_capacity(boxed_nested_routes.len() + 1);
-        routes.push(BoxedRoute::new(default_route).into());
-        routes.extend(boxed_nested_routes);
-
-        Route::LoadAndReset { reset_to: routes, after_millis: LOAD_AND_RESET_DELAY_MS }
+        load_and_reset_nested_to_after(default_route, nested_routes, LOAD_AND_RESET_DELAY_MS)
     }
 
     pub fn load_and_reset_to(&self, reset_to: Route) -> Route {

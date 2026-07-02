@@ -12,12 +12,22 @@ struct LoadAndResetContainer: View {
     let nextRoute: [Route]
     let loadingTimeMs: Int
 
+    private var loadingTitle: String? {
+        guard case .selectedWallet = nextRoute.first else { return nil }
+        return String(localized: "Loading wallet...")
+    }
+
     var body: some View {
-        ProgressView()
+        FullPageLoadingView(title: loadingTitle)
             .task(id: route) {
                 do {
                     let generation = await app.captureLoadAndResetGeneration()
+                    async let prewarm: Void = app.prewarmLoadAndResetTargetIfCurrent(
+                        generation: generation,
+                        routes: nextRoute
+                    )
                     try await Task.sleep(for: .milliseconds(loadingTimeMs))
+                    await prewarm
                     await app.resetAfterLoadingIfCurrent(
                         generation: generation,
                         route: route,

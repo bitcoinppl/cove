@@ -55,6 +55,8 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     @ObservationIgnored
     private let initialScanLifecycleChanged =
         OSAllocatedUnfairLock<InitialScanLifecycleChangedHandler?>(initialState: nil)
+    @ObservationIgnored
+    private var walletScanStarted = false
 
     var walletMetadata: WalletMetadata
     var ledgerState: WalletLedgerState
@@ -209,6 +211,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     func forceWalletScan() async {
         await rust.forceWalletScan()
+    }
+
+    @MainActor
+    func startWalletScanIfNeeded() async throws {
+        guard !walletScanStarted else { return }
+        walletScanStarted = true
+
+        do {
+            try await rust.startWalletScan()
+        } catch {
+            walletScanStarted = false
+            throw error
+        }
     }
 
     func firstAddress() async throws -> AddressInfo {

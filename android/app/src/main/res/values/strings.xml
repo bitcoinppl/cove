@@ -196,6 +196,7 @@
     <string name="btn_12_words">12 Words</string>
     <string name="btn_24_words">24 Words</string>
     <string name="label_loading">loading…</string>
+    <string name="label_loading_wallet">loading wallet…</string>
 
     <!-- Node Settings -->
     <string name="node_custom_electrum">Custom Electrum</string>
