@@ -29,8 +29,9 @@ The `COVE_KEYSTORE_*` variables in `.envrc.example` are only needed for signed A
 2. Build the Rust library and bindings:
    - iOS: `just build-ios` (`just bi`) for simulator or `just build-ios-debug-device` (`just bidd`) for device
    - Android: `just build-android` (`just ba`)
-3. Open in Xcode (`ios/Cove.xcodeproj`) or Android Studio (`android/`)
-4. Build and run
+3. Build and run on a device:
+   - iOS: `just build-run-ios --udid <device-udid>` or set `IOS_DEVICE_UDID` and run `just build-run-ios`
+   - Android: open Android Studio (`android/`) or use the Android run/install recipes
 
 ## Release Builds
 
@@ -59,9 +60,12 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 - **Rust-only changes**: Use `just bacon` or `just bcheck` for continuous feedback
 - **UI changes (no Rust API changes)**: Use `just compile-ios` or `just compile-android` for faster iteration
 - **Rust API or UniFFI changes**: Run `just build-ios` or `just build-android` to rebuild Rust and regenerate bindings
+- **Run iOS on a physical device**: Use `just build-run-ios --udid <device-udid>` when bindings may be stale, or `just run-ios --udid <device-udid>` when generated bindings are already current
 - **Tests**: Run `just watch-test` (`just wtest`) in a separate terminal for continuous test feedback
 
 `just build-ios` and `just build-android` rebuild the Rust core, regenerate UniFFI bindings, and update the mobile projects. `just compile-ios` and `just compile-android` only rebuild the native apps, so use them when Rust exports have not changed.
+
+`just build-run-ios` rebuilds the debug iOS bindings, builds the Xcode app with checkout-specific DerivedData, installs it with `devicectl`, and launches it without opening Xcode. It targets the first available paired iOS device by default; pass `--udid <device-udid>`, `--device-name <device-name>`, or set `IOS_DEVICE_UDID` / `IOS_DEVICE_NAME` to choose a specific phone. The phone must be connected, paired, in Developer Mode, and unlocked before launch.
 
 ### Common Commands
 
@@ -72,6 +76,8 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 | `just build-ios` | `just bi` | Build iOS debug simulator |
 | `just build-ios-debug-device` | `just bidd` | Build iOS debug device |
 | `just build-ios-release` | `just bir` | Build iOS release |
+| `just build-run-ios` | `just bri` | Rebuild iOS bindings, install, and run on device or simulator |
+| `just run-ios` | `just ri` | Install and run iOS using existing generated bindings |
 | `just compile-ios` | - | Compile iOS without regenerating bindings |
 | `just compile-android` | - | Compile Android without regenerating bindings |
 | `just test` | - | Run the Rust test suite with nextest |

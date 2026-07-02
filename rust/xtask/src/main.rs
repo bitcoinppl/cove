@@ -87,6 +87,22 @@ enum Commands {
         udid: Option<String>,
     },
 
+    /// Rebuild iOS bindings, then build, install, and run the iOS app
+    #[command(name = "build-run-ios")]
+    BuildRunIos {
+        /// Run in the iOS simulator instead of on a physical device
+        #[arg(long)]
+        simulator: bool,
+
+        /// Physical device name to target
+        #[arg(long, env = "IOS_DEVICE_NAME")]
+        device_name: Option<String>,
+
+        /// Physical device UDID to target
+        #[arg(long, env = "IOS_DEVICE_UDID")]
+        udid: Option<String>,
+    },
+
     /// Run manual iOS full-launch UI tests
     #[command(name = "ios-ui")]
     IosUi {
@@ -246,6 +262,11 @@ fn main() -> Result<()> {
         Commands::RunIos { simulator, device_name, udid } => {
             let options = ios::IosRunOptions::new(simulator, device_name, udid);
             ios::run_ios(options, cli.verbose)
+        }
+
+        Commands::BuildRunIos { simulator, device_name, udid } => {
+            let options = ios::IosRunOptions::new(simulator, device_name, udid);
+            ios::build_run_ios(options, cli.verbose)
         }
 
         Commands::IosUi { device, test, foreground } => {

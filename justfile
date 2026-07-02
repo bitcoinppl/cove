@@ -481,16 +481,17 @@ install-android-clean:
 
 alias iac := install-android-clean
 
-# Run iOS app
+# Run iOS app with existing generated bindings
 [group('util')]
 run-ios *args:
     just xtask run-ios {{ args }} && just notf "done run ios"
 
 alias ri := run-ios
 
+# Rebuild iOS bindings, then install and run the iOS app
 [group('util')]
-build-run-ios:
-    just bidd && just ri
+build-run-ios *args:
+    just xtask build-run-ios {{ args }} && just notf "done build run ios"
 
 alias bri := build-run-ios
 
