@@ -270,7 +270,7 @@ impl RustSendFlowManager {
             return false;
         }
 
-        let (spendable_balance, unavailable_balance_alert, is_max_selected) = {
+        let (spendable_balance, unavailable_balance_alert, is_max_selected, total_fee_sats) = {
             let state = self.state.lock();
             (
                 validation::spendable_balance_for_validation(state.unlocked_spendable_sats),
@@ -279,10 +279,15 @@ impl RustSendFlowManager {
                     state.lock_state_load_failed,
                 ),
                 state.max_selected.is_some(),
+                state
+                    .fee_selection
+                    .as_ref()
+                    .and_then(|selection| selection.selected.total_fee.map(|fee| fee.as_sats())),
             )
         };
+        let total_spend_sats = validation::total_spend_sats(amount, total_fee_sats);
 
-        if spendable_balance < amount {
+        if spendable_balance < total_spend_sats {
             if let Some(alert) = unavailable_balance_alert {
                 let msg = Message::SetAlert(alert);
                 if display_alert {
@@ -698,10 +703,10 @@ impl RustSendFlowManager {
 mod tests {
     use std::{sync::Arc, time::Duration};
 
-    use cove_types::fees::{
-        FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed,
+    use cove_types::{
+        fees::{FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed},
+        utxo::{UtxoList, ffi_preview::preview_new_utxo_list},
     };
-    use cove_types::utxo::{UtxoList, ffi_preview::preview_new_utxo_list};
 
     use crate::{
         manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
@@ -1259,7 +1264,6 @@ mod tests {
             )))
         ));
     }
-
     #[test]
     fn validate_amount_blocks_send_when_lock_state_load_failed() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
@@ -1281,5 +1285,57 @@ mod tests {
             alert,
             super::SendFlowAlertState::General { title, .. } if title.contains("Locked")
         ));
+    }
+
+    #[test]
+    fn validate_amount_blocks_send_when_amount_plus_fee_exceeds_balance() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(5_000);
+            state.unlocked_spendable_sats = Some(5_001);
+        }
+        set_selected_fee_total(&manager, 156);
+
+        assert!(!manager.validate_amount(true));
+
+        let super::Message::SetAlert(alert) = next_reconcile_message(&manager) else {
+            panic!("expected a single insufficient funds alert");
+        };
+
+        assert!(matches!(
+            alert,
+            super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
+        ));
+    }
+
+    #[test]
+    fn validate_amount_allows_total_equal_to_spendable_balance() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(5_000);
+            state.unlocked_spendable_sats = Some(5_156);
+        }
+        set_selected_fee_total(&manager, 156);
+
+        assert!(manager.validate_amount(true));
+        assert!(manager.reconciler.receiver().try_recv().is_err());
+    }
+
+    #[test]
+    fn amount_exceeds_balance_includes_selected_fee_total() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(5_000);
+            state.unlocked_spendable_sats = Some(5_001);
+        }
+        set_selected_fee_total(&manager, 156);
+
+        assert!(manager.amount_exceeds_balance());
     }
 }
