@@ -175,44 +175,49 @@ fun SendFlowConfirmScreen(
                                 .fillMaxWidth()
                                 .heightIn(min = maxHeight)
                                 .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        AmountWidget(
-                            amount = sendingAmount,
-                            denomination = sendingAmountDenomination,
-                            dollarText = dollarEquivalentText,
-                            accountShort = accountShort,
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                        SummaryWidget(
-                            address = address,
-                            networkFee = networkFee,
-                            willReceive = willReceive,
-                            willPay = willPay,
-                            onAddressClick = { sheetState = SheetState.AdvancedDetails },
-                        )
-                        Spacer(Modifier.weight(1f))
-                        SwipeToSendStub(
-                            text = stringResource(R.string.action_swipe_to_send),
-                            sendState = sendState,
-                            onComplete = onSwipeToSend,
-                            containerColor = MaterialTheme.coveColors.swipeTrackBg,
-                            targetContainerColor = MaterialTheme.coveColors.midnightBtn,
-                            knobColor = MaterialTheme.coveColors.midnightBtn,
-                            textColor = MaterialTheme.colorScheme.onSurface,
-                            targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(bottom = 24.dp)
-                                    .testTag("sendFlowConfirm.swipeToSend"),
-                        )
+                        Column {
+                            AmountWidget(
+                                amount = sendingAmount,
+                                denomination = sendingAmountDenomination,
+                                dollarText = dollarEquivalentText,
+                                accountShort = accountShort,
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                            SummaryWidget(
+                                address = address,
+                                networkFee = networkFee,
+                                willReceive = willReceive,
+                                willPay = willPay,
+                                onAddressClick = { sheetState = SheetState.AdvancedDetails },
+                            )
+                        }
 
-                        Spacer(
-                            Modifier
-                                .height(1.dp)
-                                .testTag("sendFlowConfirm.bottomPadding"),
-                        )
+                        Column {
+                            SwipeToSendStub(
+                                text = stringResource(R.string.action_swipe_to_send),
+                                sendState = sendState,
+                                onComplete = onSwipeToSend,
+                                containerColor = MaterialTheme.coveColors.swipeTrackBg,
+                                targetContainerColor = MaterialTheme.coveColors.midnightBtn,
+                                knobColor = MaterialTheme.coveColors.midnightBtn,
+                                textColor = MaterialTheme.colorScheme.onSurface,
+                                targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .navigationBarsPadding()
+                                        .padding(bottom = 24.dp)
+                                        .testTag("sendFlowConfirm.swipeToSend"),
+                            )
+
+                            Spacer(
+                                Modifier
+                                    .height(1.dp)
+                                    .testTag("sendFlowConfirm.bottomPadding"),
+                            )
+                        }
                     }
                 }
             }
