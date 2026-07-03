@@ -1363,13 +1363,15 @@ fn available_ios_devices_with_connection_refresh(
     sh: &Shell,
     selector: &DeviceSelector,
 ) -> Result<Vec<ResolvedDevice>> {
-    for attempt in 0..IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS {
+    let retry_attempts = ios_device_connection_retry_attempts()?;
+
+    for attempt in 0..retry_attempts {
         let devices = available_ios_devices(sh)?;
         if ios_devices_include_selector(&devices, selector) {
             return Ok(devices);
         }
 
-        if attempt + 1 == IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS {
+        if attempt + 1 == retry_attempts {
             return Ok(devices);
         }
 
@@ -1377,7 +1379,15 @@ fn available_ios_devices_with_connection_refresh(
         std::thread::sleep(Duration::from_secs(1));
     }
 
-    Ok(Vec::new())
+    unreachable!("iOS device connection refresh loop should return from every branch")
+}
+
+fn ios_device_connection_retry_attempts() -> Result<usize> {
+    if IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS == 0 {
+        return Err(eyre!("IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS must be greater than zero"));
+    }
+
+    Ok(IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS)
 }
 
 fn available_ios_devices(sh: &Shell) -> Result<Vec<ResolvedDevice>> {
