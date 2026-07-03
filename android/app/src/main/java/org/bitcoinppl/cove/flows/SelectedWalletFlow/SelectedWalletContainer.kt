@@ -309,6 +309,9 @@ private fun SelectedWalletLoadingScreen(
     val primaryText = MaterialTheme.colorScheme.onSurface
     val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
     val canGoBack = app.canGoBack()
+    val showsShieldIcon =
+        metadata.walletType == WalletType.COLD ||
+            metadata.walletType == WalletType.XPUB_ONLY
 
     ForceLightStatusBarIcons()
 
@@ -329,7 +332,7 @@ private fun SelectedWalletLoadingScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (metadata.walletType == WalletType.COLD) {
+                        if (showsShieldIcon) {
                             BitcoinShieldIcon(size = 13.dp, color = Color.White)
                             Spacer(modifier = Modifier.size(8.dp))
                         }

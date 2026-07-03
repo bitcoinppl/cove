@@ -44,6 +44,7 @@
     <string name="label_wallet_account_number">Account number</string>
     <string name="label_wallet_fingerprint">Fingerprint</string>
     <string name="label_wallet_type">Wallet type</string>
+    <string name="label_wallet_address_type">Address type</string>
     <string name="title_wallet_settings">Settings</string>
     <string name="label_wallet_name">Name</string>
     <string name="change_name">Change Name</string>
