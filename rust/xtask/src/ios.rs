@@ -1,5 +1,6 @@
 use crate::common::{
-    command_exists, print_error, print_info, print_success, trim_generated_trailing_whitespace,
+    command_exists, print_error, print_info, print_success, print_warning,
+    trim_generated_trailing_whitespace,
 };
 use color_eyre::{
     eyre::{eyre, Context},
@@ -57,6 +58,9 @@ const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
 const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
 const IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS: usize = 1;
+const IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS: usize = 2;
+const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS: u64 = 30;
+const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DELAY_SECS: u64 = 5;
 
 #[derive(Debug, Clone, Copy)]
 pub enum IosBuildType {
@@ -1158,15 +1162,85 @@ fn run_ios_device(sh: &Shell, device: &ResolvedDevice, verbose: bool) -> Result<
     print_success("App installed successfully");
 
     print_info("Launching app on physical device...");
-    cmd!(
-        sh,
-        "xcrun devicectl device process launch --device {device_identifier} --terminate-existing {IOS_BUNDLE_ID}"
-    )
-    .run()
-    .wrap_err("Failed to launch app on physical device")?;
+    launch_ios_device_app(sh, &device_identifier)?;
     print_success("App launched successfully");
 
     Ok(())
+}
+
+fn launch_ios_device_app(sh: &Shell, device_identifier: &str) -> Result<()> {
+    let locked_retry_deadline =
+        SystemTime::now() + Duration::from_secs(IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS);
+    let mut warned_locked_device = false;
+
+    loop {
+        let output = cmd!(
+            sh,
+            "xcrun devicectl device process launch --device {device_identifier} --terminate-existing {IOS_BUNDLE_ID}"
+        )
+        .quiet()
+        .ignore_status()
+        .output()
+        .wrap_err("Failed to launch app on physical device")?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let status = output.status;
+        let stdout =
+            String::from_utf8(output.stdout).wrap_err("Failed to parse devicectl stdout")?;
+        let stderr =
+            String::from_utf8(output.stderr).wrap_err("Failed to parse devicectl stderr")?;
+
+        if !devicectl_launch_failed_because_device_locked(&stdout, &stderr) {
+            return Err(eyre!("devicectl launch exited with status {status}")).with_context(|| {
+                format!(
+                    "Failed to launch app on physical device\nstdout:\n{}\nstderr:\n{}",
+                    non_empty_output(&stdout, "<empty>"),
+                    non_empty_output(&stderr, "<empty>"),
+                )
+            });
+        }
+
+        if !warned_locked_device {
+            print_warning(
+                &format!(
+                    "iOS device is locked. Unlock the iPhone to launch; retrying for {IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS}s"
+                )
+                .yellow()
+                .bold()
+                .to_string(),
+            );
+            say_iphone_needs_unlocking(sh);
+            warned_locked_device = true;
+        }
+
+        if SystemTime::now() >= locked_retry_deadline {
+            let message =
+                "Failed because iPhone wasn't unlocked. Unlock the iPhone, then run `just ri` again";
+            print_error(&message.red().bold().to_string());
+            color_eyre::eyre::bail!("{message}");
+        }
+
+        std::thread::sleep(Duration::from_secs(IOS_DEVICE_LOCKED_LAUNCH_RETRY_DELAY_SECS));
+    }
+}
+
+fn say_iphone_needs_unlocking(sh: &Shell) {
+    if !command_exists("say") {
+        return;
+    }
+
+    let message = "iPhone needs to be unlocked";
+    let _ = cmd!(sh, "say {message}").quiet().ignore_status().run();
+}
+
+fn devicectl_launch_failed_because_device_locked(stdout: &str, stderr: &str) -> bool {
+    [stdout, stderr].iter().any(|output| {
+        output.contains("BSErrorCodeDescription = Locked")
+            || output.contains("because the device was not, or could not be, unlocked")
+    })
 }
 
 fn build_ios_app(
@@ -1255,14 +1329,15 @@ fn sanitize_build_slot(slot: &str) -> String {
 }
 
 fn first_available_ios_device(sh: &Shell) -> Result<ResolvedDevice> {
-    available_ios_devices(sh)?
+    available_ios_devices_with_connection_refresh(sh, &DeviceSelector::Auto)?
         .into_iter()
         .next()
         .ok_or_else(|| eyre!("No available paired iOS device found"))
 }
 
 fn resolve_available_ios_device_by_name(sh: &Shell, device_name: &str) -> Result<ResolvedDevice> {
-    let devices = available_ios_devices(sh)?;
+    let selector = DeviceSelector::Name(device_name.to_string());
+    let devices = available_ios_devices_with_connection_refresh(sh, &selector)?;
 
     devices
         .iter()
@@ -1273,7 +1348,8 @@ fn resolve_available_ios_device_by_name(sh: &Shell, device_name: &str) -> Result
 }
 
 fn resolve_available_ios_device_by_udid(sh: &Shell, udid: &str) -> Result<ResolvedDevice> {
-    let devices = available_ios_devices(sh)?;
+    let selector = DeviceSelector::Udid(udid.to_string());
+    let devices = available_ios_devices_with_connection_refresh(sh, &selector)?;
 
     devices
         .iter()
@@ -1281,6 +1357,27 @@ fn resolve_available_ios_device_by_udid(sh: &Shell, udid: &str) -> Result<Resolv
         .cloned()
         .ok_or_else(|| eyre!("No available paired iOS device found for udid={udid}"))
         .with_context(|| available_device_context(&devices))
+}
+
+fn available_ios_devices_with_connection_refresh(
+    sh: &Shell,
+    selector: &DeviceSelector,
+) -> Result<Vec<ResolvedDevice>> {
+    for attempt in 0..IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS {
+        let devices = available_ios_devices(sh)?;
+        if ios_devices_include_selector(&devices, selector) {
+            return Ok(devices);
+        }
+
+        if attempt + 1 == IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS {
+            return Ok(devices);
+        }
+
+        refresh_matching_ios_device_connection(sh, selector)?;
+        std::thread::sleep(Duration::from_secs(1));
+    }
+
+    Ok(Vec::new())
 }
 
 fn available_ios_devices(sh: &Shell) -> Result<Vec<ResolvedDevice>> {
@@ -1306,6 +1403,54 @@ fn available_ios_devices(sh: &Shell) -> Result<Vec<ResolvedDevice>> {
     result
 }
 
+fn refresh_matching_ios_device_connection(sh: &Shell, selector: &DeviceSelector) -> Result<()> {
+    let Some(device) = paired_ios_devices(sh)?
+        .into_iter()
+        .find(|device| devicectl_device_matches_selector(device, selector))
+    else {
+        return Ok(());
+    };
+
+    print_info(&format!("Preparing iOS device connection for {}", devicectl_device_label(&device)));
+
+    let device_identifier = device.identifier;
+    cmd!(sh, "xcrun devicectl device info details --device {device_identifier} --quiet")
+        .quiet()
+        .ignore_status()
+        .run()
+        .wrap_err("Failed to refresh iOS device connection")?;
+
+    Ok(())
+}
+
+fn paired_ios_devices(sh: &Shell) -> Result<Vec<DevicectlDevice>> {
+    let output_path = devicectl_json_output_path()?;
+
+    let result = (|| -> Result<Vec<DevicectlDevice>> {
+        cmd!(sh, "xcrun devicectl list devices --quiet --json-output {output_path}")
+            .quiet()
+            .run()
+            .wrap_err("Failed to list iOS devices")?;
+
+        let output = sh
+            .read_file(&output_path)
+            .wrap_err_with(|| format!("Failed to read {}", output_path.display()))?;
+        let list = serde_json::from_str::<DevicectlListDevicesOutput>(&output)
+            .wrap_err("Failed to parse devicectl device list JSON")?;
+
+        Ok(list
+            .result
+            .devices
+            .into_iter()
+            .filter(|device| device.hardware_properties.platform.as_deref() == Some("iOS"))
+            .collect())
+    })();
+
+    let _ = fs::remove_file(&output_path);
+
+    result
+}
+
 fn resolved_available_ios_device(device: DevicectlDevice) -> Option<ResolvedDevice> {
     if !devicectl_device_is_available_ios(&device) {
         return None;
@@ -1320,6 +1465,35 @@ fn resolved_available_ios_device(device: DevicectlDevice) -> Option<ResolvedDevi
 fn devicectl_device_is_available_ios(device: &DevicectlDevice) -> bool {
     device.hardware_properties.platform.as_deref() == Some("iOS")
         && device.connection_properties.tunnel_state.as_deref() == Some("connected")
+}
+
+fn ios_devices_include_selector(devices: &[ResolvedDevice], selector: &DeviceSelector) -> bool {
+    match selector {
+        DeviceSelector::Auto => !devices.is_empty(),
+        DeviceSelector::Name(device_name) => {
+            devices.iter().any(|device| device.name == *device_name)
+        }
+        DeviceSelector::Udid(udid) => devices.iter().any(|device| device.udid == *udid),
+    }
+}
+
+fn devicectl_device_matches_selector(device: &DevicectlDevice, selector: &DeviceSelector) -> bool {
+    match selector {
+        DeviceSelector::Auto => device.device_properties.name.is_some(),
+        DeviceSelector::Name(device_name) => {
+            device.device_properties.name.as_deref() == Some(device_name)
+        }
+        DeviceSelector::Udid(udid) => device.hardware_properties.udid.as_deref() == Some(udid),
+    }
+}
+
+fn devicectl_device_label(device: &DevicectlDevice) -> String {
+    match (&device.device_properties.name, &device.hardware_properties.udid) {
+        (Some(name), Some(udid)) => format!("{name} ({udid})"),
+        (Some(name), None) => name.clone(),
+        (None, Some(udid)) => udid.clone(),
+        (None, None) => device.identifier.clone(),
+    }
 }
 
 fn devicectl_json_output_path() -> Result<PathBuf> {

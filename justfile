@@ -501,6 +501,7 @@ build-run-ios *args:
     just xtask build-run-ios {{ args }} && just notf "done build run ios"
 
 alias bri := build-run-ios
+alias ib := build-run-ios
 
 # Show logcat for cove process
 [group('util')]
