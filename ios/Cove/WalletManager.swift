@@ -85,6 +85,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     /// cached transaction details
     var transactionDetails: [TxId: TransactionDetails] = [:]
     var transactionConfirmations: [TxId: UInt32] = [:]
+    var transactionLockStates: [TxId: TransactionLockState] = [:]
 
     var receiveAddressState: ReceiveAddressState?
     var receiveAddressPresentation = ReceiveAddressPresentation(
@@ -340,14 +341,37 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func transactionLockState(for txId: TxId) async throws -> TransactionLockState {
-        try await rust.transactionLockState(txId: txId)
+        let state = try await rust.transactionLockState(txId: txId)
+        await MainActor.run {
+            transactionLockStates[txId] = state
+        }
+
+        return state
     }
 
     func toggleTransactionLockState(for txId: TxId) async throws -> TransactionLockState {
         let state = try await rust.toggleTransactionLockState(txId: txId)
+        await MainActor.run {
+            transactionLockStates[txId] = state
+        }
         await AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
 
         return state
+    }
+
+    func unlockTransactionOutputs(for txId: TxId) async throws -> TransactionLockState {
+        let state = try await rust.unlockTransactionOutputs(txId: txId)
+        await MainActor.run {
+            transactionLockStates[txId] = state
+        }
+        await AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
+
+        return state
+    }
+
+    @MainActor
+    func clearTransactionLockState(for txId: TxId) {
+        transactionLockStates[txId] = nil
     }
 
     @MainActor
@@ -356,9 +380,31 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
     }
 
+    @MainActor
     func reconcileAfterLabelsChanged() {
-        transactionDetails.removeAll()
-        Task { await rust.getTransactions() }
+        let cachedTransactionIds = Array(transactionDetails.keys)
+        let cachedLockStateTransactionIds = Array(transactionLockStates.keys)
+
+        Task {
+            for txId in cachedTransactionIds {
+                do {
+                    _ = try await refreshTransactionDetails(for: txId)
+                } catch {
+                    logger.error("Failed to refresh transaction details after label change: \(error)")
+                }
+            }
+
+            for txId in cachedLockStateTransactionIds {
+                do {
+                    _ = try await transactionLockState(for: txId)
+                } catch {
+                    logger.error("Failed to refresh transaction lock state after label change: \(error)")
+                    await clearTransactionLockState(for: txId)
+                }
+            }
+
+            await rust.getTransactions()
+        }
     }
 
     func updateTransactionConfirmations(txId: TxId, confirmations: UInt32) {

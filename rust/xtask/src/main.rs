@@ -41,6 +41,10 @@ enum Commands {
         /// Build profile: 'debug', 'release', or custom profile name
         #[arg(default_value = "release")]
         profile: String,
+
+        /// Build only the native library ABI used by the connected Android device
+        #[arg(long)]
+        connected_device: bool,
     },
 
     /// Build and run Android app on device/emulator
@@ -242,9 +246,15 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::BumpVersion { bump_type, targets } => version::bump_version(bump_type, targets),
 
-        Commands::BuildAndroid { profile } => {
+        Commands::BuildAndroid { profile, connected_device } => {
             let build_profile = android::BuildProfile::from_str(&profile);
-            android::build_android(build_profile, cli.verbose)
+            let build_targets = if connected_device {
+                android::AndroidBuildTargets::ConnectedDevice
+            } else {
+                android::AndroidBuildTargets::All
+            };
+
+            android::build_android(build_profile, build_targets, cli.verbose)
         }
 
         Commands::RunAndroid { profile } => {

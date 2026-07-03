@@ -1,9 +1,11 @@
 package org.bitcoinppl.cove.flows.CoinControlFlow
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +29,12 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -455,6 +458,7 @@ private fun UtxoListScreenContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun UtxoItemRow(
     manager: org.bitcoinppl.cove.CoinControlManager,
@@ -463,68 +467,71 @@ private fun UtxoItemRow(
     onToggle: () -> Unit,
     onSetSpendability: () -> Unit,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-                .graphicsLayer(alpha = if (utxo.spendable) 1f else 0.58f)
-                .clickable { onToggle() },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SelectionCircle(selected = selected, spendable = utxo.spendable)
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = utxo.displayName,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                )
-                if (utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
-                    Spacer(Modifier.width(4.dp))
-                    ChangeBadge()
-                }
-                if (!utxo.spendable) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp),
+    var spendabilityMenuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .graphicsLayer(alpha = if (utxo.spendable) 1f else 0.58f)
+                    .combinedClickable(
+                        onClick = onToggle,
+                        onLongClick = { spendabilityMenuExpanded = true },
+                    ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SelectionCircle(selected = selected, spendable = utxo.spendable)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = utxo.displayName,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 13.sp,
                     )
+                    if (utxo.type == org.bitcoinppl.cove_core.types.UtxoType.CHANGE) {
+                        Spacer(Modifier.width(4.dp))
+                        ChangeBadge()
+                    }
                 }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = utxo.address.unformatted(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = utxo.address.unformatted(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    manager.displayAmount(utxo.amount),
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    utxo.displayDate,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+            }
         }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                manager.displayAmount(utxo.amount),
-                fontWeight = FontWeight.Normal,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                utxo.displayDate,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onSetSpendability) {
-            Icon(
-                imageVector = if (utxo.spendable) Icons.Filled.LockOpen else Icons.Filled.Lock,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+
+        DropdownMenu(
+            expanded = spendabilityMenuExpanded,
+            onDismissRequest = { spendabilityMenuExpanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(if (utxo.spendable) "Lock UTXO" else "Unlock UTXO") },
+                onClick = {
+                    spendabilityMenuExpanded = false
+                    onSetSpendability()
+                },
             )
         }
     }

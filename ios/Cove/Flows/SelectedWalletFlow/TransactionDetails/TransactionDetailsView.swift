@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+private let lockStateUpdateRevealDelay: Duration = .milliseconds(200)
+private let lockStateUpdateMinimumVisibleDuration: Duration = .milliseconds(350)
+
 struct TransactionDetailsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
@@ -16,8 +19,9 @@ struct TransactionDetailsView: View {
 
     @State private var initialOffset: Double? = nil
     @State private var currentOffset: Double = 0
-    @State private var lockState: TransactionLockState? = nil
     @State private var isUpdatingLockState = false
+    @State private var showLockStateUpdatingIndicator = false
+    @State private var lockStateUpdatingIndicatorShownAt: ContinuousClock.Instant? = nil
     @State private var lockStateError: String? = nil
     @State private var lockStateLoadError: String? = nil
 
@@ -31,6 +35,10 @@ struct TransactionDetailsView: View {
     /// read from cache (observable), fallback to initial details
     var transactionDetails: TransactionDetails {
         manager.transactionDetails[txId] ?? initialDetails
+    }
+
+    var lockState: TransactionLockState? {
+        manager.transactionLockStates[txId]
     }
 
     var numberOfConfirmations: Int? {
@@ -88,7 +96,26 @@ struct TransactionDetailsView: View {
         guard !isUpdatingLockState else { return }
 
         isUpdatingLockState = true
-        Task { await toggleTransactionLockState() }
+        showLockStateUpdatingIndicator = false
+        lockStateUpdatingIndicatorShownAt = nil
+        Task {
+            await updateTransactionLockState {
+                try await manager.toggleTransactionLockState(for: initialDetails.txId())
+            }
+        }
+    }
+
+    private func beginUnlockTransactionOutputs() {
+        guard !isUpdatingLockState else { return }
+
+        isUpdatingLockState = true
+        showLockStateUpdatingIndicator = false
+        lockStateUpdatingIndicatorShownAt = nil
+        Task {
+            await updateTransactionLockState {
+                try await manager.unlockTransactionOutputs(for: initialDetails.txId())
+            }
+        }
     }
 
     var body: some View {
@@ -105,8 +132,10 @@ struct TransactionDetailsView: View {
                             numberOfConfirmations: numberOfConfirmations,
                             lockState: lockState,
                             isUpdatingLockState: isUpdatingLockState,
+                            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                             lockStateLoadError: lockStateLoadError,
                             retryLockState: retryTransactionLockState,
+                            requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
                             toggleLockState: beginToggleTransactionLockState
                         )
                     } else {
@@ -117,8 +146,10 @@ struct TransactionDetailsView: View {
                             numberOfConfirmations: numberOfConfirmations,
                             lockState: lockState,
                             isUpdatingLockState: isUpdatingLockState,
+                            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
                             lockStateLoadError: lockStateLoadError,
                             retryLockState: retryTransactionLockState,
+                            requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
                             toggleLockState: beginToggleTransactionLockState
                         )
                     }
@@ -223,12 +254,9 @@ struct TransactionDetailsView: View {
 
     func refreshTransactionLockState() async {
         do {
-            let state = try await manager.transactionLockState(for: initialDetails.txId())
+            _ = try await manager.transactionLockState(for: initialDetails.txId())
             await MainActor.run {
-                withAnimation {
-                    lockState = state
-                    lockStateLoadError = nil
-                }
+                lockStateLoadError = nil
             }
         } catch {
             Log.error("Error refreshing transaction lock state: \(error)")
@@ -238,19 +266,47 @@ struct TransactionDetailsView: View {
         }
     }
 
-    func toggleTransactionLockState() async {
-        do {
-            let state = try await manager.toggleTransactionLockState(for: initialDetails.txId())
-            await MainActor.run {
-                withAnimation {
-                    lockState = state
+    func updateTransactionLockState(
+        operation: @escaping () async throws -> TransactionLockState
+    ) async {
+        let indicatorTask = Task {
+            do {
+                try await Task.sleep(for: lockStateUpdateRevealDelay)
+                try Task.checkCancellation()
+                await MainActor.run {
+                    lockStateUpdatingIndicatorShownAt = ContinuousClock.now
+                    showLockStateUpdatingIndicator = true
                 }
-                isUpdatingLockState = false
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Error showing transaction lock update indicator: \(error)")
             }
+        }
+        var updateError: String? = nil
+
+        do {
+            _ = try await operation()
         } catch {
-            await MainActor.run {
-                lockStateError = error.localizedDescription
-                isUpdatingLockState = false
+            updateError = error.localizedDescription
+        }
+
+        indicatorTask.cancel()
+
+        if let visibleSince = await MainActor.run(body: { lockStateUpdatingIndicatorShownAt }) {
+            let remaining = lockStateUpdateMinimumVisibleDuration - visibleSince.duration(to: ContinuousClock.now)
+            if remaining > .zero {
+                try? await Task.sleep(for: remaining)
+            }
+        }
+
+        await MainActor.run {
+            showLockStateUpdatingIndicator = false
+            lockStateUpdatingIndicatorShownAt = nil
+            isUpdatingLockState = false
+
+            if let updateError {
+                lockStateError = updateError
             }
         }
     }

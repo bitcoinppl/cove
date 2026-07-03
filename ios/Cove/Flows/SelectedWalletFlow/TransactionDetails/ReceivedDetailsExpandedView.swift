@@ -11,6 +11,12 @@ struct ReceivedDetailsExpandedView: View {
     let manager: WalletManager
     let transactionDetails: TransactionDetails
     let numberOfConfirmations: Int?
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
+    let lockStateLoadError: String?
+    let retryLockState: () -> Void
+    let toggleLockState: () -> Void
 
     // private
     @State private var isCopied = false
@@ -34,28 +40,55 @@ struct ReceivedDetailsExpandedView: View {
             Divider().padding(.vertical, 18)
 
             if transactionDetails.isConfirmed() {
-                Text("Confirmations")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.leading)
-
-                Group {
-                    if let numberOfConfirmations {
-                        Text(ThousandsFormatter(numberOfConfirmations).fmt())
-                            .fontWeight(.semibold)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Confirmations")
+                            .font(.caption)
+                            .foregroundColor(.gray)
                             .multilineTextAlignment(.leading)
-                            .contentTransition(.numericText())
-                    } else {
-                        ProgressView()
-                            .tint(.primary)
+
+                        if let numberOfConfirmations {
+                            Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                                .fontWeight(.semibold)
+                                .multilineTextAlignment(.leading)
+                                .contentTransition(.numericText())
+                        } else {
+                            ProgressView()
+                                .tint(.primary)
+                        }
                     }
+                    .padding(.bottom, 14)
+
+                    Spacer()
+
+                    TransactionDetailsLockControl(
+                        lockState: lockState,
+                        isUpdatingLockState: isUpdatingLockState,
+                        showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                        lockStateLoadError: lockStateLoadError,
+                        retryLockState: retryLockState,
+                        toggleLockState: toggleLockState
+                    )
+                    .padding(.top, 1)
                 }
-                .padding(.bottom, 14)
 
                 expandedDetailsRow(
                     header: "Block Number",
                     content: String(transactionDetails.blockNumberFmt() ?? "")
                 )
+            } else {
+                HStack {
+                    Spacer()
+
+                    TransactionDetailsLockControl(
+                        lockState: lockState,
+                        isUpdatingLockState: isUpdatingLockState,
+                        showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                        lockStateLoadError: lockStateLoadError,
+                        retryLockState: retryLockState,
+                        toggleLockState: toggleLockState
+                    )
+                }
             }
 
             Text("Received At")

@@ -6,7 +6,7 @@ use bip329::{
 };
 use bitcoin::{Address, address::NetworkUnchecked};
 use cove_util::result_ext::ResultExt as _;
-use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
+use redb::{ReadOnlyTable, ReadableTable as _, TableDefinition};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::database::{cbor::Cbor, key::OutPointKey};
@@ -14,6 +14,11 @@ use crate::transaction::TxId;
 
 type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;
+
+enum ImportedLabelAction {
+    Insert(Label),
+    Ignore,
+}
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi::export(Display)]
@@ -59,17 +64,28 @@ impl LabelsTable {
     }
 
     pub fn number_of_labels(&self) -> Result<u64, Error> {
-        let txn_table = self.read_table(TXN_TABLE)?;
-        let input_table = self.read_table(INPUT_TABLE)?;
-        let output_table = self.read_table(OUTPUT_TABLE)?;
-        let address_table = self.read_table(ADDRESS_TABLE)?;
+        let txns = self.count_meaningful_labels(TXN_TABLE, Label::Transaction)?;
+        let inputs = self.count_meaningful_labels(INPUT_TABLE, Label::Input)?;
+        let outputs = self.count_meaningful_labels(OUTPUT_TABLE, Label::Output)?;
+        let addresses = self.count_meaningful_labels(ADDRESS_TABLE, Label::Address)?;
 
-        let txns = txn_table.len()?;
-        let inputs = input_table.len()?;
-        let outputs = output_table.len()?;
-        let addresses = address_table.len()?;
+        Ok((txns + inputs + outputs + addresses) as u64)
+    }
 
-        Ok(txns + inputs + outputs + addresses)
+    pub fn has_labels(&self) -> Result<bool, Error> {
+        if self.has_meaningful_label(TXN_TABLE, Label::Transaction)? {
+            return Ok(true);
+        }
+
+        if self.has_meaningful_label(INPUT_TABLE, Label::Input)? {
+            return Ok(true);
+        }
+
+        if self.has_meaningful_label(OUTPUT_TABLE, Label::Output)? {
+            return Ok(true);
+        }
+
+        self.has_meaningful_label(ADDRESS_TABLE, Label::Address)
     }
 
     // MARK: LIST
@@ -104,7 +120,13 @@ impl LabelsTable {
             .map(|(_key, record)| record.value().item)
             .map(Label::Address);
 
-        let labels = txns.chain(inputs).chain(outputs).chain(addresses).collect::<Vec<_>>().into();
+        let labels = txns
+            .chain(inputs)
+            .chain(outputs)
+            .chain(addresses)
+            .filter(is_meaningful_export_label)
+            .collect::<Vec<_>>()
+            .into();
 
         Ok(labels)
     }
@@ -232,7 +254,7 @@ impl LabelsTable {
         for row in table.iter()? {
             let (_key, record) = row?;
             let record = record.value().item;
-            if !record.spendable {
+            if !record.spendable() {
                 outpoints.insert(record.ref_);
             }
         }
@@ -243,36 +265,73 @@ impl LabelsTable {
     // MARK: INSERT
 
     pub fn insert_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
-        let spendable_by_outpoint = parsed
-            .output_spendable
-            .into_iter()
-            .map(|field| (field.ref_, field.value))
-            .collect::<std::collections::HashMap<_, _>>();
+        let timestamps = Timestamps::now();
+        let mut records_to_insert = Vec::new();
 
-        let labels = parsed
-            .labels
-            .into_vec()
-            .into_iter()
-            .map(|label| {
-                let Label::Output(mut output) = label else { return Ok(label) };
-
-                match spendable_by_outpoint
-                    .get(&output.ref_)
-                    .and_then(|field| field.explicit_value())
-                {
-                    Some(spendable) => output.spendable = spendable,
-                    None => {
-                        if let Some(current) = self.get_output_record(output.ref_)? {
-                            output.spendable = current.item.spendable;
-                        }
-                    }
+        for label in parsed.labels.into_vec() {
+            match self.prepare_imported_label(label)? {
+                ImportedLabelAction::Insert(label) => {
+                    records_to_insert.push(Record::with_timestamps(label, timestamps));
                 }
+                ImportedLabelAction::Ignore => {}
+            }
+        }
 
-                Ok(Label::Output(output))
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+        self.insert_records(records_to_insert)
+    }
 
-        self.insert_labels(labels)
+    fn prepare_imported_label(&self, label: Label) -> Result<ImportedLabelAction, Error> {
+        let Label::Output(output) = label else {
+            if has_non_empty_label(label.label()) {
+                return Ok(ImportedLabelAction::Insert(label));
+            }
+
+            return Ok(ImportedLabelAction::Ignore);
+        };
+
+        self.prepare_imported_output_label(output)
+    }
+
+    fn prepare_imported_output_label(
+        &self,
+        mut output: OutputRecord,
+    ) -> Result<ImportedLabelAction, Error> {
+        let current = self.get_output_record(output.ref_)?;
+
+        if has_non_empty_label(output.label.as_deref()) {
+            if output.spendable.is_none()
+                && let Some(current) = current
+            {
+                output.spendable = current.item.spendable;
+            }
+
+            return Ok(ImportedLabelAction::Insert(Label::Output(output)));
+        }
+
+        let Some(spendable) = output.spendable else {
+            return Ok(ImportedLabelAction::Ignore);
+        };
+
+        if !spendable {
+            if let Some(current) = current {
+                output.label = current.item.label;
+            }
+            output.spendable = Some(false);
+
+            return Ok(ImportedLabelAction::Insert(Label::Output(output)));
+        }
+
+        let Some(mut current) = current else {
+            return Ok(ImportedLabelAction::Ignore);
+        };
+
+        if current.item.spendable == Some(false) {
+            current.item.spendable = Some(true);
+
+            return Ok(ImportedLabelAction::Insert(Label::Output(current.item)));
+        }
+
+        Ok(ImportedLabelAction::Ignore)
     }
 
     pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
@@ -390,20 +449,15 @@ impl LabelsTable {
                         return Ok(());
                     }
 
-                    let record = OutputRecord { ref_: outpoint, label: None, spendable: false };
+                    let record =
+                        OutputRecord { ref_: outpoint, label: None, spendable: Some(false) };
                     let record = Record::with_timestamps(record, Timestamps::new(now, now));
                     table.insert(key, record)?;
 
                     return Ok(());
                 };
 
-                if spendable && current.item.label.is_none() {
-                    table.remove(key)?;
-
-                    return Ok(());
-                }
-
-                current.item.spendable = spendable;
+                current.item.spendable = Some(spendable);
                 current.timestamps.updated_at = now;
                 table.insert(key, current)?;
 
@@ -518,6 +572,47 @@ impl LabelsTable {
 
         Ok(table)
     }
+
+    fn count_meaningful_labels<K, T>(
+        &self,
+        table: TableDefinition<K, SerdeRecord<T>>,
+        to_label: impl Fn(T) -> Label,
+    ) -> Result<usize, Error>
+    where
+        K: redb::Key + Debug + Clone + Send + Sync + 'static,
+        T: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
+    {
+        let table = self.read_table(table)?;
+
+        let count = table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| to_label(record.value().item))
+            .filter(is_meaningful_export_label)
+            .count();
+
+        Ok(count)
+    }
+
+    fn has_meaningful_label<K, T>(
+        &self,
+        table: TableDefinition<K, SerdeRecord<T>>,
+        to_label: impl Fn(T) -> Label,
+    ) -> Result<bool, Error>
+    where
+        K: redb::Key + Debug + Clone + Send + Sync + 'static,
+        T: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
+    {
+        let table = self.read_table(table)?;
+
+        let has_label = table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| to_label(record.value().item))
+            .any(|label| is_meaningful_export_label(&label));
+
+        Ok(has_label)
+    }
 }
 
 impl From<redb::TransactionError> for Error {
@@ -535,6 +630,19 @@ impl From<redb::TableError> for Error {
 impl From<redb::StorageError> for Error {
     fn from(error: redb::StorageError) -> Self {
         Self::Database(error.into())
+    }
+}
+
+fn has_non_empty_label(label: Option<&str>) -> bool {
+    label.is_some_and(|label| !label.trim().is_empty())
+}
+
+fn is_meaningful_export_label(label: &Label) -> bool {
+    match label {
+        Label::Output(output) => {
+            has_non_empty_label(output.label.as_deref()) || output.spendable.is_some()
+        }
+        _ => has_non_empty_label(label.label()),
     }
 }
 
@@ -576,10 +684,47 @@ mod tests {
     use std::str::FromStr as _;
 
     use crate::{
-        database::wallet_data::test_support::new_test_wallet_data_db, wallet::metadata::WalletId,
+        database::{
+            Record, cbor::Cbor, record::Timestamps,
+            wallet_data::test_support::new_test_wallet_data_db,
+        },
+        wallet::metadata::WalletId,
     };
-    use bip329::Labels;
+    use bip329::{Labels, OutputRecord};
     use bitcoin::OutPoint;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    struct LegacyOutputRecord {
+        #[serde(rename = "ref")]
+        ref_: bitcoin::OutPoint,
+        label: Option<String>,
+        spendable: bool,
+    }
+
+    #[test]
+    fn output_record_deserializes_legacy_bool_spendable_cbor() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let legacy = Record::with_timestamps(
+            LegacyOutputRecord {
+                ref_: outpoint,
+                label: Some("legacy".to_string()),
+                spendable: false,
+            },
+            Timestamps::new(1, 2),
+        );
+
+        let bytes = <Cbor<Record<LegacyOutputRecord>> as redb::Value>::as_bytes(&legacy);
+        let decoded = <Cbor<Record<OutputRecord>> as redb::Value>::from_bytes(bytes.as_ref());
+
+        assert_eq!(decoded.item.ref_, outpoint);
+        assert_eq!(decoded.item.label, Some("legacy".to_string()));
+        assert_eq!(decoded.item.spendable, Some(false));
+        assert_eq!(decoded.timestamps, Timestamps::new(1, 2));
+    }
 
     #[test]
     fn test_all_labels_for_txn() {
@@ -661,7 +806,7 @@ mod tests {
             .expect("missing output record");
 
         assert_eq!(record.item.label, Some("renamed".to_string()));
-        assert!(!record.item.spendable);
+        assert_eq!(record.item.spendable, Some(false));
     }
 
     #[test]
@@ -688,7 +833,7 @@ mod tests {
             .expect("missing output record");
 
         assert_eq!(record.item.label, Some("unlocked".to_string()));
-        assert!(record.item.spendable);
+        assert_eq!(record.item.spendable, Some(true));
     }
 
     #[test]
@@ -715,10 +860,147 @@ mod tests {
             .expect("missing output record");
 
         assert_eq!(record.item.label, Some("locked".to_string()));
-        assert!(!record.item.spendable);
+        assert_eq!(record.item.spendable, Some(false));
         assert!(
             db.locked_output_outpoints().expect("failed to get locked outputs").contains(&outpoint)
         );
+    }
+
+    #[test]
+    fn import_skips_unlabeled_metadata_without_spendability_updates() {
+        let ignored_output = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse ignored output");
+        let ignored_spendable_true_output = OutPoint::from_str(
+            "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:2",
+        )
+        .expect("failed to parse ignored spendable true output");
+        let jsonl = r#"
+            {"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290","origin":"wpkh([d317f698/84h/1h/0h])"}
+            {"type":"addr","ref":"bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c","origin":"wpkh([d317f698/84h/1h/0h])"}
+            {"type":"input","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0","origin":"wpkh([d317f698/84h/1h/0h])"}
+            {"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","origin":"wpkh([d317f698/84h/1h/0h])"}
+            {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:2","origin":"wpkh([d317f698/84h/1h/0h])","spendable":true}
+            {"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"real label"}
+        "#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.insert_imported_labels(
+            Labels::try_from_str_with_metadata(jsonl).expect("failed to parse labels"),
+        )
+        .expect("failed to import labels");
+
+        let exported = db.all_labels().expect("failed to load labels").export().unwrap();
+
+        assert_eq!(db.number_of_labels().expect("failed to count labels"), 1);
+        assert!(exported.contains(r#""label":"real label""#));
+        assert!(
+            !exported
+                .contains("d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0")
+        );
+        assert!(db.get_output_record(ignored_output).expect("failed to get output").is_none());
+        assert!(
+            db.get_output_record(ignored_spendable_true_output)
+                .expect("failed to get spendable true output")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn export_includes_only_labeled_or_explicit_spendability_records() {
+        let lock_only_output = OutPoint::from_str(
+            "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:2",
+        )
+        .expect("failed to parse lock-only output");
+        let unlock_output = OutPoint::from_str(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0",
+        )
+        .expect("failed to parse unlock output");
+        let jsonl = r#"
+            {"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290"}
+            {"type":"addr","ref":"bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c"}
+            {"type":"input","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0"}
+            {"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1"}
+            {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:2","spendable":false}
+            {"type":"output","ref":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0","spendable":true}
+            {"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"real label"}
+        "#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(jsonl).expect("failed to parse labels"))
+            .expect("failed to insert labels");
+
+        let exported = db.all_labels().expect("failed to load labels").export().unwrap();
+
+        assert_eq!(db.number_of_labels().expect("failed to count labels"), 3);
+        assert!(exported.contains(&lock_only_output.to_string()));
+        assert!(exported.contains(&unlock_output.to_string()));
+        assert!(exported.contains(r#""label":"real label""#));
+        assert!(exported.contains(r#""spendable":false"#));
+        assert!(exported.contains(r#""spendable":true"#));
+        assert!(!exported.contains("bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c"));
+        assert!(
+            !exported
+                .contains("f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1")
+        );
+    }
+
+    #[test]
+    fn import_unlabeled_spendable_true_marks_locked_output_unlocked_for_export() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","spendable":true}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        db.insert_imported_labels(
+            Labels::try_from_str_with_metadata(imported).expect("failed to parse labels"),
+        )
+        .expect("failed to import labels");
+
+        let exported = db.all_labels().expect("failed to load labels").export().unwrap();
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(record.item.label, None);
+        assert_eq!(record.item.spendable, Some(true));
+        assert!(db.locked_output_outpoints().expect("failed to get locked outputs").is_empty());
+        assert!(exported.contains(r#""spendable":true"#));
+    }
+
+    #[test]
+    fn import_unlabeled_spendability_update_preserves_existing_output_label() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"keep me","spendable":false}"#;
+        let imported = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","spendable":true}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
+            .expect("failed to insert existing labels");
+        db.insert_imported_labels(
+            Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
+        )
+        .expect("failed to import labels");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(record.item.label, Some("keep me".to_string()));
+        assert_eq!(record.item.spendable, Some(true));
     }
 
     #[test]
@@ -739,7 +1021,7 @@ mod tests {
         let locked = db.locked_output_outpoints().expect("failed to get locked outputs");
 
         assert_eq!(record.item.label, None);
-        assert!(!record.item.spendable);
+        assert_eq!(record.item.spendable, Some(false));
         assert!(locked.contains(&outpoint));
     }
 
@@ -794,12 +1076,12 @@ mod tests {
             destination_db.locked_output_outpoints().expect("failed to get locked outputs");
 
         assert_eq!(record.item.label, None);
-        assert!(!record.item.spendable);
+        assert_eq!(record.item.spendable, Some(false));
         assert!(locked.contains(&outpoint));
     }
 
     #[test]
-    fn unlocking_lock_only_record_removes_output_record() {
+    fn unlocking_lock_only_record_marks_explicit_unlock() {
         let outpoint = OutPoint::from_str(
             "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
         )
@@ -810,8 +1092,16 @@ mod tests {
         db.set_output_spendability(outpoint, false).expect("failed to lock output");
         db.set_output_spendability(outpoint, true).expect("failed to unlock output");
 
-        assert!(db.get_output_record(outpoint).expect("failed to get output record").is_none());
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+        let exported = db.all_labels().expect("failed to load labels").export().unwrap();
+
+        assert_eq!(record.item.label, None);
+        assert_eq!(record.item.spendable, Some(true));
         assert!(db.locked_output_outpoints().expect("failed to get locked outputs").is_empty());
+        assert!(exported.contains(r#""spendable":true"#));
     }
 
     #[test]
@@ -834,7 +1124,7 @@ mod tests {
             .expect("missing output record");
 
         assert_eq!(record.item.label, Some("keep me".to_string()));
-        assert!(record.item.spendable);
+        assert_eq!(record.item.spendable, Some(true));
     }
 
     #[test]
@@ -870,7 +1160,7 @@ mod tests {
             .expect("missing untouched output")
             .item;
 
-        assert!(!requested.spendable);
-        assert!(untouched.spendable);
+        assert_eq!(requested.spendable, Some(false));
+        assert_eq!(untouched.spendable, Some(true));
     }
 }

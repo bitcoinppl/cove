@@ -101,6 +101,8 @@ struct TransactionDetailsLabelView: View {
 
             Text(label)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .foregroundStyle(.secondary)
     }

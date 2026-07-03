@@ -132,7 +132,7 @@ impl State {
             });
 
             utxo.label = label;
-            utxo.spendable = output_record.map(|record| record.item.spendable).unwrap_or(true);
+            utxo.spendable = output_record.map(|record| record.item.spendable()).unwrap_or(true);
         }
 
         self.lock_state_load_failed = lock_state_load_failed;

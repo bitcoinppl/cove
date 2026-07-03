@@ -44,6 +44,7 @@ internal fun TransactionDetailsWidget(
     totalSpentFiatFmt: String?,
     historicalFiatFmt: String?,
     metadata: WalletMetadata,
+    lockControl: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val tooltipText = stringResource(R.string.fiat_price_tooltip)
@@ -66,56 +67,64 @@ internal fun TransactionDetailsWidget(
 
         if (isSent) {
             // "Sent to" section - only for sent transactions
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    stringResource(R.string.label_sent_to),
-                    color = sub,
-                    fontSize = 13.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
-                    color = fg,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 20.sp,
-                )
-
-                // show block number and confirmations for confirmed sent transactions
-                if (isConfirmed) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.label_sent_to),
+                        color = sub,
+                        fontSize = 13.sp,
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            transactionDetails.blockNumberFmt() ?: "",
-                            color = sub,
-                            fontSize = 12.sp,
-                        )
-                        Text(" | ", color = sub, fontSize = 12.sp)
-                        if (numberOfConfirmations != null) {
+                    Text(
+                        transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
+                        color = fg,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 20.sp,
+                    )
+
+                    // show block number and confirmations for confirmed sent transactions
+                    if (isConfirmed) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                numberOfConfirmations.toString(),
+                                transactionDetails.blockNumberFmt() ?: "",
                                 color = sub,
                                 fontSize = 12.sp,
                             )
-                            Spacer(Modifier.size(4.dp))
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .size(14.dp)
-                                        .clip(CircleShape)
-                                        .background(CoveColor.SuccessGreen),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(10.dp),
+                            Text(" | ", color = sub, fontSize = 12.sp)
+                            if (numberOfConfirmations != null) {
+                                Text(
+                                    numberOfConfirmations.toString(),
+                                    color = sub,
+                                    fontSize = 12.sp,
                                 )
+                                Spacer(Modifier.size(4.dp))
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(14.dp)
+                                            .clip(CircleShape)
+                                            .background(CoveColor.SuccessGreen),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(10.dp),
+                                    )
+                                }
                             }
                         }
                     }
                 }
+
+                Spacer(Modifier.width(12.dp))
+                lockControl()
             }
             Spacer(Modifier.height(24.dp))
             Box(
@@ -179,6 +188,7 @@ internal fun TransactionDetailsWidget(
                 numberOfConfirmations = numberOfConfirmations,
                 currentFiatFmt = totalSpentFiatFmt,
                 historicalFiatFmt = historicalFiatFmt,
+                lockControl = lockControl,
             )
         }
 

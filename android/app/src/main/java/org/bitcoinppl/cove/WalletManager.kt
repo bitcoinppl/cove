@@ -102,6 +102,7 @@ class WalletManager :
     // cached transaction details (observable for Compose)
     val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
     val transactionConfirmations: SnapshotStateMap<TxId, UInt> = mutableStateMapOf()
+    val transactionLockStates: SnapshotStateMap<TxId, TransactionLockState> = mutableStateMapOf()
 
     var receiveAddressState by mutableStateOf<ReceiveAddressState?>(null)
     var receiveAddressPresentation by mutableStateOf(
@@ -530,19 +531,40 @@ class WalletManager :
         return details
     }
 
-    suspend fun transactionLockState(txId: TxId): TransactionLockState =
-        withRustSuspend {
-            transactionLockState(txId)
-        }
+    suspend fun transactionLockState(txId: TxId): TransactionLockState {
+        val state =
+            withRustSuspend {
+                transactionLockState(txId)
+            }
+        transactionLockStates[txId] = state
+
+        return state
+    }
 
     suspend fun toggleTransactionLockState(txId: TxId): TransactionLockState {
         val state =
             withRustSuspend {
                 toggleTransactionLockState(txId)
             }
+        transactionLockStates[txId] = state
         AppManager.getInstance().reconcileAfterLabelImport(id)
 
         return state
+    }
+
+    suspend fun unlockTransactionOutputs(txId: TxId): TransactionLockState {
+        val state =
+            withRustSuspend {
+                unlockTransactionOutputs(txId)
+            }
+        transactionLockStates[txId] = state
+        AppManager.getInstance().reconcileAfterLabelImport(id)
+
+        return state
+    }
+
+    fun clearTransactionLockState(txId: TxId) {
+        transactionLockStates.remove(txId)
     }
 
     fun importLabels(labels: Bip329Labels) {
@@ -551,13 +573,37 @@ class WalletManager :
     }
 
     suspend fun reconcileAfterLabelImportAndWait(): Boolean {
-        transactionDetailsCache.clear()
+        val cachedTransactionIds = transactionDetailsCache.keys.toList()
+        val cachedLockStateTransactionIds = transactionLockStates.keys.toList()
+        var refreshedDetails = true
+
+        for (txId in cachedTransactionIds) {
+            try {
+                refreshTransactionDetails(txId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "failed to refresh transaction details after label import", e)
+                refreshedDetails = false
+            }
+        }
+
+        for (txId in cachedLockStateTransactionIds) {
+            try {
+                transactionLockState(txId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "failed to refresh transaction lock state after label import", e)
+                clearTransactionLockState(txId)
+            }
+        }
 
         return try {
             withRustSuspend {
                 getTransactions()
             }
-            true
+            refreshedDetails
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

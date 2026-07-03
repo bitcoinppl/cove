@@ -71,7 +71,8 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `just build-android` | `just ba` | Build Android debug |
+| `just build-android` | `just ba` | Build Android debug Rust FFI and Kotlin bindings for all ABIs |
+| `just build-android-connected-device` | `just bad` | Build Android debug Rust FFI and Kotlin bindings for the connected device ABI |
 | `just build-android-release` | `just bar` | Build Android release |
 | `just build-ios` | `just bi` | Build iOS debug simulator |
 | `just build-ios-debug-device` | `just bidd` | Build iOS debug device |

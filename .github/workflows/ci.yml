@@ -116,7 +116,8 @@ jobs:
         with:
           workspaces: rust -> target
           cache-bin: false
-          prefix-key: v1-rust
+          cache-targets: false
+          prefix-key: v2-rust-ios
 
       - name: Set up just
         uses: taiki-e/install-action@v2

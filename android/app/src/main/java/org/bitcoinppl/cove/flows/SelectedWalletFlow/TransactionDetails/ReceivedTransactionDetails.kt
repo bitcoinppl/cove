@@ -42,6 +42,7 @@ internal fun ReceivedTransactionDetails(
     numberOfConfirmations: Int?,
     currentFiatFmt: String?,
     historicalFiatFmt: String?,
+    lockControl: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val tooltipText = stringResource(R.string.fiat_price_tooltip)
@@ -53,27 +54,37 @@ internal fun ReceivedTransactionDetails(
         // for confirmed transactions, show Confirmations and Block Number first (matching iOS)
         if (transactionDetails.isConfirmed()) {
             // Confirmations row
-            Text(
-                stringResource(R.string.label_confirmations),
-                color = sub,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            if (numberOfConfirmations != null) {
-                Text(
-                    NumberFormat.getNumberInstance().format(numberOfConfirmations),
-                    color = fg,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            } else {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = fg,
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.label_confirmations),
+                        color = sub,
+                        fontSize = 12.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (numberOfConfirmations != null) {
+                        Text(
+                            NumberFormat.getNumberInstance().format(numberOfConfirmations),
+                            color = fg,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = fg,
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
+
+                Spacer(Modifier.width(12.dp))
+                lockControl()
             }
-            Spacer(Modifier.height(14.dp))
 
             // Block Number row
             Text(
@@ -89,6 +100,14 @@ internal fun ReceivedTransactionDetails(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(14.dp))
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Spacer(Modifier.weight(1f))
+                lockControl()
+            }
         }
 
         // "Received At" section with address and copy button

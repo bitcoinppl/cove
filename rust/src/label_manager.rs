@@ -104,7 +104,7 @@ impl LabelManager {
     }
 
     pub fn has_labels(&self) -> bool {
-        self.db.labels.number_of_labels().unwrap_or(0) > 0
+        self.db.labels.has_labels().unwrap_or(false)
     }
 
     pub fn transaction_label(&self, tx_id: Arc<TxId>) -> Option<String> {
@@ -243,7 +243,7 @@ impl LabelManager {
 
             let split = Split::try_from_data(
                 data,
-                FileType::Json,
+                FileType::UnicodeText,
                 SplitOptions {
                     encoding: Encoding::Zlib,
                     min_split_number: 1,
@@ -337,10 +337,10 @@ impl LabelManager {
                 continue;
             }
 
-            if record.item.spendable {
+            if record.item.spendable != Some(false) {
                 labels_to_delete.push(Label::from(record.item));
 
-                // spendable outputs do not need a lock-only replacement record
+                // unlocked outputs do not need a replacement record
                 continue;
             }
 
@@ -598,7 +598,7 @@ impl LabelManager {
             .map(|vout| OutputRecord {
                 ref_: bitcoin::OutPoint { txid: tx_id.0, vout: *vout },
                 label: Some(output_label.clone()),
-                spendable: true,
+                spendable: None,
             })
             .collect()
     }
@@ -649,7 +649,7 @@ mod tests {
             .get_output_record(outpoint)
             .expect("failed to get output record")
             .expect("missing output record");
-        record.item.spendable = spendable;
+        record.item.spendable = Some(spendable);
 
         manager
             .db
@@ -742,7 +742,7 @@ mod tests {
             .item;
 
         assert_eq!(output.label, Some("second (received)".to_string()));
-        assert!(!output.spendable);
+        assert_eq!(output.spendable, Some(false));
     }
 
     #[test]
@@ -769,8 +769,28 @@ mod tests {
 
         assert!(changed);
         assert_eq!(output.label, None);
-        assert!(!output.spendable);
+        assert_eq!(output.spendable, Some(false));
         assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+    }
+
+    #[test]
+    fn deleting_transaction_label_removes_migrated_spendable_auto_output() {
+        let (manager, _tmp) = test_manager();
+        let details = received_details_with_output(0);
+        let tx_id = details.tx_id;
+        let outpoint = bitcoin::OutPoint { txid: tx_id.0, vout: 0 };
+
+        insert_or_update_auto_labels(&manager, &details, "first");
+        set_output_spendable(&manager, outpoint, true);
+
+        let changed = manager
+            .delete_labels_for_txn_without_cloud_backup_dirty(Arc::new(tx_id))
+            .expect("failed to delete labels");
+
+        assert!(changed);
+        assert!(manager.db.labels.get_output_record(outpoint).unwrap().is_none());
+        assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+        assert_eq!(manager.db.labels.number_of_labels().expect("labels count loads"), 0);
     }
 
     #[test]
@@ -838,5 +858,46 @@ mod tests {
             .global_config
             .clear_selected_wallet()
             .expect("selected wallet is cleared");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn label_bbqr_export_uses_unicode_text_file_type() {
+        use bbqr::{
+            continuous_join::{ContinuousJoinResult, ContinuousJoiner},
+            file_type::FileType,
+            header::Header,
+        };
+
+        crate::test_support::ensure_tokio_runtime();
+        let (manager, _tmp) = test_manager();
+        manager
+            .import_without_cloud_backup_dirty(
+                r#"{"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"exported"}"#,
+            )
+            .expect("failed to insert labels");
+
+        let parts = manager
+            .export_to_bbqr_with_density(&QrDensity::default())
+            .await
+            .expect("failed to export labels");
+        let header = Header::try_from_str(&parts[0]).expect("failed to parse BBQr header");
+
+        assert_eq!(header.file_type, FileType::UnicodeText);
+
+        let mut joiner = ContinuousJoiner::new();
+        let mut joined = None;
+        for part in parts {
+            if let ContinuousJoinResult::Complete(result) =
+                joiner.add_part(part).expect("failed to join BBQr part")
+            {
+                joined = Some(result);
+            }
+        }
+
+        let joined = joined.expect("BBQr parts never completed");
+        let jsonl = String::from_utf8(joined.data).expect("BBQr payload is not UTF-8");
+        let labels = parse_labels(&jsonl).expect("BBQr payload is not BIP329 JSONL");
+
+        assert_eq!(labels.labels.transaction_label(), Some("exported"));
     }
 }

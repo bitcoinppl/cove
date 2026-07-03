@@ -14,8 +14,10 @@ struct TransactionReceivedDetailsSection: View {
     let numberOfConfirmations: Int?
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
     let lockStateLoadError: String?
     let retryLockState: () -> Void
+    let requestUnlockLockedUtxos: () -> Void
     let toggleLockState: () -> Void
 
     private var headerIcon: HeaderIcon {
@@ -36,7 +38,13 @@ struct TransactionReceivedDetailsSection: View {
                     .fontWeight(.semibold)
                     .padding(.top, 8)
 
-                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
+                TransactionDetailsHeaderLabelRow(
+                    transactionDetails: transactionDetails,
+                    manager: manager,
+                    lockState: lockState,
+                    isUpdatingLockState: isUpdatingLockState,
+                    requestUnlockLockedUtxos: requestUnlockLockedUtxos
+                )
             }
         }
 
@@ -91,14 +99,6 @@ struct TransactionReceivedDetailsSection: View {
         }
         .padding(.top, 12)
 
-        TransactionDetailsLockControl(
-            lockState: lockState,
-            isUpdatingLockState: isUpdatingLockState,
-            lockStateLoadError: lockStateLoadError,
-            retryLockState: retryLockState,
-            toggleLockState: toggleLockState
-        )
-
         if let confirmations = numberOfConfirmations, confirmations < 3 {
             VStack {
                 Divider().padding(.vertical, 18)
@@ -111,7 +111,13 @@ struct TransactionReceivedDetailsSection: View {
             ReceivedDetailsExpandedView(
                 manager: manager,
                 transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                toggleLockState: toggleLockState
             )
         }
     }
@@ -124,8 +130,10 @@ struct TransactionSentDetailsSection: View {
     let numberOfConfirmations: Int?
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
     let lockStateLoadError: String?
     let retryLockState: () -> Void
+    let requestUnlockLockedUtxos: () -> Void
     let toggleLockState: () -> Void
 
     private var headerIcon: HeaderIcon {
@@ -146,7 +154,13 @@ struct TransactionSentDetailsSection: View {
                     .fontWeight(.semibold)
                     .padding(.top, 6)
 
-                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
+                TransactionDetailsHeaderLabelRow(
+                    transactionDetails: transactionDetails,
+                    manager: manager,
+                    lockState: lockState,
+                    isUpdatingLockState: isUpdatingLockState,
+                    requestUnlockLockedUtxos: requestUnlockLockedUtxos
+                )
             }
         }
 
@@ -207,14 +221,6 @@ struct TransactionSentDetailsSection: View {
         }
         .padding(.top, 12)
 
-        TransactionDetailsLockControl(
-            lockState: lockState,
-            isUpdatingLockState: isUpdatingLockState,
-            lockStateLoadError: lockStateLoadError,
-            retryLockState: retryLockState,
-            toggleLockState: toggleLockState
-        )
-
         if let confirmations = numberOfConfirmations, confirmations < 3 {
             VStack {
                 Divider().padding(.vertical, 18)
@@ -227,15 +233,104 @@ struct TransactionSentDetailsSection: View {
             SentDetailsExpandedView(
                 manager: manager,
                 transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                toggleLockState: toggleLockState
             )
         }
     }
 }
 
-struct TransactionDetailsLockControl: View {
+private struct TransactionDetailsHeaderLabelRow: View {
+    let transactionDetails: TransactionDetails
+    let manager: WalletManager
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
+    let requestUnlockLockedUtxos: () -> Void
+
+    private var lockedUtxosState: TransactionLockState? {
+        guard let lockState, lockState.showsCollapsedLockTreatment else { return nil }
+
+        return lockState
+    }
+
+    var body: some View {
+        if let lockedUtxosState {
+            VStack(spacing: 8) {
+                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
+                    .lineLimit(1)
+
+                TransactionCollapsedLockBadge(
+                    lockState: lockedUtxosState,
+                    isUpdatingLockState: isUpdatingLockState,
+                    requestUnlockLockedUtxos: requestUnlockLockedUtxos
+                )
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, detailsExpandedPadding)
+        } else {
+            TransactionDetailsLabelView(details: transactionDetails, manager: manager)
+        }
+    }
+}
+
+private struct TransactionCollapsedLockBadge: View {
+    let lockState: TransactionLockState
+    let isUpdatingLockState: Bool
+    let requestUnlockLockedUtxos: () -> Void
+
+    @State private var showUnlockLockedUtxosConfirmation = false
+
+    var body: some View {
+        Button {
+            showUnlockLockedUtxosConfirmation = true
+        } label: {
+            Label {
+                Text(lockState.collapsedLockBadgeTitle)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: "lock.fill")
+                    .font(.footnote.weight(.semibold))
+            }
+            .foregroundStyle(Color.statusError)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.statusError.opacity(0.14))
+            .clipShape(Capsule())
+            .opacity(isUpdatingLockState ? 0.72 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isUpdatingLockState)
+        .accessibilityLabel(lockState.collapsedLockBadgeTitle)
+        .confirmationDialog(
+            "Unlock UTXOs?",
+            isPresented: $showUnlockLockedUtxosConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Unlock") {
+                requestUnlockLockedUtxos()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Do you want to unlock this transaction's UTXOs?")
+        }
+    }
+}
+
+struct TransactionDetailsLockControl: View {
+    private static let buttonMinWidth: CGFloat = 82
+    private static let symbolFrameSize: CGFloat = 14
+
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
     let lockStateLoadError: String?
     let retryLockState: () -> Void
     let toggleLockState: () -> Void
@@ -243,7 +338,6 @@ struct TransactionDetailsLockControl: View {
     var body: some View {
         if lockStateLoadError != nil {
             content(
-                title: String(localized: "Unable to load lock state"),
                 buttonTitle: String(localized: "Retry"),
                 systemImage: "arrow.clockwise",
                 action: retryLockState
@@ -254,12 +348,12 @@ struct TransactionDetailsLockControl: View {
                 EmptyView()
             case .some(.unlocked), .some(.locked), .some(.mixed):
                 content(
-                    title: lockStateText,
-                    buttonTitle: isUpdatingLockState
+                    buttonTitle: showLockStateUpdatingIndicator
                         ? String(localized: "Updating...")
                         : lockStateButtonText,
                     systemImage: lockStateButtonIcon,
-                    isUpdating: isUpdatingLockState,
+                    isDisabled: isUpdatingLockState,
+                    showsUpdatingIndicator: showLockStateUpdatingIndicator,
                     action: toggleLockState
                 )
             }
@@ -267,70 +361,53 @@ struct TransactionDetailsLockControl: View {
     }
 
     private func content(
-        title: String,
         buttonTitle: String,
         systemImage: String,
-        isUpdating: Bool = false,
+        isDisabled: Bool = false,
+        showsUpdatingIndicator: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        VStack(spacing: 8) {
+        Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if showsUpdatingIndicator {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(
+                            width: Self.symbolFrameSize,
+                            height: Self.symbolFrameSize
+                        )
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.caption2.weight(.semibold))
+                        .frame(
+                            width: Self.symbolFrameSize,
+                            height: Self.symbolFrameSize
+                        )
+                }
 
-                Text(title)
+                Text(buttonTitle)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .contentTransition(.identity)
             }
-
-            Button(action: action) {
-                HStack(spacing: 6) {
-                    if isUpdating {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else {
-                        Image(systemName: systemImage)
-                            .font(.footnote.weight(.semibold))
-                    }
-
-                    Text(buttonTitle)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.systemGray5)
-                .foregroundStyle(.primary)
-                .clipShape(Capsule())
-                .opacity(isUpdating ? 0.72 : 1)
-            }
-            .buttonStyle(.plain)
-            .disabled(isUpdating)
+            .frame(minWidth: Self.buttonMinWidth, alignment: .leading)
+            .foregroundStyle(actionColor.opacity(isDisabled ? 0.72 : 1))
+            .contentShape(Rectangle())
         }
-        .padding(.top, 2)
-    }
-
-    private var lockStateText: String {
-        switch lockState {
-        case .some(.locked):
-            String(localized: "Locked")
-        case .some(.mixed):
-            String(localized: "Mixed")
-        case .some(.unlocked):
-            String(localized: "Unlocked")
-        case .some(.none), nil:
-            ""
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .transaction { transaction in
+            transaction.animation = nil
         }
     }
 
     private var lockStateButtonText: String {
         switch lockState {
         case .some(.locked):
-            String(localized: "Unlock Transaction")
+            String(localized: "Unlock")
         case .some(.mixed), .some(.unlocked):
-            String(localized: "Lock Transaction")
+            String(localized: "Lock")
         case .some(.none), nil:
             ""
         }
@@ -344,6 +421,32 @@ struct TransactionDetailsLockControl: View {
             "lock"
         case .some(.none), nil:
             "lock"
+        }
+    }
+
+    private var actionColor: Color {
+        switch lockState {
+        case .some(.locked):
+            .systemRed
+        case .some(.mixed), .some(.unlocked), .some(.none), nil:
+            .secondary
+        }
+    }
+}
+
+private extension TransactionLockState {
+    var showsCollapsedLockTreatment: Bool {
+        self == .locked || self == .mixed
+    }
+
+    var collapsedLockBadgeTitle: String {
+        switch self {
+        case .locked:
+            String(localized: "UTXOs locked")
+        case .mixed:
+            String(localized: "Some UTXOs locked")
+        case .none, .unlocked:
+            ""
         }
     }
 }
