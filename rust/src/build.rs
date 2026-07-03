@@ -1,5 +1,6 @@
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GIT_SHORT_HASH: &str = env!("GIT_SHORT_HASH");
+const GIT_BRANCH: &str = env!("GIT_BRANCH");
 const BUILD_PROFILE: &str = env!("BUILD_PROFILE");
 
 #[cfg(debug_assertions)]
@@ -14,6 +15,10 @@ pub fn version() -> String {
 
 pub fn git_short_hash() -> String {
     GIT_SHORT_HASH.to_string()
+}
+
+pub fn git_branch() -> String {
+    GIT_BRANCH.to_string()
 }
 
 pub const fn is_release() -> bool {

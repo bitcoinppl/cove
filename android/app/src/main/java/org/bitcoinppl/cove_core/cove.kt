@@ -1213,6 +1213,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup(
     ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_git_branch(
+    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_git_short_hash(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet(
@@ -2150,6 +2152,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(`ptr`: Long,`tapSigner`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_ffiapp_git_branch(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_git_short_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3892,6 +3896,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 63223.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_git_branch() != 52405.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_git_short_hash() != 52244.toShort()) {
@@ -10255,6 +10262,8 @@ public interface FfiAppInterface {
      */
     fun `getTapSignerBackup`(`tapSigner`: TapSigner): kotlin.ByteArray?
 
+    fun `gitBranch`(): kotlin.String
+
     fun `gitShortHash`(): kotlin.String
 
     /**
@@ -10602,6 +10611,19 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         it,
 
         FfiConverterTypeTapSigner.lower(`tapSigner`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `gitBranch`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_git_branch(
+        it,
+        _status)
 }
     }
     )

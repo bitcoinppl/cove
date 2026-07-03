@@ -74,6 +74,15 @@ struct AboutScreen: View {
                     Text(app.rust.gitShortHash())
                         .foregroundStyle(.secondary)
                 }
+
+                #if DEBUG
+                    HStack {
+                        Text("Git Branch")
+                        Spacer()
+                        Text(app.rust.gitBranch())
+                            .foregroundStyle(.secondary)
+                    }
+                #endif
             }
 
             Section {

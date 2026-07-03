@@ -95,6 +95,7 @@ fun AboutSettingsScreen(
         version = BuildConfig.VERSION_NAME,
         buildNumber = BuildConfig.VERSION_CODE.toString(),
         gitCommit = app.gitShortHash,
+        gitBranch = app.gitBranch,
         isBetaEnabled = isBetaEnabled,
         onBack = { app.popRoute() },
         onBuildNumberClick = {
@@ -264,6 +265,7 @@ internal fun AboutSettingsContent(
     version: String,
     buildNumber: String,
     gitCommit: String,
+    gitBranch: String,
     isBetaEnabled: Boolean,
     onBack: () -> Unit,
     onBuildNumberClick: () -> Unit,
@@ -321,6 +323,13 @@ internal fun AboutSettingsContent(
                             label = "Git Commit",
                             value = gitCommit,
                         )
+                        if (BuildConfig.DEBUG && gitBranch.isNotBlank()) {
+                            MaterialDivider()
+                            AboutRow(
+                                label = "Git Branch",
+                                value = gitBranch,
+                            )
+                        }
                     }
                 }
 
@@ -390,6 +399,7 @@ internal fun AboutSettingsPreviewContent() {
             version = "1.3.0",
             buildNumber = "18",
             gitCommit = "abc1234",
+            gitBranch = "fix-lock-unlock",
             isBetaEnabled = true,
             onBack = { },
             onBuildNumberClick = { },

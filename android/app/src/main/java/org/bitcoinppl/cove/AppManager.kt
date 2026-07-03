@@ -324,6 +324,9 @@ class AppManager private constructor() : FfiReconcile {
     val gitShortHash: String
         get() = withRustOr("") { gitShortHash() }
 
+    val gitBranch: String
+        get() = withRustOr("") { gitBranch() }
+
     fun findTapSignerWallet(ts: TapSigner): WalletMetadata? =
         withRustOr(null) {
             findTapSignerWallet(ts)
