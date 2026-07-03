@@ -391,6 +391,10 @@ impl FfiApp {
         crate::build::git_short_hash()
     }
 
+    pub fn git_branch(&self) -> String {
+        crate::build::git_branch()
+    }
+
     pub fn debug_or_release(&self) -> String {
         if !crate::build::is_release() {
             return "DEBUG".to_string();

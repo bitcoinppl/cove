@@ -3000,6 +3000,8 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func getTapSignerBackup(tapSigner: TapSigner) throws  -> Data?
 
+    func gitBranch()  -> String
+
     func gitShortHash()  -> String
 
     /**
@@ -3256,6 +3258,15 @@ open func getTapSignerBackup(tapSigner: TapSigner)throws  -> Data?  {
     uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(
             self.uniffiCloneHandle(),
         FfiConverterTypeTapSigner_lower(tapSigner),uniffiCallStatus
+    )
+})
+}
+
+open func gitBranch() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_ffiapp_git_branch(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -40523,6 +40534,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 63223) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_git_branch() != 52405) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 52244) {
