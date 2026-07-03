@@ -104,6 +104,10 @@ struct UtxoListScreen: View {
         return "Continue (\(manager.selected.count))"
     }
 
+    var canContinue: Bool {
+        !manager.selected.isEmpty && manager.totalSelectedSats > 0
+    }
+
     /// ─── Body ────────────────────────────────────────────────
     var body: some View {
         VStack(spacing: 24) {
@@ -244,17 +248,17 @@ struct UtxoListScreen: View {
                     )
                 }
                 .buttonStyle(
-                    manager.totalSelectedSats < conservativeDustLimitSats
-                        ? DarkButtonStyle(
+                    canContinue
+                        ? DarkButtonStyle()
+                        : DarkButtonStyle(
                             backgroundColor: .systemGray4, foregroundColor: .secondary
                         )
-                        : DarkButtonStyle()
                 )
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.bottom, 4)
-                .disabled(manager.totalSelectedSats < conservativeDustLimitSats)
+                .disabled(!canContinue)
                 .contentTransition(.interpolate)
             }
         }
