@@ -16,7 +16,10 @@ struct TapSignerChooseChainCode: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -32,7 +35,7 @@ struct TapSignerChooseChainCode: View {
             }
         }
         .contentTransition(.opacity)
-        .background(backgroundView)
+        .background(TapSignerResultBackground())
         .navigationBarHidden(true)
     }
 
@@ -120,23 +123,6 @@ struct TapSignerChooseChainCode: View {
             }
             .contentShape(Rectangle())
         }
-    }
-
-    private var backgroundView: some View {
-        VStack {
-            Image(.chainCodePattern)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .ignoresSafeArea(edges: .all)
-                .padding(.top, 5)
-
-            Spacer()
-        }
-        .opacity(0.8)
-    }
-
-    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 }
 

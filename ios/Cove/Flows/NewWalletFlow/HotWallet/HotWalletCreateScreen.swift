@@ -44,7 +44,10 @@ struct WordsView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -74,10 +77,6 @@ struct WordsView: View {
                 }
             }
         }
-    }
-
-    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 
     private func recoveryWordsContent(compactHeight: Bool, includesPrimaryAction: Bool) -> some View {

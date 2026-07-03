@@ -18,7 +18,10 @@ struct TapSignerSetupRetry: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -33,7 +36,7 @@ struct TapSignerSetupRetry: View {
                 }
             }
         }
-        .background(backgroundView)
+        .background(TapSignerResultBackground())
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
     }
@@ -107,23 +110,6 @@ struct TapSignerSetupRetry: View {
                 .padding(.horizontal)
             }
         }
-    }
-
-    private var backgroundView: some View {
-        VStack {
-            Image(.chainCodePattern)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .ignoresSafeArea(edges: .all)
-                .padding(.top, 5)
-
-            Spacer()
-        }
-        .opacity(0.8)
-    }
-
-    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 }
 

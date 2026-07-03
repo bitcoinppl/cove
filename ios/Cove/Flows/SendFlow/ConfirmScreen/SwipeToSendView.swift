@@ -7,6 +7,9 @@
 import Foundation
 import SwiftUI
 
+private let minimumSwipeToSendControlHeight: CGFloat = 70
+private let swipeToSendVerticalTextPadding: CGFloat = 48
+
 enum SendState: Hashable, Equatable {
     case idle
     case sending
@@ -25,17 +28,23 @@ struct SwipeToSendView: View {
     @State var offset: CGFloat = 0
     @State var isDragging = false
     @State var containerWidth = screenWidth
+    @State private var measuredTextHeight: CGFloat = 0
 
     var maxOffset: CGFloat {
-        containerWidth - 70
+        max(0, containerWidth - circleSize)
     }
 
-    var height: CGFloat = 70
+    var height: CGFloat {
+        max(minimumSwipeToSendControlHeight, measuredTextHeight + swipeToSendVerticalTextPadding)
+    }
+
     var circleSize: CGFloat {
         height
     }
 
     var fontOpacity: Double {
+        guard maxOffset > 0 else { return 1 }
+
         let percentDragged = offset / maxOffset
 
         if percentDragged == 0 {
@@ -75,7 +84,9 @@ struct SwipeToSendView: View {
                 Text("Swipe to Send")
                     .foregroundColor(colorScheme == .dark ? .white : .midnightBtn)
                     .fontWeight(.medium)
+                    .fixedSize(horizontal: false, vertical: true)
                     .opacity(fontOpacity)
+                    .recordSwipeToSendTextHeight()
 
                 Spacer()
             }
@@ -91,7 +102,7 @@ struct SwipeToSendView: View {
                         }
                     }
                 )
-                .offset(x: -containerWidth / 2 + 35 + offset)
+                .offset(x: -containerWidth / 2 + circleSize / 2 + offset)
                 .gesture(
                     DragGesture()
                         .onChanged { value in
@@ -101,7 +112,7 @@ struct SwipeToSendView: View {
                         .onEnded { _ in
                             isDragging = false
                             if offset > maxOffset * 0.8 {
-                                // Trigger send action
+                                // trigger send action
                                 withAnimation {
                                     offset = maxOffset
                                 }
@@ -121,15 +132,18 @@ struct SwipeToSendView: View {
                 case .idle: EmptyView()
                 case .sending: HStack(spacing: 16) {
                         Text("sending")
+                            .recordSwipeToSendTextHeight()
                         ThreeDotsAnimation()
                     }
                 case .sent: HStack(spacing: 12) {
                         Text("sent")
+                            .recordSwipeToSendTextHeight()
                         Image(systemName: "checkmark")
                             .foregroundColor(.green)
                     }
                 case .error: HStack(spacing: 10) {
                         Text("error")
+                            .recordSwipeToSendTextHeight()
                         Image(systemName: "xmark")
                             .foregroundColor(.red)
                             .onAppear {
@@ -143,10 +157,34 @@ struct SwipeToSendView: View {
         }
         .frame(height: height)
         .onChange(of: sendState, initial: true, onChangeSendState)
+        .onPreferenceChange(SwipeToSendTextHeightPreferenceKey.self) { height in
+            measuredTextHeight = height
+        }
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
         } action: { frame in
             containerWidth = frame.width
+        }
+    }
+}
+
+private struct SwipeToSendTextHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private extension View {
+    func recordSwipeToSendTextHeight() -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: SwipeToSendTextHeightPreferenceKey.self,
+                    value: proxy.size.height
+                )
+            }
         }
     }
 }

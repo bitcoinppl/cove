@@ -29,7 +29,10 @@ struct HotWalletSelectScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -158,10 +161,6 @@ struct HotWalletSelectScreen: View {
                 Text("24 Words")
             }
         }
-    }
-
-    private func usesScrollableLayout(availableHeight _: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge
     }
 }
 

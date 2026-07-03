@@ -10,9 +10,6 @@ import SwiftUI
 
 private let sendConfirmationActionTopPadding: CGFloat = 20
 private let sendConfirmationActionBottomPadding: CGFloat = 24
-private let sendConfirmationActionReservedHeight: CGFloat = 70
-    + sendConfirmationActionTopPadding
-    + sendConfirmationActionBottomPadding
 
 struct SendFlowConfirmScreen: View {
     @Environment(AppManager.self) private var app
@@ -171,10 +168,8 @@ struct SendFlowConfirmScreen: View {
                         }
                         .scrollIndicators(.hidden)
                         .padding(.horizontal)
-                        .frame(
-                            width: geometry.size.width,
-                            height: max(0, geometry.size.height - sendConfirmationActionReservedHeight)
-                        )
+                        .frame(width: geometry.size.width)
+                        .frame(maxHeight: .infinity)
                         .background(Color.coveBg)
 
                         SwipeToSendView(sendState: $sendState) {
@@ -221,7 +216,6 @@ struct SendFlowConfirmScreen: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .offset(y: -sendConfirmationActionBottomPadding)
                         .padding(.horizontal)
                         .padding(.top, sendConfirmationActionTopPadding)
                         .padding(.bottom, sendConfirmationActionBottomPadding)

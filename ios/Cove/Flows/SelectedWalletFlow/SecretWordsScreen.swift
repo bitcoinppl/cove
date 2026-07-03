@@ -46,7 +46,10 @@ struct SecretWordsScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -180,10 +183,6 @@ struct SecretWordsScreen: View {
             }
         }
         .padding()
-    }
-
-    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 }
 

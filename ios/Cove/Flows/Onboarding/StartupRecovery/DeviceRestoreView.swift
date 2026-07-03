@@ -90,8 +90,11 @@ private struct DeviceRestoreContent: View {
     @ViewBuilder
     private var heroIcon: some View {
         switch restoreState {
-        case .idle, .restoring:
-            restoringHeroIcon
+        case .idle:
+            restoringHeroIcon(pulse: false)
+
+        case .restoring:
+            restoringHeroIcon(pulse: true)
 
         case .complete:
             OnboardingStatusHero(
@@ -118,8 +121,8 @@ private struct DeviceRestoreContent: View {
         }
     }
 
-    private var restoringHeroIcon: some View {
-        OnboardingStatusHero(systemImage: "icloud.and.arrow.down", iconSize: 22)
+    private func restoringHeroIcon(pulse: Bool) -> some View {
+        OnboardingStatusHero(systemImage: "icloud.and.arrow.down", pulse: pulse, iconSize: 22)
     }
 
     @ViewBuilder

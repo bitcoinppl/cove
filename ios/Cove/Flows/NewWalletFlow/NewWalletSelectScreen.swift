@@ -36,7 +36,10 @@ struct NewWalletSelectScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -230,10 +233,6 @@ struct NewWalletSelectScreen: View {
             .cornerRadius(10)
         }
         .buttonStyle(PlainButtonStyle())
-    }
-
-    private func usesScrollableLayout(availableHeight _: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge
     }
 
     private func newWalletFromXpub(_ xpub: String) {

@@ -346,7 +346,10 @@ struct VerifyWordsScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesScrollableLayout(availableHeight: proxy.size.height)
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
                 if scrollableLayout {
@@ -520,10 +523,6 @@ struct VerifyWordsScreen: View {
         .padding(.top, 12)
         .padding(.bottom, 56)
         .background(Color.midnightBlue)
-    }
-
-    private func usesScrollableLayout(availableHeight: CGFloat) -> Bool {
-        sizeCategory >= .extraExtraLarge || availableHeight <= 812
     }
 
     private var isReturning: Bool {
