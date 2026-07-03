@@ -607,6 +607,7 @@ fn cloud_only_wallets_match_detail(
     wallets: &[CloudBackupWalletItem],
     detail: &CloudBackupDetail,
 ) -> bool {
+    // detail carries only a cloud-only count, so identity consistency is limited to local overlap
     wallets.len() as u32 == detail.cloud_only_count
         && wallets.iter().all(|cloud_wallet| {
             detail
@@ -707,6 +708,27 @@ mod tests {
             manager.state.read().cloud_only(),
             CloudOnlyState::Loaded { wallets: vec![wallet_b] }
         );
+    }
+
+    #[test]
+    fn detail_refresh_preserves_empty_loaded_cloud_only_cache_after_restore_when_count_matches() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet = cloud_backup_wallet_item("wallet-a");
+
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)));
+        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+            wallet.clone(),
+        ]));
+        manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Restored {
+            record_id: wallet.record_id,
+            warning: None,
+        });
+        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
+            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)),
+        );
+
+        assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loaded { wallets: vec![] });
     }
 
     #[test]
