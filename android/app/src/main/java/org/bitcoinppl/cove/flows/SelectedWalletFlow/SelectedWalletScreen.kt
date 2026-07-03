@@ -191,7 +191,9 @@ fun SelectedWalletScreen(
 
     // state for wallet name rename dropdown
     var showRenameMenu by remember { mutableStateOf(false) }
-    val isColdWallet = manager.walletMetadata?.walletType == WalletType.COLD
+    val showsShieldIcon =
+        manager.walletMetadata?.walletType == WalletType.COLD ||
+            manager.walletMetadata?.walletType == WalletType.XPUB_ONLY
     val isWatchOnly = manager.walletMetadata?.walletType == WalletType.WATCH_ONLY
 
     // force white status bar icons for midnight blue background
@@ -231,7 +233,7 @@ fun SelectedWalletScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (isColdWallet) {
+                            if (showsShieldIcon) {
                                 BitcoinShieldIcon(size = 13.dp, color = Color.White)
                                 Spacer(modifier = Modifier.size(8.dp))
                             }

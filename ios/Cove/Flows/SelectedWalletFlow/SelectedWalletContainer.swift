@@ -105,7 +105,7 @@ private struct SelectedWalletLoadingScreen: View {
 
     private var titleContent: some View {
         HStack(spacing: 10) {
-            if case .cold = metadata.walletType {
+            if metadata.walletType == .cold || metadata.walletType == .xpubOnly {
                 BitcoinShieldIcon(width: 13, color: toolbarTextColor)
             }
 
