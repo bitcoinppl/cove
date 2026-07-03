@@ -1181,9 +1181,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_wallet_display_sent_and_received_amount(
     ): Short
-    external fun uniffi_cove_checksum_func_ffi_min_send_amount(
+    external fun uniffi_cove_checksum_func_ffi_conservative_dust_limit_amount(
     ): Short
-    external fun uniffi_cove_checksum_func_ffi_min_send_sats(
+    external fun uniffi_cove_checksum_func_ffi_conservative_dust_limit_sats(
+    ): Short
+    external fun uniffi_cove_checksum_func_ffi_low_send_warning_amount(
+    ): Short
+    external fun uniffi_cove_checksum_func_ffi_low_send_warning_sats(
     ): Short
     external fun uniffi_cove_checksum_func_preview_new_legacy_found_address(
     ): Short
@@ -1558,8 +1562,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustsendflowmanager_validate_address(
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_validate_amount(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage(
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option(
     ): Short
@@ -2673,8 +2675,6 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustsendflowmanager_validate_amount(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
-    external fun uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(`ptr`: Long,`displayAlert`: Byte,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
     external fun uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(`ptr`: Long,`feeRate`: Long,`feeSpeed`: RustBufferFeeSpeed.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustsendflowmanager_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3555,9 +3555,13 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_wallet_display_sent_and_received_amount(`metadata`: RustBuffer.ByValue,`sentAndReceived`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_ffi_min_send_amount(uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_func_ffi_conservative_dust_limit_amount(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_func_ffi_min_send_sats(uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_func_ffi_conservative_dust_limit_sats(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_func_ffi_low_send_warning_amount(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_func_ffi_low_send_warning_sats(uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_func_preview_new_legacy_found_address(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3854,10 +3858,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_wallet_display_sent_and_received_amount() != 2923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_ffi_min_send_amount() != 61138.toShort()) {
+    if (lib.uniffi_cove_checksum_func_ffi_conservative_dust_limit_amount() != 11787.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_ffi_min_send_sats() != 550.toShort()) {
+    if (lib.uniffi_cove_checksum_func_ffi_conservative_dust_limit_sats() != 54311.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_ffi_low_send_warning_amount() != 6176.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_ffi_low_send_warning_sats() != 35697.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_preview_new_legacy_found_address() != 25458.toShort()) {
@@ -4419,9 +4429,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_amount() != 64774.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 52935.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 7512.toShort()) {
@@ -20595,8 +20602,6 @@ public interface RustSendFlowManagerInterface {
 
     fun `validateAmount`(`displayAlert`: kotlin.Boolean = false): kotlin.Boolean
 
-    fun `validateFeePercentage`(`displayAlert`: kotlin.Boolean = false): kotlin.Boolean
-
     /**
      * get the custom fee rate option
      */
@@ -20820,20 +20825,6 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_amount(
-        it,
-
-        FfiConverterBoolean.lower(`displayAlert`),_status)
-}
-    }
-    )
-    }
-
-
-    override fun `validateFeePercentage`(`displayAlert`: kotlin.Boolean): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(
         it,
 
         FfiConverterBoolean.lower(`displayAlert`),_status)
@@ -47571,6 +47562,17 @@ sealed class SendFlowAlertState {
         companion object
     }
 
+    data class Warning(
+        val `kind`: org.bitcoinppl.cove_core.SendFlowWarningKind,
+        val `title`: kotlin.String,
+        val `message`: kotlin.String) : SendFlowAlertState()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -47594,6 +47596,11 @@ public object FfiConverterTypeSendFlowAlertState : FfiConverterRustBuffer<SendFl
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
+            3 -> SendFlowAlertState.Warning(
+                FfiConverterTypeSendFlowWarningKind.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -47614,6 +47621,15 @@ public object FfiConverterTypeSendFlowAlertState : FfiConverterRustBuffer<SendFl
                 + FfiConverterString.allocationSize(value.`message`)
             )
         }
+        is SendFlowAlertState.Warning -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSendFlowWarningKind.allocationSize(value.`kind`)
+                + FfiConverterString.allocationSize(value.`title`)
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
     }
 
     override fun write(value: SendFlowAlertState, buf: ByteBuffer) {
@@ -47625,6 +47641,13 @@ public object FfiConverterTypeSendFlowAlertState : FfiConverterRustBuffer<SendFl
             }
             is SendFlowAlertState.General -> {
                 buf.putInt(2)
+                FfiConverterString.write(value.`title`, buf)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is SendFlowAlertState.Warning -> {
+                buf.putInt(3)
+                FfiConverterTypeSendFlowWarningKind.write(value.`kind`, buf)
                 FfiConverterString.write(value.`title`, buf)
                 FfiConverterString.write(value.`message`, buf)
                 Unit
@@ -47787,7 +47810,7 @@ sealed class SendFlowException: kotlin.Exception() {
             get() = ""
     }
 
-    class SendAmountToLow(
+    class SendBelowDustLimit(
         ) : SendFlowException() {
         override val message
             get() = ""
@@ -47875,7 +47898,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 FfiConverterString.read(buf),
                 )
             8 -> SendFlowException.InsufficientFunds()
-            9 -> SendFlowException.SendAmountToLow()
+            9 -> SendFlowException.SendBelowDustLimit()
             10 -> SendFlowException.UnableToGetFeeRate()
             11 -> SendFlowException.UnableToBuildTxn(
                 FfiConverterString.read(buf),
@@ -47932,7 +47955,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is SendFlowException.SendAmountToLow -> (
+            is SendFlowException.SendBelowDustLimit -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -48002,7 +48025,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 buf.putInt(8)
                 Unit
             }
-            is SendFlowException.SendAmountToLow -> {
+            is SendFlowException.SendBelowDustLimit -> {
                 buf.putInt(9)
                 Unit
             }
@@ -48395,6 +48418,15 @@ sealed class SendFlowManagerAction: Disposable  {
     object FinalizeAndGoToNextScreen : SendFlowManagerAction()
 
 
+    data class AcknowledgeWarningAndFinalize(
+        val v1: org.bitcoinppl.cove_core.SendFlowWarningKind) : SendFlowManagerAction()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -48536,6 +48568,13 @@ sealed class SendFlowManagerAction: Disposable  {
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {// Nothing to destroy
             }
+            is SendFlowManagerAction.AcknowledgeWarningAndFinalize -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
@@ -48615,6 +48654,9 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
             23 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
+            24 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
+                FfiConverterTypeSendFlowWarningKind.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48780,6 +48822,13 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 4UL
             )
         }
+        is SendFlowManagerAction.AcknowledgeWarningAndFinalize -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSendFlowWarningKind.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: SendFlowManagerAction, buf: ByteBuffer) {
@@ -48896,6 +48945,11 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {
                 buf.putInt(23)
+                Unit
+            }
+            is SendFlowManagerAction.AcknowledgeWarningAndFinalize -> {
+                buf.putInt(24)
+                FfiConverterTypeSendFlowWarningKind.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -49298,6 +49352,41 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+enum class SendFlowWarningKind {
+
+    SMALL_AMOUNT,
+    HIGH_FEE,
+    VERY_HIGH_FEE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendFlowWarningKind: FfiConverterRustBuffer<SendFlowWarningKind> {
+    override fun read(buf: ByteBuffer) = try {
+        SendFlowWarningKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SendFlowWarningKind) = 4UL
+
+    override fun write(value: SendFlowWarningKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -54390,6 +54479,12 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class OutputBelowDustLimit(
+        ) : WalletManagerException() {
+        override val message
+            get() = ""
+    }
+
     class LockedOutputsSelected(
         ) : WalletManagerException() {
         override val message
@@ -54575,42 +54670,43 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             20 -> WalletManagerException.InsufficientFunds(
                 FfiConverterString.read(buf),
                 )
-            21 -> WalletManagerException.LockedOutputsSelected()
-            22 -> WalletManagerException.GetConfirmDetailsException(
+            21 -> WalletManagerException.OutputBelowDustLimit()
+            22 -> WalletManagerException.LockedOutputsSelected()
+            23 -> WalletManagerException.GetConfirmDetailsException(
                 FfiConverterString.read(buf),
                 )
-            23 -> WalletManagerException.SignAndBroadcastException(
+            24 -> WalletManagerException.SignAndBroadcastException(
                 FfiConverterString.read(buf),
                 )
-            24 -> WalletManagerException.Converter(
+            25 -> WalletManagerException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
-            25 -> WalletManagerException.UnknownException(
+            26 -> WalletManagerException.UnknownException(
                 FfiConverterString.read(buf),
                 )
-            26 -> WalletManagerException.PsbtFinalizeException(
+            27 -> WalletManagerException.PsbtFinalizeException(
                 FfiConverterString.read(buf),
                 )
-            27 -> WalletManagerException.GetHistoricalPricesException(
+            28 -> WalletManagerException.GetHistoricalPricesException(
                 FfiConverterString.read(buf),
                 )
-            28 -> WalletManagerException.CsvCreationException(
+            29 -> WalletManagerException.CsvCreationException(
                 FfiConverterString.read(buf),
                 )
-            29 -> WalletManagerException.AddUtxosException(
+            30 -> WalletManagerException.AddUtxosException(
                 FfiConverterString.read(buf),
                 )
-            30 -> WalletManagerException.OutputLabelsException(
+            31 -> WalletManagerException.OutputLabelsException(
                 FfiConverterString.read(buf),
                 )
-            31 -> WalletManagerException.DatabaseCorruption(
+            32 -> WalletManagerException.DatabaseCorruption(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            32 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
+            33 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
                 FfiConverterString.read(buf),
                 )
-            33 -> WalletManagerException.ReceiveAddressException(
+            34 -> WalletManagerException.ReceiveAddressException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -54715,6 +54811,10 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.OutputBelowDustLimit -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
             is WalletManagerException.LockedOutputsSelected -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -54883,68 +54983,72 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.LockedOutputsSelected -> {
+            is WalletManagerException.OutputBelowDustLimit -> {
                 buf.putInt(21)
                 Unit
             }
-            is WalletManagerException.GetConfirmDetailsException -> {
+            is WalletManagerException.LockedOutputsSelected -> {
                 buf.putInt(22)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.SignAndBroadcastException -> {
+            is WalletManagerException.GetConfirmDetailsException -> {
                 buf.putInt(23)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.Converter -> {
+            is WalletManagerException.SignAndBroadcastException -> {
                 buf.putInt(24)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.Converter -> {
+                buf.putInt(25)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.UnknownException -> {
-                buf.putInt(25)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(26)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.GetHistoricalPricesException -> {
+            is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(27)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.CsvCreationException -> {
+            is WalletManagerException.GetHistoricalPricesException -> {
                 buf.putInt(28)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.AddUtxosException -> {
+            is WalletManagerException.CsvCreationException -> {
                 buf.putInt(29)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.OutputLabelsException -> {
+            is WalletManagerException.AddUtxosException -> {
                 buf.putInt(30)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.DatabaseCorruption -> {
+            is WalletManagerException.OutputLabelsException -> {
                 buf.putInt(31)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.DatabaseCorruption -> {
+                buf.putInt(32)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is WalletManagerException.PendingUnsignedTransactionsLoadException -> {
-                buf.putInt(32)
+                buf.putInt(33)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.ReceiveAddressException -> {
-                buf.putInt(33)
+                buf.putInt(34)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -60070,20 +60174,40 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
 
- fun `ffiMinSendAmount`(): Amount {
+ fun `ffiConservativeDustLimitAmount`(): Amount {
             return FfiConverterTypeAmount.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_ffi_min_send_amount(
+    UniffiLib.uniffi_cove_fn_func_ffi_conservative_dust_limit_amount(
 
         _status)
 }
     )
     }
 
- fun `ffiMinSendSats`(): kotlin.ULong {
+ fun `ffiConservativeDustLimitSats`(): kotlin.ULong {
             return FfiConverterULong.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_ffi_min_send_sats(
+    UniffiLib.uniffi_cove_fn_func_ffi_conservative_dust_limit_sats(
+
+        _status)
+}
+    )
+    }
+
+ fun `ffiLowSendWarningAmount`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_ffi_low_send_warning_amount(
+
+        _status)
+}
+    )
+    }
+
+ fun `ffiLowSendWarningSats`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_ffi_low_send_warning_sats(
 
         _status)
 }

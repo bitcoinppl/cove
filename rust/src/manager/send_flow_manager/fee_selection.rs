@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use act_zero::call;
-use cove_common::consts::MIN_SEND_SATS;
+use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_util::result_ext::ResultExt as _;
 use tracing::debug;
 
@@ -136,7 +136,7 @@ impl RustSendFlowManager {
 
         let amount_sats_for_fee_calc = match &mode {
             EnterMode::CoinControl(cc) if cc.is_max_selected => cc.max_send().to_sat(),
-            _ => amount_sats.unwrap_or(MIN_SEND_SATS),
+            _ => amount_sats.unwrap_or(LOW_SEND_WARNING_SATS),
         };
 
         let amount_for_fee_calc = Amount::from_sat(amount_sats_for_fee_calc);
@@ -192,25 +192,15 @@ impl RustSendFlowManager {
             selected_fee_rate.as_ref(),
         );
         let fee_selection = FeeSelection::new(fee_rate_options_with_total_fee, selected);
-        state.lock().fee_selection = Some(fee_selection.clone());
-
-        match &mode {
-            EnterMode::CoinControl(cc) if cc.is_max_selected => {
-                let max = cc.max_send();
-                let total_fee = fee_selection
-                    .selected
-                    .total_fee
-                    .map(|fee| fee.as_sats())
-                    .or_else(|| fee_selection.options.medium.total_fee.map(|fee| fee.as_sats()))
-                    .unwrap_or(0);
-
-                let send_amount = max.as_sats() - total_fee;
-                if Some(send_amount) != amount_sats {
-                    self.handle_amount_changed(Amount::from_sat(send_amount));
-                }
+        {
+            let mut state = state.lock();
+            if state.fee_selection.as_ref() != Some(&fee_selection) {
+                state.clear_warning_acknowledgements();
             }
-            _ => {}
+            state.fee_selection = Some(fee_selection.clone());
         }
+
+        self.reconcile_coin_control_amount_for_selected_fee();
 
         sender.queue(Message::UpdateFeeSelection(fee_selection));
     }
@@ -228,17 +218,25 @@ impl RustSendFlowManager {
             return None;
         }
 
-        let psbt = self
-            .build_psbt(Some(address), Some(amount), selected_fee_rate.fee_rate)
-            .await
-            .map_err_str(Error::UnableToGetFeeDetails);
+        let psbt =
+            match self.build_psbt(Some(address), Some(amount), selected_fee_rate.fee_rate).await {
+                Ok(psbt) => psbt,
+                Err(SendFlowError::SendBelowDustLimit) => {
+                    self.reconciler
+                        .send_async(Message::SetAlert(SendFlowError::SendBelowDustLimit.into()))
+                        .await;
+                    return None;
+                }
+                Err(error) => {
+                    let error = SendFlowError::UnableToGetMaxSend(error.to_string());
+                    self.reconciler.send_async(Message::SetAlert(error.into())).await;
+                    return None;
+                }
+            };
 
-        let total_fee = psbt.and_then(|psbt| psbt.fee().map_err_str(Error::UnableToGetFeeDetails));
-
-        let total_fee = match total_fee {
+        let total_fee = match psbt.fee().map_err_str(Error::UnableToGetFeeDetails) {
             Ok(total_fee) => total_fee,
             Err(error) => {
-                let error = SendFlowError::UnableToGetMaxSend(error.to_string());
                 self.reconciler.send_async(Message::SetAlert(error.into())).await;
                 return None;
             }

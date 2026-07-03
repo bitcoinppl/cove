@@ -8,7 +8,7 @@ use cove_types::{
     utxo::UtxoList,
 };
 
-use super::SetAmountFocusField;
+use super::{SendFlowWarningKind, SetAmountFocusField};
 use crate::{
     app::App,
     database::Database,
@@ -30,6 +30,7 @@ pub struct SendFlowManagerState {
     pub(crate) wallet_balance: Option<Arc<Balance>>,
     pub(crate) unlocked_spendable_sats: Option<u64>,
     pub(crate) lock_state_load_failed: bool,
+    pub(crate) acknowledged_warnings: Vec<SendFlowWarningKind>,
     /// True once we have base fee rates (either from cache or network)
     /// UI can show immediately once this is true (total fees pending calculation)
     pub(crate) has_base_fees: bool,
@@ -147,12 +148,27 @@ impl SendFlowManagerState {
             wallet_balance: Some(balance),
             unlocked_spendable_sats: None,
             lock_state_load_failed: false,
+            acknowledged_warnings: Vec::new(),
             fee_selection: None,
             btc_price_in_fiat,
             selected_fiat_currency,
             has_base_fees: false,
             payjoin_endpoint: None,
         }
+    }
+
+    pub(crate) fn acknowledge_warning(&mut self, kind: SendFlowWarningKind) {
+        if !self.has_acknowledged_warning(kind) {
+            self.acknowledged_warnings.push(kind);
+        }
+    }
+
+    pub(crate) fn has_acknowledged_warning(&self, kind: SendFlowWarningKind) -> bool {
+        self.acknowledged_warnings.contains(&kind)
+    }
+
+    pub(crate) fn clear_warning_acknowledgements(&mut self) {
+        self.acknowledged_warnings.clear();
     }
 }
 

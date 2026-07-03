@@ -11,8 +11,13 @@ pub static WALLET_DATA_DIR: LazyLock<PathBuf> = LazyLock::new(wallet_data_dir_in
 pub static GAP_LIMIT: u8 = 30;
 pub static MAX_RESCAN_GAP_LIMIT: u32 = 2000;
 
-pub static MIN_SEND_SATS: u64 = 5000;
-pub static MIN_SEND_AMOUNT: Amount = Amount::from_sat(MIN_SEND_SATS);
+/// Warn users before sending on-chain payments below this amount
+pub static LOW_SEND_WARNING_SATS: u64 = 5000;
+pub static LOW_SEND_WARNING_AMOUNT: Amount = Amount::from_sat(LOW_SEND_WARNING_SATS);
+
+/// Conservative UI fallback when the recipient script is not available
+pub static CONSERVATIVE_DUST_LIMIT_SATS: u64 = 546;
+pub static CONSERVATIVE_DUST_LIMIT_AMOUNT: Amount = Amount::from_sat(CONSERVATIVE_DUST_LIMIT_SATS);
 
 /// Set custom root data directory (must be called before any database access)
 /// primarily for Android where we need to use app-specific storage

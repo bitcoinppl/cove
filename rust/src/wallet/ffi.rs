@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
+use cove_common::consts::{
+    CONSERVATIVE_DUST_LIMIT_AMOUNT, CONSERVATIVE_DUST_LIMIT_SATS, LOW_SEND_WARNING_AMOUNT,
+    LOW_SEND_WARNING_SATS,
+};
 use cove_types::amount::Amount;
 
 use super::{WalletAddressType, metadata};
@@ -22,11 +25,21 @@ pub fn preview_new_wrapped_found_address() -> metadata::FoundAddress {
 }
 
 #[uniffi::export]
-pub fn ffi_min_send_sats() -> u64 {
-    MIN_SEND_SATS
+pub fn ffi_low_send_warning_sats() -> u64 {
+    LOW_SEND_WARNING_SATS
 }
 
 #[uniffi::export]
-pub fn ffi_min_send_amount() -> Arc<Amount> {
-    Arc::new(MIN_SEND_AMOUNT.into())
+pub fn ffi_low_send_warning_amount() -> Arc<Amount> {
+    Arc::new(LOW_SEND_WARNING_AMOUNT.into())
+}
+
+#[uniffi::export]
+pub fn ffi_conservative_dust_limit_sats() -> u64 {
+    CONSERVATIVE_DUST_LIMIT_SATS
+}
+
+#[uniffi::export]
+pub fn ffi_conservative_dust_limit_amount() -> Arc<Amount> {
+    Arc::new(CONSERVATIVE_DUST_LIMIT_AMOUNT.into())
 }

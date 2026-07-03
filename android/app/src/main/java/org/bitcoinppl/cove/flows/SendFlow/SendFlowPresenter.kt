@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ class SendFlowPresenter(
 ) : Closeable {
     // prevents alerts from reappearing during dismissal animations
     private var disappearing by mutableStateOf(false)
+    private var disappearingResetJob: Job? = null
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val isClosed = AtomicBoolean(false)
@@ -34,6 +36,9 @@ class SendFlowPresenter(
 
     val isShowingAlert: Boolean
         get() = alertState != null && !disappearing
+
+    val isDisappearing: Boolean
+        get() = disappearing
 
     var lastWorkingFeeRate by mutableStateOf<Float?>(null)
     var erroredFeeRate by mutableStateOf<Float?>(null)
@@ -58,11 +63,20 @@ class SendFlowPresenter(
     }
 
     fun setDisappearing() {
+        disappearingResetJob?.cancel()
         disappearing = true
-        mainScope.launch {
+        disappearingResetJob = mainScope.launch {
             delay(500)
             disappearing = false
         }
+    }
+
+    fun clearAlert() {
+        if (alertState != null) {
+            setDisappearing()
+        }
+
+        alertState = null
     }
 
     /**
@@ -72,6 +86,7 @@ class SendFlowPresenter(
         when (val state = alertState?.item) {
             is SendFlowAlertState.Error -> errorAlertTitle(state.v1)
             is SendFlowAlertState.General -> state.title
+            is SendFlowAlertState.Warning -> state.title
             null -> ""
         }
 
@@ -90,7 +105,7 @@ class SendFlowPresenter(
             is SendFlowException.NoBalance,
             -> "Insufficient Funds"
 
-            is SendFlowException.SendAmountToLow -> "Send Amount Too Low"
+            is SendFlowException.SendBelowDustLimit -> "Amount Below Dust Limit"
             is SendFlowException.UnableToGetFeeRate -> "Unable to get fee rate"
             is SendFlowException.UnableToBuildTxn -> "Unable to build transaction"
             is SendFlowException.UnableToGetMaxSend -> "Unable to get max send"
@@ -110,6 +125,7 @@ class SendFlowPresenter(
         when (val state = alertState?.item) {
             is SendFlowAlertState.Error -> errorAlertMessage(state.v1)
             is SendFlowAlertState.General -> state.message
+            is SendFlowAlertState.Warning -> state.message
             null -> ""
         }
 
@@ -136,8 +152,8 @@ class SendFlowPresenter(
             is SendFlowException.InsufficientFunds ->
                 "You do not have enough bitcoin in your wallet to cover the amount plus fees"
 
-            is SendFlowException.SendAmountToLow ->
-                "Send amount is too low. Please send at least 5000 sats"
+            is SendFlowException.SendBelowDustLimit ->
+                "This amount is below Bitcoin's dust limit for this address type. The network would reject it. Please send a bit more."
 
             is SendFlowException.UnableToGetFeeRate ->
                 "Are you connected to the internet?"
@@ -171,6 +187,9 @@ class SendFlowPresenter(
             is SendFlowAlertState.General -> {
                 { alertState = null }
             }
+            is SendFlowAlertState.Warning -> {
+                { alertState = null }
+            }
             null -> null
         }
 
@@ -195,7 +214,7 @@ class SendFlowPresenter(
 
             is SendFlowException.InvalidNumber,
             is SendFlowException.InsufficientFunds,
-            is SendFlowException.SendAmountToLow,
+            is SendFlowException.SendBelowDustLimit,
             is SendFlowException.ZeroAmount,
             is SendFlowException.WalletManager,
             is SendFlowException.UnableToGetFeeDetails,
@@ -213,6 +232,8 @@ class SendFlowPresenter(
 
     override fun close() {
         if (!isClosed.compareAndSet(false, true)) return
+        disappearingResetJob?.cancel()
+        disappearingResetJob = null
         mainScope.cancel()
     }
 }

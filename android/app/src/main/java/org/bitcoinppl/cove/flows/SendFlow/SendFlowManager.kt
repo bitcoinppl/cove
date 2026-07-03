@@ -168,9 +168,7 @@ class SendFlowManager internal constructor(
      */
     fun validate(displayAlert: Boolean = false): Boolean {
         if (isClosed.get()) return false
-        return validateAmount(displayAlert) &&
-                validateAddress(displayAlert) &&
-                validateFeePercentage(displayAlert)
+        return validateAmount(displayAlert) && validateAddress(displayAlert)
     }
 
     suspend fun waitForInit(): Boolean =
@@ -222,11 +220,6 @@ class SendFlowManager internal constructor(
     fun validateAmount(displayAlert: Boolean = false): Boolean =
         withRustOr(false) {
             validateAmount(displayAlert)
-        }
-
-    fun validateFeePercentage(displayAlert: Boolean = false): Boolean =
-        withRustOr(false) {
-            validateFeePercentage(displayAlert)
         }
 
     fun updateAddress(address: Address) {
@@ -316,25 +309,24 @@ class SendFlowManager internal constructor(
             is SendFlowManagerReconcileMessage.SetAlert -> {
                 logWarn("setAlert: ${message.v1}")
 
-                // capture previous state before modifying
                 val hadSheet = presenter.sheetState != null
                 val hadAlert = presenter.alertState != null
+                val isDismissingAlert = presenter.isDisappearing
 
-                presenter.alertState = TaggedItem(message.v1)
-
-                // handle alert/sheet conflict - delay only if there was a previous conflict
-                if (hadSheet || hadAlert) {
-                    presenter.alertState = null
+                if (hadSheet || hadAlert || isDismissingAlert) {
+                    presenter.clearAlert()
                     presenter.sheetState = null
                     mainScope.launch {
                         delay(ALERT_PRESENTATION_DELAY_MS)
                         presenter.alertState = TaggedItem(message.v1)
                     }
+                } else {
+                    presenter.alertState = TaggedItem(message.v1)
                 }
             }
 
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                presenter.alertState = null
+                presenter.clearAlert()
             }
 
             is SendFlowManagerReconcileMessage.SetMaxSelected -> {

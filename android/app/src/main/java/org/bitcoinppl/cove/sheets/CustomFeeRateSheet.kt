@@ -32,6 +32,7 @@ import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.types.Amount
 import org.bitcoinppl.cove_core.types.FeeRate
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
@@ -52,6 +53,13 @@ private object CustomFeeRateConstants {
     // delay before showing alert after dismissing sheet
     const val ALERT_DELAY_MS = 850L
 }
+
+internal fun isTooHighCustomFeeError(error: SendFlowException): Boolean =
+    when (error) {
+        is SendFlowException.InsufficientFunds -> true
+        is SendFlowException.WalletManager -> error.v1 is WalletManagerException.InsufficientFunds
+        else -> false
+    }
 
 /** custom fee rate sheet - allows user to set custom sats/vbyte with slider */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,8 +149,16 @@ fun CustomFeeRateSheet(
                             updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(feeRateOption)
                             presenter.lastWorkingFeeRate = feeRate
                         }
-                    } catch (e: SendFlowException.WalletManager) {
-                        // handle insufficient funds - set max fee rate
+                    } catch (e: SendFlowException) {
+                        if (!isTooHighCustomFeeError(e)) {
+                            android.util.Log.e(
+                                "CustomFeeRateSheet",
+                                "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}",
+                                e,
+                            )
+                            return@withContext
+                        }
+
                         withContext(Dispatchers.Main) {
                             presenter.erroredFeeRate = feeRate
 

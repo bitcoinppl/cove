@@ -7,10 +7,13 @@
 
 import SwiftUI
 
-let minSendSatsU = ffiMinSendSats()
-let minSendAmount = ffiMinSendAmount()
+let lowSendWarningSatsU = ffiLowSendWarningSats()
+let lowSendWarningAmount = ffiLowSendWarningAmount()
+let lowSendWarningSats = Int(lowSendWarningSatsU)
 
-let minSendSats = Int(minSendSatsU)
+let conservativeDustLimitSatsU = ffiConservativeDustLimitSats()
+let conservativeDustLimitAmount = ffiConservativeDustLimitAmount()
+let conservativeDustLimitSats = Int(conservativeDustLimitSatsU)
 
 let screenHeight = UIScreen.main.bounds.height
 let screenWidth = UIScreen.main.bounds.width

@@ -14,7 +14,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     // private
     @State private var customAmount: Double = 0.0
-    @State private var previousAmount: Double = .init(minSendSats)
+    @State private var previousAmount: Double = .init(conservativeDustLimitSats)
     @State private var isEditing: Bool = false
     @State private var pinState: PinState = .hard
     private enum PinState { case none, soft, hard }
@@ -88,7 +88,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     }
 
     private var minSend: Double {
-        satToDouble(minSendSats)
+        satToDouble(conservativeDustLimitSats)
     }
 
     private var step: Double {
@@ -96,15 +96,17 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     }
 
     private var maxSend: Double {
-        var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: minSendSatsU + 1000)
-        if amount.asSats() < minSendSatsU { amount = Amount.fromSat(sats: minSendSatsU + 1000) }
+        var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
+        if amount.asSats() <= conservativeDustLimitSatsU {
+            amount = Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
+        }
         return amountToDouble(amount)
     }
 
     /// softMaxSend is the next biggest amount below maxSend that can be selected
     /// any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
     private var softMaxSend: Double {
-        let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? minSendAmount
+        let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? conservativeDustLimitAmount
         return amountToDouble(amount)
     }
 

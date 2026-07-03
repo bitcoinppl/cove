@@ -643,6 +643,8 @@ private fun SendFlowRouteToScreen(
 
     // validation alert dialog (shown across all send routes)
     if (presenter.isShowingAlert) {
+        val alert = presenter.alertState?.item
+
         AlertDialog(
             onDismissRequest = {
                 presenter.setDisappearing()
@@ -651,13 +653,42 @@ private fun SendFlowRouteToScreen(
             title = { Text(presenter.alertTitle()) },
             text = { Text(presenter.alertMessage()) },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        presenter.setDisappearing()
-                        presenter.alertButtonAction()?.invoke()
-                    },
-                ) {
-                    Text("OK")
+                when (alert) {
+                    is SendFlowAlertState.Warning -> {
+                        TextButton(
+                            onClick = {
+                                presenter.setDisappearing()
+                                presenter.alertState = null
+                                sendFlowManager.dispatch(
+                                    SendFlowManagerAction.AcknowledgeWarningAndFinalize(alert.kind),
+                                )
+                            },
+                        ) {
+                            Text("Send Anyway")
+                        }
+                    }
+                    else -> {
+                        TextButton(
+                            onClick = {
+                                presenter.setDisappearing()
+                                presenter.alertButtonAction()?.invoke()
+                            },
+                        ) {
+                            Text("OK")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                if (alert is SendFlowAlertState.Warning) {
+                    TextButton(
+                        onClick = {
+                            presenter.setDisappearing()
+                            presenter.alertState = null
+                        },
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             },
         )
