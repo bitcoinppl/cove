@@ -64,7 +64,28 @@ impl LabelsTable {
     }
 
     pub fn number_of_labels(&self) -> Result<u64, Error> {
-        Ok(self.all_labels()?.len() as u64)
+        let txns = self.count_meaningful_labels(TXN_TABLE, Label::Transaction)?;
+        let inputs = self.count_meaningful_labels(INPUT_TABLE, Label::Input)?;
+        let outputs = self.count_meaningful_labels(OUTPUT_TABLE, Label::Output)?;
+        let addresses = self.count_meaningful_labels(ADDRESS_TABLE, Label::Address)?;
+
+        Ok((txns + inputs + outputs + addresses) as u64)
+    }
+
+    pub fn has_labels(&self) -> Result<bool, Error> {
+        if self.has_meaningful_label(TXN_TABLE, Label::Transaction)? {
+            return Ok(true);
+        }
+
+        if self.has_meaningful_label(INPUT_TABLE, Label::Input)? {
+            return Ok(true);
+        }
+
+        if self.has_meaningful_label(OUTPUT_TABLE, Label::Output)? {
+            return Ok(true);
+        }
+
+        self.has_meaningful_label(ADDRESS_TABLE, Label::Address)
     }
 
     // MARK: LIST
@@ -550,6 +571,47 @@ impl LabelsTable {
         let table = read_txn.open_table(table).map_err_str(DatabaseError::TableAccess)?;
 
         Ok(table)
+    }
+
+    fn count_meaningful_labels<K, T>(
+        &self,
+        table: TableDefinition<K, SerdeRecord<T>>,
+        to_label: impl Fn(T) -> Label,
+    ) -> Result<usize, Error>
+    where
+        K: redb::Key + Debug + Clone + Send + Sync + 'static,
+        T: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
+    {
+        let table = self.read_table(table)?;
+
+        let count = table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| to_label(record.value().item))
+            .filter(is_meaningful_export_label)
+            .count();
+
+        Ok(count)
+    }
+
+    fn has_meaningful_label<K, T>(
+        &self,
+        table: TableDefinition<K, SerdeRecord<T>>,
+        to_label: impl Fn(T) -> Label,
+    ) -> Result<bool, Error>
+    where
+        K: redb::Key + Debug + Clone + Send + Sync + 'static,
+        T: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
+    {
+        let table = self.read_table(table)?;
+
+        let has_label = table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| to_label(record.value().item))
+            .any(|label| is_meaningful_export_label(&label));
+
+        Ok(has_label)
     }
 }
 

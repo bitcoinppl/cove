@@ -104,7 +104,7 @@ impl LabelManager {
     }
 
     pub fn has_labels(&self) -> bool {
-        self.db.labels.number_of_labels().unwrap_or(0) > 0
+        self.db.labels.has_labels().unwrap_or(false)
     }
 
     pub fn transaction_label(&self, tx_id: Arc<TxId>) -> Option<String> {
@@ -337,10 +337,10 @@ impl LabelManager {
                 continue;
             }
 
-            if record.item.spendable.is_none() {
+            if record.item.spendable != Some(false) {
                 labels_to_delete.push(Label::from(record.item));
 
-                // outputs without explicit spendability do not need a replacement record
+                // unlocked outputs do not need a replacement record
                 continue;
             }
 
@@ -771,6 +771,26 @@ mod tests {
         assert_eq!(output.label, None);
         assert_eq!(output.spendable, Some(false));
         assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+    }
+
+    #[test]
+    fn deleting_transaction_label_removes_migrated_spendable_auto_output() {
+        let (manager, _tmp) = test_manager();
+        let details = received_details_with_output(0);
+        let tx_id = details.tx_id;
+        let outpoint = bitcoin::OutPoint { txid: tx_id.0, vout: 0 };
+
+        insert_or_update_auto_labels(&manager, &details, "first");
+        set_output_spendable(&manager, outpoint, true);
+
+        let changed = manager
+            .delete_labels_for_txn_without_cloud_backup_dirty(Arc::new(tx_id))
+            .expect("failed to delete labels");
+
+        assert!(changed);
+        assert!(manager.db.labels.get_output_record(outpoint).unwrap().is_none());
+        assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
+        assert_eq!(manager.db.labels.number_of_labels().expect("labels count loads"), 0);
     }
 
     #[test]
