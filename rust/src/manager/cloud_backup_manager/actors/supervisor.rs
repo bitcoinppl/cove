@@ -154,6 +154,22 @@ fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudB
     }
 }
 
+fn apply_cloud_only_operation_refresh_detail_result(
+    manager: &RustCloudBackupManager,
+    result: &CloudBackupDetailResult,
+) {
+    match result {
+        CloudBackupDetailResult::Success(detail) => {
+            manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
+                CloudBackupDetailOutcome::Refreshed(detail.clone()),
+            );
+        }
+        CloudBackupDetailResult::AccessError(error) => {
+            error!("Failed to refresh detail: {error}");
+        }
+    }
+}
+
 fn refresh_detail_needs_connectivity_retry(
     manager: &RustCloudBackupManager,
     attempt: DetailRefreshAttempt,
@@ -655,7 +671,15 @@ impl CloudBackupSupervisor {
         };
 
         if let Some(result) = result {
-            apply_refresh_detail_result(&manager, &result);
+            if matches!(
+                claim.operation(),
+                CloudBackupExclusiveOperation::RestoreCloudWallet
+                    | CloudBackupExclusiveOperation::DeleteCloudWallet
+            ) {
+                apply_cloud_only_operation_refresh_detail_result(&manager, &result);
+            } else {
+                apply_refresh_detail_result(&manager, &result);
+            }
         }
 
         self.active_operation = None;

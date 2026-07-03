@@ -435,20 +435,47 @@ impl RustCloudBackupManager {
 
 impl RustCloudBackupManager {
     pub(crate) fn apply_detail_outcome(&self, outcome: CloudBackupDetailOutcome) {
+        self.apply_detail_outcome_with_cloud_only_policy(
+            outcome,
+            CloudOnlyRefreshPolicy::ResetIfStale,
+        );
+    }
+
+    pub(crate) fn apply_detail_outcome_preserving_cloud_only_if_consistent(
+        &self,
+        outcome: CloudBackupDetailOutcome,
+    ) {
+        self.apply_detail_outcome_with_cloud_only_policy(
+            outcome,
+            CloudOnlyRefreshPolicy::PreserveLoadedIfConsistent,
+        );
+    }
+
+    fn apply_detail_outcome_with_cloud_only_policy(
+        &self,
+        outcome: CloudBackupDetailOutcome,
+        cloud_only_policy: CloudOnlyRefreshPolicy,
+    ) {
         let detail = match outcome {
             CloudBackupDetailOutcome::Cleared => None,
             CloudBackupDetailOutcome::Refreshed(detail) => Some(detail),
         };
         let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
-        let reset_cloud_only = {
-            let state = self.state.read();
-            detail.as_ref().is_some_and(|detail| {
-                cloud_only_cache_is_stale(&state.cloud_only(), detail, detail_snapshot.as_ref())
-            })
-        };
+        let cloud_only = self.state.read().cloud_only();
+        let preserve_cloud_only = detail.as_ref().is_some_and(|detail| {
+            cloud_only_policy == CloudOnlyRefreshPolicy::PreserveLoadedIfConsistent
+                && loaded_cloud_only_matches_detail(&cloud_only, detail)
+        });
+        let reset_cloud_only = detail.as_ref().is_some_and(|detail| {
+            !preserve_cloud_only
+                && cloud_only_cache_is_stale(&cloud_only, detail, detail_snapshot.as_ref())
+        });
 
         if reset_cloud_only {
             *self.cloud_only_detail_snapshot.write() = None;
+        }
+        if preserve_cloud_only && let Some(detail) = detail.as_ref() {
+            *self.cloud_only_detail_snapshot.write() = Some(detail.clone());
         }
 
         self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
@@ -543,6 +570,12 @@ impl RustCloudBackupManager {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloudOnlyRefreshPolicy {
+    ResetIfStale,
+    PreserveLoadedIfConsistent,
+}
+
 fn cloud_only_cache_is_stale(
     cloud_only: &CloudOnlyState,
     detail: &CloudBackupDetail,
@@ -556,17 +589,33 @@ fn cloud_only_cache_is_stale(
         return true;
     }
 
-    if wallets.len() as u32 != detail.cloud_only_count {
-        return true;
-    }
+    !cloud_only_wallets_match_detail(wallets, detail)
+}
 
-    wallets.iter().any(|cloud_wallet| {
-        detail
-            .up_to_date
-            .iter()
-            .chain(detail.needs_sync.iter())
-            .any(|local_wallet| local_wallet.record_id == cloud_wallet.record_id)
-    })
+fn loaded_cloud_only_matches_detail(
+    cloud_only: &CloudOnlyState,
+    detail: &CloudBackupDetail,
+) -> bool {
+    let CloudOnlyState::Loaded { wallets } = cloud_only else {
+        return false;
+    };
+
+    cloud_only_wallets_match_detail(wallets, detail)
+}
+
+fn cloud_only_wallets_match_detail(
+    wallets: &[CloudBackupWalletItem],
+    detail: &CloudBackupDetail,
+) -> bool {
+    // detail carries only a cloud-only count, so identity consistency is limited to local overlap
+    wallets.len() as u32 == detail.cloud_only_count
+        && wallets.iter().all(|cloud_wallet| {
+            detail
+                .up_to_date
+                .iter()
+                .chain(detail.needs_sync.iter())
+                .all(|local_wallet| local_wallet.record_id != cloud_wallet.record_id)
+        })
 }
 
 #[cfg(test)]
@@ -634,6 +683,52 @@ mod tests {
         manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)));
 
         assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
+    }
+
+    #[test]
+    fn detail_refresh_preserves_loaded_cloud_only_cache_after_delete_when_count_matches() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet_a = cloud_backup_wallet_item("wallet-a");
+        let wallet_b = cloud_backup_wallet_item("wallet-b");
+
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(2)));
+        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+            wallet_a.clone(),
+            wallet_b.clone(),
+        ]));
+        manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Deleted {
+            record_id: wallet_a.record_id,
+        });
+        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
+            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)),
+        );
+
+        assert_eq!(
+            manager.state.read().cloud_only(),
+            CloudOnlyState::Loaded { wallets: vec![wallet_b] }
+        );
+    }
+
+    #[test]
+    fn detail_refresh_preserves_empty_loaded_cloud_only_cache_after_restore_when_count_matches() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet = cloud_backup_wallet_item("wallet-a");
+
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)));
+        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+            wallet.clone(),
+        ]));
+        manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Restored {
+            record_id: wallet.record_id,
+            warning: None,
+        });
+        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
+            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)),
+        );
+
+        assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loaded { wallets: vec![] });
     }
 
     #[test]
