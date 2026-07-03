@@ -723,6 +723,9 @@ impl AndroidStayAwakeGuard {
 
 impl Drop for AndroidStayAwakeGuard {
     fn drop(&mut self) {
+        if let Err(error) = restore_stayon_service_state(&self.previous_stay_awake_setting) {
+            print_warning(&format!("{error}"));
+        }
         if let Err(error) = restore_stay_awake_setting(&self.previous_stay_awake_setting) {
             print_warning(&format!("{error}"));
         }
@@ -789,6 +792,26 @@ fn restore_screen_off_timeout_setting(previous_setting: &str) -> Result<()> {
         &["shell", "settings", "put", "system", SCREEN_OFF_TIMEOUT_SETTING, previous_setting],
         "Failed to restore Android screen-off timeout",
     )
+}
+
+fn restore_stayon_service_state(previous_setting: &str) -> Result<()> {
+    let stayon_arg = stayon_service_arg(previous_setting);
+
+    adb_status(
+        &["shell", "svc", "power", "stayon", stayon_arg],
+        "Failed to restore Android svc stayon",
+    )
+}
+
+fn stayon_service_arg(previous_setting: &str) -> &'static str {
+    match previous_setting.parse::<u32>().unwrap_or(0) {
+        0 => "false",
+        1 => "ac",
+        2 => "usb",
+        4 => "wireless",
+        8 => "dock",
+        _ => "true",
+    }
 }
 
 fn adb_status(args: &[&str], context: &str) -> Result<()> {

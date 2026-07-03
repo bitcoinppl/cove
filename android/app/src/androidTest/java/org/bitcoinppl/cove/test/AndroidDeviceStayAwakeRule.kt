@@ -41,9 +41,14 @@ internal fun UiDevice.withStayAwake(block: () -> Unit) {
 
         block()
     } finally {
+        restoreStayOnService(previousStayAwakeSetting)
         restoreStayAwakeSetting(previousStayAwakeSetting)
         restoreScreenOffTimeout(previousScreenOffTimeout)
     }
+}
+
+private fun UiDevice.restoreStayOnService(previousSetting: String) {
+    executeShellCommand("svc power stayon ${previousSetting.toStayOnServiceArgument()}")
 }
 
 private fun UiDevice.restoreStayAwakeSetting(previousSetting: String) {
@@ -63,3 +68,13 @@ private fun UiDevice.restoreScreenOffTimeout(previousSetting: String) {
 
     executeShellCommand("settings put system screen_off_timeout $previousSetting")
 }
+
+private fun String.toStayOnServiceArgument(): String =
+    when (toIntOrNull() ?: 0) {
+        0 -> "false"
+        1 -> "ac"
+        2 -> "usb"
+        4 -> "wireless"
+        8 -> "dock"
+        else -> "true"
+    }

@@ -189,8 +189,6 @@ ui-manual:
 #
 # Focused instrumentation tests should use AndroidDeviceStayAwakeRule when the
 # stay-awake behavior belongs in the test itself.
-#
-# Run an Android device command from android/ with stay-awake enabled.
 [group('test')]
 android-stay-awake *command:
     just xtask android-stay-awake -- {{ command }}
