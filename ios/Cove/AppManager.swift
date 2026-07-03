@@ -123,6 +123,14 @@ private let navigationSettleDelayMs = 800
         return walletManager
     }
 
+    func walletMetadata(id: WalletId) -> WalletMetadata? {
+        if let walletManager = cachedWalletManager(id: id) {
+            return walletManager.walletMetadata
+        }
+
+        return wallets.first(where: { $0.id == id })
+    }
+
     func ensureWalletManager(id: WalletId) throws -> WalletManager {
         if let walletManager = cachedWalletManager(id: id) {
             logger.debug("found and using vm for \(id)")
@@ -386,9 +394,6 @@ private let navigationSettleDelayMs = 800
     private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
         try rust.dispatch(action: .selectWallet(id: id))
         isSidebarVisible = false
-
-        // prewarm the app-owned manager before the queued route update renders the destination
-        _ = try ensureWalletManager(id: id)
     }
 
     func trySelectLatestOrNewWallet() {
@@ -592,6 +597,26 @@ private let navigationSettleDelayMs = 800
     @MainActor
     func captureLoadAndResetGeneration() -> GenerationToken {
         navigationGenerations.capture()
+    }
+
+    @MainActor
+    func startLoadAndResetTargetPrewarm(generation: GenerationToken, routes: [Route]) {
+        Task { [weak self] in
+            await self?.prewarmLoadAndResetTargetIfCurrent(generation: generation, routes: routes)
+        }
+    }
+
+    @MainActor
+    func prewarmLoadAndResetTargetIfCurrent(generation: GenerationToken, routes: [Route]) async {
+        guard isNavigationGenerationCurrent(generation) else { return }
+        guard case let .selectedWallet(id) = routes.first else { return }
+
+        do {
+            let manager = try ensureWalletManager(id: id)
+            try await manager.startWalletScanIfNeeded()
+        } catch {
+            logger.error("Unable to prewarm selected wallet \(id): \(error)")
+        }
     }
 
     @MainActor

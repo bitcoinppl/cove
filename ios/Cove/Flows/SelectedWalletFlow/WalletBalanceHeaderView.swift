@@ -183,7 +183,10 @@ struct WalletBalanceHeaderView: View {
         )
         .background(.midnightBlue)
         .onAppear {
-            if fiatBalance == nil { fiatBalance = manager.amountInFiatCached(balance) }
+            if fiatBalance == nil {
+                fiatBalance = manager.amountInFiatCached(balance)
+            }
+
             if fiatPendingBalance == nil {
                 fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
             }

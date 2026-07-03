@@ -24,6 +24,12 @@ impl BalancePresentation {
     }
 }
 
+/// Returns provisional presentation values for loading screens before a wallet manager is available
+#[uniffi::export]
+pub fn balance_presentation_provisional() -> BalancePresentation {
+    BalancePresentation::provisional()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

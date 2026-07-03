@@ -55,6 +55,8 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     @ObservationIgnored
     private let initialScanLifecycleChanged =
         OSAllocatedUnfairLock<InitialScanLifecycleChangedHandler?>(initialState: nil)
+    @ObservationIgnored
+    private var walletScanStarted = false
 
     var walletMetadata: WalletMetadata
     var ledgerState: WalletLedgerState
@@ -96,18 +98,18 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     var scrolledTransactionId: String?
 
     init(id: WalletId) throws {
-        self.id = id
         let rust = try RustWalletManager(id: id)
-        let loadState = rust.initialLoadState()
+        let initialState = rust.initialState()
 
+        self.id = initialState.metadata.id
         self.rust = rust
-        self.loadState = loadState
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-
-        walletMetadata = rust.walletMetadata()
-        unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        walletMetadata = initialState.metadata
+        unsignedTransactions = initialState.unsignedTransactions
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -138,15 +140,17 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     init(xpub: String) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
-        let metadata = rust.walletMetadata()
+        let initialState = rust.initialState()
 
         self.rust = rust
-        self.loadState = .loading
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-        walletMetadata = metadata
-        id = metadata.id
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        walletMetadata = initialState.metadata
+        unsignedTransactions = initialState.unsignedTransactions
+        id = initialState.metadata.id
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -163,16 +167,17 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             backup: backup,
             birthday: birthday
         )
-
-        let metadata = rust.walletMetadata()
+        let initialState = rust.initialState()
 
         self.rust = rust
-        self.loadState = .loading
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-        walletMetadata = metadata
-        id = metadata.id
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        walletMetadata = initialState.metadata
+        unsignedTransactions = initialState.unsignedTransactions
+        id = initialState.metadata.id
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -206,6 +211,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     func forceWalletScan() async {
         await rust.forceWalletScan()
+    }
+
+    @MainActor
+    func startWalletScanIfNeeded() async throws {
+        guard !walletScanStarted else { return }
+        walletScanStarted = true
+
+        do {
+            try await rust.startWalletScan()
+        } catch {
+            walletScanStarted = false
+            throw error
+        }
     }
 
     func firstAddress() async throws -> AddressInfo {
@@ -407,26 +425,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         case let .availableTransactions(txns):
             switch self.loadState {
             case .loading:
-                self.loadState = .scanning(txns)
+                self.loadState = loadStateForTransactions(txns)
             case let .scanning(current) where txns.count >= current.count:
-                self.loadState = .scanning(txns)
+                self.loadState = loadStateForTransactions(txns)
             case .scanning:
                 break
             case let .loaded(current) where txns.count >= current.count:
-                self.loadState = .scanning(txns)
+                self.loadState = loadStateForTransactions(txns)
             case .loaded:
                 break
             }
 
         case let .updatedTransactions(txns):
-            switch self.loadState {
-            case .scanning, .loading:
-                self.loadState = .scanning(txns)
-            case .loaded:
-                self.loadState = ledgerState.initialScanComplete
-                    ? .loaded(txns)
-                    : .scanning(txns)
-            }
+            self.loadState = loadStateForTransactions(txns)
 
         case let .transactionUpdated(transaction):
             replaceTransactionInLoadState(transaction)
@@ -438,14 +449,21 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             transactionConfirmations[update.txId] = update.confirmations
 
         case let .scanComplete(txns):
-            self.loadState = ledgerState.initialScanComplete ? .loaded(txns) : .scanning(txns)
+            self.loadState = loadStateForTransactions(txns)
             notifyInitialScanLifecycleChanged()
 
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:
-            self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
+            do {
+                self.unsignedTransactions = try rust.getUnsignedTransactions()
+            } catch {
+                logger.error(
+                    "Unable to refresh unsigned transactions: \(error.localizedDescription)"
+                )
+                self.unsignedTransactions = []
+            }
 
         case let .walletMetadataChanged(metadata):
             withAnimation { self.walletMetadata = metadata }
@@ -508,16 +526,28 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     )
 
     private func reconcileLoadStateWithLedgerState() {
-        if ledgerState.initialScanComplete, !scanStatus.isActive,
-           case let .scanning(txns) = loadState
-        {
-            loadState = .loaded(txns)
-        } else if ledgerState.initialScanIncomplete,
-                  scanStatus.isActive,
-                  case let .loaded(txns) = loadState
-        {
-            loadState = .scanning(txns)
+        switch loadState {
+        case .loading:
+            break
+        case let .scanning(txns), let .loaded(txns):
+            loadState = loadStateForTransactions(txns)
         }
+    }
+
+    private func loadStateForTransactions(_ transactions: [CoveCore.Transaction]) -> WalletLoadState {
+        if scanStatus.isActive {
+            return .scanning(transactions)
+        }
+
+        if ledgerState.initialScanComplete {
+            return .loaded(transactions)
+        }
+
+        if transactions.isEmpty {
+            return .loading
+        }
+
+        return .scanning(transactions)
     }
 
     private func setWalletMetadata(_ metadata: WalletMetadata) {
@@ -565,7 +595,6 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
         assert(preview == "preview_only")
 
-        id = WalletId()
         let rust =
             if let walletMetadata {
                 RustWalletManager.previewNewWalletWithMetadata(metadata: walletMetadata)
@@ -574,11 +603,15 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             }
 
         self.rust = rust
-        self.loadState = .loading
-        self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
-        self.walletMetadata = rust.walletMetadata()
+        let initialState = rust.initialState()
+        self.loadState = initialState.loadState
+        self.scanStatus = initialState.scanStatus
+        self.ledgerState = initialState.ledgerState
+        self.balancePresentation = initialState.balancePresentation
+        self.balance = initialState.balance
+        self.walletMetadata = initialState.metadata
+        self.id = initialState.metadata.id
+        self.unsignedTransactions = initialState.unsignedTransactions
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }

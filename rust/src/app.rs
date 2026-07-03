@@ -24,7 +24,10 @@ use crate::{
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     network::Network,
     node::{Node, client::NodeClient},
-    router::{LOAD_AND_RESET_DELAY_MS, NewWalletRoute, Route, RouteFactory, Router},
+    router::{
+        LOAD_AND_RESET_DELAY_MS, NewWalletRoute, Route, RouteFactory, Router,
+        WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS, load_and_reset_nested_to_after,
+    },
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
@@ -49,6 +52,20 @@ impl AppState {
     pub fn new() -> Self {
         Self { router: Router::new() }
     }
+}
+
+fn wallet_selection_loading_route(id: WalletId, next_route: Option<Route>) -> Route {
+    let wallet_route = Route::SelectedWallet(id);
+
+    if let Some(next_route) = next_route {
+        return load_and_reset_nested_to_after(
+            wallet_route,
+            vec![next_route],
+            WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS,
+        );
+    }
+
+    wallet_route.load_and_reset_after(WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS)
 }
 
 #[derive(Clone, Debug)]
@@ -414,8 +431,7 @@ impl FfiApp {
     pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
         let selected_wallet = Database::global().global_config.selected_wallet()?;
 
-        // change default route to selected wallet
-        self.load_and_reset_default_route(Route::SelectedWallet(selected_wallet.clone()));
+        self.reset_default_route_to(Route::SelectedWallet(selected_wallet.clone()));
 
         Some(selected_wallet)
     }
@@ -454,7 +470,7 @@ impl FfiApp {
     }
 
     /// Load and reset the default route
-    /// Shows a laoding screen, and then resets the default route
+    /// Shows a loading screen, and then resets the default route
     pub fn load_and_reset_default_route_after(&self, route: Route, after_millis: u32) {
         let loading_route = route.load_and_reset_after(after_millis);
         self.reset_default_route_to(loading_route);
@@ -465,7 +481,7 @@ impl FfiApp {
     pub fn reset_nested_routes_to(&self, default_route: Route, nested_routes: Vec<Route>) {
         let loading_route = RouteFactory.load_and_reset_nested_to(default_route, nested_routes);
         debug!("loading and resetting default route to: {:?}", loading_route);
-        self.load_and_reset_default_route(loading_route);
+        self.reset_default_route_to(loading_route);
     }
 
     /// Reset to the default route with nested routes, only used by the `LoadingAndResetContainer`
@@ -672,14 +688,7 @@ impl FfiApp {
 
         Database::global().global_config.select_wallet(id.clone())?;
 
-        if let Some(next_route) = next_route {
-            let wallet_route = Route::SelectedWallet(id.clone());
-            let loading_route =
-                RouteFactory.load_and_reset_nested_to(wallet_route, vec![next_route]);
-            self.load_and_reset_default_route(loading_route);
-        } else {
-            self.go_to_selected_wallet();
-        }
+        self.reset_default_route_to(wallet_selection_loading_route(id, next_route));
 
         Ok(())
     }
@@ -716,6 +725,42 @@ impl FfiApp {
 enum SelectLatestWalletError {
     NoWalletsFound,
     WalletSelection(AppError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn load_and_reset_targets(route: Route, expected_after_millis: u32) -> Vec<Route> {
+        let Route::LoadAndReset { reset_to, after_millis } = route else {
+            panic!("expected load-and-reset route");
+        };
+
+        assert_eq!(after_millis, expected_after_millis);
+
+        reset_to.iter().map(|route| route.route()).collect()
+    }
+
+    #[test]
+    fn wallet_selection_loading_route_uses_wallet_delay() {
+        let wallet_id = WalletId::from("wallet-id".to_string());
+        let route = wallet_selection_loading_route(wallet_id.clone(), None);
+
+        let targets = load_and_reset_targets(route, WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS);
+
+        assert_eq!(targets, vec![Route::SelectedWallet(wallet_id)]);
+    }
+
+    #[test]
+    fn wallet_selection_loading_route_preserves_nested_target() {
+        let wallet_id = WalletId::from("wallet-id".to_string());
+        let next_route = Route::NewWallet(NewWalletRoute::default());
+        let route = wallet_selection_loading_route(wallet_id.clone(), Some(next_route.clone()));
+
+        let targets = load_and_reset_targets(route, WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS);
+
+        assert_eq!(targets, vec![Route::SelectedWallet(wallet_id), next_route]);
+    }
 }
 
 /// Initialize the global App instance (Updater, router, state)

@@ -155,6 +155,18 @@ class AppManager private constructor() : FfiReconcile {
         walletManager = manager
     }
 
+    fun cachedWalletManager(id: WalletId): WalletManager? {
+        val manager = walletManager ?: return null
+        if (manager.id != id) return null
+
+        return manager
+    }
+
+    fun walletMetadata(id: WalletId): WalletMetadata? {
+        cachedWalletManager(id)?.walletMetadata?.let { return it }
+        return wallets.firstOrNull { it.id == id }
+    }
+
     /**
      * get or create wallet manager for the given wallet id
      * caches the instance so we don't recreate unnecessarily
@@ -168,7 +180,7 @@ class AppManager private constructor() : FfiReconcile {
 
             // selecting a different wallet is the boundary for ending in-flight scans
             Log.d(tag, "closing old wallet manager for ${it.id}")
-            it.close()
+            clearWalletManager()
         }
 
         Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
@@ -253,6 +265,8 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun clearWalletManager() {
+        clearWalletScopedChildManagers()
+
         try {
             walletManager?.close()
         } catch (e: Exception) {
@@ -271,6 +285,11 @@ class AppManager private constructor() : FfiReconcile {
         }
     }
 
+    private fun clearWalletScopedChildManagers() {
+        clearSendFlowManager()
+        clearActiveCoinControlManager()
+    }
+
     private fun clearSendFlowManager() {
         try {
             sendFlowManager?.close()
@@ -278,6 +297,15 @@ class AppManager private constructor() : FfiReconcile {
             Log.w(tag, "Error closing SendFlowManager: ${e.message}")
         }
         sendFlowManager = null
+    }
+
+    private fun clearActiveCoinControlManager() {
+        try {
+            coinControlManager?.close()
+        } catch (e: Exception) {
+            Log.w(tag, "Error closing CoinControlManager: ${e.message}")
+        }
+        coinControlManager = null
     }
 
     private fun clearInactiveSendFlowManager() {
@@ -331,15 +359,12 @@ class AppManager private constructor() : FfiReconcile {
         advanceNavigationGeneration(skipSettle = true)
 
         // close managers before clearing them
-        walletManager?.close()
-        sendFlowManager?.close()
-        coinControlManager?.close()
+        clearWalletManager()
 
         database = Database()
-        needsOnboarding = rust.needsOnboarding()
-        walletManager = null
-        sendFlowManager = null
-        coinControlManager = null
+        needsOnboarding = withRustOr(needsOnboarding) {
+            needsOnboarding()
+        }
 
         withRustOr(null) {
             state()
@@ -600,6 +625,31 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
+
+    fun startLoadAndResetTargetPrewarm(
+        generation: GenerationToken,
+        nextRoutes: List<Route>,
+    ) {
+        mainScope.launch {
+            prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes)
+        }
+    }
+
+    suspend fun prewarmLoadAndResetTargetIfCurrent(
+        generation: GenerationToken,
+        nextRoutes: List<Route>,
+    ) {
+        if (!isNavigationGenerationCurrent(generation)) return
+        val selectedWalletRoute = nextRoutes.firstOrNull() as? Route.SelectedWallet ?: return
+
+        try {
+            getWalletManager(selectedWalletRoute.v1).startWalletScanIfNeeded()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(tag, "Unable to prewarm selected wallet ${selectedWalletRoute.v1}", e)
+        }
+    }
 
     fun resetAfterLoadingIfCurrent(
         generation: GenerationToken,

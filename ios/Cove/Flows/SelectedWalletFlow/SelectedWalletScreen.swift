@@ -97,6 +97,16 @@ struct SelectedWalletScreen: View {
         manager.rust.labelManager()
     }
 
+    func transactionsCard(transactions: [CoveCore.Transaction]) -> some View {
+        TransactionsCardView(
+            transactions: transactions,
+            unsignedTransactions: manager.unsignedTransactions,
+            metadata: manager.walletMetadata
+        )
+        .ignoresSafeArea()
+        .background(Color.coveBg)
+    }
+
     func DisplayErrorAlert(_ alert: WalletErrorAlert) -> Alert {
         switch alert {
         case .nodeConnectionFailed:
@@ -121,6 +131,18 @@ struct SelectedWalletScreen: View {
                 ),
                 secondaryButton: .cancel()
             )
+        }
+    }
+
+    @ViewBuilder
+    var Transactions: some View {
+        switch manager.loadState {
+        case .loading:
+            transactionsCard(transactions: [])
+        case let .scanning(txns):
+            transactionsCard(transactions: txns)
+        case let .loaded(txns):
+            transactionsCard(transactions: txns)
         }
     }
 

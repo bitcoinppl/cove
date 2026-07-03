@@ -10,6 +10,12 @@ import SwiftUI
 
 private let scrollThresholdIndex = 5
 
+enum TransactionsCopy {
+    static var checkingWalletHistory: String {
+        String(localized: "Checking wallet history")
+    }
+}
+
 struct TransactionsCardView: View {
     @Environment(AppManager.self) var app
     @Environment(WalletManager.self) var manager
@@ -28,12 +34,24 @@ struct TransactionsCardView: View {
     }
 
     private var isScanning: Bool {
-        // keep both sources so reconcile message ordering cannot hide active scanning
-        manager.ledgerState.initialScanActive || manager.scanStatus.isActive
+        // keep all sources so reconcile message ordering cannot hide active scanning
+        isWalletLoading || manager.ledgerState.initialScanActive || manager.scanStatus.isActive
+    }
+
+    private var isWalletLoading: Bool {
+        if case .loading = manager.loadState {
+            return true
+        }
+
+        return false
     }
 
     private var scanSpinnerMessage: String? {
-        manager.ledgerState.initialScanComplete ? nil : "Checking wallet history"
+        if isWalletLoading {
+            return TransactionsCopy.checkingWalletHistory
+        }
+
+        return manager.ledgerState.initialScanComplete ? nil : TransactionsCopy.checkingWalletHistory
     }
 
     private var isScanProgressVisible: Bool {
@@ -210,7 +228,7 @@ struct EmptyWalletScanState: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text("Checking wallet history")
+            Text(TransactionsCopy.checkingWalletHistory)
                 .foregroundStyle(.secondary)
                 .font(.body)
 

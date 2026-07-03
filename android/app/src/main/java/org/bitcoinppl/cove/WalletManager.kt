@@ -54,6 +54,7 @@ class WalletManager :
 
     val id: WalletId
     private val rust: RustWalletManager
+    private val walletScanStarted = AtomicBoolean(false)
 
     // observable state
     var walletMetadata by mutableStateOf<WalletMetadata?>(null)
@@ -62,7 +63,7 @@ class WalletManager :
     var ledgerState by mutableStateOf<WalletLedgerState>(WalletLedgerState.InitialScanIncomplete(InitialScanActivity.IDLE))
         private set
 
-    var loadState by mutableStateOf<WalletLoadState>(WalletLoadState.LOADING)
+    var loadState by mutableStateOf<WalletLoadState>(WalletLoadState.Loading)
         private set
 
     var scanStatus by mutableStateOf<WalletScanStatus>(WalletScanStatus.Idle)
@@ -130,10 +131,10 @@ class WalletManager :
 
     val hasTransactions: Boolean
         get() =
-            when (loadState) {
-                is WalletLoadState.LOADING -> false
-                is WalletLoadState.SCANNING -> (loadState as WalletLoadState.SCANNING).txns.isNotEmpty()
-                is WalletLoadState.LOADED -> (loadState as WalletLoadState.LOADED).txns.isNotEmpty()
+            when (val state = loadState) {
+                is WalletLoadState.Loading -> false
+                is WalletLoadState.Scanning -> state.v1.isNotEmpty()
+                is WalletLoadState.Loaded -> state.v1.isNotEmpty()
             }
 
     val isVerified: Boolean
@@ -149,21 +150,17 @@ class WalletManager :
     private constructor(
         walletId: WalletId,
         rustManager: RustWalletManager,
-        metadata: WalletMetadata,
+        initialState: WalletInitialState,
     ) {
         this.id = walletId
         this.rust = rustManager
-        this.walletMetadata = metadata
-        this.ledgerState = rustManager.ledgerState()
-        this.balancePresentationState = rustManager.balancePresentation(WalletScanStatus.Idle)
-        this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
-
-        // set initial load state from Rust cached data
-        loadState = when (val rustLoadState = rustManager.initialLoadState()) {
-            is org.bitcoinppl.cove_core.WalletLoadState.Loading -> WalletLoadState.LOADING
-            is org.bitcoinppl.cove_core.WalletLoadState.Scanning -> WalletLoadState.SCANNING(rustLoadState.v1)
-            is org.bitcoinppl.cove_core.WalletLoadState.Loaded -> WalletLoadState.LOADED(rustLoadState.v1)
-        }
+        this.walletMetadata = initialState.metadata
+        this.ledgerState = initialState.ledgerState
+        this.loadState = initialState.loadState
+        this.scanStatus = initialState.scanStatus
+        this.balancePresentationState = initialState.balancePresentation
+        this.balance = initialState.balance
+        this.unsignedTransactions = initialState.unsignedTransactions
 
         rustManager.listenForUpdates(this)
     }
@@ -172,17 +169,17 @@ class WalletManager :
         // create from wallet ID
         operator fun invoke(id: WalletId): WalletManager {
             val rust = RustWalletManager(id)
-            val metadata = rust.walletMetadata()
+            val initialState = rust.initialState()
             android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
-            return WalletManager(id, rust, metadata)
+            return WalletManager(initialState.metadata.id, rust, initialState)
         }
 
         // create from xpub
         fun fromXpub(xpub: String): WalletManager {
             val rust = RustWalletManager.tryNewFromXpub(xpub)
-            val metadata = rust.walletMetadata()
+            val initialState = rust.initialState()
             android.util.Log.d("WalletManager", "Initialized WalletManager from xpub")
-            return WalletManager(metadata.id, rust, metadata)
+            return WalletManager(initialState.metadata.id, rust, initialState)
         }
 
         // create from TapSigner
@@ -199,15 +196,15 @@ class WalletManager :
                     backup,
                     birthday,
                 )
-            val metadata = rust.walletMetadata()
+            val initialState = rust.initialState()
             android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
-            return WalletManager(metadata.id, rust, metadata)
+            return WalletManager(initialState.metadata.id, rust, initialState)
         }
 
         internal fun previewNew(): WalletManager {
             val rust = RustWalletManager.previewNewWallet()
-            val metadata = rust.walletMetadata()
-            return WalletManager(metadata.id, rust, metadata)
+            val initialState = rust.initialState()
+            return WalletManager(initialState.metadata.id, rust, initialState)
         }
     }
 
@@ -268,14 +265,25 @@ class WalletManager :
         }
     }
 
+    suspend fun startWalletScanIfNeeded() {
+        if (!walletScanStarted.compareAndSet(false, true)) return
+
+        try {
+            startWalletScan()
+        } catch (e: Exception) {
+            walletScanStarted.set(false)
+            throw e
+        }
+    }
+
     fun setScanning() {
         val currentTxns =
             when (val state = loadState) {
-                is WalletLoadState.LOADED -> state.txns
-                is WalletLoadState.SCANNING -> state.txns
+                is WalletLoadState.Loaded -> state.v1
+                is WalletLoadState.Scanning -> state.v1
                 else -> emptyList()
             }
-        loadState = WalletLoadState.SCANNING(currentTxns)
+        loadState = WalletLoadState.Scanning(currentTxns)
     }
 
     suspend fun firstAddress(): AddressInfo =
@@ -596,14 +604,14 @@ class WalletManager :
 
         loadState =
             when (val current = loadState) {
-                is WalletLoadState.LOADING ->
+                is WalletLoadState.Loading ->
                     if (ledgerState.initialScanComplete) {
-                        WalletLoadState.LOADED(listOf(transaction))
+                        WalletLoadState.Loaded(listOf(transaction))
                     } else {
-                        WalletLoadState.SCANNING(listOf(transaction))
+                        WalletLoadState.Scanning(listOf(transaction))
                     }
-                is WalletLoadState.SCANNING -> WalletLoadState.SCANNING(replace(current.txns))
-                is WalletLoadState.LOADED -> WalletLoadState.LOADED(replace(current.txns))
+                is WalletLoadState.Scanning -> WalletLoadState.Scanning(replace(current.v1))
+                is WalletLoadState.Loaded -> WalletLoadState.Loaded(replace(current.v1))
             }
     }
 
@@ -627,18 +635,18 @@ class WalletManager :
                     }
                 if (message.v1.isActive) {
                     when (val current = loadState) {
-                        is WalletLoadState.SCANNING -> Unit
-                        is WalletLoadState.LOADED -> loadState = WalletLoadState.SCANNING(current.txns)
-                        is WalletLoadState.LOADING -> loadState = WalletLoadState.SCANNING(listOf())
+                        is WalletLoadState.Scanning -> Unit
+                        is WalletLoadState.Loaded -> loadState = WalletLoadState.Scanning(current.v1)
+                        is WalletLoadState.Loading -> loadState = WalletLoadState.Scanning(listOf())
                     }
                 } else {
                     when (val current = loadState) {
-                        is WalletLoadState.SCANNING -> {
+                        is WalletLoadState.Scanning -> {
                             if (ledgerState.initialScanComplete) {
-                                loadState = WalletLoadState.LOADED(current.txns)
+                                loadState = WalletLoadState.Loaded(current.v1)
                             }
                         }
-                        is WalletLoadState.LOADED, is WalletLoadState.LOADING -> Unit
+                        is WalletLoadState.Loaded, is WalletLoadState.Loading -> Unit
                     }
                 }
             }
@@ -655,34 +663,24 @@ class WalletManager :
             is WalletManagerReconcileMessage.AvailableTransactions -> {
                 val txns = message.v1
                 when (val current = loadState) {
-                    is WalletLoadState.LOADING -> {
-                        loadState = WalletLoadState.SCANNING(txns)
+                    is WalletLoadState.Loading -> {
+                        loadState = loadStateForTransactions(txns)
                     }
-                    is WalletLoadState.SCANNING -> {
-                        if (txns.size >= current.txns.size) {
-                            loadState = WalletLoadState.SCANNING(txns)
+                    is WalletLoadState.Scanning -> {
+                        if (txns.size >= current.v1.size) {
+                            loadState = loadStateForTransactions(txns)
                         }
                     }
-                    is WalletLoadState.LOADED -> {
-                        if (txns.size >= current.txns.size) {
-                            loadState = WalletLoadState.SCANNING(txns)
+                    is WalletLoadState.Loaded -> {
+                        if (txns.size >= current.v1.size) {
+                            loadState = loadStateForTransactions(txns)
                         }
                     }
                 }
             }
 
             is WalletManagerReconcileMessage.UpdatedTransactions -> {
-                loadState =
-                    when (loadState) {
-                        is WalletLoadState.SCANNING, is WalletLoadState.LOADING ->
-                            WalletLoadState.SCANNING(message.v1)
-                        is WalletLoadState.LOADED ->
-                            if (ledgerState.initialScanComplete) {
-                                WalletLoadState.LOADED(message.v1)
-                            } else {
-                                WalletLoadState.SCANNING(message.v1)
-                            }
-                    }
+                loadState = loadStateForTransactions(message.v1)
             }
 
             is WalletManagerReconcileMessage.TransactionUpdated -> {
@@ -698,12 +696,7 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.ScanComplete -> {
-                loadState =
-                    if (ledgerState.initialScanComplete) {
-                        WalletLoadState.LOADED(message.v1)
-                    } else {
-                        WalletLoadState.SCANNING(message.v1)
-                    }
+                loadState = loadStateForTransactions(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
@@ -712,8 +705,13 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
                 unsignedTransactions =
-                    withRustOr(emptyList()) {
-                        getUnsignedTransactions()
+                    runCatching {
+                        withRustOr(emptyList()) {
+                            getUnsignedTransactions()
+                        }
+                    }.getOrElse { error ->
+                        logError("Unable to refresh unsigned transactions", error)
+                        emptyList()
                     }
             }
 
@@ -835,19 +833,23 @@ class WalletManager :
 
     private fun reconcileLoadStateWithLedgerState() {
         when (val current = loadState) {
-            is WalletLoadState.SCANNING -> {
-                if (ledgerState.initialScanComplete && !scanStatus.isActive) {
-                    loadState = WalletLoadState.LOADED(current.txns)
-                }
+            is WalletLoadState.Scanning -> {
+                loadState = loadStateForTransactions(current.v1)
             }
-            is WalletLoadState.LOADED -> {
-                if (ledgerState.initialScanIncomplete && scanStatus.isActive) {
-                    loadState = WalletLoadState.SCANNING(current.txns)
-                }
+            is WalletLoadState.Loaded -> {
+                loadState = loadStateForTransactions(current.v1)
             }
-            is WalletLoadState.LOADING -> Unit
+            is WalletLoadState.Loading -> Unit
         }
     }
+
+    private fun loadStateForTransactions(transactions: List<Transaction>): WalletLoadState =
+        when {
+            scanStatus.isActive -> WalletLoadState.Scanning(transactions)
+            ledgerState.initialScanComplete -> WalletLoadState.Loaded(transactions)
+            transactions.isEmpty() -> WalletLoadState.Loading
+            else -> WalletLoadState.Scanning(transactions)
+        }
 
     override fun close() {
         rustGuard.closeOnce {
@@ -858,20 +860,4 @@ class WalletManager :
             rust.close()
         }
     }
-}
-
-/**
- * wallet load state sealed class
- * mirrors iOS WalletLoadState enum
- */
-sealed class WalletLoadState {
-    data object LOADING : WalletLoadState()
-
-    data class SCANNING(
-        val txns: List<Transaction>,
-    ) : WalletLoadState()
-
-    data class LOADED(
-        val txns: List<Transaction>,
-    ) : WalletLoadState()
 }

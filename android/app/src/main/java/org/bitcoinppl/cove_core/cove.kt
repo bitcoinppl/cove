@@ -1119,6 +1119,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_send_flow_alert_state_from_address_error(
     ): Short
+    external fun uniffi_cove_checksum_func_balance_presentation_provisional(
+    ): Short
     external fun uniffi_cove_checksum_func_grouped_plain_words_of(
     ): Short
     external fun uniffi_cove_checksum_func_numberofwordsingroups(
@@ -1629,7 +1631,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_initial_load_state(
+    external fun uniffi_cove_checksum_method_rustwalletmanager_initial_state(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_initiate_payment(
     ): Short
@@ -2757,7 +2759,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustwalletmanager_initial_load_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_rustwalletmanager_initial_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_initiate_payment(`ptr`: Long,`psbt`: Long,`payjoinEndpoint`: RustBuffer.ByValue,
     ): Long
@@ -3483,6 +3485,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_send_flow_alert_state_from_address_error(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_balance_presentation_provisional(uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_grouped_plain_words_of(`mnemonic`: RustBuffer.ByValue,`groups`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_numberofwordsingroups(`me`: RustBuffer.ByValue,`of`: Byte,uniffi_out_err: UniffiRustCallStatus,
@@ -3749,6 +3753,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_func_balance_presentation_provisional() != 4257.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_func_grouped_plain_words_of() != 56420.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3908,7 +3915,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 16208.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21077.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 21603.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_needs_onboarding() != 25615.toShort()) {
@@ -4514,7 +4521,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 35895.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_load_state() != 32246.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 13212.toShort()) {
@@ -10279,7 +10286,7 @@ public interface FfiAppInterface {
 
     /**
      * Load and reset the default route
-     * Shows a laoding screen, and then resets the default route
+     * Shows a loading screen, and then resets the default route
      */
     fun `loadAndResetDefaultRouteAfter`(`route`: Route, `afterMillis`: kotlin.UInt)
 
@@ -10718,7 +10725,7 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     /**
      * Load and reset the default route
-     * Shows a laoding screen, and then resets the default route
+     * Shows a loading screen, and then resets the default route
      */override fun `loadAndResetDefaultRouteAfter`(`route`: Route, `afterMillis`: kotlin.UInt)
         =
     callWithHandle {
@@ -21231,7 +21238,10 @@ public interface RustWalletManagerInterface {
 
     fun `getUnsignedTransactions`(): List<UnsignedTransaction>
 
-    fun `initialLoadState`(): WalletLoadState
+    /**
+     * Returns the bootstrap wallet snapshot used before reconcile messages arrive
+     */
+    fun `initialState`(): WalletInitialState
 
     /**
      * Send entry point for unsigned hot wallet PSBTs
@@ -21869,11 +21879,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
-    override fun `initialLoadState`(): WalletLoadState {
-            return FfiConverterTypeWalletLoadState.lift(
+
+    /**
+     * Returns the bootstrap wallet snapshot used before reconcile messages arrive
+     */override fun `initialState`(): WalletInitialState {
+            return FfiConverterTypeWalletInitialState.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_initial_load_state(
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_initial_state(
         it,
         _status)
 }
@@ -30951,6 +30964,83 @@ public object FfiConverterTypeUnsupportedDbVersion: FfiConverterRustBuffer<Unsup
     override fun write(value: UnsupportedDbVersion, buf: ByteBuffer) {
             FfiConverterString.write(value.`path`, buf)
             FfiConverterUByte.write(value.`version`, buf)
+    }
+}
+
+
+
+data class WalletInitialState (
+    var `metadata`: WalletMetadata
+    ,
+    var `ledgerState`: WalletLedgerState
+    ,
+    var `loadState`: WalletLoadState
+    ,
+    var `scanStatus`: WalletScanStatus
+    ,
+    var `balancePresentation`: BalancePresentation
+    ,
+    var `balance`: Balance
+    ,
+    var `unsignedTransactions`: List<UnsignedTransaction>
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`metadata`,
+        this.`ledgerState`,
+        this.`loadState`,
+        this.`scanStatus`,
+        this.`balancePresentation`,
+        this.`balance`,
+        this.`unsignedTransactions`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletInitialState: FfiConverterRustBuffer<WalletInitialState> {
+    override fun read(buf: ByteBuffer): WalletInitialState {
+        return WalletInitialState(
+            FfiConverterTypeWalletMetadata.read(buf),
+            FfiConverterTypeWalletLedgerState.read(buf),
+            FfiConverterTypeWalletLoadState.read(buf),
+            FfiConverterTypeWalletScanStatus.read(buf),
+            FfiConverterTypeBalancePresentation.read(buf),
+            FfiConverterTypeBalance.read(buf),
+            FfiConverterSequenceTypeUnsignedTransaction.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WalletInitialState) = (
+            FfiConverterTypeWalletMetadata.allocationSize(value.`metadata`) +
+            FfiConverterTypeWalletLedgerState.allocationSize(value.`ledgerState`) +
+            FfiConverterTypeWalletLoadState.allocationSize(value.`loadState`) +
+            FfiConverterTypeWalletScanStatus.allocationSize(value.`scanStatus`) +
+            FfiConverterTypeBalancePresentation.allocationSize(value.`balancePresentation`) +
+            FfiConverterTypeBalance.allocationSize(value.`balance`) +
+            FfiConverterSequenceTypeUnsignedTransaction.allocationSize(value.`unsignedTransactions`)
+    )
+
+    override fun write(value: WalletInitialState, buf: ByteBuffer) {
+            FfiConverterTypeWalletMetadata.write(value.`metadata`, buf)
+            FfiConverterTypeWalletLedgerState.write(value.`ledgerState`, buf)
+            FfiConverterTypeWalletLoadState.write(value.`loadState`, buf)
+            FfiConverterTypeWalletScanStatus.write(value.`scanStatus`, buf)
+            FfiConverterTypeBalancePresentation.write(value.`balancePresentation`, buf)
+            FfiConverterTypeBalance.write(value.`balance`, buf)
+            FfiConverterSequenceTypeUnsignedTransaction.write(value.`unsignedTransactions`, buf)
     }
 }
 
@@ -54335,6 +54425,14 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "id=${ `id` }, error=${ `error` }"
     }
 
+    class PendingUnsignedTransactionsLoadException(
+
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class ReceiveAddressException(
 
         val v1: kotlin.String
@@ -54456,7 +54554,10 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            32 -> WalletManagerException.ReceiveAddressException(
+            32 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
+                FfiConverterString.read(buf),
+                )
+            33 -> WalletManagerException.ReceiveAddressException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -54616,6 +54717,11 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.`id`)
                 + FfiConverterString.allocationSize(value.`error`)
+            )
+            is WalletManagerException.PendingUnsignedTransactionsLoadException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
             is WalletManagerException.ReceiveAddressException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -54779,8 +54885,13 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
-            is WalletManagerException.ReceiveAddressException -> {
+            is WalletManagerException.PendingUnsignedTransactionsLoadException -> {
                 buf.putInt(32)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.ReceiveAddressException -> {
+                buf.putInt(33)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -59529,6 +59640,19 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
         FfiConverterTypeAddressError.lower(`error`),
         FfiConverterString.lower(`address`),_status)
+}
+    )
+    }
+
+
+        /**
+         * Returns provisional presentation values for loading screens before a wallet manager is available
+         */ fun `balancePresentationProvisional`(): BalancePresentation {
+            return FfiConverterTypeBalancePresentation.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_balance_presentation_provisional(
+
+        _status)
 }
     )
     }
