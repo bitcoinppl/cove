@@ -1776,8 +1776,10 @@ mod tests {
         let spendable = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(4_000));
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
@@ -1806,8 +1808,10 @@ mod tests {
         let spendable = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(7_500));
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
