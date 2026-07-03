@@ -380,6 +380,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
     }
 
+    @MainActor
     func reconcileAfterLabelsChanged() {
         let cachedTransactionIds = Array(transactionDetails.keys)
         let cachedLockStateTransactionIds = Array(transactionLockStates.keys)

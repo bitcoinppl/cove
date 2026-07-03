@@ -277,7 +277,11 @@ struct TransactionDetailsView: View {
                     lockStateUpdatingIndicatorShownAt = ContinuousClock.now
                     showLockStateUpdatingIndicator = true
                 }
-            } catch {}
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Error showing transaction lock update indicator: \(error)")
+            }
         }
         var updateError: String? = nil
 
