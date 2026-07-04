@@ -14272,63 +14272,6 @@ public func FfiConverterTypeCloudBackupRestoreReport_lower(_ value: CloudBackupR
 
 
 /**
- * Retry instruction attached to a retryable deep verification failure
- */
-public struct CloudBackupRetryContext: Equatable, Hashable {
-    public var issue: CloudBackupRetryIssue
-    public var action: CloudBackupRetryAction
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(issue: CloudBackupRetryIssue, action: CloudBackupRetryAction) {
-        self.issue = issue
-        self.action = action
-    }
-
-
-
-
-}
-
-#if compiler(>=6)
-extension CloudBackupRetryContext: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRetryContext {
-        return
-            try CloudBackupRetryContext(
-                issue: FfiConverterTypeCloudBackupRetryIssue.read(from: &buf),
-                action: FfiConverterTypeCloudBackupRetryAction.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CloudBackupRetryContext, into buf: inout [UInt8]) {
-        FfiConverterTypeCloudBackupRetryIssue.write(value.issue, into: &buf)
-        FfiConverterTypeCloudBackupRetryAction.write(value.action, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCloudBackupRetryContext_lift(_ buf: RustBuffer) throws -> CloudBackupRetryContext {
-    return try FfiConverterTypeCloudBackupRetryContext.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCloudBackupRetryContext_lower(_ value: CloudBackupRetryContext) -> RustBuffer {
-    return FfiConverterTypeCloudBackupRetryContext.lower(value)
-}
-
-
-/**
  * Top-level state snapshot exposed to platform managers
  */
 public struct CloudBackupState: Equatable, Hashable {
@@ -21456,68 +21399,6 @@ public func FfiConverterTypeCloudBackupRetryAction_lower(_ value: CloudBackupRet
 
 
 /**
- * Retry issue category for a user-visible verification retry
- */
-
-public enum CloudBackupRetryIssue: Equatable, Hashable {
-
-    case connectivity
-
-
-
-
-
-}
-
-#if compiler(>=6)
-extension CloudBackupRetryIssue: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer {
-    typealias SwiftType = CloudBackupRetryIssue
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupRetryIssue {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .connectivity
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: CloudBackupRetryIssue, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .connectivity:
-            writeInt(&buf, Int32(1))
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCloudBackupRetryIssue_lift(_ buf: RustBuffer) throws -> CloudBackupRetryIssue {
-    return try FfiConverterTypeCloudBackupRetryIssue.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCloudBackupRetryIssue_lower(_ value: CloudBackupRetryIssue) -> RustBuffer {
-    return FfiConverterTypeCloudBackupRetryIssue.lower(value)
-}
-
-
-
-/**
  * Root-level prompt the UI should show for the current cloud backup state
  */
 
@@ -23645,7 +23526,7 @@ public enum DeepVerificationFailure: Equatable, Hashable {
     /**
      * Transient iCloud/network/passkey error — safe to retry
      */
-    case retry(message: String, detail: CloudBackupDetail?, retryContext: CloudBackupRetryContext?
+    case retry(message: String, detail: CloudBackupDetail?, retryAction: CloudBackupRetryAction?
     )
     /**
      * Manifest missing, master key verified intact — recreate from local wallets
@@ -23692,7 +23573,7 @@ public struct FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .retry(message: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf), retryContext: try FfiConverterOptionTypeCloudBackupRetryContext.read(from: &buf)
+        case 1: return .retry(message: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf), retryAction: try FfiConverterOptionTypeCloudBackupRetryAction.read(from: &buf)
         )
 
         case 2: return .recreateManifest(message: try FfiConverterString.read(from: &buf), warning: try FfiConverterString.read(from: &buf), detail: try FfiConverterOptionTypeCloudBackupDetail.read(from: &buf)
@@ -23712,11 +23593,11 @@ public struct FfiConverterTypeDeepVerificationFailure: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .retry(message,detail,retryContext):
+        case let .retry(message,detail,retryAction):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(message, into: &buf)
             FfiConverterOptionTypeCloudBackupDetail.write(detail, into: &buf)
-            FfiConverterOptionTypeCloudBackupRetryContext.write(retryContext, into: &buf)
+            FfiConverterOptionTypeCloudBackupRetryAction.write(retryAction, into: &buf)
 
 
         case let .recreateManifest(message,warning,detail):
@@ -38443,30 +38324,6 @@ fileprivate struct FfiConverterOptionTypeCloudBackupProgress: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeCloudBackupRetryContext: FfiConverterRustBuffer {
-    typealias SwiftType = CloudBackupRetryContext?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeCloudBackupRetryContext.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeCloudBackupRetryContext.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeCloudRestoreProviderHint: FfiConverterRustBuffer {
     typealias SwiftType = CloudRestoreProviderHint?
 
@@ -38651,6 +38508,30 @@ fileprivate struct FfiConverterOptionTypeBlockSizeLast: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeBlockSizeLast.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCloudBackupRetryAction: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupRetryAction?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCloudBackupRetryAction.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCloudBackupRetryAction.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

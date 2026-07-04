@@ -396,7 +396,7 @@ private fun VerificationFailureContent(
 }
 
 private fun verificationRetryAction(failure: DeepVerificationFailure.Retry): CloudBackupManagerAction =
-    if (failure.retryContext?.action == CloudBackupRetryAction.VERIFY_DISCOVERABLE) {
+    if (failure.retryAction == CloudBackupRetryAction.VERIFY_DISCOVERABLE) {
         CloudBackupManagerAction.StartVerificationDiscoverable(
             CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
         )

@@ -29058,47 +29058,6 @@ public object FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer<C
 
 
 /**
- * Retry instruction attached to a retryable deep verification failure
- */
-data class CloudBackupRetryContext (
-    var `issue`: CloudBackupRetryIssue
-    ,
-    var `action`: CloudBackupRetryAction
-
-){
-
-
-
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext> {
-    override fun read(buf: ByteBuffer): CloudBackupRetryContext {
-        return CloudBackupRetryContext(
-            FfiConverterTypeCloudBackupRetryIssue.read(buf),
-            FfiConverterTypeCloudBackupRetryAction.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: CloudBackupRetryContext) = (
-            FfiConverterTypeCloudBackupRetryIssue.allocationSize(value.`issue`) +
-            FfiConverterTypeCloudBackupRetryAction.allocationSize(value.`action`)
-    )
-
-    override fun write(value: CloudBackupRetryContext, buf: ByteBuffer) {
-            FfiConverterTypeCloudBackupRetryIssue.write(value.`issue`, buf)
-            FfiConverterTypeCloudBackupRetryAction.write(value.`action`, buf)
-    }
-}
-
-
-
-/**
  * Top-level state snapshot exposed to platform managers
  */
 data class CloudBackupState (
@@ -37247,42 +37206,6 @@ public object FfiConverterTypeCloudBackupRetryAction: FfiConverterRustBuffer<Clo
 
 
 /**
- * Retry issue category for a user-visible verification retry
- */
-
-enum class CloudBackupRetryIssue {
-
-    CONNECTIVITY;
-
-
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer<CloudBackupRetryIssue> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupRetryIssue.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: CloudBackupRetryIssue) = 4UL
-
-    override fun write(value: CloudBackupRetryIssue, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-/**
  * Root-level prompt the UI should show for the current cloud backup state
  */
 sealed class CloudBackupRootPrompt {
@@ -39954,7 +39877,7 @@ sealed class DeepVerificationFailure {
     data class Retry(
         val `message`: kotlin.String,
         val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?,
-        val `retryContext`: org.bitcoinppl.cove_core.CloudBackupRetryContext?) : DeepVerificationFailure()
+        val `retryAction`: org.bitcoinppl.cove_core.CloudBackupRetryAction?) : DeepVerificationFailure()
 
     {
 
@@ -40032,7 +39955,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
             1 -> DeepVerificationFailure.Retry(
                 FfiConverterString.read(buf),
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
-                FfiConverterOptionalTypeCloudBackupRetryContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupRetryAction.read(buf),
                 )
             2 -> DeepVerificationFailure.RecreateManifest(
                 FfiConverterString.read(buf),
@@ -40059,7 +39982,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
                 4UL
                 + FfiConverterString.allocationSize(value.`message`)
                 + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
-                + FfiConverterOptionalTypeCloudBackupRetryContext.allocationSize(value.`retryContext`)
+                + FfiConverterOptionalTypeCloudBackupRetryAction.allocationSize(value.`retryAction`)
             )
         }
         is DeepVerificationFailure.RecreateManifest -> {
@@ -40096,7 +40019,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
                 buf.putInt(1)
                 FfiConverterString.write(value.`message`, buf)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
-                FfiConverterOptionalTypeCloudBackupRetryContext.write(value.`retryContext`, buf)
+                FfiConverterOptionalTypeCloudBackupRetryAction.write(value.`retryAction`, buf)
                 Unit
             }
             is DeepVerificationFailure.RecreateManifest -> {
@@ -57940,38 +57863,6 @@ public object FfiConverterOptionalTypeCloudBackupProgress: FfiConverterRustBuffe
 /**
  * @suppress
  */
-public object FfiConverterOptionalTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext?> {
-    override fun read(buf: ByteBuffer): CloudBackupRetryContext? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeCloudBackupRetryContext.read(buf)
-    }
-
-    override fun allocationSize(value: CloudBackupRetryContext?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeCloudBackupRetryContext.allocationSize(value)
-        }
-    }
-
-    override fun write(value: CloudBackupRetryContext?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeCloudBackupRetryContext.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint?> {
     override fun read(buf: ByteBuffer): CloudRestoreProviderHint? {
         if (buf.get().toInt() == 0) {
@@ -58218,6 +58109,38 @@ public object FfiConverterOptionalTypeBlockSizeLast: FfiConverterRustBuffer<Bloc
         } else {
             buf.put(1)
             FfiConverterTypeBlockSizeLast.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupRetryAction: FfiConverterRustBuffer<CloudBackupRetryAction?> {
+    override fun read(buf: ByteBuffer): CloudBackupRetryAction? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupRetryAction.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryAction?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupRetryAction.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupRetryAction?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupRetryAction.write(value, buf)
         }
     }
 }

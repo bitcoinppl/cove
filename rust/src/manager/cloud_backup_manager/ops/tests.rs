@@ -19,10 +19,10 @@ use super::test_support::*;
 use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, PersistedCloudBackupState,
-    PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-    PersistedDisablingCloudBackup,
+    CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState,
+    CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
@@ -120,7 +120,7 @@ async fn deep_verify_for_test(
     .await;
 
     if let Some(completion) = manager.pending_verification_completion() {
-        let mut report = completion.report().clone();
+        let mut report = completion.report();
         if report.detail.is_none() {
             report.detail = manager.model_snapshot().detail;
         }

@@ -274,7 +274,7 @@ pub enum DeepVerificationFailure {
     Retry {
         message: String,
         detail: Option<CloudBackupDetail>,
-        retry_context: Option<CloudBackupRetryContext>,
+        retry_action: Option<CloudBackupRetryAction>,
     },
     /// Manifest missing, master key verified intact — recreate from local wallets
     RecreateManifest { message: String, warning: String, detail: Option<CloudBackupDetail> },
@@ -288,9 +288,9 @@ impl DeepVerificationFailure {
     pub(crate) fn retry(
         message: impl Into<String>,
         detail: Option<CloudBackupDetail>,
-        retry_context: Option<CloudBackupRetryContext>,
+        retry_action: Option<CloudBackupRetryAction>,
     ) -> Self {
-        Self::Retry { message: message.into(), detail, retry_context }
+        Self::Retry { message: message.into(), detail, retry_action }
     }
 
     pub(crate) fn detail(&self) -> Option<&CloudBackupDetail> {
@@ -303,34 +303,15 @@ impl DeepVerificationFailure {
     }
 
     pub(crate) fn is_connectivity_retry(&self) -> bool {
-        matches!(
-            self,
-            Self::Retry {
-                retry_context: Some(CloudBackupRetryContext {
-                    issue: CloudBackupRetryIssue::Connectivity,
-                    ..
-                }),
-                ..
-            }
-        )
+        matches!(self, Self::Retry { retry_action: Some(_), .. })
     }
 
     pub(crate) fn connectivity_retry_action(&self) -> Option<CloudBackupRetryAction> {
         match self {
-            Self::Retry {
-                retry_context:
-                    Some(CloudBackupRetryContext { issue: CloudBackupRetryIssue::Connectivity, action }),
-                ..
-            } => Some(*action),
+            Self::Retry { retry_action: Some(action), .. } => Some(*action),
             _ => None,
         }
     }
-}
-
-/// Retry issue category for a user-visible verification retry
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum CloudBackupRetryIssue {
-    Connectivity,
 }
 
 /// Retry action the UI should dispatch for a retryable verification failure
@@ -338,19 +319,6 @@ pub enum CloudBackupRetryIssue {
 pub enum CloudBackupRetryAction {
     Verify,
     VerifyDiscoverable,
-}
-
-/// Retry instruction attached to a retryable deep verification failure
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct CloudBackupRetryContext {
-    pub issue: CloudBackupRetryIssue,
-    pub action: CloudBackupRetryAction,
-}
-
-impl CloudBackupRetryContext {
-    pub(crate) fn connectivity(action: CloudBackupRetryAction) -> Self {
-        Self { issue: CloudBackupRetryIssue::Connectivity, action }
-    }
 }
 
 /// Top-level state snapshot exposed to platform managers

@@ -10,8 +10,8 @@ use self::queue_processor::PendingUploadVerifier;
 use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
+    CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState,
+    CloudBlobUploadedPendingConfirmationState, CloudStorageIssue, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
 
@@ -19,13 +19,6 @@ pub(crate) use detail::remote_wallet_revision_matches;
 
 pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(crate) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PendingUploadVerificationStatus {
-    Idle,
-    Pending,
-    BlockedOnAuthorization,
-}
 
 pub(crate) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
     FibonacciBuilder::default()
@@ -131,7 +124,7 @@ impl RustCloudBackupManager {
         current_state: &PersistedCloudBlobSyncState,
         revision_hash: Option<String>,
         retryable: bool,
-        issue: Option<CloudBlobFailureIssue>,
+        issue: Option<CloudStorageIssue>,
         error: String,
     ) -> Result<bool, CloudBackupError> {
         let failed_at = crate::manager::cloud_backup_manager::current_timestamp();
@@ -184,7 +177,7 @@ impl RustCloudBackupManager {
         send!(self.supervisor.ensure_pending_upload_verification_loop());
     }
 
-    pub(crate) async fn verify_pending_uploads_once(&self) -> PendingUploadVerificationStatus {
+    pub(crate) async fn verify_pending_uploads_once(&self) -> PendingUploadVerificationState {
         PendingUploadVerifier(self.clone()).run_once().await
     }
 

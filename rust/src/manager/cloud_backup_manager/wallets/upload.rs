@@ -418,7 +418,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let issue = CloudStorageIssue::from(&error);
         let retryable = Self::is_upload_failure_retryable(&error);
-        let persisted_issue = Self::cloud_blob_failure_issue(issue);
+        let persisted_issue = Self::persistable_cloud_storage_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
         if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
@@ -455,7 +455,7 @@ impl RustCloudBackupManager {
             current_state,
             revision_hash,
             Self::is_upload_preparation_failure_retryable(&error),
-            Self::cloud_blob_failure_issue(issue),
+            Self::persistable_cloud_storage_issue(issue),
             error.to_string(),
         )?;
         Err(error)

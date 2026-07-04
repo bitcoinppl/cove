@@ -420,10 +420,10 @@ mod tests {
     use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 
     use super::super::{
-        CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, PersistedBackupSyncState,
-        PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBackupStatus,
-        PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
-        PersistedPasskeyState, PersistedPendingVerificationUpload,
+        CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudStorageIssue,
+        PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
+        PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+        PersistedConfiguredCloudBackup, PersistedPasskeyState, PersistedPendingVerificationUpload,
     };
 
     fn configured_state(
@@ -850,6 +850,21 @@ mod tests {
 
         assert!(!failed_state.retryable);
         assert_eq!(failed_state.issue, None);
+    }
+
+    #[test]
+    fn cloud_storage_issue_preserves_cloud_blob_failure_issue_json() {
+        let cases = [
+            (CloudStorageIssue::AuthorizationRequired, "\"AuthorizationRequired\""),
+            (CloudStorageIssue::Offline, "\"Offline\""),
+            (CloudStorageIssue::Unavailable, "\"Unavailable\""),
+            (CloudStorageIssue::NotFound, "\"NotFound\""),
+            (CloudStorageIssue::QuotaExceeded, "\"QuotaExceeded\""),
+        ];
+
+        for (issue, expected_json) in cases {
+            assert_eq!(serde_json::to_string(&issue).unwrap(), expected_json);
+        }
     }
 
     #[test]

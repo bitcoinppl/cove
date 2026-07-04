@@ -31,9 +31,8 @@ use parking_lot::RwLock;
 use tracing::{error, info, warn};
 
 use crate::database::Database;
-use crate::database::cloud_backup::{
-    CloudBlobFailureIssue, PersistedCloudBackupState, PersistedCloudBackupStatus,
-};
+pub(crate) use crate::database::cloud_backup::CloudStorageIssue;
+use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
 use crate::manager::reconcile_channel::ReconcileChannel;
 use crate::wallet::metadata::{WalletId, WalletMode as LocalWalletMode};
 
@@ -56,22 +55,20 @@ pub use self::detail::{
 pub(crate) use self::detail::{
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
 };
-#[allow(unused_imports)]
-pub use self::dto::CloudBackupRetryIssue;
 pub use self::dto::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
     CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent,
     CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupRestoreReport, CloudBackupRetryAction,
-    CloudBackupRetryContext, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationMetadata, CloudBackupWalletItem, CloudBackupWalletStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
-    RecordId, SavedPasskeyConfirmationMode,
+    CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
+    CloudBackupWalletItem, CloudBackupWalletStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RecordId,
+    SavedPasskeyConfirmationMode,
 };
 pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;
 pub type CloudBackupState = self::dto::CloudBackupState;
 pub(crate) use self::error::{
-    BlockingCloudStep, CloudBackupError, CloudStorageIssue, blocking_cloud_error,
-    is_connectivity_related_issue, offline_error_for_step,
+    BlockingCloudStep, CloudBackupError, blocking_cloud_error, is_connectivity_related_issue,
+    offline_error_for_step,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
 #[cfg(test)]
@@ -165,7 +162,7 @@ pub enum DeepVerificationFailure {
     Retry {
         message: String,
         detail: Option<CloudBackupDetail>,
-        retry_context: Option<CloudBackupRetryContext>,
+        retry_action: Option<CloudBackupRetryAction>,
     },
     /// Manifest missing, master key verified intact — recreate from local wallets
     RecreateManifest { message: String, warning: String, detail: Option<CloudBackupDetail> },
@@ -371,19 +368,10 @@ impl RustCloudBackupManager {
         Self::await_cloud_backup_write(receiver).await
     }
 
-    pub(crate) fn cloud_blob_failure_issue(
+    pub(crate) fn persistable_cloud_storage_issue(
         issue: CloudStorageIssue,
-    ) -> Option<CloudBlobFailureIssue> {
-        match issue {
-            CloudStorageIssue::AuthorizationRequired => {
-                Some(CloudBlobFailureIssue::AuthorizationRequired)
-            }
-            CloudStorageIssue::Offline => Some(CloudBlobFailureIssue::Offline),
-            CloudStorageIssue::Unavailable => Some(CloudBlobFailureIssue::Unavailable),
-            CloudStorageIssue::NotFound => Some(CloudBlobFailureIssue::NotFound),
-            CloudStorageIssue::QuotaExceeded => Some(CloudBlobFailureIssue::QuotaExceeded),
-            CloudStorageIssue::Other => None,
-        }
+    ) -> Option<CloudStorageIssue> {
+        issue.persistable()
     }
 
     pub(crate) fn connection_status(&self) -> ConnectivityStatus {
@@ -711,11 +699,7 @@ impl RustCloudBackupManager {
         completion: PendingVerificationCompletion,
         source: CloudBackupVerificationSource,
     ) {
-        if let Some(detail) = completion.report().detail.clone() {
-            self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
-        }
-
-        let persisted_completion = completion.persisted();
+        let persisted_completion = completion.clone();
 
         let mut state = Self::load_persisted_state();
         state.replace_pending_verification_completion(persisted_completion);
@@ -734,10 +718,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn pending_verification_completion(&self) -> Option<PendingVerificationCompletion> {
-        Self::load_persisted_state()
-            .pending_verification_completion()
-            .cloned()
-            .map(PendingVerificationCompletion::from_persisted)
+        Self::load_persisted_state().pending_verification_completion().cloned()
     }
 
     pub(crate) fn clear_pending_verification_completion(&self) {
@@ -1097,6 +1078,18 @@ mod tests {
     }
 
     #[test]
+    fn persistable_cloud_storage_issue_filters_other_for_persistence() {
+        assert_eq!(
+            RustCloudBackupManager::persistable_cloud_storage_issue(CloudStorageIssue::Offline),
+            Some(CloudStorageIssue::Offline)
+        );
+        assert_eq!(
+            RustCloudBackupManager::persistable_cloud_storage_issue(CloudStorageIssue::Other),
+            None
+        );
+    }
+
+    #[test]
     fn corrupted_persisted_state_projects_runtime_error() {
         assert_eq!(
             RustCloudBackupManager::runtime_status_for(&PersistedCloudBackupState::corrupted(
@@ -1108,8 +1101,8 @@ mod tests {
 
     #[test]
     fn pending_verification_completion_expires_future_created_at() {
-        let completion = PendingVerificationCompletion {
-            report: DeepVerificationReport {
+        let mut completion = PendingVerificationCompletion::new(
+            DeepVerificationReport {
                 master_key_wrapper_repaired: false,
                 local_master_key_repaired: false,
                 credential_recovered: false,
@@ -1118,10 +1111,10 @@ mod tests {
                 wallets_unsupported: 0,
                 detail: None,
             },
-            namespace_id: "namespace".into(),
-            uploads: Vec::new(),
-            created_at: Some(11),
-        };
+            "namespace".into(),
+            Vec::new(),
+        );
+        completion.created_at = Some(11);
 
         assert!(completion.is_expired(10, 60));
     }

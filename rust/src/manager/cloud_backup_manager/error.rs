@@ -2,6 +2,8 @@ use std::{error::Error as StdError, fmt, ops::Deref};
 
 use cove_device::{cloud_storage::CloudStorageError, passkey::PasskeyError};
 
+use crate::database::cloud_backup::CloudStorageIssue;
+
 #[derive(Debug)]
 struct CloudBackupErrorSource {
     message: String,
@@ -142,16 +144,6 @@ impl CloudBackupInternalError {
     ) -> Self {
         Self(CloudBackupErrorSource::context(context, source))
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CloudStorageIssue {
-    AuthorizationRequired,
-    Offline,
-    Unavailable,
-    NotFound,
-    QuotaExceeded,
-    Other,
 }
 
 pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>) -> bool {

@@ -115,7 +115,7 @@ async fn sync_health_reports_authorization_required_for_persisted_auth_failures(
     persist_failed_blob_state_with_issue(
         metadata.id,
         true,
-        Some(CloudBlobFailureIssue::AuthorizationRequired),
+        Some(CloudStorageIssue::AuthorizationRequired),
     );
 
     assert_eq!(

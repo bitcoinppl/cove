@@ -179,7 +179,7 @@ impl RustCloudBackupManager {
             })?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let mut report = completion.report().clone();
+        let mut report = completion.report();
         let sync_states_by_record_id: HashMap<_, _> = Database::global()
             .cloud_blob_sync_states
             .list()

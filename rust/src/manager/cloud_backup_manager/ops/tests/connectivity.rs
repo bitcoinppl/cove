@@ -258,7 +258,7 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
     persist_failed_blob_state_with_issue(
         metadata.id,
         false,
-        Some(CloudBlobFailureIssue::AuthorizationRequired),
+        Some(CloudStorageIssue::AuthorizationRequired),
     );
     let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
 
@@ -292,7 +292,7 @@ async fn cloud_storage_change_retries_authorization_failed_wallet_uploads() {
     persist_failed_blob_state_with_issue(
         metadata.id,
         false,
-        Some(CloudBlobFailureIssue::AuthorizationRequired),
+        Some(CloudStorageIssue::AuthorizationRequired),
     );
     let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
 

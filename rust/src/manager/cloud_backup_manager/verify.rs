@@ -30,9 +30,9 @@ use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::CloudBackupStore;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
-    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
+    CloudBackupRetryAction, CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport,
+    DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
+    RustCloudBackupManager, is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -80,19 +80,18 @@ impl RustCloudBackupManager {
         error: CloudBackupError,
     ) -> DeepVerificationResult {
         error!("Deep verification unexpected error: {error}");
-        let retry_context = is_connectivity_related_issue(&error).then(|| {
-            let action = if force_discoverable {
+        let retry_action = is_connectivity_related_issue(&error).then_some({
+            if force_discoverable {
                 CloudBackupRetryAction::VerifyDiscoverable
             } else {
                 CloudBackupRetryAction::Verify
-            };
-            CloudBackupRetryContext::connectivity(action)
+            }
         });
 
         DeepVerificationResult::Failed(DeepVerificationFailure::retry(
             error.to_string(),
             None,
-            retry_context,
+            retry_action,
         ))
     }
 
