@@ -1,7 +1,5 @@
 use std::sync::{Arc, LazyLock};
 
-use cove_macros::impl_default_for;
-use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
@@ -104,13 +102,8 @@ pub enum SecuritySettingsResult {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustAuthManager {
-    #[allow(dead_code)]
-    pub state: Arc<RwLock<AuthManagerState>>,
     pub reconciler: ReconcileChannel<AuthManagerReconcileMessage>,
 }
-
-#[derive(Clone, Debug, uniffi::Record)]
-pub struct AuthManagerState {}
 
 type Action = AuthManagerAction;
 
@@ -151,11 +144,7 @@ pub enum TrickPinError {
 
 impl RustAuthManager {
     fn init() -> Arc<Self> {
-        Self {
-            state: Arc::new(RwLock::new(AuthManagerState::new())),
-            reconciler: ReconcileChannel::new(1000),
-        }
-        .into()
+        Self { reconciler: ReconcileChannel::new(1000) }.into()
     }
 }
 
@@ -545,13 +534,6 @@ impl RustAuthManager {
         let decoy_pin = Database::global().global_config.decoy_pin().unwrap_or_default();
 
         pin == decoy_pin
-    }
-}
-
-impl_default_for!(AuthManagerState);
-impl AuthManagerState {
-    pub const fn new() -> Self {
-        Self {}
     }
 }
 
