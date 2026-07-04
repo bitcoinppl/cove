@@ -8,10 +8,7 @@ use crate::{
 };
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
 
-use super::{
-    EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowBuildTxnError,
-    SendFlowError, SendFlowSaveUnsignedTransactionError,
-};
+use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError};
 
 #[derive(Clone)]
 struct FinalizeSnapshot {
@@ -176,7 +173,7 @@ impl RustSendFlowManager {
             let details = match confirm_details {
                 Ok(details) => details,
                 Err(error) => {
-                    let error = SendFlowError::from(SendFlowBuildTxnError::from(error));
+                    let error = SendFlowError::from(error);
                     return me.send_alert_async(error).await;
                 }
             };
@@ -187,7 +184,7 @@ impl RustSendFlowManager {
             if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
                 && let Err(e) = manager.save_unsigned_transaction(details.clone())
             {
-                let error = SendFlowError::from(SendFlowSaveUnsignedTransactionError::from(e));
+                let error = SendFlowError::unable_to_save_unsigned_transaction(e);
                 me.send_alert_async(error).await;
             }
 
@@ -201,7 +198,7 @@ impl RustSendFlowManager {
                 }
                 WalletType::WatchOnly => {
                     return me
-                        .send_alert_async(SendFlowError::from(SendFlowBuildTxnError::WatchOnly))
+                        .send_alert_async(SendFlowError::unable_to_build_txn("watch only"))
                         .await;
                 }
             };

@@ -174,7 +174,7 @@ impl RustPendingWalletManager {
             PendingWalletManagerAction::UpdateWords(words) => {
                 {
                     let mut state = self.state.write();
-                    state.wallet = PendingWallet::new(words, None).into();
+                    state.wallet = PendingWallet::new(words).into();
                     state.number_of_words = words;
                 }
 
@@ -186,7 +186,7 @@ impl RustPendingWalletManager {
 
 impl PendingWalletManagerState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
-        Self { number_of_words, wallet: PendingWallet::new(number_of_words, None).into() }
+        Self { number_of_words, wallet: PendingWallet::new(number_of_words).into() }
     }
 }
 

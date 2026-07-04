@@ -40,10 +40,7 @@ use cove_types::{
     unit::BitcoinUnit,
     utxo::Utxo,
 };
-use error::{
-    SendFlowBuildTxnError, SendFlowError, SendFlowFeeDetailsError, SendFlowMaxSendError,
-    SendFlowSaveUnsignedTransactionError,
-};
+use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};

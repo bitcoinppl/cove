@@ -1,5 +1,4 @@
 use cove_types::{Network, address::AddressError};
-use futures::channel::oneshot;
 
 use crate::manager::wallet_manager::WalletManagerError;
 
@@ -71,84 +70,20 @@ impl SendFlowError {
             _ => Self::InvalidAddress(address),
         }
     }
-}
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SendFlowBuildTxnError {
-    #[error("no amount")]
-    NoAmount,
-
-    #[error("no address")]
-    NoAddress,
-
-    #[error("watch only")]
-    WatchOnly,
-
-    #[error(transparent)]
-    Actor(#[from] oneshot::Canceled),
-
-    #[error(transparent)]
-    WalletManager(#[from] WalletManagerError),
-}
-
-impl From<SendFlowBuildTxnError> for SendFlowError {
-    fn from(error: SendFlowBuildTxnError) -> Self {
-        match error {
-            SendFlowBuildTxnError::WalletManager(error) => Self::from(error),
-            error => Self::UnableToBuildTxn(error.to_string()),
-        }
+    pub(crate) fn unable_to_build_txn(error: impl std::fmt::Display) -> Self {
+        Self::UnableToBuildTxn(error.to_string())
     }
-}
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SendFlowFeeDetailsError {
-    #[error(transparent)]
-    Psbt(#[from] cove_types::psbt::PsbtError),
-
-    #[error(transparent)]
-    SendFlow(#[from] SendFlowError),
-}
-
-impl From<SendFlowFeeDetailsError> for SendFlowError {
-    fn from(error: SendFlowFeeDetailsError) -> Self {
+    pub(crate) fn unable_to_get_fee_details(error: impl std::fmt::Display) -> Self {
         Self::UnableToGetFeeDetails(error.to_string())
     }
-}
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SendFlowMaxSendError {
-    #[error(transparent)]
-    FeeDetails(#[from] SendFlowFeeDetailsError),
-
-    #[error(transparent)]
-    SendFlow(#[from] SendFlowError),
-
-    #[error(transparent)]
-    WalletManager(#[from] WalletManagerError),
-}
-
-impl From<SendFlowMaxSendError> for SendFlowError {
-    fn from(error: SendFlowMaxSendError) -> Self {
-        match error {
-            SendFlowMaxSendError::SendFlow(error @ Self::SendBelowDustLimit)
-            | SendFlowMaxSendError::SendFlow(error @ Self::InsufficientFunds) => error,
-            SendFlowMaxSendError::WalletManager(error) => match Self::from(error) {
-                error @ Self::SendBelowDustLimit | error @ Self::InsufficientFunds => error,
-                error => Self::UnableToGetMaxSend(error.to_string()),
-            },
-            error => Self::UnableToGetMaxSend(error.to_string()),
-        }
+    pub(crate) fn unable_to_get_max_send(error: impl std::fmt::Display) -> Self {
+        Self::UnableToGetMaxSend(error.to_string())
     }
-}
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SendFlowSaveUnsignedTransactionError {
-    #[error(transparent)]
-    WalletManager(#[from] WalletManagerError),
-}
-
-impl From<SendFlowSaveUnsignedTransactionError> for SendFlowError {
-    fn from(error: SendFlowSaveUnsignedTransactionError) -> Self {
+    pub(crate) fn unable_to_save_unsigned_transaction(error: impl std::fmt::Display) -> Self {
         Self::UnableToSaveUnsignedTransaction(error.to_string())
     }
 }

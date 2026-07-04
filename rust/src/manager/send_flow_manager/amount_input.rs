@@ -8,8 +8,8 @@ use tracing::{debug, trace, warn};
 
 use super::{
     BtcOnChangeHandler, DeferredSender, Error, FeeSelection, FiatOnChangeHandler, FiatOrBtc,
-    Message, Result, RustSendFlowManager, SendFlowError, SendFlowMaxSendError,
-    SetAmountFocusField, State, btc_on_change, fiat_on_change,
+    Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, State, btc_on_change,
+    fiat_on_change,
 };
 
 impl RustSendFlowManager {
@@ -323,7 +323,7 @@ impl RustSendFlowManager {
                 self.reconciler.send(Message::SetAlert(SendFlowError::SendBelowDustLimit.into()));
             }
             Err(error) => {
-                let error = Error::from(SendFlowMaxSendError::from(error));
+                let error = Error::unable_to_get_max_send(error);
                 self.reconciler.send(Message::SetAlert(error.into()));
             }
         }
@@ -373,11 +373,8 @@ impl RustSendFlowManager {
         }
 
         let fee_rate = fee_rate.unwrap_or_else(|| FeeRate::from_sat_per_vb(50.0));
-        let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
-            .await
-            .unwrap()
-            .map_err(SendFlowMaxSendError::from)?
-            .into();
+        let psbt: Psbt =
+            call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()?.into();
 
         let total = Arc::new(psbt.output_total_amount());
         trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");

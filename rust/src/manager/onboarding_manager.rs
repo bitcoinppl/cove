@@ -560,7 +560,7 @@ impl RustOnboardingManager {
     }
 
     fn create_wallet(branch: OnboardingBranch) -> Result<CreatedWalletFlow, String> {
-        let pending_wallet = PendingWallet::new(NumberOfBip39Words::Twelve, None);
+        let pending_wallet = PendingWallet::new(NumberOfBip39Words::Twelve);
         let mnemonic = pending_wallet.mnemonic.clone();
         let words = pending_wallet.words();
         let network = pending_wallet.network;

@@ -631,12 +631,12 @@ impl FlowState {
                 (origin.flow_state(), TransitionCommand::None)
             }
             (Self::RestoreOffline { origin }, OnboardingAction::ContinueWithoutCloudRestore) => {
-                (origin.flow_state_after_restore_unavailable(), TransitionCommand::None)
+                (origin.flow_state(), TransitionCommand::None)
             }
             (
                 Self::RestoreUnavailable { origin },
                 OnboardingAction::ContinueWithoutCloudRestore,
-            ) => (origin.flow_state_after_restore_unavailable(), TransitionCommand::None),
+            ) => (origin.flow_state(), TransitionCommand::None),
             (Self::RestoreFailed { origin, .. }, OnboardingAction::RetryRestore) => {
                 let attempt_id =
                     restore_attempt_id.expect("restore attempt id required for RetryRestore");
@@ -1194,10 +1194,6 @@ impl RestoreOrigin {
             Self::HardwareImport => FlowState::HardwareImport,
             Self::SoftwareImport => FlowState::SoftwareImport { error_message: None },
         }
-    }
-
-    fn flow_state_after_restore_unavailable(self) -> FlowState {
-        self.flow_state()
     }
 }
 

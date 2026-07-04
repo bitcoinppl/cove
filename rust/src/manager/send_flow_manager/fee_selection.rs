@@ -12,8 +12,8 @@ use cove_types::{
 };
 
 use super::{
-    Error, Message, Result, RustSendFlowManager, SendFlowError, SendFlowFeeDetailsError,
-    SendFlowMaxSendError, state::EnterMode, state::FeeSelection,
+    Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
+    state::FeeSelection,
 };
 
 fn selected_fee_rate_for_options(
@@ -46,7 +46,7 @@ impl RustSendFlowManager {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
-        let total_fee = psbt.fee().map_err(SendFlowFeeDetailsError::from)?;
+        let total_fee = psbt.fee().map_err(Error::unable_to_get_fee_details)?;
 
         let fee_rate_option =
             FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
@@ -227,16 +227,16 @@ impl RustSendFlowManager {
                     return None;
                 }
                 Err(error) => {
-                    let error = Error::from(SendFlowMaxSendError::from(error));
+                    let error = Error::unable_to_get_max_send(error);
                     self.reconciler.send_async(Message::SetAlert(error.into())).await;
                     return None;
                 }
             };
 
-        let total_fee = match psbt.fee().map_err(SendFlowFeeDetailsError::from) {
+        let total_fee = match psbt.fee().map_err(Error::unable_to_get_fee_details) {
             Ok(total_fee) => total_fee,
             Err(error) => {
-                let error = Error::from(SendFlowMaxSendError::from(error));
+                let error = Error::unable_to_get_max_send(error);
                 self.reconciler.send_async(Message::SetAlert(error.into())).await;
                 return None;
             }
