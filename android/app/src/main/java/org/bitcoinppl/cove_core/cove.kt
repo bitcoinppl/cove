@@ -1697,6 +1697,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_display_confirmation_count(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount_pending_fmt(
@@ -2827,6 +2829,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(`ptr`: Long,`amount`: Long,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_display_confirmation_count(`ptr`: Long,`confirmations`: Int,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount_pending_fmt(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
@@ -3425,6 +3429,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_hardwarewalletmetadata_istapsigner(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_walletbirthday_block_height_fmt(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wallettype_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4630,6 +4636,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 18925.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_confirmation_count() != 48659.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 25193.toShort()) {
@@ -21354,6 +21363,8 @@ public interface RustWalletManagerInterface {
      */
     fun `displayAmountWithDirection`(`amount`: Amount, `direction`: TransactionDirection): kotlin.String
 
+    fun `displayConfirmationCount`(`confirmations`: kotlin.UInt): kotlin.String
+
     fun `displayFiatAmount`(`amount`: kotlin.Double, `withSuffix`: kotlin.Boolean = true): kotlin.String
 
     /**
@@ -22419,6 +22430,20 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
         FfiConverterTypeAmount.lower(`amount`),
         FfiConverterTypeTransactionDirection.lower(`direction`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `displayConfirmationCount`(`confirmations`: kotlin.UInt): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_confirmation_count(
+        it,
+
+        FfiConverterUInt.lower(`confirmations`),_status)
 }
     }
     )
@@ -52564,6 +52589,16 @@ sealed class WalletBirthday {
 
 
 
+
+
+     fun `blockHeightFmt`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletbirthday_block_height_fmt(FfiConverterTypeWalletBirthday.lower(this),
+        _status)
+}
+    )
+    }
 
 
 

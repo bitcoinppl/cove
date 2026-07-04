@@ -178,4 +178,12 @@ mod tests {
         let txid_borrow: &TxId = txid.borrow();
         assert_eq!(txid_borrow, &txid);
     }
+
+    #[test]
+    fn fee_rate_formats_with_two_decimal_places_and_units() {
+        assert_eq!(FeeRate::from_sat_per_vb(0.0).sats_per_vbyte_string(), "0.00 sats/vbyte");
+        assert_eq!(FeeRate::from_sat_per_vb(1.0).sats_per_vbyte_string(), "1.00 sats/vbyte");
+        assert_eq!(FeeRate::from_sat_per_vb(1.25).sats_per_vbyte_string(), "1.25 sats/vbyte");
+        assert_eq!(FeeRate::from_sat_per_vb(12.345).sats_per_vbyte_string(), "12.35 sats/vbyte");
+    }
 }

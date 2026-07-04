@@ -443,6 +443,11 @@ class WalletManager :
             numberOfConfirmations(blockHeight)
         }
 
+    fun displayConfirmationCount(confirmations: UInt): String =
+        withRustOr("") {
+            displayConfirmationCount(confirmations)
+        }
+
     fun amountFmt(amount: Amount): String =
         when (walletMetadata?.selectedUnit) {
             BitcoinUnit.BTC -> amount.btcString()

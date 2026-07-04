@@ -20,6 +20,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.types.FeeRate
 import java.util.Locale
 
 enum class FeePriority(
@@ -181,7 +182,7 @@ private fun NetworkFeeBottomSheetPreview() {
                                 priority = FeePriority.CUSTOM,
                                 timeEstimate = "10 minutes",
                                 feeAmount = "1,128 sats",
-                                feeRate = String.format(Locale.US, "%.2f sats/vbyte", feeRate),
+                                feeRate = FeeRate.fromSatPerVb(feeRate).satsPerVbyteString(),
                                 dollarAmount = "≈ $1.28",
                             )
                         selectedPriority = FeePriority.CUSTOM

@@ -57,7 +57,7 @@ struct SentDetailsExpandedView: View {
 
                                 if let numberOfConfirmations {
                                     Group {
-                                        Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                                        Text(manager.displayConfirmationCount(UInt32(numberOfConfirmations)))
                                             .contentTransition(.numericText())
 
                                         Image(systemName: "checkmark.circle.fill")

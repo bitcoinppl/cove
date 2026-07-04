@@ -291,6 +291,10 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         amountFormatter.amountInFiatCached(amount)
     }
 
+    func displayConfirmationCount(_ confirmations: UInt32) -> String {
+        rust.displayConfirmationCount(confirmations: confirmations)
+    }
+
     func amountFmtUnit(_ amount: Amount) -> String {
         amountFormatter.amountFmtUnit(amount)
     }

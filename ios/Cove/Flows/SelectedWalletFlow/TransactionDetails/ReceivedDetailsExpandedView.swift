@@ -48,7 +48,7 @@ struct ReceivedDetailsExpandedView: View {
                             .multilineTextAlignment(.leading)
 
                         if let numberOfConfirmations {
-                            Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                            Text(manager.displayConfirmationCount(UInt32(numberOfConfirmations)))
                                 .fontWeight(.semibold)
                                 .multilineTextAlignment(.leading)
                                 .contentTransition(.numericText())

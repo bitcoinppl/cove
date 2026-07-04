@@ -9210,6 +9210,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func displayAmountWithDirection(amount: Amount, direction: TransactionDirection)  -> String
 
+    func displayConfirmationCount(confirmations: UInt32)  -> String
+
     func displayFiatAmount(amount: Double, withSuffix: Bool)  -> String
 
     /**
@@ -10043,6 +10045,16 @@ open func displayAmountWithDirection(amount: Amount, direction: TransactionDirec
             self.uniffiCloneHandle(),
         FfiConverterTypeAmount_lower(amount),
         FfiConverterTypeTransactionDirection_lower(direction),uniffiCallStatus
+    )
+})
+}
+
+open func displayConfirmationCount(confirmations: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_display_confirmation_count(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(confirmations),uniffiCallStatus
     )
 })
 }
@@ -33734,6 +33746,15 @@ public enum WalletBirthday: Equatable, Hashable {
 
 
 
+public func blockHeightFmt() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_walletbirthday_block_height_fmt(
+            FfiConverterTypeWalletBirthday_lower(self),uniffiCallStatus
+    )
+})
+}
+
 
 
 }
@@ -41363,6 +41384,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 18925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_confirmation_count() != 48659) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 25193) {

@@ -1,11 +1,10 @@
 use cove_nfc::message::NfcMessage;
-use cove_util::result_ext::ResultExt as _;
+use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 use derive_more::{
     AsRef, Deref,
     derive::{From, Into},
 };
 use jiff::ToSpan as _;
-use numfmt::Formatter;
 use rand::RngExt as _;
 
 use crate::{multi_format::StringOrData, push_tx::PushTx};
@@ -166,10 +165,7 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn block_height_fmt(&self) -> String {
-        let mut fmt =
-            Formatter::new().separator(',').unwrap().precision(numfmt::Precision::Decimals(0));
-
-        fmt.fmt(self.block_height).to_string()
+        self.block_height.thousands_int()
     }
 
     #[uniffi::method]
@@ -297,4 +293,28 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
 
 fn random_block_height() -> u32 {
     rand::rng().random_range(0..850_000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn confirmed_transaction_block_height_formats_with_grouping() {
+        let mut transaction = ConfirmedTransaction {
+            txid: TxId::preview_new(),
+            block_height: 0,
+            confirmed_at: jiff::Timestamp::now(),
+            sent_and_received: SentAndReceived::preview_new(),
+            fiat: None,
+            labels: Default::default(),
+        };
+        assert_eq!(transaction.block_height_fmt(), "0");
+
+        transaction.block_height = 1;
+        assert_eq!(transaction.block_height_fmt(), "1");
+
+        transaction.block_height = 1_000_000;
+        assert_eq!(transaction.block_height_fmt(), "1,000,000");
+    }
 }

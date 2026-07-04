@@ -38,7 +38,7 @@ import org.bitcoinppl.cove_core.WalletMetadata
 @Composable
 internal fun TransactionDetailsWidget(
     transactionDetails: TransactionDetails,
-    numberOfConfirmations: Int?,
+    numberOfConfirmationsFmt: String?,
     feeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
@@ -96,9 +96,9 @@ internal fun TransactionDetailsWidget(
                                 fontSize = 12.sp,
                             )
                             Text(" | ", color = sub, fontSize = 12.sp)
-                            if (numberOfConfirmations != null) {
+                            if (numberOfConfirmationsFmt != null) {
                                 Text(
-                                    numberOfConfirmations.toString(),
+                                    numberOfConfirmationsFmt,
                                     color = sub,
                                     fontSize = 12.sp,
                                 )
@@ -185,7 +185,7 @@ internal fun TransactionDetailsWidget(
             // received transaction details
             ReceivedTransactionDetails(
                 transactionDetails = transactionDetails,
-                numberOfConfirmations = numberOfConfirmations,
+                numberOfConfirmationsFmt = numberOfConfirmationsFmt,
                 currentFiatFmt = totalSpentFiatFmt,
                 historicalFiatFmt = historicalFiatFmt,
                 lockControl = lockControl,

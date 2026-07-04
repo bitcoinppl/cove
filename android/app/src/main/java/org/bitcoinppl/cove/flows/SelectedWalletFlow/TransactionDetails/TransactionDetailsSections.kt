@@ -191,6 +191,8 @@ private fun TransactionDetailsColumn(
     val foreground = MaterialTheme.colorScheme.onBackground
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val isExpanded = metadata.detailsExpanded
+    val numberOfConfirmationsFmt =
+        numberOfConfirmations?.let { manager.displayConfirmationCount(it.toUInt()) }
 
     Column(
         modifier =
@@ -220,7 +222,7 @@ private fun TransactionDetailsColumn(
         TransactionExpandedDetailsSection(
             isExpanded = isExpanded,
             transactionDetails = transactionDetails,
-            numberOfConfirmations = numberOfConfirmations,
+            numberOfConfirmationsFmt = numberOfConfirmationsFmt,
             feeFiatFmt = feeFiatFmt,
             sentSansFeeFiatFmt = sentSansFeeFiatFmt,
             totalSpentFiatFmt = totalSpentFiatFmt,
@@ -522,7 +524,7 @@ private fun TransactionConfirmationsSection(
 private fun TransactionExpandedDetailsSection(
     isExpanded: Boolean,
     transactionDetails: TransactionDetails,
-    numberOfConfirmations: Int?,
+    numberOfConfirmationsFmt: String?,
     feeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
@@ -543,7 +545,7 @@ private fun TransactionExpandedDetailsSection(
     ) {
         TransactionDetailsWidget(
             transactionDetails = transactionDetails,
-            numberOfConfirmations = numberOfConfirmations,
+            numberOfConfirmationsFmt = numberOfConfirmationsFmt,
             feeFiatFmt = feeFiatFmt,
             sentSansFeeFiatFmt = sentSansFeeFiatFmt,
             totalSpentFiatFmt = totalSpentFiatFmt,

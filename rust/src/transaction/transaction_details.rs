@@ -9,7 +9,6 @@ use bip329::{Label, Labels, TransactionRecord};
 use bitcoin::params::Params;
 use cove_types::Network;
 use jiff::Timestamp;
-use numfmt::{Formatter, Precision};
 
 use crate::{
     database::Database,
@@ -414,8 +413,7 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn block_number_fmt(&self) -> Option<String> {
         let block_number = self.block_number()?;
-        let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(0));
-        Some(f.fmt(block_number).to_string())
+        Some(block_number.thousands_int())
     }
     #[uniffi::method]
     pub fn address_spaced_out(&self) -> Option<String> {
@@ -634,5 +632,28 @@ mod tests {
 
         metadata.sensitive_visible = false;
         assert_eq!(details.display_amount(metadata, true), "••••••");
+    }
+
+    #[test]
+    fn block_number_formats_with_grouping() {
+        let mut details = TransactionDetails::preview_new_confirmed();
+
+        details.pending_or_confirmed = PendingOrConfirmed::Confirmed(ConfirmedDetails {
+            block_number: 0,
+            confirmation_time: 0,
+        });
+        assert_eq!(details.block_number_fmt(), Some("0".to_string()));
+
+        details.pending_or_confirmed = PendingOrConfirmed::Confirmed(ConfirmedDetails {
+            block_number: 1,
+            confirmation_time: 0,
+        });
+        assert_eq!(details.block_number_fmt(), Some("1".to_string()));
+
+        details.pending_or_confirmed = PendingOrConfirmed::Confirmed(ConfirmedDetails {
+            block_number: 1_000_000,
+            confirmation_time: 0,
+        });
+        assert_eq!(details.block_number_fmt(), Some("1,000,000".to_string()));
     }
 }

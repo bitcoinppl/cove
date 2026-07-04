@@ -11,6 +11,7 @@ use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
 use crate::transaction::Unit;
 use crate::{database::Database, network::Network};
 use cove_tap_card::TapSigner;
+use cove_util::format::NumberFormatter as _;
 
 pub use cove_types::{BlockSizeLast, WalletId};
 
@@ -116,6 +117,16 @@ pub enum StoreType {
 pub enum WalletBirthday {
     BlockHeight(u64),
     Timestamp(u64),
+}
+
+#[uniffi::export]
+impl WalletBirthday {
+    pub fn block_height_fmt(&self) -> Option<String> {
+        match self {
+            Self::BlockHeight(height) => Some(height.thousands_int()),
+            Self::Timestamp(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -555,6 +566,17 @@ mod tests {
 
             assert_eq!(deserialized.birthday, Some(birthday));
         }
+    }
+
+    #[test]
+    fn wallet_birthday_block_height_formats_with_grouping() {
+        assert_eq!(WalletBirthday::BlockHeight(0).block_height_fmt(), Some("0".to_string()));
+        assert_eq!(WalletBirthday::BlockHeight(1).block_height_fmt(), Some("1".to_string()));
+        assert_eq!(
+            WalletBirthday::BlockHeight(1_000_000).block_height_fmt(),
+            Some("1,000,000".to_string())
+        );
+        assert_eq!(WalletBirthday::Timestamp(1_700_000_000).block_height_fmt(), None);
     }
 
     #[test]

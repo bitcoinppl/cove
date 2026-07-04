@@ -805,6 +805,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
     ): Short
+    external fun uniffi_cove_types_checksum_method_feerate_sats_per_vbyte_string(
+    ): Short
     external fun uniffi_cove_types_checksum_method_feerateoption_duration(
     ): Short
     external fun uniffi_cove_types_checksum_method_feerateoption_fee_rate(
@@ -814,6 +816,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_types_checksum_method_feerateoption_is_equal(
     ): Short
     external fun uniffi_cove_types_checksum_method_feerateoption_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoption_sats_per_vbyte_string(
     ): Short
     external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration(
     ): Short
@@ -828,6 +832,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_is_equal(
     ): Short
     external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb(
+    ): Short
+    external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sats_per_vbyte_string(
     ): Short
     external fun uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee(
     ): Short
@@ -1109,6 +1115,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_types_fn_method_feerate_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
+    external fun uniffi_cove_types_fn_method_feerate_sats_per_vbyte_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_clone_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_types_fn_free_feerateoption(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1125,6 +1133,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_types_fn_method_feerateoption_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
+    external fun uniffi_cove_types_fn_method_feerateoption_sats_per_vbyte_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_clone_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_types_fn_free_feerateoptionwithtotalfee(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1145,6 +1155,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
+    external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sats_per_vbyte_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_feerateoptionwithtotalfee_total_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_clone_feerateoptions(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1634,6 +1646,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_types_checksum_method_feerate_sats_per_vbyte_string() != 28324.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_types_checksum_method_feerateoption_duration() != 37929.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1647,6 +1662,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 38044.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_feerateoption_sats_per_vbyte_string() != 46546.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration() != 34003.toShort()) {
@@ -1668,6 +1686,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sats_per_vbyte_string() != 22579.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 12787.toShort()) {
@@ -4885,6 +4906,8 @@ public interface FeeRateInterface {
 
     fun `satPerVb`(): kotlin.Float
 
+    fun `satsPerVbyteString`(): kotlin.String
+
     companion object
 }
 
@@ -4994,6 +5017,19 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerate_sat_per_vb(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `satsPerVbyteString`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feerate_sats_per_vbyte_string(
         it,
         _status)
 }
@@ -5157,6 +5193,8 @@ public interface FeeRateOptionInterface {
     fun `isEqual`(`rhs`: FeeRateOption): kotlin.Boolean
 
     fun `satPerVb`(): kotlin.Float
+
+    fun `satsPerVbyteString`(): kotlin.String
 
     companion object
 }
@@ -5338,6 +5376,19 @@ open class FeeRateOption: Disposable, AutoCloseable, FeeRateOptionInterface
     }
 
 
+    override fun `satsPerVbyteString`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feerateoption_sats_per_vbyte_string(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
 
 
 
@@ -5487,6 +5538,8 @@ public interface FeeRateOptionWithTotalFeeInterface {
     fun `isEqual`(`rhs`: FeeRateOptionWithTotalFee): kotlin.Boolean
 
     fun `satPerVb`(): kotlin.Float
+
+    fun `satsPerVbyteString`(): kotlin.String
 
     fun `totalFee`(): Amount?
 
@@ -5689,6 +5742,19 @@ open class FeeRateOptionWithTotalFee: Disposable, AutoCloseable, FeeRateOptionWi
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `satsPerVbyteString`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sats_per_vbyte_string(
         it,
         _status)
 }

@@ -70,8 +70,6 @@ import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.defaultWalletColors
-import java.math.BigInteger
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -418,10 +416,7 @@ fun WalletSettingsScreen(
 
 private fun WalletBirthday.displayValue(): String =
     when (this) {
-        is WalletBirthday.BlockHeight -> {
-            val height = NumberFormat.getIntegerInstance(Locale.getDefault()).format(BigInteger(v1.toString()))
-            "Block $height"
-        }
+        is WalletBirthday.BlockHeight -> "Block ${blockHeightFmt()}"
 
         is WalletBirthday.Timestamp -> {
             val date = Date(v1.toLong() * 1000)
