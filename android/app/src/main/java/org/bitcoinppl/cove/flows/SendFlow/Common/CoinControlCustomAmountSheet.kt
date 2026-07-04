@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.Common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +31,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayDate
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayName
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.ffiConservativeDustLimitSats

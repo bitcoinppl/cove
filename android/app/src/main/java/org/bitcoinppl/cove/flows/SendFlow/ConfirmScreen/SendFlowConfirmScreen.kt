@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -46,6 +48,9 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAdvancedDetailsView
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
+import org.bitcoinppl.cove.flows.SendFlow.SendState
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors

@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box

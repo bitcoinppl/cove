@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.Common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

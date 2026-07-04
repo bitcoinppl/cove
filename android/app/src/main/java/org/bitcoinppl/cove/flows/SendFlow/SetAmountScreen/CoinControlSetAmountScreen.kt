@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,6 +50,9 @@ import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.CoinControlCustomAmountSheet
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons

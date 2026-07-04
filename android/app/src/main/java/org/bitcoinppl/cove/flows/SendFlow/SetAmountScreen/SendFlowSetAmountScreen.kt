@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -69,6 +71,9 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowHeaderView
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
+import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors

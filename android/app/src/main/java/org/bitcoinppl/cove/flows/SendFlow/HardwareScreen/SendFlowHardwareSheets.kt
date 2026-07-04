@@ -1,4 +1,6 @@
-package org.bitcoinppl.cove.flows.SendFlow
+@file:Suppress("PackageNaming")
+
+package org.bitcoinppl.cove.flows.SendFlow.HardwareScreen
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -10,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.views.QrExportView
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 

@@ -27,6 +27,10 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
+import org.bitcoinppl.cove.flows.SendFlow.HardwareScreen.SendFlowHardwareScreen
+import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.CoinControlSetAmountScreen
+import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.SendFlowSetAmountScreen
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
