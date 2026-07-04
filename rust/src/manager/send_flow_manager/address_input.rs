@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cove_types::address::AddressWithNetwork;
 use tracing::debug;
 
-use super::{DeferredSender, Message, RustSendFlowManager, SendFlowError, SetAmountFocusField};
+use super::{Message, RustSendFlowManager, SendFlowError, SetAmountFocusField};
 
 impl RustSendFlowManager {
     /// Called when the user types or pastes into the address field.
@@ -11,7 +11,7 @@ impl RustSendFlowManager {
     pub(crate) fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
         debug!("handle_entering_address_changed: {address}");
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         self.state.lock().entering_address = address.clone();
 
@@ -90,7 +90,7 @@ impl RustSendFlowManager {
             state.amount_fiat = None;
         }
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         sender.queue(Message::UpdateAmountFiat(0.0));
         sender.queue(Message::UpdateAmountSats(0));
         self.schedule_fee_rate_update();
@@ -110,7 +110,7 @@ impl RustSendFlowManager {
     }
 
     pub(crate) fn clear_address(self: &Arc<Self>) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         {
             let mut state = self.state.lock();
             if state.address.is_some() {
@@ -131,7 +131,7 @@ impl RustSendFlowManager {
         new_value: String,
     ) {
         debug!("handle_scan_code_changed {new_value}");
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         let network = self.state.lock().metadata.network;
         let address_with_network = {

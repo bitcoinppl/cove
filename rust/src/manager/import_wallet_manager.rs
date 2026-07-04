@@ -2,14 +2,16 @@ use std::sync::Arc;
 
 use bip39::{Language, Mnemonic};
 use cove_util::result_ext::ResultExt as _;
-use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
     app::reconcile::{Update, Updater},
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
+    manager::{
+        cloud_backup_manager::CLOUD_BACKUP_MANAGER, deferred_sender::SingleOrMany,
+        reconcile_channel::ReconcileChannel,
+    },
     mnemonic::MnemonicExt as _,
     wallet::{
         Wallet,
@@ -36,9 +38,7 @@ pub trait ImportWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static
 pub struct RustImportWalletManager {
     #[allow(dead_code)]
     pub state: Arc<RwLock<ImportWalletManagerState>>,
-    #[allow(dead_code)]
-    pub reconciler: Sender<ImportWalletManagerReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<ImportWalletManagerReconcileMessage>>,
+    pub reconciler: ReconcileChannel<ImportWalletManagerReconcileMessage>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -82,23 +82,20 @@ pub type Error = ImportWalletError;
 impl RustImportWalletManager {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        let (sender, receiver) = flume::bounded(1000);
-
         Self {
             state: Arc::new(RwLock::new(ImportWalletManagerState::new())),
-            reconciler: sender,
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: ReconcileChannel::new(1000),
         }
     }
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn ImportWalletManagerReconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                // call the reconcile method on the frontend
-                reconciler.reconcile(field);
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => {
+                for message in messages {
+                    reconciler.reconcile(message);
+                }
             }
         });
     }

@@ -24,7 +24,7 @@ impl RustSendFlowManager {
         }
 
         // update the state
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         self.state.lock().entering_btc_amount = new.clone();
 
         let state: State = self.state.clone().into();
@@ -98,7 +98,7 @@ impl RustSendFlowManager {
             return None;
         }
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         // update the state
         self.state.lock().entering_fiat_amount = new_value.clone();
@@ -159,7 +159,7 @@ impl RustSendFlowManager {
         fee_rate: Arc<FeeRateOptionWithTotalFee>,
     ) {
         debug!("selected_fee_rate_changed: {fee_rate:?}");
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         if let Some(options) = self.fee_rate_options() {
             let selection = FeeSelection::new(options, fee_rate.clone());
             {
@@ -191,7 +191,7 @@ impl RustSendFlowManager {
     pub(crate) fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
         debug!("handle_amount_changed: {amount:?}");
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         let (unit, fiat_or_btc, btc_price_in_fiat) = {
             let state = self.state.lock();
 
@@ -254,7 +254,7 @@ impl RustSendFlowManager {
     ) {
         debug!("handle_focus_field_changed: {old:?} --> {new:?}");
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         // most likely the first load, so ignore for now let front end handle it
         if old.is_none() && new.is_some() && self.state.lock().focus_field.is_none() {
@@ -331,7 +331,7 @@ impl RustSendFlowManager {
 
     pub(crate) async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         debug!("select_max_send");
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         // access the mutex once
         let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
@@ -400,7 +400,7 @@ impl RustSendFlowManager {
         old: BitcoinUnit,
         new: BitcoinUnit,
     ) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         self.state.lock().metadata.selected_unit = new;
 
         sender.queue(Message::RefreshPresenters);
@@ -447,7 +447,7 @@ impl RustSendFlowManager {
         _old_value: FiatOrBtc,
         new_value: FiatOrBtc,
     ) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         self.state.lock().metadata.fiat_or_btc = new_value;
 
         sender.queue(Message::RefreshPresenters);

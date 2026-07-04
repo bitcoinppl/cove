@@ -26,7 +26,7 @@ use act_zero::{Addr, call, send};
 use cove_device::cloud_storage::{CloudStorageClient, CloudSyncHealth};
 use cove_tokio::task::spawn_actor;
 use cove_util::ResultExt as _;
-use flume::{Receiver, Sender};
+use flume::Receiver;
 use parking_lot::RwLock;
 use tracing::{error, info, warn};
 
@@ -36,6 +36,7 @@ use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobFailureIssue, PersistedCloudBackupState, PersistedCloudBackupStatus,
 };
+use crate::manager::reconcile_channel::ReconcileChannel;
 use crate::wallet::metadata::{WalletId, WalletMode as LocalWalletMode, WalletType};
 
 pub(crate) use self::actors::CloudBackupRestoreEvent;
@@ -570,8 +571,7 @@ impl CloudBackupDetailResult {
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustCloudBackupManager {
     pub state: Arc<RwLock<CloudBackupStateReducer>>,
-    pub reconciler: Sender<Message>,
-    pub reconcile_receiver: Arc<Receiver<Message>>,
+    pub reconciler: ReconcileChannel<Message>,
     cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
@@ -770,14 +770,11 @@ impl RustCloudBackupManager {
     }
 
     fn init() -> Arc<Self> {
-        let (sender, receiver) = flume::bounded(1000);
-
         let manager = Arc::new_cyclic(|manager| {
             let cloud_writes = spawn_actor(CloudBackupWriteSupervisor::new(manager.clone()));
             Self {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
-                reconciler: sender,
-                reconcile_receiver: Arc::new(receiver),
+                reconciler: ReconcileChannel::new(1000),
                 cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
                 cloud_writes: cloud_writes.clone(),
                 supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone(), cloud_writes)),

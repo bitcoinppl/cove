@@ -22,6 +22,8 @@ use crate::{
     keychain::{Keychain, KeychainError},
     manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
+    manager::deferred_sender::SingleOrMany,
+    manager::reconcile_channel::ReconcileChannel,
     network::Network,
     node::{Node, client::NodeClient},
     router::{
@@ -33,7 +35,6 @@ use crate::{
 use cove_macros::impl_default_for;
 use cove_types::BlockSizeLast;
 use cove_util::ResultExt as _;
-use flume::{Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
@@ -71,7 +72,7 @@ fn wallet_selection_loading_route(id: WalletId, next_route: Option<Route>) -> Ro
 #[derive(Clone, Debug)]
 pub struct App {
     state: Arc<RwLock<AppState>>,
-    update_receiver: Arc<Receiver<AppMessage>>,
+    reconcile: ReconcileChannel<AppMessage>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -116,9 +117,9 @@ impl App {
         crate::bootstrap::ensure_storage_bootstrapped().expect("storage bootstrap failed");
 
         // Set up the updater channel
-        let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) = flume::bounded(1000);
+        let reconcile = ReconcileChannel::new(1000);
 
-        Updater::init(sender);
+        Updater::init(reconcile.raw_sender());
         let state = Arc::new(RwLock::new(AppState::new()));
 
         #[cfg(debug_assertions)]
@@ -144,7 +145,7 @@ impl App {
             });
         }
 
-        Self { update_receiver: Arc::new(receiver), state }
+        Self { reconcile, state }
     }
 
     /// Fetch global instance of the app, or create one if it doesn't exist
@@ -297,11 +298,12 @@ impl App {
     }
 
     pub fn listen_for_updates(&self, updater: Box<dyn FfiReconcile>) {
-        let update_receiver = self.update_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = update_receiver.recv() {
-                updater.reconcile(field);
+        self.reconcile.listen(move |field| match field {
+            SingleOrMany::Single(message) => updater.reconcile(message),
+            SingleOrMany::Many(messages) => {
+                for message in messages {
+                    updater.reconcile(message);
+                }
             }
         });
     }

@@ -13,7 +13,7 @@ use cove_types::{
 };
 
 use super::{
-    DeferredSender, Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
+    Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
     state::FeeSelection,
 };
 
@@ -92,7 +92,7 @@ impl RustSendFlowManager {
     pub(crate) async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
         debug!("get_or_update_fee_rate_options");
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         let (address, amount_sats) = {
             let state = self.state.lock();

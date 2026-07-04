@@ -82,6 +82,12 @@ impl<T: DebugSend> MessageSender<T> {
             error!("unable to send message to send flow manager: {err}");
         }
     }
+
+    /// Clone the underlying flume sender to share with actors that hold a raw
+    /// `Sender<SingleOrMany<T>>` and feed the same channel
+    pub fn raw(&self) -> Sender<SingleOrMany<T>> {
+        self.sender.clone()
+    }
 }
 
 impl<T: DebugSend> Drop for DeferredSender<T> {

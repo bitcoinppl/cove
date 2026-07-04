@@ -8,7 +8,6 @@ use std::{
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
-use flume::Receiver;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -36,6 +35,7 @@ use crate::{
 };
 
 use super::deferred_sender::{DeferredSender, MessageSender, SingleOrMany};
+use super::reconcile_channel::ReconcileChannel;
 
 mod cloud_restore;
 mod flow_state;
@@ -239,15 +239,13 @@ pub struct RustOnboardingManager {
     state: Arc<RwLock<InternalState>>,
     cloud_check_in_flight: Arc<AtomicBool>,
     pending_cloud_check_retry: Arc<AtomicBool>,
-    reconciler: MessageSender<Message>,
-    reconcile_receiver: Arc<Receiver<SingleOrMany<Message>>>,
+    reconciler: ReconcileChannel<Message>,
 }
 
 #[uniffi::export]
 impl RustOnboardingManager {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
-        let (sender, receiver) = flume::bounded(100);
         let has_wallets = !Database::global().wallets.all().unwrap_or_default().is_empty();
         let resolution = resolve_initial_flow(
             Self::load_onboarding_progress(),
@@ -277,8 +275,7 @@ impl RustOnboardingManager {
             state: Arc::new(RwLock::new(InternalState::new(resolution.flow))),
             cloud_check_in_flight: Arc::new(AtomicBool::new(false)),
             pending_cloud_check_retry: Arc::new(AtomicBool::new(false)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: ReconcileChannel::new(100),
         });
 
         manager.start_connectivity_listener();
@@ -291,17 +288,11 @@ impl RustOnboardingManager {
     }
 
     pub fn listen_for_updates(&self, reconciler: Box<dyn OnboardingManagerReconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                match field {
-                    SingleOrMany::Single(message) => reconciler.reconcile(message),
-                    SingleOrMany::Many(messages) => {
-                        for message in messages {
-                            reconciler.reconcile(message);
-                        }
-                    }
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => {
+                for message in messages {
+                    reconciler.reconcile(message);
                 }
             }
         });
@@ -497,7 +488,7 @@ impl RustOnboardingManager {
     fn start_restore_attempt(&self, attempt_id: u64) {
         let receiver = CLOUD_BACKUP_MANAGER.restore_from_cloud_backup_with_events();
         let state = self.state.clone();
-        let reconciler = self.reconciler.clone();
+        let reconciler = self.reconciler.sender().clone();
 
         cove_tokio::task::spawn(async move {
             while let Ok(event) = receiver.recv_async().await {
@@ -520,7 +511,7 @@ impl RustOnboardingManager {
         });
 
         let state = self.state.clone();
-        let reconciler = self.reconciler.clone();
+        let reconciler = self.reconciler.sender().clone();
         cove_tokio::task::spawn(async move {
             tokio::time::sleep(Duration::from_secs(120)).await;
 
@@ -629,7 +620,7 @@ impl RustOnboardingManager {
     where
         F: FnOnce(&mut InternalState, &mut DeferredSender<Message>) -> R,
     {
-        Self::mutate_state_fields(&self.state, &self.reconciler, mutate)
+        Self::mutate_state_fields(&self.state, self.reconciler.sender(), mutate)
     }
 
     fn mutate_state_fields<F, R>(
@@ -2674,19 +2665,19 @@ mod tests {
     ) -> Arc<RustOnboardingManager> {
         crate::database::test_support::init_test_database();
 
-        let (sender, receiver) = flume::bounded(16);
-
         Arc::new(RustOnboardingManager {
             state: Arc::new(RwLock::new(preview_internal_state(flow, cloud_restore_discovery))),
             cloud_check_in_flight: Arc::new(AtomicBool::new(false)),
             pending_cloud_check_retry: Arc::new(AtomicBool::new(false)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: ReconcileChannel::new(16),
         })
     }
 
     fn assert_no_reconcile_messages(manager: &RustOnboardingManager) {
-        assert!(matches!(manager.reconcile_receiver.try_recv(), Err(flume::TryRecvError::Empty)));
+        assert!(matches!(
+            manager.reconciler.receiver().try_recv(),
+            Err(flume::TryRecvError::Empty)
+        ));
     }
 
     fn apply_action(flow: &mut FlowState, action: OnboardingAction) -> TransitionCommand {

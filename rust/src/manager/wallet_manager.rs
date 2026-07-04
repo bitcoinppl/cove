@@ -20,7 +20,6 @@ use act_zero::{Addr, call, send};
 use actor::WalletActor;
 pub use balance_presentation::BalancePresentation;
 use bdk_wallet::error::CreateTxError;
-use flume::Receiver;
 pub use ledger_state::WalletLedgerState;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
@@ -60,7 +59,8 @@ use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
     coin_control_manager::RustCoinControlManager,
-    deferred_sender::{self, DeferredSender, MessageSender},
+    deferred_sender::{self, DeferredSender},
+    reconcile_channel::ReconcileChannel,
     send_flow_manager::RustSendFlowManager,
 };
 
@@ -279,8 +279,7 @@ pub struct RustWalletManager {
     // faster to access, but adds complexity to the code because we have to make sure its updated
     // in all the places
     pub metadata: Arc<RwLock<WalletMetadata>>,
-    pub reconciler: MessageSender<Message>,
-    pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
+    pub reconciler: ReconcileChannel<Message>,
     scan_status: Arc<RwLock<WalletScanStatus>>,
     wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
     unsigned_transactions: WalletBootstrapUnsignedTransactions,
@@ -852,15 +851,9 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                match field {
-                    SingleOrMany::Single(message) => reconciler.reconcile(message),
-                    SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-                }
-            }
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
         });
     }
 
@@ -1140,24 +1133,27 @@ impl RustWalletManager {
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
         let metadata = preview_ledger_ready_metadata(metadata);
-        let (sender, receiver) = flume::bounded(100);
+        let channel = ReconcileChannel::new(100);
 
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor =
-            WalletActor::new(wallet, sender.clone(), scan_status.clone(), wallet_snapshot.clone())
-                .expect("failed to open wallet database for preview wallet");
+        let wallet_actor = WalletActor::new(
+            wallet,
+            channel.raw_sender(),
+            scan_status.clone(),
+            wallet_snapshot.clone(),
+        )
+        .expect("failed to open wallet database for preview wallet");
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
             id: metadata.id.clone(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: channel,
             scan_status,
             wallet_snapshot,
             unsigned_transactions,
