@@ -281,16 +281,12 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
-        .alert(
-            presenter.alertTitle,
-            isPresented: presenter.showingAlert,
-            presenting: presenter.alertState,
-            actions: { alert in
-                presenter.alertButtons(alert: alert) { kind in
-                    sendFlowManager.dispatch(action: .acknowledgeWarningAndFinalize(kind))
-                }
-            },
-            message: presenter.alertMessage
+        .presentingAlert(
+            presenter.alertStateBinding,
+            context: SendFlowAlertContext(
+                presenter: presenter,
+                sendFlowManager: sendFlowManager
+            )
         )
     }
 

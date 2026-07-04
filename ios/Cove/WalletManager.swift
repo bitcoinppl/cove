@@ -75,7 +75,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     /// general wallet errors
-    var errorAlert: WalletErrorAlert? = nil
+    var errorAlert: TaggedItem<WalletErrorAlert>? = nil
 
     /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
@@ -512,7 +512,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             }
 
         case let .nodeConnectionFailed(error):
-            self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
+            self.errorAlert = TaggedItem(WalletErrorAlert.nodeConnectionFailed(error))
             self.logger.error(error)
             self.logger.error("set errorAlert")
 

@@ -11,6 +11,7 @@ import SwiftUI
 struct SendFlowConfirmScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
+    @Environment(SendFlowPresenter.self) private var presenter
 
     let id: WalletId
     @State var manager: WalletManager
@@ -22,9 +23,7 @@ struct SendFlowConfirmScreen: View {
 
     // private
     @State private var finalizedTransaction: BitcoinTransaction? = nil
-    @State private var isShowingAlert = false
     @State private var sendState: SendState = .idle
-    @State private var isShowingErrorAlert = false
 
     /// popover to change btc and sats
     @State private var showingMenu: Bool = false
@@ -44,6 +43,10 @@ struct SendFlowConfirmScreen: View {
 
     var metadata: WalletMetadata {
         manager.walletMetadata
+    }
+
+    private var confirmationAlertContext: SendFlowConfirmAlertContext {
+        SendFlowConfirmAlertContext(presenter: presenter, sendState: $sendState)
     }
 
     var body: some View {
@@ -187,20 +190,22 @@ struct SendFlowConfirmScreen: View {
                                 // for payjoin, stay in .sending — PayjoinTxBroadcast reconcile fires sendState = .sent
                                 if payjoinEndpoint == nil {
                                     sendState = .sent
-                                    isShowingAlert = true
+                                    presenter.confirmationAlertState = .init(.sent(id))
                                     auth.unlock()
                                 }
                                 return
                             }
                             sendState = .sent
-                            isShowingAlert = true
+                            presenter.confirmationAlertState = .init(.sent(id))
                             auth.unlock()
                         } catch let error as WalletManagerError {
                             sendState = .error(error.description)
-                            isShowingErrorAlert = true
+                            presenter.confirmationAlertState = .init(.broadcastError(error.description))
                         } catch {
                             sendState = .error(error.localizedDescription)
-                            isShowingErrorAlert = true
+                            presenter.confirmationAlertState = .init(
+                                .broadcastError(error.localizedDescription)
+                            )
                         }
                     }
                 }
@@ -228,7 +233,7 @@ struct SendFlowConfirmScreen: View {
                 // UUID changes each time so this fires reliably across multiple sends
                 guard uuid != nil, case .sending = sendState else { return }
                 sendState = .sent
-                isShowingAlert = true
+                presenter.confirmationAlertState = .init(.sent(id))
                 auth.unlock()
             }
             .onChange(of: manager.sendFlowErrorAlert) { _, alert in
@@ -241,38 +246,13 @@ struct SendFlowConfirmScreen: View {
                     case let .confirmDetails(error): error
                     }
                 sendState = .error(errorMessage)
-                isShowingErrorAlert = true
+                manager.sendFlowErrorAlert = nil
+                presenter.confirmationAlertState = .init(.broadcastError(errorMessage))
             }
-            .alert(
-                "Sent!",
-                isPresented: $isShowingAlert,
-                actions: {
-                    Button("OK") {
-                        app.loadAndReset(to: Route.selectedWallet(id))
-                    }
-                },
-                message: {
-                    Text("Transaction was successfully sent!")
-                }
-            )
-            .alert(
-                "Error Broadcasting!",
-                isPresented: $isShowingErrorAlert,
-                actions: {
-                    Button("OK") {
-                        sendState = .idle
-                        isShowingErrorAlert = false
-                    }
-                },
-                message: {
-                    if case let .error(error) = sendState {
-                        Text(error)
-                    } else {
-                        Text(
-                            "Unknown error, unable to broadcast transaction, please try again!"
-                        )
-                    }
-                }
+            .presentingAlert(
+                presenter.confirmationAlertStateBinding,
+                context: confirmationAlertContext,
+                defaultTitle: "Error Broadcasting!"
             )
         }
     }
@@ -314,6 +294,9 @@ private enum SendConfirmationError: LocalizedError {
                                 )
                                 .environment(AppManager.shared)
                                 .environment(AuthManager.shared)
+                                .environment(
+                                    SendFlowPresenter(app: AppManager.shared, manager: manager)
+                                )
                             }
                         }
                     }
@@ -340,5 +323,11 @@ private enum SendConfirmationError: LocalizedError {
         )
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
+        .environment(
+            SendFlowPresenter(
+                app: AppManager.shared,
+                manager: WalletManager(preview: "preview_only")
+            )
+        )
     }
 }

@@ -13,11 +13,15 @@ struct ExportingBackup: Equatable {
     var backup: Data
 }
 
-private enum SheetState: Equatable {
+enum SelectedWalletPresentationState: Equatable {
     case receive
     case chooseAddressType([FoundAddress])
-    case qrLabelsExport
     case qrLabelsImport
+    case labelsFileImport
+    case exportLabelsConfirmation
+    case labelsQrExport
+    case exportXpubConfirmation
+    case xpubQrExport
 }
 
 struct SelectedWalletScreen: View {
@@ -37,8 +41,7 @@ struct SelectedWalletScreen: View {
     /// public
     var manager: WalletManager
 
-    /// alerts & sheets
-    @State private var sheetState: TaggedItem<SheetState>? = nil
+    @State private var presentationState: TaggedItem<SelectedWalletPresentationState>? = nil
 
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
@@ -48,11 +51,6 @@ struct SelectedWalletScreen: View {
     @State var exportingBackup: ExportingBackup? = nil
 
     @State private var scannedLabels: TaggedItem<MultiFormat>? = nil
-    @State private var isImportingLabels = false
-    @State private var showExportLabelsConfirmation = false
-    @State private var showLabelsQrExport = false
-    @State private var showExportXpubConfirmation = false
-    @State private var showXpubQrExport = false
     @State private var pendingRenameNavigationTask: Task<Void, Never>? = nil
 
     /// private
@@ -107,33 +105,6 @@ struct SelectedWalletScreen: View {
         .background(Color.coveBg)
     }
 
-    func DisplayErrorAlert(_ alert: WalletErrorAlert) -> Alert {
-        switch alert {
-        case .nodeConnectionFailed:
-            Alert(
-                title: Text("Node Connection Failed"),
-                message: Text("Would you like to select a different node?"),
-                primaryButton: .default(
-                    Text("Yes, Change Node"),
-                    action: {
-                        app.pushRoutes(RouteFactory().nestedSettings(route: .node))
-                    }
-                ),
-                secondaryButton: .cancel()
-            )
-        case .noBalance:
-            .init(
-                title: Text("No Balance"),
-                message: Text("Can't send a transaction, when you have no funds."),
-                primaryButton: .default(
-                    Text("Receive Funds"),
-                    action: { sheetState = .init(.receive) }
-                ),
-                secondaryButton: .cancel()
-            )
-        }
-    }
-
     @ViewBuilder
     var Transactions: some View {
         switch manager.loadState {
@@ -161,18 +132,58 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    @ViewBuilder
-    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
-        switch state.item {
-        case .receive:
-            ReceiveView(manager: manager)
-        case let .chooseAddressType(foundAddresses):
-            ChooseWalletTypeView(manager: manager, foundAddresses: foundAddresses)
-        case .qrLabelsExport:
-            EmptyView()
-        case .qrLabelsImport:
-            QrCodeLabelImportView(scannedCode: $scannedLabels)
-        }
+    private var presentationContext: SelectedWalletPresentationContext {
+        SelectedWalletPresentationContext(
+            app: app,
+            manager: manager,
+            presentationState: $presentationState,
+            walletErrorAlert: Binding(
+                get: { manager.errorAlert },
+                set: { manager.errorAlert = $0 }
+            ),
+            scannedLabels: $scannedLabels
+        )
+    }
+
+    private var sheetPresentationState: Binding<TaggedItem<SelectedWalletPresentationState>?> {
+        Binding(
+            get: {
+                guard let presentationState, presentationState.item.isSheet else { return nil }
+                return presentationState
+            },
+            set: { newValue in
+                if let newValue {
+                    presentationState = newValue
+                } else if presentationState?.item.isSheet == true {
+                    presentationState = nil
+                }
+            }
+        )
+    }
+
+    private var labelsFileImportIsPresented: Binding<Bool> {
+        isPresenting(.labelsFileImport)
+    }
+
+    private var exportLabelsConfirmationIsPresented: Binding<Bool> {
+        isPresenting(.exportLabelsConfirmation)
+    }
+
+    private var exportXpubConfirmationIsPresented: Binding<Bool> {
+        isPresenting(.exportXpubConfirmation)
+    }
+
+    private func isPresenting(_ state: SelectedWalletPresentationState) -> Binding<Bool> {
+        Binding(
+            get: { presentationState?.item == state },
+            set: { isPresented in
+                if isPresented {
+                    presentationState = TaggedItem(state)
+                } else if presentationState?.item == state {
+                    presentationState = nil
+                }
+            }
+        )
     }
 
     private func setSheetState(_ discoveryState: DiscoveryState) {
@@ -180,23 +191,23 @@ struct SelectedWalletScreen: View {
 
         switch discoveryState {
         case let .foundAddressesFromMnemonic(foundAddresses):
-            sheetState = TaggedItem(.chooseAddressType(foundAddresses))
+            presentationState = TaggedItem(.chooseAddressType(foundAddresses))
         case let .foundAddressesFromJson(foundAddress, _):
-            sheetState = TaggedItem(.chooseAddressType(foundAddress))
+            presentationState = TaggedItem(.chooseAddressType(foundAddress))
         default: ()
         }
     }
 
     func showReceiveSheet() {
-        sheetState = TaggedItem(.receive)
+        presentationState = TaggedItem(.receive)
     }
 
     func showQrExport() {
-        showLabelsQrExport = true
+        presentationState = TaggedItem(.labelsQrExport)
     }
 
     func presentXpubQrExport() {
-        showXpubQrExport = true
+        presentationState = TaggedItem(.xpubQrExport)
     }
 
     private func showRenameFromTitleMenu() {
@@ -277,9 +288,15 @@ struct SelectedWalletScreen: View {
                 Menu {
                     MoreInfoPopover(
                         manager: manager,
-                        isImportingLabels: $isImportingLabels,
-                        showExportLabelsConfirmation: $showExportLabelsConfirmation,
-                        showExportXpubConfirmation: $showExportXpubConfirmation
+                        importLabels: {
+                            presentationState = TaggedItem(.labelsFileImport)
+                        },
+                        exportLabels: {
+                            presentationState = TaggedItem(.exportLabelsConfirmation)
+                        },
+                        exportXpub: {
+                            presentationState = TaggedItem(.exportXpubConfirmation)
+                        }
                     )
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -289,7 +306,7 @@ struct SelectedWalletScreen: View {
                 .accessibilityIdentifier("selectedWallet.more")
                 .confirmationDialog(
                     "Export Labels",
-                    isPresented: $showExportLabelsConfirmation
+                    isPresented: exportLabelsConfirmationIsPresented
                 ) {
                     Button("QR Code") {
                         showQrExport()
@@ -303,7 +320,7 @@ struct SelectedWalletScreen: View {
                 }
                 .confirmationDialog(
                     "Export Xpub",
-                    isPresented: $showExportXpubConfirmation
+                    isPresented: exportXpubConfirmationIsPresented
                 ) {
                     Button("QR Code") {
                         presentXpubQrExport()
@@ -353,9 +370,9 @@ struct SelectedWalletScreen: View {
             showNavBar: shouldShowNavBar,
             reduceTransparency: reduceTransparency
         )
-        .sheet(item: $sheetState, content: SheetContent)
+        .presentingSheet(sheetPresentationState, context: presentationContext)
         .fileImporter(
-            isPresented: $isImportingLabels,
+            isPresented: labelsFileImportIsPresented,
             allowedContentTypes: [.plainText, .json]
         ) { result in
             do {
@@ -380,34 +397,6 @@ struct SelectedWalletScreen: View {
                     )
                 )
             }
-        }
-        .sheet(isPresented: $showLabelsQrExport) {
-            QrExportView(
-                title: "Export Labels",
-                subtitle: "Scan to import labels\ninto another wallet",
-                generateBbqrStrings: { density in
-                    try await manager.rust.exportLabelsForQr(density: density)
-                },
-                generateUrStrings: nil,
-                copyData: { try await manager.rust.exportLabelsForShare().content }
-            )
-            .presentationDetents([.height(500), .height(600), .large])
-            .padding()
-            .padding(.top, 10)
-        }
-        .sheet(isPresented: $showXpubQrExport) {
-            QrExportView(
-                title: "Export Xpub",
-                subtitle: "Public descriptor for\nwatch-only wallet",
-                generateBbqrStrings: { density in
-                    try await manager.rust.exportXpubForQr(density: density)
-                },
-                generateUrStrings: nil,
-                copyData: { try await manager.rust.exportXpubForShare().content }
-            )
-            .presentationDetents([.height(500), .height(600), .large])
-            .padding()
-            .padding(.top, 10)
         }
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
@@ -536,11 +525,23 @@ struct SelectedWalletScreen: View {
             app.isPastHeader = false
             UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
-        .alert(
-            item: Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
-            content: DisplayErrorAlert
+        .presentingAlert(
+            Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
+            context: presentationContext,
+            defaultTitle: "Error"
         )
         .environment(manager)
+    }
+}
+
+extension SelectedWalletPresentationState {
+    var isSheet: Bool {
+        switch self {
+        case .receive, .chooseAddressType, .qrLabelsImport, .labelsQrExport, .xpubQrExport:
+            true
+        case .labelsFileImport, .exportLabelsConfirmation, .exportXpubConfirmation:
+            false
+        }
     }
 }
 

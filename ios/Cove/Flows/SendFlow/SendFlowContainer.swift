@@ -89,12 +89,10 @@ private struct SendFlowLoadedView: View {
                 return
             }
         }
-        .alert(
-            alertTitle,
-            isPresented: showingAlert,
-            presenting: manager.sendFlowErrorAlert,
-            actions: { myAlert($0).actions },
-            message: { myAlert($0).message }
+        .presentingAlert(
+            sendFlowErrorAlert,
+            context: SendFlowErrorAlertContext(alertState: sendFlowErrorAlert),
+            defaultTitle: "Error!"
         )
         .onDisappear {
             presenter.setDisappearing()
@@ -123,33 +121,11 @@ private struct SendFlowLoadedView: View {
         }
     }
 
-    private var showingAlert: Binding<Bool> {
+    private var sendFlowErrorAlert: Binding<TaggedItem<SendFlowErrorAlert>?> {
         Binding(
-            get: { manager.sendFlowErrorAlert != nil },
-            set: { if !$0 { manager.sendFlowErrorAlert = .none } }
+            get: { manager.sendFlowErrorAlert },
+            set: { manager.sendFlowErrorAlert = $0 }
         )
-    }
-
-    private var alertTitle: String {
-        guard let alert = manager.sendFlowErrorAlert else { return "Error!" }
-        return myAlert(alert).title
-    }
-
-    private func myAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
-        let error =
-            switch alert.item {
-            case let .confirmDetails(error): error
-            case let .signAndBroadcast(error): error
-            }
-
-        return
-            AlertBuilder(
-                title: "Error!",
-                message: error,
-                actions: {
-                    Button("OK", action: { manager.sendFlowErrorAlert = .none })
-                }
-            ).eraseToAny()
     }
 
     private func applyRouteArguments(to sendFlowManager: SendFlowManager) {

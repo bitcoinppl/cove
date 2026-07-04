@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum AlertState: Equatable {
+enum AboutAlertState: Equatable {
     case confirmBetaEnable
     case confirmBetaDisable
     case betaEnabled
@@ -11,7 +11,7 @@ private enum AlertState: Equatable {
     case resetLocalStateResult(String)
 }
 
-private struct WipeCloudResult: Equatable {
+struct WipeCloudResult: Equatable {
     let succeeded: Bool
     let message: String
 }
@@ -23,7 +23,7 @@ struct AboutScreen: View {
     @State private var buildTapCount = 0
     @State private var buildTapTimer: Timer? = nil
     @State private var isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
-    @State private var alertState: TaggedItem<AlertState>? = nil
+    @State private var alertState: TaggedItem<AboutAlertState>? = nil
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -31,6 +31,15 @@ struct AboutScreen: View {
 
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+    }
+
+    private var presentationContext: AboutPresentationContext {
+        AboutPresentationContext(
+            alertState: $alertState,
+            isBetaEnabled: $isBetaEnabled,
+            dismiss: { dismiss() },
+            wipeCloudBackup: Self.debugWipeCloudBackup
+        )
     }
 
     var body: some View {
@@ -116,127 +125,7 @@ struct AboutScreen: View {
         }
         .navigationTitle("About")
         .onDisappear { buildTapTimer?.invalidate(); buildTapTimer = nil }
-        .alert(
-            alertTitle,
-            isPresented: showingAlert,
-            presenting: alertState,
-            actions: { MyAlert($0).actions },
-            message: { MyAlert($0).message }
-        )
-    }
-
-    // MARK: Alerts
-
-    private var showingAlert: Binding<Bool> {
-        Binding(
-            get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
-        )
-    }
-
-    private var alertTitle: String {
-        guard let alertState else { return "Error" }
-        return MyAlert(alertState).title
-    }
-
-    private func MyAlert(_ alert: TaggedItem<AlertState>) -> AnyAlertBuilder {
-        switch alert.item {
-        case .confirmBetaEnable:
-            AlertBuilder(
-                title: "Enable Beta Features?",
-                message: "This will enable experimental features",
-                actions: {
-                    Button("Enable") {
-                        do {
-                            try Database().globalFlag().set(key: .betaFeaturesEnabled, value: true)
-                            isBetaEnabled = true
-                        } catch {
-                            alertState = .init(.betaError("Failed to enable beta features: \(error.localizedDescription)"))
-                            return
-                        }
-                        alertState = .init(.betaEnabled)
-                    }
-                    Button("Cancel", role: .cancel) { alertState = .none }
-                }
-            ).eraseToAny()
-
-        case .confirmBetaDisable:
-            AlertBuilder(
-                title: "Disable Beta Features?",
-                message: "This will hide experimental features",
-                actions: {
-                    Button("Disable") {
-                        do {
-                            try Database().globalFlag().set(key: .betaFeaturesEnabled, value: false)
-                            isBetaEnabled = false
-                        } catch {
-                            alertState = .init(.betaError("Failed to disable beta features: \(error.localizedDescription)"))
-                            return
-                        }
-                        alertState = .none
-                    }
-                    Button("Cancel", role: .cancel) { alertState = .none }
-                }
-            ).eraseToAny()
-
-        case .betaEnabled:
-            AlertBuilder(
-                title: "Beta Features Enabled",
-                message: "Beta features have been enabled",
-                actions: { Button("OK") { dismiss() } }
-            ).eraseToAny()
-
-        case let .betaError(error):
-            AlertBuilder(
-                title: "Something went wrong!",
-                message: error,
-                actions: { Button("OK") { alertState = .none } }
-            ).eraseToAny()
-
-        case .confirmWipeCloud:
-            AlertBuilder(
-                title: "Wipe Cloud Backup?",
-                message: "Deletes all iCloud backup files and resets local backup state",
-                actions: {
-                    Button("Wipe", role: .destructive) {
-                        Task.detached {
-                            let result = Self.debugWipeCloudBackup()
-                            await MainActor.run {
-                                alertState = .init(.wipeCloudResult(result))
-                            }
-                        }
-                    }
-                    Button("Cancel", role: .cancel) { alertState = .none }
-                }
-            ).eraseToAny()
-
-        case let .wipeCloudResult(result):
-            AlertBuilder(
-                title: result.succeeded ? "Cloud Backup Wiped" : "Cloud Backup Wipe Failed",
-                message: result.message,
-                actions: { Button("OK") { alertState = .none } }
-            ).eraseToAny()
-
-        case .confirmResetLocalState:
-            AlertBuilder(
-                title: "Reset Local Backup State?",
-                message: "Clears local keychain and DB backup state but keeps iCloud files intact. Use this to test the recovery flow.",
-                actions: {
-                    Button("Reset", role: .destructive) {
-                        RustCloudBackupManager().debugResetCloudBackupState()
-                        alertState = .init(.resetLocalStateResult("Local backup state reset. iCloud files are untouched."))
-                    }
-                    Button("Cancel", role: .cancel) { alertState = .none }
-                }
-            ).eraseToAny()
-
-        case let .resetLocalStateResult(message):
-            AlertBuilder(
-                title: "Local State Reset",
-                message: message,
-                actions: { Button("OK") { alertState = .none } }
-            ).eraseToAny()
-        }
+        .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
     }
 
     private nonisolated static func debugWipeCloudBackup() -> WipeCloudResult {

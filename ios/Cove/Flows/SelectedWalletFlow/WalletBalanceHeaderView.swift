@@ -50,7 +50,7 @@ struct WalletBalanceHeaderView: View {
         }
 
         if balance.asSats() == 0 {
-            manager.errorAlert = .noBalance
+            manager.errorAlert = TaggedItem(.noBalance)
             return
         }
 
