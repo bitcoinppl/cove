@@ -68,6 +68,8 @@ mod disable;
 mod enable;
 mod verification;
 
+pub(crate) use verification::DeepVerificationContinuation;
+
 mod tests {
     #![cfg(test)]
 

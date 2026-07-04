@@ -141,7 +141,13 @@ impl CloudBackupSupervisor {
                 &RustCloudBackupManager::load_persisted_state(),
             );
             if matches!(runtime_status, CloudBackupStatus::Enabled) {
-                self.start_reinitialize_verification(manager, claim, VerificationAttempt::Initial);
+                self.start_verification_with_context(
+                    manager,
+                    Some(claim),
+                    DeepVerificationContinuation::ReinitializeBackup {
+                        attempt: VerificationAttempt::Initial,
+                    },
+                );
                 return;
             }
         }

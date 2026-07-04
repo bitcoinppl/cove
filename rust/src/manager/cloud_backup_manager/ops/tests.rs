@@ -28,7 +28,7 @@ use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupOperation, CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
-    supervisor::VerificationAttempt,
+    supervisor::{DeepVerificationContinuation, VerificationAttempt},
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
@@ -97,9 +97,12 @@ async fn deep_verify_for_test(
 ) -> DeepVerificationResult {
     let step = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
     call!(manager.supervisor.complete_verification(
+        None,
         step,
-        force_discoverable,
-        VerificationAttempt::Initial
+        DeepVerificationContinuation::Manual {
+            force_discoverable,
+            attempt: VerificationAttempt::Initial,
+        }
     ))
     .await
     .unwrap();

@@ -8,11 +8,48 @@ pub(crate) enum DeepVerificationContinuation {
     ReinitializeBackup { attempt: VerificationAttempt },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeepVerificationTerminalPolicy {
+    ClearActiveOperationBeforeConnectivityRetry,
+    ClearActiveOperationAfterTerminalHandling,
+}
+
 impl DeepVerificationContinuation {
+    fn attempt(self) -> VerificationAttempt {
+        match self {
+            Self::Manual { attempt, .. }
+            | Self::RecreateManifest { attempt }
+            | Self::ReinitializeBackup { attempt } => attempt,
+        }
+    }
+
     fn force_discoverable(self) -> bool {
         match self {
             Self::Manual { force_discoverable, .. } => force_discoverable,
             Self::RecreateManifest { .. } | Self::ReinitializeBackup { .. } => false,
+        }
+    }
+
+    fn with_attempt(self, attempt: VerificationAttempt) -> Self {
+        match self {
+            Self::Manual { force_discoverable, .. } => Self::Manual { force_discoverable, attempt },
+            Self::RecreateManifest { .. } => Self::RecreateManifest { attempt },
+            Self::ReinitializeBackup { .. } => Self::ReinitializeBackup { attempt },
+        }
+    }
+
+    fn connectivity_retry(self) -> Self {
+        self.with_attempt(VerificationAttempt::AutomaticConnectivityRetry)
+    }
+
+    fn terminal_policy(self) -> DeepVerificationTerminalPolicy {
+        match self {
+            Self::Manual { .. } => {
+                DeepVerificationTerminalPolicy::ClearActiveOperationBeforeConnectivityRetry
+            }
+            Self::RecreateManifest { .. } | Self::ReinitializeBackup { .. } => {
+                DeepVerificationTerminalPolicy::ClearActiveOperationAfterTerminalHandling
+            }
         }
     }
 }
@@ -65,16 +102,25 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
-        self.start_verification_with_context(force_discoverable, VerificationAttempt::Initial).await
-    }
-
-    async fn start_verification_with_context(
-        &mut self,
-        force_discoverable: bool,
-        attempt: VerificationAttempt,
-    ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
+        self.start_verification_with_context(
+            manager,
+            None,
+            DeepVerificationContinuation::Manual {
+                force_discoverable,
+                attempt: VerificationAttempt::Initial,
+            },
+        );
+        Produces::ok(())
+    }
+
+    pub(crate) fn start_verification_with_context(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: Option<CloudBackupExclusiveOperationClaim>,
+        continuation: DeepVerificationContinuation,
+    ) {
         self.pending_verification_completion = None;
         if matches!(
             manager.state.read().verification_presentation(),
@@ -86,43 +132,48 @@ impl CloudBackupSupervisor {
                 CloudBackupVerificationSource::Settings,
             ));
         }
-        self.schedule_verification(manager, force_discoverable, attempt);
-
-        Produces::ok(())
+        self.schedule_verification(manager, claim, continuation);
     }
 
     fn schedule_verification(
         &self,
         manager: Arc<RustCloudBackupManager>,
-        force_discoverable: bool,
-        attempt: VerificationAttempt,
+        claim: Option<CloudBackupExclusiveOperationClaim>,
+        continuation: DeepVerificationContinuation,
     ) {
+        let force_discoverable = continuation.force_discoverable();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
-            send!(addr.complete_verification(result, force_discoverable, attempt));
+            send!(addr.complete_verification(claim, result, continuation));
         });
     }
 
     pub async fn complete_verification(
         &mut self,
+        claim: Option<CloudBackupExclusiveOperationClaim>,
         result: CloudBackupDeepVerificationStep,
-        force_discoverable: bool,
-        attempt: VerificationAttempt,
+        continuation: DeepVerificationContinuation,
     ) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        if let Some(claim) = claim
+            && self.active_operation != Some(claim)
+        {
+            return Produces::ok(());
+        }
+        let Some(manager) = self.manager() else {
+            if claim.is_some() {
+                self.active_operation = None;
+            }
+            return Produces::ok(());
+        };
+
         let result = match result {
             CloudBackupDeepVerificationStep::Complete(result) => result,
             CloudBackupDeepVerificationStep::PreparedWrapperRepair(prepared) => {
-                let Some(claim) = self.begin_exclusive_operation(
+                let Some(claim) = self.claim_deep_verification_repair(
                     &manager,
-                    CloudBackupExclusiveOperation::VerificationRepair,
+                    claim,
+                    "cloud backup verification repair is waiting for another operation",
                 ) else {
-                    let result = DeepVerificationResult::Failed(DeepVerificationFailure::retry(
-                        "cloud backup verification repair is waiting for another operation",
-                        None,
-                        None,
-                    ));
-                    manager.handle_deep_verification_result(result);
                     return Produces::ok(());
                 };
 
@@ -130,47 +181,51 @@ impl CloudBackupSupervisor {
                     manager,
                     claim,
                     *prepared,
-                    DeepVerificationContinuation::Manual { force_discoverable, attempt },
+                    continuation,
                 );
                 return Produces::ok(());
             }
             CloudBackupDeepVerificationStep::PreparedAutoSync(prepared) => {
-                let Some(claim) = self.begin_exclusive_operation(
+                let Some(claim) = self.claim_deep_verification_repair(
                     &manager,
-                    CloudBackupExclusiveOperation::VerificationRepair,
+                    claim,
+                    "cloud backup verification auto-sync is waiting for another operation",
                 ) else {
-                    let result = DeepVerificationResult::Failed(DeepVerificationFailure::retry(
-                        "cloud backup verification auto-sync is waiting for another operation",
-                        None,
-                        None,
-                    ));
-                    manager.handle_deep_verification_result(result);
                     return Produces::ok(());
                 };
 
-                self.start_deep_verification_auto_sync(
-                    manager,
-                    claim,
-                    *prepared,
-                    DeepVerificationContinuation::Manual { force_discoverable, attempt },
-                );
+                self.start_deep_verification_auto_sync(manager, claim, *prepared, continuation);
                 return Produces::ok(());
             }
         };
 
-        if verification_needs_connectivity_retry(&manager, attempt, &result) {
-            manager.persist_verification_result(&result);
-            self.schedule_verification(
-                manager,
-                force_discoverable,
-                VerificationAttempt::AutomaticConnectivityRetry,
-            );
-            return Produces::ok(());
+        self.finish_deep_verification_continuation(manager, claim, continuation, result);
+        Produces::ok(())
+    }
+
+    fn claim_deep_verification_repair(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: Option<CloudBackupExclusiveOperationClaim>,
+        waiting_message: &'static str,
+    ) -> Option<CloudBackupExclusiveOperationClaim> {
+        if let Some(claim) = claim {
+            return Some(claim);
         }
 
-        manager.persist_verification_result(&result);
-        manager.handle_deep_verification_result(result);
-        Produces::ok(())
+        let Some(claim) = self
+            .begin_exclusive_operation(manager, CloudBackupExclusiveOperation::VerificationRepair)
+        else {
+            let result = DeepVerificationResult::Failed(DeepVerificationFailure::retry(
+                waiting_message,
+                None,
+                None,
+            ));
+            manager.handle_deep_verification_result(result);
+            return None;
+        };
+
+        Some(claim)
     }
 
     fn start_deep_verification_wrapper_repair(
@@ -279,7 +334,12 @@ impl CloudBackupSupervisor {
 
         match result {
             CloudBackupDeepVerificationStep::Complete(result) => {
-                self.finish_deep_verification_continuation(manager, claim, continuation, result);
+                self.finish_deep_verification_continuation(
+                    manager,
+                    Some(claim),
+                    continuation,
+                    result,
+                );
             }
             CloudBackupDeepVerificationStep::PreparedAutoSync(prepared) => {
                 self.start_deep_verification_auto_sync(manager, claim, *prepared, continuation);
@@ -362,7 +422,12 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(result) => {
-                self.finish_deep_verification_continuation(manager, claim, continuation, result);
+                self.finish_deep_verification_continuation(
+                    manager,
+                    Some(claim),
+                    continuation,
+                    result,
+                );
             }
         }
 
@@ -402,7 +467,12 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(result) => {
-                self.finish_deep_verification_continuation(manager, claim, continuation, result);
+                self.finish_deep_verification_continuation(
+                    manager,
+                    Some(claim),
+                    continuation,
+                    result,
+                );
             }
         }
 
@@ -427,7 +497,7 @@ impl CloudBackupSupervisor {
         if let Some(pending_completion) = pending_completion {
             manager.replace_pending_verification_completion(pending_completion);
         }
-        self.finish_deep_verification_continuation(manager, claim, continuation, result);
+        self.finish_deep_verification_continuation(manager, Some(claim), continuation, result);
         Produces::ok(())
     }
 
@@ -442,67 +512,47 @@ impl CloudBackupSupervisor {
             continuation.force_discoverable(),
             error,
         );
-        self.finish_deep_verification_continuation(manager, claim, continuation, result);
+        self.finish_deep_verification_continuation(manager, Some(claim), continuation, result);
     }
 
     fn finish_deep_verification_continuation(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
+        mut claim: Option<CloudBackupExclusiveOperationClaim>,
         continuation: DeepVerificationContinuation,
         result: DeepVerificationResult,
     ) {
-        match continuation {
-            DeepVerificationContinuation::Manual { force_discoverable, attempt } => {
-                self.active_operation = None;
-                manager.project_exclusive_operation_finished(claim);
-
-                if verification_needs_connectivity_retry(&manager, attempt, &result) {
-                    manager.persist_verification_result(&result);
-                    self.schedule_verification(
-                        manager,
-                        force_discoverable,
-                        VerificationAttempt::AutomaticConnectivityRetry,
-                    );
-                    return;
-                }
-
-                manager.persist_verification_result(&result);
-                manager.handle_deep_verification_result(result);
-            }
-            DeepVerificationContinuation::RecreateManifest { attempt } => {
-                if verification_needs_connectivity_retry(&manager, attempt, &result) {
-                    manager.persist_verification_result(&result);
-                    self.schedule_recreate_manifest_verification(
-                        manager,
-                        claim,
-                        VerificationAttempt::AutomaticConnectivityRetry,
-                    );
-                    return;
-                }
-
-                manager.persist_verification_result(&result);
-                manager.handle_deep_verification_result(result);
-                self.active_operation = None;
-                manager.project_exclusive_operation_finished(claim);
-            }
-            DeepVerificationContinuation::ReinitializeBackup { attempt } => {
-                if verification_needs_connectivity_retry(&manager, attempt, &result) {
-                    manager.persist_verification_result(&result);
-                    self.schedule_reinitialize_verification(
-                        manager,
-                        claim,
-                        VerificationAttempt::AutomaticConnectivityRetry,
-                    );
-                    return;
-                }
-
-                manager.persist_verification_result(&result);
-                manager.handle_deep_verification_result(result);
-                self.active_operation = None;
-                manager.project_exclusive_operation_finished(claim);
-            }
+        if continuation.terminal_policy()
+            == DeepVerificationTerminalPolicy::ClearActiveOperationBeforeConnectivityRetry
+            && let Some(claim) = claim.take()
+        {
+            self.finish_deep_verification_operation(&manager, claim);
         }
+
+        if verification_needs_connectivity_retry(&manager, continuation.attempt(), &result) {
+            manager.persist_verification_result(&result);
+            self.schedule_verification(manager, claim, continuation.connectivity_retry());
+            return;
+        }
+
+        manager.persist_verification_result(&result);
+        manager.handle_deep_verification_result(result);
+
+        if continuation.terminal_policy()
+            == DeepVerificationTerminalPolicy::ClearActiveOperationAfterTerminalHandling
+            && let Some(claim) = claim
+        {
+            self.finish_deep_verification_operation(&manager, claim);
+        }
+    }
+
+    fn finish_deep_verification_operation(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        self.active_operation = None;
+        manager.project_exclusive_operation_finished(claim);
     }
 
     pub async fn complete_recreate_manifest_recovery(
@@ -572,10 +622,12 @@ impl CloudBackupSupervisor {
         match result {
             Ok(()) => {
                 manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
-                self.start_recreate_manifest_verification(
+                self.start_verification_with_context(
                     manager,
-                    claim,
-                    VerificationAttempt::Initial,
+                    Some(claim),
+                    DeepVerificationContinuation::RecreateManifest {
+                        attempt: VerificationAttempt::Initial,
+                    },
                 );
             }
             Err(error) => {
@@ -588,174 +640,6 @@ impl CloudBackupSupervisor {
             }
         }
 
-        Produces::ok(())
-    }
-
-    pub(crate) fn start_reinitialize_verification(
-        &mut self,
-        manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-        attempt: VerificationAttempt,
-    ) {
-        self.pending_verification_completion = None;
-        if matches!(
-            manager.state.read().verification_presentation(),
-            CloudBackupVerificationPresentation::ManualVerifying { .. }
-        ) {
-            manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
-        } else {
-            manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
-                CloudBackupVerificationSource::Settings,
-            ));
-        }
-        self.schedule_reinitialize_verification(manager, claim, attempt);
-    }
-
-    fn schedule_reinitialize_verification(
-        &self,
-        manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-        attempt: VerificationAttempt,
-    ) {
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_deep_verify_cloud_backup(false).await;
-            send!(addr.complete_reinitialize_verification(claim, result, attempt));
-        });
-    }
-
-    pub async fn complete_reinitialize_verification(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        result: CloudBackupDeepVerificationStep,
-        attempt: VerificationAttempt,
-    ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            return Produces::ok(());
-        };
-        let result = match result {
-            CloudBackupDeepVerificationStep::Complete(result) => result,
-            CloudBackupDeepVerificationStep::PreparedWrapperRepair(prepared) => {
-                self.start_deep_verification_wrapper_repair(
-                    manager,
-                    claim,
-                    *prepared,
-                    DeepVerificationContinuation::ReinitializeBackup { attempt },
-                );
-                return Produces::ok(());
-            }
-            CloudBackupDeepVerificationStep::PreparedAutoSync(prepared) => {
-                self.start_deep_verification_auto_sync(
-                    manager,
-                    claim,
-                    *prepared,
-                    DeepVerificationContinuation::ReinitializeBackup { attempt },
-                );
-                return Produces::ok(());
-            }
-        };
-
-        if verification_needs_connectivity_retry(&manager, attempt, &result) {
-            manager.persist_verification_result(&result);
-            self.schedule_reinitialize_verification(
-                manager,
-                claim,
-                VerificationAttempt::AutomaticConnectivityRetry,
-            );
-            return Produces::ok(());
-        }
-
-        manager.persist_verification_result(&result);
-        manager.handle_deep_verification_result(result);
-        self.active_operation = None;
-        manager.project_exclusive_operation_finished(claim);
-        Produces::ok(())
-    }
-
-    fn start_recreate_manifest_verification(
-        &mut self,
-        manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-        attempt: VerificationAttempt,
-    ) {
-        self.pending_verification_completion = None;
-        if matches!(
-            manager.state.read().verification_presentation(),
-            CloudBackupVerificationPresentation::ManualVerifying { .. }
-        ) {
-            manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
-        } else {
-            manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
-                CloudBackupVerificationSource::Settings,
-            ));
-        }
-        self.schedule_recreate_manifest_verification(manager, claim, attempt);
-    }
-
-    fn schedule_recreate_manifest_verification(
-        &self,
-        manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-        attempt: VerificationAttempt,
-    ) {
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_deep_verify_cloud_backup(false).await;
-            send!(addr.complete_recreate_manifest_verification(claim, result, attempt));
-        });
-    }
-
-    pub async fn complete_recreate_manifest_verification(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        result: CloudBackupDeepVerificationStep,
-        attempt: VerificationAttempt,
-    ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            return Produces::ok(());
-        };
-        let result = match result {
-            CloudBackupDeepVerificationStep::Complete(result) => result,
-            CloudBackupDeepVerificationStep::PreparedWrapperRepair(prepared) => {
-                self.start_deep_verification_wrapper_repair(
-                    manager,
-                    claim,
-                    *prepared,
-                    DeepVerificationContinuation::RecreateManifest { attempt },
-                );
-                return Produces::ok(());
-            }
-            CloudBackupDeepVerificationStep::PreparedAutoSync(prepared) => {
-                self.start_deep_verification_auto_sync(
-                    manager,
-                    claim,
-                    *prepared,
-                    DeepVerificationContinuation::RecreateManifest { attempt },
-                );
-                return Produces::ok(());
-            }
-        };
-
-        if verification_needs_connectivity_retry(&manager, attempt, &result) {
-            manager.persist_verification_result(&result);
-            self.schedule_recreate_manifest_verification(
-                manager,
-                claim,
-                VerificationAttempt::AutomaticConnectivityRetry,
-            );
-            return Produces::ok(());
-        }
-
-        manager.persist_verification_result(&result);
-        manager.handle_deep_verification_result(result);
-        self.active_operation = None;
-        manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }
 
