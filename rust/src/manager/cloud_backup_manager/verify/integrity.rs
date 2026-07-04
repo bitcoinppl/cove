@@ -53,7 +53,7 @@ impl RustCloudBackupManager {
     ///
     /// Verifies the master key is in the keychain and backup files exist in iCloud
     /// Returns None if everything is OK, Some(warning) if there's a problem
-    pub async fn verify_backup_integrity_impl(&self) -> Option<String> {
+    pub(crate) async fn verify_backup_integrity_impl(&self) -> Option<String> {
         let state = self.state.read().status().clone();
         if !matches!(state, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
             return None;

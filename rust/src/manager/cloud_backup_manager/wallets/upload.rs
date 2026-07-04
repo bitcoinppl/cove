@@ -111,7 +111,7 @@ impl DirtyWalletUploadPreparationError {
 
 impl RustCloudBackupManager {
     /// Upload wallets to cloud and update local cache
-    pub async fn do_backup_wallets(
+    pub(crate) async fn do_backup_wallets(
         &self,
         wallets: &[crate::wallet::metadata::WalletMetadata],
     ) -> Result<(), CloudBackupError> {
@@ -307,7 +307,7 @@ impl RustCloudBackupManager {
         }
     }
 
-    pub async fn do_upload_wallet_if_dirty(
+    pub(crate) async fn do_upload_wallet_if_dirty(
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {

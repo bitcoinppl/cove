@@ -104,7 +104,7 @@ impl From<LocalWalletMode> for WalletMode {
     }
 }
 
-pub async fn build_wallet_entry(
+async fn build_wallet_entry(
     metadata: &WalletMetadata,
     mode: LocalWalletMode,
 ) -> Result<WalletEntry, CloudBackupError> {
@@ -234,7 +234,7 @@ fn build_cold_wallet_secret(
     }
 }
 
-pub async fn prepare_wallet_backup(
+pub(crate) async fn prepare_wallet_backup(
     metadata: &WalletMetadata,
     mode: LocalWalletMode,
 ) -> Result<PreparedWalletBackup, CloudBackupError> {
@@ -270,7 +270,7 @@ fn prepare_cloud_labels(labels_jsonl: &str) -> Result<PreparedCloudLabels, Cloud
     })
 }
 
-pub fn wallet_metadata_change_requires_upload(
+pub(crate) fn wallet_metadata_change_requires_upload(
     before: &WalletMetadata,
     after: &WalletMetadata,
 ) -> bool {
@@ -303,7 +303,9 @@ async fn export_wallet_labels_jsonl(
     manager.export().await.map_err(CloudBackupError::internal)
 }
 
-pub fn decode_cloud_labels_jsonl(entry: &WalletEntry) -> Result<Option<String>, CloudBackupError> {
+pub(crate) fn decode_cloud_labels_jsonl(
+    entry: &WalletEntry,
+) -> Result<Option<String>, CloudBackupError> {
     let Some(compressed_labels) = &entry.labels_zstd_jsonl else {
         return Ok(None);
     };
@@ -328,7 +330,7 @@ fn ensure_cloud_labels_size(size: usize, label_state: &str) -> Result<(), CloudB
     ))
 }
 
-pub fn convert_cloud_secret(secret: &CloudWalletSecret) -> LocalWalletSecret {
+pub(crate) fn convert_cloud_secret(secret: &CloudWalletSecret) -> LocalWalletSecret {
     match secret {
         CloudWalletSecret::Mnemonic(mnemonic) => LocalWalletSecret::Mnemonic(mnemonic.clone()),
         CloudWalletSecret::TapSignerBackup(backup) => {
@@ -338,7 +340,7 @@ pub fn convert_cloud_secret(secret: &CloudWalletSecret) -> LocalWalletSecret {
     }
 }
 
-pub fn descriptor_pair_from_cloud(
+pub(crate) fn descriptor_pair_from_cloud(
     descriptors: &Option<DescriptorPair>,
 ) -> Option<LocalDescriptorPair> {
     descriptors.as_ref().map(|descriptors| LocalDescriptorPair {

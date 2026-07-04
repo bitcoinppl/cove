@@ -13,14 +13,14 @@ use super::{
 type Action = CloudBackupManagerAction;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecoveryAction {
+pub(crate) enum RecoveryAction {
     RecreateManifest,
     ReinitializeBackup,
     RepairPasskey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerificationState {
+pub(crate) enum VerificationState {
     Idle,
     Verifying,
     Verified(DeepVerificationReport),
@@ -70,21 +70,21 @@ pub enum CloudBackupVerificationPresentation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PendingUploadVerificationState {
+pub(crate) enum PendingUploadVerificationState {
     Idle,
     Confirming,
     BlockedOnAuthorization,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SyncState {
+pub(crate) enum SyncState {
     Idle,
     Syncing,
     Failed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecoveryState {
+pub(crate) enum RecoveryState {
     Idle,
     Recovering(RecoveryAction),
     Failed { action: RecoveryAction, error: String },

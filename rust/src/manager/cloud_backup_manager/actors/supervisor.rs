@@ -14,9 +14,9 @@ use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
 use tracing::{error, info, warn};
 
+use super::CloudBackupSyncHealthWorker;
 use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupCleanupWorker};
 use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredPasskeyMaterial};
-use super::sync_health::CloudBackupSyncHealthWorker;
 use super::uploads::CloudBackupUploadWorker;
 use super::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteBlocker,
