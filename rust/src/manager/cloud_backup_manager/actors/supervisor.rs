@@ -20,8 +20,7 @@ use super::restore::{self, CloudBackupRestoreEvent, RestoreOperation, RestoredPa
 use super::uploads::CloudBackupUploadWorker;
 use super::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWriteBlocker,
-    CloudBackupWriteClient, CloudBackupWriteCommandResult, CloudBackupWriteCompletion,
-    CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
+    CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
@@ -45,21 +44,21 @@ use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupEnableContext,
-    CloudBackupEnableOutcome, CloudBackupEnablePasskeyPreparation,
-    CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
-    CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation, CloudBackupError,
+    CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
+    CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
+    CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
     CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
     CloudBackupOtherBackupsOutcome, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPreparedCloudWalletDelete, CloudBackupReadyEnableUpload, CloudBackupRecoveryOutcome,
+    CloudBackupPreparedCloudWalletDelete, CloudBackupReadyEnableUpload,
     CloudBackupRegisteredEnablePasskey, CloudBackupRestoreOutcome, CloudBackupRestoreReport,
     CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation, CloudBackupStatus,
-    CloudBackupSyncOutcome, CloudBackupUploadedEnableBackup, CloudBackupVerificationOutcome,
-    CloudBackupVerificationPresentation, CloudBackupVerificationSource, CloudBackupWalletItem,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    EnablePasskeyRegistrationFlow, OtherBackupsOperation, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, RustCloudBackupManager, SavedPasskeyConfirmationMode, VerificationState,
-    WalletId, blocking_cloud_error,
+    CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
+    CloudBackupVerificationSource, CloudBackupWalletItem, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, EnablePasskeyRegistrationFlow,
+    OtherBackupsOperation, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
+    blocking_cloud_error,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -77,23 +76,6 @@ mod tests {
 }
 
 static NEXT_SUPERVISOR_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
-
-/// User or system operation requested of the Cloud Backup supervisor
-#[derive(Debug, Clone)]
-pub(crate) enum CloudBackupOperation {
-    Enable(CloudBackupEnableContext),
-    EnableForceNew(CloudBackupEnableContext),
-    EnableNoDiscovery(CloudBackupEnableContext),
-    Recovery(RecoveryAction),
-    RepairPasskey { no_discovery: bool },
-    Sync,
-    FetchCloudOnly,
-    Disable,
-    RestoreCloudWallet,
-    DeleteCloudWallet,
-    RecoverOtherBackups,
-    DeleteOtherBackups,
-}
 
 /// Passkey proof cached only for the current supervisor session
 ///
@@ -266,51 +248,29 @@ impl CloudBackupSupervisor {
         Some(self.addr.upgrade())
     }
 
-    async fn await_cloud_backup_write_for_operation<T>(
-        receiver: CloudBackupWriteResultReceiver<T>,
-        origin: CloudBackupExclusiveOperationClaim,
-    ) -> Result<T, CloudBackupError> {
-        let result: CloudBackupWriteCommandResult<T> = receiver.await.map_err(|source| {
-            CloudBackupError::internal_context("wait for cloud backup write supervisor", source)
-        })?;
-        let context = result.context();
-        if context.origin() != Some(origin) {
-            return Err(CloudBackupError::Internal(format!(
-                "cloud backup write supervisor returned mismatched operation origin for command {:?}",
-                context.id()
-            )
-            .into()));
-        }
-
-        result.into_result()
-    }
-
     async fn delete_prepared_cloud_wallet_for_operation(
         write: Addr<CloudBackupWriteSupervisor>,
         prepared: CloudBackupPreparedCloudWalletDelete,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), CloudBackupError> {
-        let receiver = call!(write.delete_active_wallet_backup_for_operation(
-            prepared.cloud,
-            prepared.namespace,
-            prepared.record_id.clone(),
-            origin
-        ))
-        .await
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
+        let writes = CloudBackupWriteClient::for_operation(write, origin);
+        writes
+            .delete_active_wallet_backup(
+                prepared.cloud,
+                prepared.namespace,
+                prepared.record_id.clone(),
+            )
+            .await
+            .map_err(|error| {
+                let error = match error {
+                    CloudBackupError::CloudStorage(source) => {
+                        CloudBackupError::cloud_storage_context("delete wallet backup", source)
+                    }
+                    error => error,
+                };
 
-        Self::await_cloud_backup_write_for_operation(receiver, origin).await.map_err(|error| {
-            let error = match error {
-                CloudBackupError::CloudStorage(source) => {
-                    CloudBackupError::cloud_storage_context("delete wallet backup", source)
-                }
-                error => error,
-            };
-
-            blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
-        })?;
+                blocking_cloud_error(BlockingCloudStep::DeleteCloudWallet, error)
+            })?;
 
         info!("Deleted cloud wallet");
         Ok(())
@@ -321,17 +281,9 @@ impl CloudBackupSupervisor {
         namespace: String,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), CloudBackupError> {
-        let receiver = call!(write.delete_namespace_for_operation(
-            CloudStorage::global_explicit_client(),
-            namespace,
-            origin
-        ))
-        .await
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
-        Self::await_cloud_backup_write_for_operation(receiver, origin).await
+        CloudBackupWriteClient::for_operation(write, origin)
+            .delete_namespace(CloudStorage::global_explicit_client(), namespace)
+            .await
     }
 
     async fn apply_cloud_backup_write_completion_for_operation(
@@ -339,13 +291,7 @@ impl CloudBackupSupervisor {
         completion: CloudBackupWriteCompletion,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<(), CloudBackupError> {
-        let receiver = call!(write.apply_completion_for_operation(completion, origin))
-            .await
-            .map_err(|source| {
-                CloudBackupError::internal_context("start cloud backup write supervisor", source)
-            })?;
-
-        Self::await_cloud_backup_write_for_operation(receiver, origin).await
+        CloudBackupWriteClient::for_operation(write, origin).apply_completion(completion).await
     }
 
     fn begin_exclusive_operation(
@@ -457,10 +403,9 @@ impl CloudBackupSupervisor {
         Produces::ok(Ok(()))
     }
 
-    pub async fn apply_restore_enable_outcome(
+    pub async fn clear_restore_enable_progress(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        outcome: CloudBackupEnableOutcome,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         if !self.restore_operation_is_current(claim) {
             return Produces::ok(Err(CloudBackupError::Cancelled));
@@ -469,7 +414,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        manager.apply_enable_outcome(outcome);
+        manager.clear_enable_progress_report();
         Produces::ok(Ok(()))
     }
 
@@ -513,44 +458,87 @@ impl CloudBackupSupervisor {
         Produces::ok(result)
     }
 
-    fn spawn_operation(&mut self, operation: CloudBackupOperation, record_id: Option<String>) {
-        match operation {
-            CloudBackupOperation::Enable(context) => self.start_enable_operation(context),
-            CloudBackupOperation::EnableForceNew(context) => {
-                self.start_enable_force_new_operation(context);
-            }
-            CloudBackupOperation::EnableNoDiscovery(context) => {
-                self.start_enable_no_discovery_operation(context);
-            }
-            CloudBackupOperation::Recovery(action) => self.start_recovery_operation(action),
-            CloudBackupOperation::RepairPasskey { no_discovery } => {
-                self.start_repair_passkey_operation(no_discovery);
-            }
-            CloudBackupOperation::Sync => {
-                let Some(manager) = self.manager() else { return };
-                self.start_sync_request(manager);
-            }
-            CloudBackupOperation::FetchCloudOnly => self.start_cloud_only_fetch_request(),
-            CloudBackupOperation::Disable => self.start_disable_operation(),
-            CloudBackupOperation::RestoreCloudWallet => {
-                let Some(record_id) = record_id else { return };
-                self.start_restore_cloud_wallet_operation(record_id);
-            }
-            CloudBackupOperation::DeleteCloudWallet => {
-                let Some(record_id) = record_id else { return };
-                self.start_delete_cloud_wallet_operation(record_id);
-            }
-            CloudBackupOperation::RecoverOtherBackups => {
-                self.start_recover_other_backups_operation()
-            }
-            CloudBackupOperation::DeleteOtherBackups => self.start_delete_other_backups_operation(),
-        }
+    pub async fn start_enable_operation(
+        &mut self,
+        context: CloudBackupEnableContext,
+    ) -> ActorResult<()> {
+        self.begin_enable_operation(context);
+        Produces::ok(())
+    }
+
+    pub async fn start_enable_force_new_operation(
+        &mut self,
+        context: CloudBackupEnableContext,
+    ) -> ActorResult<()> {
+        self.begin_enable_force_new_operation(context);
+        Produces::ok(())
+    }
+
+    pub async fn start_enable_no_discovery_operation(
+        &mut self,
+        context: CloudBackupEnableContext,
+    ) -> ActorResult<()> {
+        self.begin_enable_no_discovery_operation(context);
+        Produces::ok(())
+    }
+
+    pub async fn start_recovery_operation(&mut self, action: RecoveryAction) -> ActorResult<()> {
+        self.begin_recovery_operation(action);
+        Produces::ok(())
+    }
+
+    pub async fn start_repair_passkey_operation(&mut self, no_discovery: bool) -> ActorResult<()> {
+        self.begin_repair_passkey_operation(no_discovery);
+        Produces::ok(())
+    }
+
+    pub async fn start_sync_operation(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        self.start_sync_request(manager);
+        Produces::ok(())
+    }
+
+    pub async fn start_cloud_only_fetch_request(&mut self) -> ActorResult<()> {
+        self.begin_cloud_only_fetch_request();
+        Produces::ok(())
+    }
+
+    pub async fn start_disable_operation(&mut self) -> ActorResult<()> {
+        self.begin_disable_operation();
+        Produces::ok(())
+    }
+
+    pub async fn start_restore_cloud_wallet_operation(
+        &mut self,
+        record_id: String,
+    ) -> ActorResult<()> {
+        self.begin_restore_cloud_wallet_operation(record_id);
+        Produces::ok(())
+    }
+
+    pub async fn start_delete_cloud_wallet_operation(
+        &mut self,
+        record_id: String,
+    ) -> ActorResult<()> {
+        self.begin_delete_cloud_wallet_operation(record_id);
+        Produces::ok(())
+    }
+
+    pub async fn start_recover_other_backups_operation(&mut self) -> ActorResult<()> {
+        self.begin_recover_other_backups_operation();
+        Produces::ok(())
+    }
+
+    pub async fn start_delete_other_backups_operation(&mut self) -> ActorResult<()> {
+        self.begin_delete_other_backups_operation();
+        Produces::ok(())
     }
 
     fn start_sync_request(&mut self, manager: Arc<RustCloudBackupManager>) {
         let request_id = self.next_request_id();
         self.active_sync_request = Some(request_id);
-        manager.apply_sync_outcome(CloudBackupSyncOutcome::Started);
+        manager.apply_sync_state(SyncState::Syncing);
 
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.do_sync_unsynced_wallets().await;
@@ -580,7 +568,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                manager.apply_sync_state(SyncState::Failed(error.to_string()));
                 self.active_sync_request = None;
             }
         }
@@ -605,17 +593,8 @@ impl CloudBackupSupervisor {
             apply_refresh_detail_result(&manager, &result);
         }
 
-        manager.apply_sync_outcome(CloudBackupSyncOutcome::Completed);
+        manager.apply_sync_state(SyncState::Idle);
         self.active_sync_request = None;
-        Produces::ok(())
-    }
-
-    pub async fn start_operation(
-        &mut self,
-        operation: CloudBackupOperation,
-        record_id: Option<String>,
-    ) -> ActorResult<()> {
-        self.spawn_operation(operation, record_id);
         Produces::ok(())
     }
 
@@ -960,7 +939,7 @@ impl CloudBackupSupervisor {
 
         self.active_operation = None;
         manager.project_exclusive_operation_finished(claim);
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
             &RustCloudBackupManager::load_persisted_state(),

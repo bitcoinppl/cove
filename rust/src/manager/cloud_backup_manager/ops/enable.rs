@@ -17,7 +17,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupPasskeyHint,
+    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupPasskeyHint,
     CloudBackupRestoreOutcome, CloudBackupStatus, CloudBackupStore, PendingEnableSession,
     PendingVerificationUpload, is_connectivity_related_issue, master_key_wrapper_revision_hash,
 };
@@ -645,9 +645,9 @@ impl RustCloudBackupManager {
         let preserve_awaiting_prompt = matches!(status, CloudBackupStatus::Disabled)
             && self.state.read().is_awaiting_enable_prompt();
 
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        self.clear_enable_progress_report();
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+        self.apply_enable_state(CloudBackupEnableState::Idle);
         if preserve_awaiting_prompt {
             self.reconcile_runtime_status(CloudBackupStatus::Enabling);
         } else {

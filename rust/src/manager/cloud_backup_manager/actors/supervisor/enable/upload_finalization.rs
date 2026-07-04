@@ -16,7 +16,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(CloudBackupEnablePreparation::CreateNew { context }) => {
-                manager.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
+                manager.apply_enable_state(CloudBackupEnableState::CreatingPasskey);
                 self.schedule_create_new_enable_passkey(manager, claim, context);
             }
             Ok(CloudBackupEnablePreparation::ExistingBackupFound { context, passkey_hint }) => {
@@ -84,7 +84,7 @@ impl CloudBackupSupervisor {
                     ready.passkey.copy_for_retry(),
                     ready.context,
                 ));
-                manager.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
+                manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, ready);
             }
             Ok(CloudBackupEnablePasskeyPreparation::Registered(registered)) => {
@@ -121,7 +121,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(CloudBackupNoDiscoveryEnablePreparation::RegisterPasskey { context }) => {
-                manager.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
+                manager.apply_enable_state(CloudBackupEnableState::CreatingPasskey);
                 self.schedule_enable_passkey_registration(
                     manager,
                     claim,
@@ -232,13 +232,11 @@ impl CloudBackupSupervisor {
                 registered.passkey,
                 registered.context,
             ));
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::WaitingForPasskeyAvailability);
+        manager.apply_enable_state(CloudBackupEnableState::WaitingForPasskeyAvailability);
         if !self.schedule_enable_saved_passkey_wait(claim, saved_passkey_confirmation) {
-            manager.apply_enable_outcome(
-                CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
-                    SavedPasskeyConfirmationMode::Manual,
-                ),
-            );
+            manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+                SavedPasskeyConfirmationMode::Manual,
+            ));
             self.active_operation = None;
             manager.project_exclusive_operation_finished(claim);
         }
@@ -254,7 +252,7 @@ impl CloudBackupSupervisor {
             return Ok(false);
         };
 
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
+        manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
         self.schedule_enable_upload(manager, claim, ready);
         Ok(true)
     }
@@ -460,7 +458,7 @@ impl CloudBackupSupervisor {
             PendingVerificationCompletion::new(report, namespace_id, pending_uploads),
             context.verification_source,
         );
-        manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
+        manager.apply_verification_state(VerificationState::Idle);
         self.pending_enable_session = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();

@@ -51,7 +51,7 @@ impl CloudBackupSupervisor {
                     confirmed.passkey.copy_for_retry(),
                     confirmed.context,
                 ));
-                manager.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
+                manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
             }
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error }
@@ -59,12 +59,11 @@ impl CloudBackupSupervisor {
             {
                 warn!("Automatic saved passkey confirmation will retry: {error}");
                 self.pending_enable_session = Some(pending);
-                manager
-                    .apply_enable_outcome(CloudBackupEnableOutcome::WaitingForPasskeyAvailability);
+                manager.apply_enable_state(CloudBackupEnableState::WaitingForPasskeyAvailability);
 
                 if !self.schedule_enable_saved_passkey_wait_with_retry(claim, retry.after_retry()) {
-                    manager.apply_enable_outcome(
-                        CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+                    manager.apply_enable_state(
+                        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                             SavedPasskeyConfirmationMode::Manual,
                         ),
                     );
@@ -75,8 +74,8 @@ impl CloudBackupSupervisor {
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error } => {
                 warn!("Confirm saved passkey will retry: {error}");
                 self.pending_enable_session = Some(pending);
-                manager.apply_enable_outcome(
-                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+                manager.apply_enable_state(
+                    CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                         SavedPasskeyConfirmationMode::Manual,
                     ),
                 );
@@ -104,7 +103,7 @@ impl CloudBackupSupervisor {
             return false;
         }
 
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+        manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
             SavedPasskeyConfirmationMode::Manual,
         ));
         self.finish_enable_operation(manager, claim);
@@ -174,8 +173,8 @@ impl CloudBackupSupervisor {
 
         match retry {
             SavedPasskeyConfirmationRetry::Manual => {
-                manager.apply_enable_outcome(
-                    CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+                manager.apply_enable_state(
+                    CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                         SavedPasskeyConfirmationMode::Manual,
                     ),
                 );
@@ -217,7 +216,7 @@ impl CloudBackupSupervisor {
             return false;
         };
 
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::ConfirmingSavedPasskey);
+        manager.apply_enable_state(CloudBackupEnableState::ConfirmingSavedPasskey);
         addr.send_fut_with(move |addr| async move {
             let result = manager.confirm_saved_passkey_from_session(pending).await;
             send!(addr.complete_saved_passkey_confirmation(claim, retry, result));

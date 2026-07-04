@@ -26,7 +26,7 @@ use crate::database::cloud_backup::{
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
-    CloudBackupOperation, CloudBackupWriteClient,
+    CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
     supervisor::{DeepVerificationContinuation, VerificationAttempt},
 };
@@ -43,13 +43,12 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDetailResult,
-    CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableOutcome,
-    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupKeychain,
-    CloudBackupLifecycle, CloudBackupManagerAction, CloudBackupOtherBackupsState,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent, CloudBackupRootPrompt,
-    CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
+    CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
+    CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent,
+    CloudBackupRootPrompt, CloudBackupVerificationPresentation, CloudBackupVerificationReason,
+    CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
 };
@@ -148,7 +147,7 @@ async fn enable_cloud_backup_create_new(
 ) -> Result<(), CloudBackupError> {
     run_enable_operation(
         manager,
-        CloudBackupOperation::Enable(CloudBackupEnableContext::settings_manual()),
+        TestEnableOperation::Enable(CloudBackupEnableContext::settings_manual()),
     )
     .await
 }
@@ -174,30 +173,50 @@ async fn enable_cloud_backup_force_new_with_context(
     manager: &RustCloudBackupManager,
     context: CloudBackupEnableContext,
 ) -> Result<(), CloudBackupError> {
-    run_enable_operation(manager, CloudBackupOperation::EnableForceNew(context)).await
+    run_enable_operation(manager, TestEnableOperation::ForceNew(context)).await
 }
 
 async fn enable_cloud_backup_no_discovery_with_context(
     manager: &RustCloudBackupManager,
     context: CloudBackupEnableContext,
 ) -> Result<(), CloudBackupError> {
-    run_enable_operation(manager, CloudBackupOperation::EnableNoDiscovery(context)).await
+    run_enable_operation(manager, TestEnableOperation::NoDiscovery(context)).await
+}
+
+enum TestEnableOperation {
+    Enable(CloudBackupEnableContext),
+    ForceNew(CloudBackupEnableContext),
+    NoDiscovery(CloudBackupEnableContext),
+    ReinitializeBackup,
 }
 
 async fn run_enable_operation(
     manager: &RustCloudBackupManager,
-    operation: CloudBackupOperation,
+    operation: TestEnableOperation,
 ) -> Result<(), CloudBackupError> {
     let saved_passkey_confirmation = match &operation {
-        CloudBackupOperation::Enable(context)
-        | CloudBackupOperation::EnableForceNew(context)
-        | CloudBackupOperation::EnableNoDiscovery(context) => context.saved_passkey_confirmation,
-        _ => SavedPasskeyConfirmationMode::Manual,
+        TestEnableOperation::Enable(context)
+        | TestEnableOperation::ForceNew(context)
+        | TestEnableOperation::NoDiscovery(context) => context.saved_passkey_confirmation,
+        TestEnableOperation::ReinitializeBackup => SavedPasskeyConfirmationMode::Manual,
     };
 
-    call!(manager.supervisor.start_operation(operation, None))
-        .await
-        .expect("start enable operation");
+    match operation {
+        TestEnableOperation::Enable(context) => {
+            call!(manager.supervisor.start_enable_operation(context)).await
+        }
+        TestEnableOperation::ForceNew(context) => {
+            call!(manager.supervisor.start_enable_force_new_operation(context)).await
+        }
+        TestEnableOperation::NoDiscovery(context) => {
+            call!(manager.supervisor.start_enable_no_discovery_operation(context)).await
+        }
+        TestEnableOperation::ReinitializeBackup => {
+            call!(manager.supervisor.start_recovery_operation(RecoveryAction::ReinitializeBackup))
+                .await
+        }
+    }
+    .expect("start enable operation");
 
     for _ in 0..200 {
         let Some(claim) = manager.projected_exclusive_operation() else { break };
@@ -225,6 +244,12 @@ async fn run_enable_operation(
         }
         _ => Ok(()),
     }
+}
+
+async fn run_reinitialize_backup_operation(
+    manager: &RustCloudBackupManager,
+) -> Result<(), CloudBackupError> {
+    run_enable_operation(manager, TestEnableOperation::ReinitializeBackup).await
 }
 
 async fn restore_from_local_master_key_fallback<S>(
@@ -270,9 +295,7 @@ async fn wait_for_discover_count(globals: &TestGlobals, expected_count: usize) {
 }
 
 async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
-    call!(manager.supervisor.start_operation(CloudBackupOperation::Disable, None))
-        .await
-        .expect("start disable operation");
+    call!(manager.supervisor.start_disable_operation()).await.expect("start disable operation");
     wait_for_test_condition(Duration::from_secs(2), "disable operation finishes", || {
         !matches!(
             manager.projected_exclusive_operation().map(|claim| claim.operation()),
@@ -291,14 +314,9 @@ async fn run_keep_cloud_backup_enabled(manager: &Arc<RustCloudBackupManager>) {
 }
 
 async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
-    call!(
-        manager.supervisor.start_operation(
-            CloudBackupOperation::Recovery(RecoveryAction::RecreateManifest),
-            None
-        )
-    )
-    .await
-    .expect("start recreate-manifest operation");
+    call!(manager.supervisor.start_recovery_operation(RecoveryAction::RecreateManifest))
+        .await
+        .expect("start recreate-manifest operation");
     wait_for_test_condition(Duration::from_secs(8), "recreate-manifest operation finishes", || {
         !matches!(
             manager.projected_exclusive_operation().map(|claim| claim.operation()),
@@ -309,13 +327,9 @@ async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
 }
 
 async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_discovery: bool) {
-    call!(
-        manager
-            .supervisor
-            .start_operation(CloudBackupOperation::RepairPasskey { no_discovery }, None)
-    )
-    .await
-    .expect("start repair-passkey operation");
+    call!(manager.supervisor.start_repair_passkey_operation(no_discovery))
+        .await
+        .expect("start repair-passkey operation");
     wait_for_test_condition(Duration::from_secs(8), "repair-passkey operation finishes", || {
         !matches!(
             manager.projected_exclusive_operation().map(|claim| claim.operation()),

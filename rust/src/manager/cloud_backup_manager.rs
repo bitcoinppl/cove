@@ -38,15 +38,14 @@ use crate::wallet::metadata::{WalletId, WalletMode as LocalWalletMode};
 
 pub(crate) use self::actors::CloudBackupRestoreEvent;
 use self::actors::{
-    CloudBackupOperation, CloudBackupSupervisor, CloudBackupUploadedWallet,
-    CloudBackupWalletCountRefresh, CloudBackupWriteBlocker, CloudBackupWriteClient,
-    CloudBackupWriteCompletion, CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
+    CloudBackupSupervisor, CloudBackupUploadedWallet, CloudBackupWalletCountRefresh,
+    CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCompletion,
+    CloudBackupWriteSupervisor,
 };
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
-    CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupEnableOutcome,
-    CloudBackupOtherBackupsOutcome, CloudBackupRecoveryOutcome, CloudBackupRestoreOutcome,
-    CloudBackupSyncOutcome, CloudBackupVerificationOutcome,
+    CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupOtherBackupsOutcome,
+    CloudBackupRestoreOutcome,
 };
 pub use self::detail::{
     CloudBackupVerificationPresentation, CloudBackupVerificationReason,
@@ -304,17 +303,6 @@ impl RustCloudBackupManager {
         Ok(())
     }
 
-    async fn await_cloud_backup_write<T>(
-        receiver: CloudBackupWriteResultReceiver<T>,
-    ) -> Result<T, CloudBackupError> {
-        receiver
-            .await
-            .map_err(|source| {
-                CloudBackupError::internal_context("wait for cloud backup write supervisor", source)
-            })?
-            .into_result()
-    }
-
     pub(crate) async fn upload_cloud_wallet_backup(
         &self,
         cloud: CloudStorageClient,
@@ -335,16 +323,9 @@ impl RustCloudBackupManager {
         data: Vec<u8>,
         completion: CloudBackupWriteCompletion,
     ) -> Result<(), CloudBackupError> {
-        let receiver =
-            call!(self.cloud_writes.upload_wallet_backup_with_completion(
-                cloud, namespace, record_id, data, completion
-            ))
+        CloudBackupWriteClient::new(self.cloud_writes.clone())
+            .upload_wallet_backup_with_completion(cloud, namespace, record_id, data, completion)
             .await
-            .map_err(|source| {
-                CloudBackupError::internal_context("start cloud backup write supervisor", source)
-            })?;
-
-        Self::await_cloud_backup_write(receiver).await
     }
 
     pub(crate) async fn complete_cloud_wallet_upload_batch(
@@ -354,18 +335,9 @@ impl RustCloudBackupManager {
         uploaded_wallets: Vec<CloudBackupUploadedWallet>,
         count_refresh: CloudBackupWalletCountRefresh,
     ) -> Result<(), CloudBackupError> {
-        let receiver = call!(self.cloud_writes.complete_uploaded_wallet_batch(
-            cloud,
-            namespace_id,
-            uploaded_wallets,
-            count_refresh
-        ))
-        .await
-        .map_err(|source| {
-            CloudBackupError::internal_context("start cloud backup write supervisor", source)
-        })?;
-
-        Self::await_cloud_backup_write(receiver).await
+        CloudBackupWriteClient::new(self.cloud_writes.clone())
+            .complete_uploaded_wallet_batch(cloud, namespace_id, uploaded_wallets, count_refresh)
+            .await
     }
 
     pub(crate) fn persistable_cloud_storage_issue(
@@ -516,42 +488,12 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::MissingPasskeyPromptDismissed);
     }
 
-    pub(crate) fn apply_enable_outcome(&self, outcome: CloudBackupEnableOutcome) {
-        match outcome {
-            CloudBackupEnableOutcome::ProgressCleared => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableProgressReported(None));
-            }
-            CloudBackupEnableOutcome::ReturnedToIdle => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                    CloudBackupEnableState::Idle,
-                ));
-            }
-            CloudBackupEnableOutcome::CreatingPasskey => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                    CloudBackupEnableState::CreatingPasskey,
-                ));
-            }
-            CloudBackupEnableOutcome::WaitingForPasskeyAvailability => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                    CloudBackupEnableState::WaitingForPasskeyAvailability,
-                ));
-            }
-            CloudBackupEnableOutcome::UploadingBackup => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                    CloudBackupEnableState::UploadingBackup,
-                ));
-            }
-            CloudBackupEnableOutcome::ConfirmingSavedPasskey => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                    CloudBackupEnableState::ConfirmingSavedPasskey,
-                ));
-            }
-            CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(mode) => {
-                self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                    CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(mode),
-                ));
-            }
-        }
+    pub(crate) fn clear_enable_progress_report(&self) {
+        self.apply_model_event(CloudBackupStateReducerEvent::EnableProgressReported(None));
+    }
+
+    pub(crate) fn apply_enable_state(&self, enable_state: CloudBackupEnableState) {
+        self.apply_model_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(enable_state));
     }
 
     pub(crate) fn apply_restore_outcome(&self, outcome: CloudBackupRestoreOutcome) {
@@ -569,16 +511,7 @@ impl RustCloudBackupManager {
         send!(self.supervisor.request_sync_health_refresh());
     }
 
-    pub(crate) fn apply_verification_outcome(&self, outcome: CloudBackupVerificationOutcome) {
-        let verification = match outcome {
-            CloudBackupVerificationOutcome::Idle => VerificationState::Idle,
-            CloudBackupVerificationOutcome::Started => VerificationState::Verifying,
-            CloudBackupVerificationOutcome::Verified(report) => VerificationState::Verified(report),
-            CloudBackupVerificationOutcome::PasskeyConfirmed => VerificationState::PasskeyConfirmed,
-            CloudBackupVerificationOutcome::Failed(failure) => VerificationState::Failed(failure),
-            CloudBackupVerificationOutcome::Cancelled => VerificationState::Cancelled,
-        };
-
+    pub(crate) fn apply_verification_state(&self, verification: VerificationState) {
         if matches!(
             verification,
             VerificationState::Idle | VerificationState::Failed(_) | VerificationState::Cancelled
@@ -591,25 +524,11 @@ impl RustCloudBackupManager {
         ));
     }
 
-    pub(crate) fn apply_sync_outcome(&self, outcome: CloudBackupSyncOutcome) {
-        let sync = match outcome {
-            CloudBackupSyncOutcome::Started => SyncState::Syncing,
-            CloudBackupSyncOutcome::Completed => SyncState::Idle,
-            CloudBackupSyncOutcome::Failed(error) => SyncState::Failed(error),
-        };
-
+    pub(crate) fn apply_sync_state(&self, sync: SyncState) {
         self.apply_model_event(CloudBackupStateReducerEvent::SyncStateResolved(sync));
     }
 
-    pub(crate) fn apply_recovery_outcome(&self, outcome: CloudBackupRecoveryOutcome) {
-        let recovery = match outcome {
-            CloudBackupRecoveryOutcome::Idle => RecoveryState::Idle,
-            CloudBackupRecoveryOutcome::Started(action) => RecoveryState::Recovering(action),
-            CloudBackupRecoveryOutcome::Failed { action, error } => {
-                RecoveryState::Failed { action, error }
-            }
-        };
-
+    pub(crate) fn apply_recovery_state(&self, recovery: RecoveryState) {
         if !matches!(recovery, RecoveryState::Idle) {
             self.clear_runtime_passkey_authorization();
         }
@@ -634,15 +553,15 @@ impl RustCloudBackupManager {
         }
 
         self.clear_prompt_state();
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        self.clear_enable_progress_report();
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         self.observe_sync_health(CloudSyncHealth::Unknown);
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+        self.apply_enable_state(CloudBackupEnableState::Idle);
         self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.apply_detail_outcome(CloudBackupDetailOutcome::Cleared);
-        self.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
-        self.apply_sync_outcome(CloudBackupSyncOutcome::Completed);
-        self.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+        self.apply_verification_state(VerificationState::Idle);
+        self.apply_sync_state(SyncState::Idle);
+        self.apply_recovery_state(RecoveryState::Idle);
         self.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Reset);
         self.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Idle);
         self.reconcile_runtime_status(CloudBackupStatus::Disabled);
@@ -745,9 +664,9 @@ impl RustCloudBackupManager {
         error: &CloudBackupError,
     ) {
         self.project_exclusive_operation_finished(claim);
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        self.clear_enable_progress_report();
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+        self.apply_enable_state(CloudBackupEnableState::Idle);
         self.reconcile_runtime_status(Self::status_for_operation_error(error));
     }
 }
@@ -879,15 +798,15 @@ impl RustCloudBackupManager {
 
         self.clear_pending_verification_completion();
         self.clear_prompt_state();
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        self.clear_enable_progress_report();
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         self.refresh_persisted_flags();
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+        self.apply_enable_state(CloudBackupEnableState::Idle);
         self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.apply_detail_outcome(CloudBackupDetailOutcome::Cleared);
-        self.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
-        self.apply_sync_outcome(CloudBackupSyncOutcome::Completed);
-        self.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+        self.apply_verification_state(VerificationState::Idle);
+        self.apply_sync_state(SyncState::Idle);
+        self.apply_recovery_state(RecoveryState::Idle);
         self.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Reset);
         self.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Idle);
         self.reconcile_runtime_status(CloudBackupStatus::Disabled);
@@ -919,21 +838,19 @@ impl RustCloudBackupManager {
 
 impl RustCloudBackupManager {
     pub(crate) fn enable_cloud_backup(&self, context: CloudBackupEnableContext) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::Enable(context), None));
+        send!(self.supervisor.start_enable_operation(context));
     }
 
     pub(crate) fn enable_cloud_backup_force_new(&self, context: CloudBackupEnableContext) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::EnableForceNew(context), None));
+        send!(self.supervisor.start_enable_force_new_operation(context));
     }
 
     pub(crate) fn enable_cloud_backup_no_discovery(&self, context: CloudBackupEnableContext) {
-        send!(
-            self.supervisor.start_operation(CloudBackupOperation::EnableNoDiscovery(context), None)
-        );
+        send!(self.supervisor.start_enable_no_discovery_operation(context));
     }
 
     pub(crate) fn disable_cloud_backup(&self) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::Disable, None));
+        send!(self.supervisor.start_disable_operation());
     }
 
     pub(crate) fn keep_cloud_backup_enabled(&self) {
@@ -1419,7 +1336,7 @@ mod tests {
         let _guard = async_test_lock().lock().await;
         let manager = init_manager();
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
 
         manager.project_exclusive_operation_started(CloudBackupExclusiveOperationClaim::new(

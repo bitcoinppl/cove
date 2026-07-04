@@ -289,9 +289,7 @@ impl RustCloudBackupManager {
         self.apply_other_backups_outcome(
             crate::manager::cloud_backup_manager::CloudBackupOtherBackupsOutcome::Idle,
         );
-        self.apply_recovery_outcome(
-            crate::manager::cloud_backup_manager::CloudBackupRecoveryOutcome::Idle,
-        );
+        self.apply_recovery_state(crate::manager::cloud_backup_manager::RecoveryState::Idle);
         Ok(())
     }
 

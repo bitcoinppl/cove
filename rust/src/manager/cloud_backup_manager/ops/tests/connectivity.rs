@@ -193,7 +193,7 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
             }),
         ))
         .unwrap();
-    manager.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+    manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
         SavedPasskeyConfirmationMode::Manual,
     ));
     CONNECTIVITY_MANAGER.set_connection_state(false);

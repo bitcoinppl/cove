@@ -89,9 +89,9 @@ impl CloudBackupSupervisor {
         }
 
         warn!("Enable failed: {error}");
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+        manager.apply_enable_state(CloudBackupEnableState::Idle);
         manager
             .reconcile_runtime_status(RustCloudBackupManager::status_for_operation_error(&error));
         self.active_operation = None;
@@ -107,7 +107,7 @@ impl CloudBackupSupervisor {
         warn!("Reinitialize backup enable failed: {error}");
         match error {
             CloudBackupError::UnsupportedPasskeyProvider => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                manager.apply_recovery_state(RecoveryState::Idle);
                 manager.reconcile_runtime_status(
                     RustCloudBackupManager::status_for_operation_error(
                         &CloudBackupError::UnsupportedPasskeyProvider,
@@ -119,7 +119,7 @@ impl CloudBackupSupervisor {
                     &RustCloudBackupManager::load_persisted_state(),
                 );
                 manager.reconcile_runtime_status(runtime_status);
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::ReinitializeBackup,
                     error: error.to_string(),
                 });
@@ -136,7 +136,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
-            manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+            manager.apply_recovery_state(RecoveryState::Idle);
             let runtime_status = RustCloudBackupManager::runtime_status_for(
                 &RustCloudBackupManager::load_persisted_state(),
             );

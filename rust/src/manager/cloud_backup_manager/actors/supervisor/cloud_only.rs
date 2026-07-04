@@ -1,7 +1,7 @@
 use super::*;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn start_cloud_only_fetch_request(&mut self) {
+    pub(crate) fn begin_cloud_only_fetch_request(&mut self) {
         let Some(manager) = self.manager() else { return };
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
@@ -13,7 +13,7 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_restore_cloud_wallet_operation(&mut self, record_id: String) {
+    pub(crate) fn begin_restore_cloud_wallet_operation(&mut self, record_id: String) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) = self
@@ -31,7 +31,7 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_delete_cloud_wallet_operation(&mut self, record_id: String) {
+    pub(crate) fn begin_delete_cloud_wallet_operation(&mut self, record_id: String) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) = self
@@ -49,7 +49,7 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_recover_other_backups_operation(&mut self) {
+    pub(crate) fn begin_recover_other_backups_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) = Self::begin_other_backups_operation(
@@ -67,7 +67,7 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_delete_other_backups_operation(&mut self) {
+    pub(crate) fn begin_delete_other_backups_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) = Self::begin_other_backups_operation(
@@ -282,7 +282,7 @@ impl CloudBackupSupervisor {
                     wallets_failed: report.wallets_failed,
                     failed_wallet_errors: report.failed_wallet_errors,
                 });
-                manager.apply_sync_outcome(CloudBackupSyncOutcome::Started);
+                manager.apply_sync_state(SyncState::Syncing);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.do_sync_unsynced_wallets().await;
                     send!(addr.complete_operation_sync(claim, result));
@@ -358,7 +358,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                manager.apply_sync_state(SyncState::Failed(error.to_string()));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
             }
@@ -385,7 +385,7 @@ impl CloudBackupSupervisor {
             apply_refresh_detail_result(&manager, &result);
         }
 
-        manager.apply_sync_outcome(CloudBackupSyncOutcome::Completed);
+        manager.apply_sync_state(SyncState::Idle);
         self.active_operation = None;
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())

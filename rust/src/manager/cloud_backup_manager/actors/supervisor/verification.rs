@@ -55,11 +55,11 @@ impl DeepVerificationContinuation {
 }
 
 impl CloudBackupSupervisor {
-    pub(crate) fn start_recovery_operation(&mut self, action: RecoveryAction) {
+    pub(crate) fn begin_recovery_operation(&mut self, action: RecoveryAction) {
         match action {
             RecoveryAction::RecreateManifest => self.start_recreate_manifest_recovery(),
             RecoveryAction::ReinitializeBackup => self.start_reinitialize_backup_operation(),
-            RecoveryAction::RepairPasskey => self.start_repair_passkey_operation(false),
+            RecoveryAction::RepairPasskey => self.begin_repair_passkey_operation(false),
         }
     }
 
@@ -79,7 +79,7 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_repair_passkey_operation(&mut self, no_discovery: bool) {
+    pub(crate) fn begin_repair_passkey_operation(&mut self, no_discovery: bool) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) =
@@ -88,9 +88,7 @@ impl CloudBackupSupervisor {
             return;
         };
 
-        manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Started(
-            RecoveryAction::RepairPasskey,
-        ));
+        manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::RepairPasskey));
         addr.send_fut_with(move |addr| async move {
             let result = if no_discovery {
                 manager.prepare_passkey_wrapper_repair_no_discovery().await
@@ -126,7 +124,7 @@ impl CloudBackupSupervisor {
             manager.state.read().verification_presentation(),
             CloudBackupVerificationPresentation::ManualVerifying { .. }
         ) {
-            manager.apply_verification_outcome(CloudBackupVerificationOutcome::Started);
+            manager.apply_verification_state(VerificationState::Verifying);
         } else {
             manager.apply_verification_effect(CloudBackupVerificationCoordinator::begin_manual(
                 CloudBackupVerificationSource::Settings,
@@ -584,7 +582,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                manager.apply_recovery_state(RecoveryState::Idle);
                 manager.reconcile_runtime_status(
                     RustCloudBackupManager::status_for_operation_error(
                         &CloudBackupError::UnsupportedPasskeyProvider,
@@ -594,7 +592,7 @@ impl CloudBackupSupervisor {
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
                     error: error.to_string(),
                 });
@@ -621,7 +619,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(()) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                manager.apply_recovery_state(RecoveryState::Idle);
                 self.start_verification_with_context(
                     manager,
                     Some(claim),
@@ -631,7 +629,7 @@ impl CloudBackupSupervisor {
                 );
             }
             Err(error) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
                     error: error.to_string(),
                 });
@@ -675,14 +673,14 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                manager.apply_recovery_state(RecoveryState::Idle);
                 manager
                     .present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::RepairPasskey);
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                manager.apply_recovery_state(RecoveryState::Idle);
                 manager.reconcile_runtime_status(
                     RustCloudBackupManager::status_for_operation_error(
                         &CloudBackupError::UnsupportedPasskeyProvider,
@@ -692,7 +690,7 @@ impl CloudBackupSupervisor {
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
                     error: error.to_string(),
                 });
@@ -728,7 +726,7 @@ impl CloudBackupSupervisor {
                         CloudBackupError::internal_context("save cspp credentials", source)
                     })
                 {
-                    manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                    manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
                         error: error.to_string(),
                     });
@@ -745,7 +743,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
                     error: error.to_string(),
                 });
@@ -780,7 +778,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
+                manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
                     error: error.to_string(),
                 });
@@ -816,8 +814,8 @@ impl CloudBackupSupervisor {
         }
 
         manager.refresh_sync_health();
-        manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
-        manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
+        manager.apply_recovery_state(RecoveryState::Idle);
+        manager.apply_verification_state(VerificationState::Idle);
         self.active_operation = None;
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())

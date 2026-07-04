@@ -637,6 +637,25 @@ impl CloudBackupWriteSupervisor {
         Produces::ok(receiver)
     }
 
+    pub(crate) async fn upload_wallet_backup_with_completion_for_operation(
+        &mut self,
+        cloud: CloudStorageClient,
+        namespace: String,
+        record_id: String,
+        data: Vec<u8>,
+        completion: CloudBackupWriteCompletion,
+        origin: CloudBackupExclusiveOperationClaim,
+    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+        let command = self.advance_operation_command_id(origin);
+        let receiver = self.submit_write(
+            CloudBackupWriteAdmission::RequiresWritesAllowed,
+            CloudBackupRemoteWriteCommand::UploadWallet { cloud, namespace, record_id, data },
+            CloudBackupWriteLocalCompletion::Apply(completion),
+            command,
+        );
+        Produces::ok(receiver)
+    }
+
     pub(crate) async fn upload_master_key_backup_for_operation(
         &mut self,
         cloud: CloudStorageClient,
@@ -744,6 +763,31 @@ impl CloudBackupWriteSupervisor {
         count_refresh: CloudBackupWalletCountRefresh,
     ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
         let command = self.advance_command_id();
+        let receiver = self.submit_write(
+            CloudBackupWriteAdmission::RequiresWritesAllowed,
+            CloudBackupRemoteWriteCommand::ListWalletCountOptional {
+                cloud,
+                namespace_id: namespace_id.clone(),
+            },
+            CloudBackupWriteLocalCompletion::CompleteUploadedWalletBatch {
+                namespace_id,
+                uploaded_wallets,
+                count_refresh,
+            },
+            command,
+        );
+        Produces::ok(receiver)
+    }
+
+    pub(crate) async fn complete_uploaded_wallet_batch_for_operation(
+        &mut self,
+        cloud: CloudStorageClient,
+        namespace_id: String,
+        uploaded_wallets: Vec<CloudBackupUploadedWallet>,
+        count_refresh: CloudBackupWalletCountRefresh,
+        origin: CloudBackupExclusiveOperationClaim,
+    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+        let command = self.advance_operation_command_id(origin);
         let receiver = self.submit_write(
             CloudBackupWriteAdmission::RequiresWritesAllowed,
             CloudBackupRemoteWriteCommand::ListWalletCountOptional {

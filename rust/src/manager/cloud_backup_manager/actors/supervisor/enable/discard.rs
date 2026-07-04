@@ -30,7 +30,7 @@ impl CloudBackupSupervisor {
     pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(pending) = self.pending_enable_session.take() else {
             if let Some(manager) = self.manager() {
-                manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+                manager.apply_enable_state(CloudBackupEnableState::Idle);
                 manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
             }
             return Produces::ok(());
@@ -58,7 +58,7 @@ impl CloudBackupSupervisor {
         }
 
         if let Some(manager) = self.manager() {
-            manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+            manager.apply_enable_state(CloudBackupEnableState::Idle);
             manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         }
 

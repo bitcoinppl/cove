@@ -176,7 +176,7 @@ impl CloudBackupSupervisor {
                     PendingVerificationCompletion::new(report, namespace_id, pending_uploads),
                     context.verification_source,
                 );
-                manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
+                manager.apply_verification_state(VerificationState::Idle);
                 self.pending_enable_session = None;
                 manager.clear_enable_progress(CloudBackupStatus::Enabled);
                 manager.refresh_persisted_flags();

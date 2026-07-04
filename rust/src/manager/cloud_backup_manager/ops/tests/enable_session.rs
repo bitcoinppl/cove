@@ -102,12 +102,7 @@ async fn reinitialize_preserves_registered_passkey_confirmation_session() {
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
 
     globals.passkey.set_create_result(Ok(vec![4, 5, 6]));
-    run_enable_operation(
-        &manager,
-        CloudBackupOperation::Recovery(RecoveryAction::ReinitializeBackup),
-    )
-    .await
-    .unwrap();
+    run_reinitialize_backup_operation(&manager).await.unwrap();
 
     assert_eq!(globals.passkey.create_count(), 1);
     assert_eq!(globals.passkey.authenticate_count(), 0);

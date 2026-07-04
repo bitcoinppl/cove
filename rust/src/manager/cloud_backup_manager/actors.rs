@@ -13,10 +13,10 @@ pub(crate) mod write;
 
 pub(crate) use self::cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace};
 pub(crate) use self::restore::CloudBackupRestoreEvent;
-pub(crate) use self::supervisor::{CloudBackupOperation, CloudBackupSupervisor};
+pub(crate) use self::supervisor::CloudBackupSupervisor;
 pub(crate) use self::sync_health_worker::CloudBackupSyncHealthWorker;
 pub(crate) use self::write::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteBlocker, CloudBackupWriteClient, CloudBackupWriteCompletion,
-    CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
+    CloudBackupWriteSupervisor,
 };

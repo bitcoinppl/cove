@@ -8,8 +8,7 @@ use super::verify::coordinator::{
 };
 use super::{
     CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupLifecycle,
-    CloudBackupRecoveryOutcome, CloudBackupSettingsRowStatus, CloudBackupStatus,
-    CloudBackupVerificationMetadata, CloudBackupVerificationOutcome,
+    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationSource,
     PendingUploadVerificationState, RustCloudBackupManager,
 };
@@ -114,13 +113,11 @@ impl RustCloudBackupManager {
         }
 
         if let Some(verification) = effect.verification {
-            self.apply_verification_outcome(CloudBackupVerificationOutcome::from_state(
-                verification,
-            ));
+            self.apply_verification_state(verification);
         }
 
         if let Some(recovery) = effect.recovery {
-            self.apply_recovery_outcome(CloudBackupRecoveryOutcome::from_state(recovery));
+            self.apply_recovery_state(recovery);
         }
 
         if effect.refresh_sync_health {

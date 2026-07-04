@@ -15,10 +15,10 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableOutcome, CloudBackupError,
-    CloudBackupRestoreFlow, CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus,
-    CloudBackupStore, CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error,
-    is_connectivity_related_issue, offline_error_for_step,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupRestoreFlow,
+    CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus, CloudBackupStore,
+    CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error, is_connectivity_related_issue,
+    offline_error_for_step,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -139,11 +139,8 @@ impl RestoreOperation {
         Ok(())
     }
 
-    pub(crate) async fn apply_enable_outcome(
-        &self,
-        outcome: CloudBackupEnableOutcome,
-    ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.apply_restore_enable_outcome(self.operation_claim, outcome))
+    pub(crate) async fn clear_enable_progress(&self) -> Result<(), CloudBackupError> {
+        call!(self.supervisor.clear_restore_enable_progress(self.operation_claim))
             .await
             .map_err(|_| CloudBackupError::Cancelled)?
     }
@@ -197,7 +194,7 @@ impl RestoreOperation {
         manager: &RustCloudBackupManager,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         manager.ensure_cloud_connectivity(BlockingCloudStep::Restore)?;
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared).await?;
+        self.clear_enable_progress().await?;
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
         self.apply_status(CloudBackupStatus::Restoring).await?;
         self.send_restore_progress(CloudBackupRestoreFlow::Finding).await?;

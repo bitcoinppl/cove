@@ -1,7 +1,7 @@
 use super::*;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn start_disable_operation(&mut self) {
+    pub(crate) fn begin_disable_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) =
@@ -134,7 +134,7 @@ impl CloudBackupSupervisor {
             .map_err(CloudBackupError::internal)?;
 
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-        manager.apply_sync_outcome(CloudBackupSyncOutcome::Completed);
+        manager.apply_sync_state(SyncState::Idle);
         Ok(())
     }
 
@@ -419,7 +419,7 @@ impl CloudBackupSupervisor {
                     call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
                 {
                     error!("Failed to resume cloud backup uploads after Keep Enabled: {error}");
-                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                    manager.apply_sync_state(SyncState::Failed(error.to_string()));
                 }
                 if let Err(error) =
                     call!(self.uploads.ensure_pending_upload_verification_loop()).await
@@ -427,7 +427,7 @@ impl CloudBackupSupervisor {
                     error!(
                         "Failed to resume pending cloud backup verification after Keep Enabled: {error}"
                     );
-                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                    manager.apply_sync_state(SyncState::Failed(error.to_string()));
                 }
                 manager.refresh_sync_health();
 

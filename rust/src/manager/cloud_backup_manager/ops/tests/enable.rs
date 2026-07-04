@@ -209,7 +209,7 @@ async fn detail_entry_starts_discoverable_verification_without_runtime_authoriza
     manager.clear_runtime_passkey_authorization();
     manager.clear_pending_verification_completion();
     manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-    manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
+    manager.apply_verification_state(VerificationState::Idle);
     Database::global().cloud_blob_sync_states.delete_all().unwrap();
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
     globals.cloud.fail_list_wallet_files("list should not run before passkey auth");
@@ -250,8 +250,7 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
         manager.clear_runtime_passkey_authorization();
         manager.clear_pending_verification_completion();
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-        manager
-            .apply_verification_outcome(CloudBackupVerificationOutcome::from_state(verification));
+        manager.apply_verification_state(verification);
         globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
         let discover_count = globals.passkey.discover_count();
@@ -505,7 +504,7 @@ fn clear_in_process_state_for_local_reset_clears_enable_state() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    manager.apply_enable_outcome(CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(
+    manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
         SavedPasskeyConfirmationMode::Manual,
     ));
 
@@ -877,7 +876,7 @@ async fn detail_entry_after_restart_without_active_authorization_prompts_normall
     restarted_manager.sync_persisted_state();
     restarted_manager.clear_pending_verification_completion();
     restarted_manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
-    restarted_manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
+    restarted_manager.apply_verification_state(VerificationState::Idle);
     Database::global().cloud_blob_sync_states.delete_all().unwrap();
     globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
 
