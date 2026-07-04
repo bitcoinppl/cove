@@ -72,6 +72,7 @@ pub struct WalletActor {
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
     last_height_fetched: Option<(Duration, usize)>,
+    height_refresh_in_flight: Option<node::HeightRefreshInFlight>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -164,6 +165,7 @@ impl WalletActor {
             node_client: None,
             last_scan_finished: None,
             last_height_fetched: None,
+            height_refresh_in_flight: None,
             state: ActorState::Initial,
             receive_address: ReceiveAddressSession::default(),
             scan_status,
@@ -271,7 +273,8 @@ impl WalletActor {
         }
 
         if check_node {
-            self.ensure_node_connection().await?;
+            self.start_wallet_scan_after_node_connection(force_scan, progress_start);
+            return Produces::ok(());
         }
 
         // perform that scanning in a background task
@@ -284,31 +287,114 @@ impl WalletActor {
         Produces::ok(())
     }
 
+    fn start_wallet_scan_after_node_connection(
+        &mut self,
+        force_scan: bool,
+        progress_start: ScanProgressStart,
+    ) {
+        let connection = self.deferred_node_connection();
+
+        self.addr.send_fut_with(|addr| async move {
+            if matches!(connection.await, Ok(Ok(()))) {
+                send!(addr.start_wallet_scan_in_task(force_scan, progress_start, false));
+            }
+        });
+    }
+
     pub async fn switch_mnemonic_to_new_address_type(
         &mut self,
         address_type: WalletAddressType,
-    ) -> ActorResult<()> {
+    ) -> ActorResult<Result<(), Error>> {
         debug!("actor switch mnemonic wallet");
 
-        self.ensure_node_connection().await?;
-        self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
-        self.restart_scan_after_address_type_switch().await?;
+        let connection = self.deferred_node_connection();
+        let (reply, receiver) = futures::channel::oneshot::channel();
 
-        Produces::ok(())
+        self.addr.send_fut_with(|addr| async move {
+            let result = match connection.await {
+                Ok(Ok(())) => call!(addr.apply_mnemonic_address_type_switch(address_type))
+                    .await
+                    .unwrap_or(Err(Error::ActorNotFound)),
+                Ok(Err(error)) => Err(error),
+                Err(_) => Err(Error::ActorNotFound),
+            };
+
+            let _ = reply.send(Produces::Value(result));
+        });
+
+        Ok(Produces::Deferred(receiver))
+    }
+
+    async fn apply_mnemonic_address_type_switch(
+        &mut self,
+        address_type: WalletAddressType,
+    ) -> ActorResult<Result<(), Error>> {
+        let result = self.apply_mnemonic_address_type_switch_inner(address_type).await;
+
+        Produces::ok(result)
+    }
+
+    async fn apply_mnemonic_address_type_switch_inner(
+        &mut self,
+        address_type: WalletAddressType,
+    ) -> Result<(), Error> {
+        self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
+        self.restart_scan_after_address_type_switch()
+            .await
+            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
+
+        Ok(())
     }
 
     pub async fn switch_descriptor_to_new_address_type(
         &mut self,
         descriptors: pubport::descriptor::Descriptors,
         address_type: WalletAddressType,
-    ) -> ActorResult<()> {
+    ) -> ActorResult<Result<(), Error>> {
         debug!("actor switch pubkey descriptor wallet");
 
-        self.ensure_node_connection().await?;
-        self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
-        self.restart_scan_after_address_type_switch().await?;
+        let connection = self.deferred_node_connection();
+        let (reply, receiver) = futures::channel::oneshot::channel();
 
-        Produces::ok(())
+        self.addr.send_fut_with(|addr| async move {
+            let result = match connection.await {
+                Ok(Ok(())) => {
+                    call!(addr.apply_descriptor_address_type_switch(descriptors, address_type))
+                        .await
+                        .unwrap_or(Err(Error::ActorNotFound))
+                }
+                Ok(Err(error)) => Err(error),
+                Err(_) => Err(Error::ActorNotFound),
+            };
+
+            let _ = reply.send(Produces::Value(result));
+        });
+
+        Ok(Produces::Deferred(receiver))
+    }
+
+    async fn apply_descriptor_address_type_switch(
+        &mut self,
+        descriptors: pubport::descriptor::Descriptors,
+        address_type: WalletAddressType,
+    ) -> ActorResult<Result<(), Error>> {
+        let result =
+            self.apply_descriptor_address_type_switch_inner(descriptors, address_type).await;
+
+        Produces::ok(result)
+    }
+
+    async fn apply_descriptor_address_type_switch_inner(
+        &mut self,
+        descriptors: pubport::descriptor::Descriptors,
+        address_type: WalletAddressType,
+    ) -> Result<(), Error> {
+        self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
+        self.restart_scan_after_address_type_switch()
+            .await
+            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
+
+        Ok(())
     }
 
     #[into_actor_result]
@@ -454,6 +540,20 @@ impl WalletActor {
     pub async fn perform_rescan_full_scan(&mut self, gap_limit: u32) -> ActorResult<()> {
         debug!("perform_rescan_full_scan with gap_limit={gap_limit}");
 
+        let connection = self.deferred_node_connection();
+        self.addr.send_fut_with(|addr| async move {
+            if matches!(connection.await, Ok(Ok(()))) {
+                send!(addr.start_rescan_full_scan_after_node_connection(gap_limit));
+            }
+        });
+
+        Produces::ok(())
+    }
+
+    async fn start_rescan_full_scan_after_node_connection(
+        &mut self,
+        gap_limit: u32,
+    ) -> ActorResult<()> {
         let scan_actor = self.scan_actor();
         send!(scan_actor.start_rescan(gap_limit, self.scan_generation));
 
@@ -470,7 +570,7 @@ impl WalletActor {
             return Produces::ok(None);
         }
 
-        let node_client = self.node_client().await?.clone();
+        let node_client = self.node_client()?.clone();
 
         let full_scan_request = match request_order {
             ScanRequestOrder::Standard => self.wallet.bdk.start_full_scan().build(),
@@ -1054,8 +1154,9 @@ mod tests {
     };
     use bip39::Mnemonic;
     use bitcoin::{
-        Address as BdkAddress, Amount, BlockHash, Network, OutPoint, ScriptBuf, TxOut, Txid,
-        hashes::Hash as _,
+        Address as BdkAddress, Amount, BlockHash, Network, OutPoint, ScriptBuf,
+        Transaction as BdkTransaction, TxOut, Txid, absolute::LockTime, hashes::Hash as _,
+        transaction::Version,
     };
     use cove_bdk_progressive_scan::ScanUpdate;
     use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
@@ -1064,7 +1165,10 @@ mod tests {
     use std::{
         collections::{BTreeMap, HashMap, HashSet},
         str::FromStr as _,
-        sync::{Arc, Once},
+        sync::{
+            Arc, Once,
+            atomic::{AtomicUsize, Ordering},
+        },
         time::{Duration, UNIX_EPOCH},
     };
     use tokio::{
@@ -1075,6 +1179,7 @@ mod tests {
 
     use crate::wallet::metadata::WalletMetadata;
 
+    use super::transactions::BroadcastTransactionError;
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
         RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
@@ -1122,6 +1227,17 @@ mod tests {
         _tmp: tempfile::TempDir,
     }
 
+    struct TestEsploraNode {
+        requests: Arc<AtomicUsize>,
+        height_requests: Arc<AtomicUsize>,
+        server: JoinHandle<()>,
+    }
+
+    struct BroadcastEsploraNode {
+        broadcast_requests: Arc<AtomicUsize>,
+        server: JoinHandle<()>,
+    }
+
     async fn actor_value<T>(result: act_zero::ActorResult<T>) -> T {
         result
             .expect("actor method should not fail")
@@ -1132,6 +1248,21 @@ mod tests {
     impl super::WalletActor {
         async fn in_memory_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
             act_zero::Produces::ok(self.wallet.metadata.clone())
+        }
+
+        async fn set_last_height_fetched_for_test(
+            &mut self,
+            age: Duration,
+            block_height: usize,
+        ) -> act_zero::ActorResult<()> {
+            let now = UNIX_EPOCH.elapsed().unwrap_or_default();
+            self.last_height_fetched = Some((now.saturating_sub(age), block_height));
+
+            act_zero::Produces::ok(())
+        }
+
+        async fn cached_height_for_test(&mut self) -> act_zero::ActorResult<Option<usize>> {
+            act_zero::Produces::ok(self.last_height_fetched().map(|(_, block_height)| block_height))
         }
     }
 
@@ -1181,6 +1312,15 @@ mod tests {
             .expect("address parses")
             .require_network(Network::Regtest)
             .expect("address is regtest")
+    }
+
+    fn test_broadcast_transaction() -> BdkTransaction {
+        BdkTransaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: Vec::new(),
+            output: Vec::new(),
+        }
     }
 
     fn test_scan_status() -> Arc<RwLock<WalletScanStatus>> {
@@ -1352,6 +1492,160 @@ mod tests {
                 });
             }
         })
+    }
+
+    async fn set_height_esplora_node(block_height: usize, delay: Duration) -> TestEsploraNode {
+        set_height_sequence_esplora_node(vec![block_height], delay).await
+    }
+
+    async fn set_height_sequence_esplora_node(
+        block_heights: Vec<usize>,
+        delay: Duration,
+    ) -> TestEsploraNode {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test esplora server binds");
+        let address = listener.local_addr().expect("test esplora server has address");
+        let node = Node::new_esplora(
+            "height test esplora node".to_string(),
+            format!("http://{address}"),
+            CoveNetwork::Bitcoin,
+        );
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("test node config is saved");
+
+        let requests = Arc::new(AtomicUsize::new(0));
+        let request_counter = requests.clone();
+        let height_requests = Arc::new(AtomicUsize::new(0));
+        let height_request_counter = height_requests.clone();
+        let block_heights = Arc::new(block_heights);
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else { return };
+                let request_counter = request_counter.clone();
+                let height_request_counter = height_request_counter.clone();
+                let block_heights = block_heights.clone();
+                tokio::spawn(async move {
+                    let mut request = [0; 1024];
+                    let bytes_read = stream.read(&mut request).await.unwrap_or_default();
+                    request_counter.fetch_add(1, Ordering::SeqCst);
+
+                    if !delay.is_zero() {
+                        tokio::time::sleep(delay).await;
+                    }
+
+                    let request = String::from_utf8_lossy(&request[..bytes_read]);
+                    let body = if request.starts_with("GET /blocks/tip/height ") {
+                        let index = height_request_counter.fetch_add(1, Ordering::SeqCst);
+                        block_heights
+                            .get(index)
+                            .or_else(|| block_heights.last())
+                            .copied()
+                            .unwrap_or_default()
+                            .to_string()
+                    } else if request.starts_with("GET /block-height/") {
+                        "0000000000000000000000000000000000000000000000000000000000000001"
+                            .to_string()
+                    } else {
+                        "1".to_string()
+                    };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        TestEsploraNode { requests, height_requests, server }
+    }
+
+    async fn wait_for_persisted_height(metadata: &WalletMetadata, block_height: u64) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let persisted = persisted_wallet_metadata(metadata)
+                    .internal
+                    .last_height_fetched
+                    .map(|height| height.block_height);
+                let global_cache = crate::database::Database::global()
+                    .global_cache
+                    .get_block_height(metadata.network)
+                    .expect("global block height cache loads")
+                    .map(|height| height.block_height);
+
+                if persisted == Some(block_height) && global_cache == Some(block_height) {
+                    return;
+                }
+
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("height refresh persists");
+    }
+
+    async fn set_broadcast_esplora_node(broadcast_status: u16) -> BroadcastEsploraNode {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test esplora server binds");
+        let address = listener.local_addr().expect("test esplora server has address");
+        let node = Node::new_esplora(
+            "broadcast test esplora node".to_string(),
+            format!("http://{address}"),
+            CoveNetwork::Bitcoin,
+        );
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("test node config is saved");
+
+        let broadcast_requests = Arc::new(AtomicUsize::new(0));
+        let broadcast_counter = broadcast_requests.clone();
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else { return };
+                let broadcast_counter = broadcast_counter.clone();
+                tokio::spawn(async move {
+                    let mut request = [0; 8192];
+                    let bytes_read = stream.read(&mut request).await.unwrap_or_default();
+                    let request = String::from_utf8_lossy(&request[..bytes_read]);
+
+                    let body = if request.starts_with("POST /tx ") {
+                        broadcast_counter.fetch_add(1, Ordering::SeqCst);
+                        "broadcast"
+                    } else {
+                        "1"
+                    };
+                    let status =
+                        if request.starts_with("POST /tx ") { broadcast_status } else { 200 };
+                    let reason = if status == 200 { "OK" } else { "Internal Server Error" };
+                    let response = format!(
+                        "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        BroadcastEsploraNode { broadcast_requests, server }
+    }
+
+    async fn wait_for_broadcast_count(server: &BroadcastEsploraNode, count: usize) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if server.broadcast_requests.load(Ordering::SeqCst) == count {
+                    return;
+                }
+
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("broadcast count is reached");
     }
 
     fn restore_default_bitcoin_node() {
@@ -1831,6 +2125,232 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn broadcast_transaction_posts_to_node_exactly_once() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_broadcast_esplora_node(200).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        mark_wallet_ledger_ready(&mut wallet);
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let result = call!(addr.broadcast_transaction(test_broadcast_transaction()))
+            .await
+            .expect("broadcast actor responds");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        result.expect("broadcast succeeds");
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn broadcast_transaction_propagates_node_error() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_broadcast_esplora_node(500).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        mark_wallet_ledger_ready(&mut wallet);
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let error = call!(addr.broadcast_transaction(test_broadcast_transaction()))
+            .await
+            .expect("broadcast actor responds")
+            .expect_err("broadcast node error is returned");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
+        assert!(
+            matches!(error, super::Error::SignAndBroadcastError(message) if message.contains("try again"))
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn payjoin_proposal_falls_back_only_when_network_broadcast_failed() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_broadcast_esplora_node(200).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        mark_wallet_ledger_ready(&mut wallet);
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        call!(addr.handle_payjoin_proposal_broadcast_result(
+            Err(BroadcastTransactionError::PostBroadcastFailed(
+                super::Error::SignAndBroadcastError("bookkeeping failed".to_string())
+            )),
+            test_broadcast_transaction()
+        ))
+        .await
+        .expect("payjoin bookkeeping result is handled");
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 0);
+
+        call!(addr.handle_payjoin_proposal_broadcast_result(
+            Err(BroadcastTransactionError::BroadcastFailed(super::Error::SignAndBroadcastError(
+                "proposal failed".to_string()
+            ))),
+            test_broadcast_transaction()
+        ))
+        .await
+        .expect("payjoin network result is handled");
+        wait_for_broadcast_count(&server, 1).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn slow_height_refresh_does_not_block_unrelated_actor_messages() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(321, Duration::from_millis(500)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let height = call!(addr.get_height(true));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let balance = tokio::time::timeout(Duration::from_millis(100), call!(addr.balance()))
+            .await
+            .expect("balance is not blocked by height refresh")
+            .expect("balance actor message completes");
+        let _balance = balance;
+
+        let height = height.await.expect("height actor message completes").expect("height loads");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(height, 321);
+        assert!(server.requests.load(Ordering::SeqCst) > 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn height_staleness_windows_return_cached_or_refresh_as_before() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        set_unreachable_bitcoin_esplora_node();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+        call!(addr.set_last_height_fetched_for_test(Duration::from_secs(10), 42))
+            .await
+            .expect("test height is set");
+
+        let fresh_cached_height = call!(addr.get_height(false))
+            .await
+            .expect("height actor responds")
+            .expect("fresh cache is returned");
+
+        let server = set_height_esplora_node(88, Duration::ZERO).await;
+        call!(addr.set_last_height_fetched_for_test(Duration::from_secs(30), 42))
+            .await
+            .expect("test height is set");
+
+        let stale_cached_height =
+            call!(addr.get_height(false)).await.expect("height actor responds").expect("height");
+        wait_for_persisted_height(&metadata, 88).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(fresh_cached_height, 42);
+        assert_eq!(stale_cached_height, 42);
+        assert!(server.requests.load(Ordering::SeqCst) > 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn height_refresh_completion_updates_state_and_persists() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(144, Duration::ZERO).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let height = call!(addr.get_height(true))
+            .await
+            .expect("height actor responds")
+            .expect("height refresh succeeds");
+        let cached_height = call!(addr.cached_height_for_test())
+            .await
+            .expect("cached height actor responds")
+            .expect("cached height is available");
+        wait_for_persisted_height(&metadata, 144).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(height, 144);
+        assert_eq!(cached_height, 144);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn concurrent_forced_height_refreshes_dedup_and_keep_height_monotonic() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_sequence_esplora_node(vec![150], Duration::from_millis(200)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        server.height_requests.store(0, Ordering::SeqCst);
+        call!(addr.set_last_height_fetched_for_test(Duration::from_secs(200), 200))
+            .await
+            .expect("test height is set");
+
+        let first = call!(addr.get_height(true));
+        let second = call!(addr.get_height(true));
+        let (first, second) = tokio::join!(first, second);
+
+        let first = first.expect("first height actor responds").expect("first height loads");
+        let second = second.expect("second height actor responds").expect("second height loads");
+        let cached_height = call!(addr.cached_height_for_test())
+            .await
+            .expect("cached height actor responds")
+            .expect("cached height is available");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(first, 200);
+        assert_eq!(second, 200);
+        assert_eq!(cached_height, 200);
+        assert_eq!(server.height_requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn mnemonic_address_type_switch_restarts_wallet_scan() {
         let _guard = address_type_switch_test_lock().lock().await;
 
@@ -1846,6 +2366,7 @@ mod tests {
 
         call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
             .await
+            .expect("address type switch actor responds")
             .expect("address type switches");
 
         wait_for_wallet_scan_started(&receiver).await;
@@ -1871,6 +2392,7 @@ mod tests {
 
         let _error = call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
             .await
+            .expect("address type switch actor responds")
             .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
         let actor_metadata =
@@ -1907,6 +2429,7 @@ mod tests {
 
         call!(addr.switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy))
             .await
+            .expect("address type switch actor responds")
             .expect("address type switches");
 
         wait_for_wallet_scan_started(&receiver).await;
@@ -1934,6 +2457,7 @@ mod tests {
             addr.switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
         )
         .await
+        .expect("address type switch actor responds")
         .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
         let actor_metadata =

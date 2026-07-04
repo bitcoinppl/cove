@@ -31,9 +31,24 @@ use crate::{
         payjoin::{PayjoinActor, PayjoinSender, build_sender},
     },
     mnemonic::{Mnemonic, MnemonicExt as _},
+    node::client::NodeClient,
     transaction::{FeeRate, Transaction, TransactionDetails, TxId},
     wallet::Address,
 };
+
+#[derive(Debug)]
+pub(crate) enum BroadcastTransactionError {
+    BroadcastFailed(Error),
+    PostBroadcastFailed(Error),
+}
+
+impl BroadcastTransactionError {
+    fn into_error(self) -> Error {
+        match self {
+            Self::BroadcastFailed(error) | Self::PostBroadcastFailed(error) => error,
+        }
+    }
+}
 
 impl WalletActor {
     // Build a transaction but don't advance the change address index
@@ -441,8 +456,12 @@ impl WalletActor {
 
         match payjoin_endpoint {
             None => {
-                let result = self.do_sign_and_broadcast_transaction(psbt).await;
-                Produces::ok(result)
+                let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
+                    Ok(result) => result,
+                    Err(error) => return Produces::ok(Err(error)),
+                };
+
+                self.start_broadcast_transaction(transaction)
             }
             Some(endpoint) => {
                 let result = self.initiate_payjoin_payment(psbt, endpoint).await;
@@ -512,55 +531,49 @@ impl WalletActor {
         Ok((psbt, fallback_tx))
     }
 
-    async fn do_sign_and_broadcast_transaction(&mut self, psbt: Psbt) -> Result<(), Error> {
-        let (_, transaction) = self.do_sign_original_psbt(psbt).await?;
-
-        self.broadcast_transaction_to_node(transaction.clone()).await?;
-
-        self.insert_broadcast_transaction(transaction).await;
-
-        Ok(())
-    }
-
-    #[into_actor_result]
     pub async fn broadcast_transaction(
         &mut self,
         transaction: BdkTransaction,
-    ) -> Result<(), Error> {
-        self.ensure_ledger_ready_for_spend()?;
-        self.broadcast_transaction_to_node(transaction.clone()).await?;
+    ) -> ActorResult<Result<(), Error>> {
+        if let Err(error) = self.ensure_ledger_ready_for_spend() {
+            return Produces::ok(Err(error));
+        }
 
-        self.insert_broadcast_transaction(transaction).await;
-
-        Ok(())
+        self.start_broadcast_transaction(transaction)
     }
 
-    async fn broadcast_transaction_to_node(
+    fn start_broadcast_transaction(
         &mut self,
         transaction: BdkTransaction,
-    ) -> Result<(), Error> {
-        self.check_node_connection().await.map_err(|error| {
-            let error_string =
-                format!("failed to broadcast transaction, unable to connect to node: {error:?}");
-            Error::SignAndBroadcastError(error_string)
-        })?;
+    ) -> ActorResult<Result<(), Error>> {
+        let connection = self.deferred_node_connection();
+        let (reply, receiver) = futures::channel::oneshot::channel();
 
-        self.node_client()
-            .await
-            .map_err(|_| {
-                Error::SignAndBroadcastError(
-                    "failed to broadcast transaction, could not get node client, try again"
-                        .to_string(),
-                )
-            })?
-            .broadcast_transaction(transaction.clone())
-            .await
-            .map_err(|error| {
-                let error_string = format!("failed to broadcast transaction, try again: {error:?}");
-                Error::SignAndBroadcastError(error_string)
-            })?;
+        self.addr.send_fut_with(|addr| async move {
+            let result = broadcast_transaction_with_connection(addr, connection, transaction)
+                .await
+                .map_err(BroadcastTransactionError::into_error);
+            let _ = reply.send(Produces::Value(result));
+        });
 
-        Ok(())
+        Ok(Produces::Deferred(receiver))
+    }
+
+    async fn node_client_for_broadcast(&mut self) -> ActorResult<Result<NodeClient, Error>> {
+        Produces::ok(self.node_client().cloned().map_err(|_| {
+            Error::SignAndBroadcastError(
+                "failed to broadcast transaction, could not get node client, try again".to_string(),
+            )
+        }))
+    }
+
+    async fn apply_broadcast_transaction(
+        &mut self,
+        transaction: BdkTransaction,
+    ) -> ActorResult<Result<(), Error>> {
+        self.insert_broadcast_transaction(transaction).await;
+
+        Produces::ok(Ok(()))
     }
 
     #[into_actor_result]
@@ -618,19 +631,76 @@ impl WalletActor {
         send!(self.addr.start_transaction_watcher(txid));
     }
 
-    async fn broadcast_and_notify(&mut self, tx: BdkTransaction) {
-        match self.broadcast_transaction_to_node(tx.clone()).await {
+    fn start_payjoin_broadcast_and_notify(&mut self, tx: BdkTransaction) {
+        let connection = self.deferred_node_connection();
+
+        self.addr.send_fut_with(|addr| async move {
+            let result = broadcast_transaction_with_connection(addr.clone(), connection, tx).await;
+            send!(addr.handle_payjoin_broadcast_result(result));
+        });
+    }
+
+    fn start_payjoin_proposal_broadcast(
+        &mut self,
+        proposal_tx: BdkTransaction,
+        fallback_tx: BdkTransaction,
+    ) {
+        let connection = self.deferred_node_connection();
+
+        self.addr.send_fut_with(|addr| async move {
+            let result =
+                broadcast_transaction_with_connection(addr.clone(), connection, proposal_tx).await;
+            send!(addr.handle_payjoin_proposal_broadcast_result(result, fallback_tx));
+        });
+    }
+
+    async fn handle_payjoin_broadcast_result(
+        &mut self,
+        result: Result<(), BroadcastTransactionError>,
+    ) -> ActorResult<()> {
+        match result {
             Ok(()) => {
-                self.insert_broadcast_transaction(tx).await;
                 self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
             }
             Err(error) => {
+                let error = error.into_error();
                 error!("payjoin broadcast failed: {error}");
                 self.send(WalletManagerReconcileMessage::SendFlowError(
                     SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
                 ));
             }
         }
+
+        self.payjoin_actor = None;
+        Produces::ok(())
+    }
+
+    pub(crate) async fn handle_payjoin_proposal_broadcast_result(
+        &mut self,
+        result: Result<(), BroadcastTransactionError>,
+        fallback_tx: BdkTransaction,
+    ) -> ActorResult<()> {
+        match result {
+            Ok(()) => {
+                self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
+                self.payjoin_actor = None;
+            }
+            Err(BroadcastTransactionError::BroadcastFailed(error)) => {
+                error!(
+                    "failed to broadcast payjoin proposal, falling back to original tx: {error:?}"
+                );
+                self.start_payjoin_broadcast_and_notify(fallback_tx);
+            }
+            Err(BroadcastTransactionError::PostBroadcastFailed(error)) => {
+                error!("payjoin proposal broadcast bookkeeping failed: {error}");
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
+                self.payjoin_actor = None;
+            }
+        }
+
+        Produces::ok(())
     }
 
     pub async fn handle_payjoin_success(
@@ -643,25 +713,11 @@ impl WalletActor {
                 error!("failed to sign payjoin proposal, falling back to original tx: {error:?}")
             })
         else {
-            self.broadcast_and_notify(fallback_tx).await;
-            self.payjoin_actor = None;
+            self.start_payjoin_broadcast_and_notify(fallback_tx);
             return Produces::ok(());
         };
 
-        match self.broadcast_transaction_to_node(proposal_tx.clone()).await {
-            Ok(()) => {
-                self.insert_broadcast_transaction(proposal_tx).await;
-                self.send(WalletManagerReconcileMessage::PayjoinTxBroadcast);
-            }
-            Err(error) => {
-                error!(
-                    "failed to broadcast payjoin proposal, falling back to original tx: {error:?}"
-                );
-                self.broadcast_and_notify(fallback_tx).await;
-            }
-        }
-
-        self.payjoin_actor = None;
+        self.start_payjoin_proposal_broadcast(proposal_tx, fallback_tx);
         Produces::ok(())
     }
 
@@ -669,8 +725,7 @@ impl WalletActor {
         &mut self,
         fallback_tx: BdkTransaction,
     ) -> ActorResult<()> {
-        self.broadcast_and_notify(fallback_tx).await;
-        self.payjoin_actor = None;
+        self.start_payjoin_broadcast_and_notify(fallback_tx);
         Produces::ok(())
     }
 
@@ -844,4 +899,37 @@ impl WalletActor {
 
         Some(if block_height > current_height { 0 } else { current_height - block_height + 1 })
     }
+}
+
+async fn broadcast_transaction_with_connection(
+    addr: WeakAddr<WalletActor>,
+    connection: Produces<Result<(), Error>>,
+    transaction: BdkTransaction,
+) -> Result<(), BroadcastTransactionError> {
+    connection
+        .await
+        .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?
+        .map_err(|error| {
+            BroadcastTransactionError::BroadcastFailed(Error::SignAndBroadcastError(format!(
+                "failed to broadcast transaction, unable to connect to node: {error:?}"
+            )))
+        })?;
+
+    let node_client = call!(addr.node_client_for_broadcast())
+        .await
+        .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?
+        .map_err(BroadcastTransactionError::BroadcastFailed)?;
+
+    node_client.broadcast_transaction(transaction.clone()).await.map_err(|error| {
+        BroadcastTransactionError::BroadcastFailed(Error::SignAndBroadcastError(format!(
+            "failed to broadcast transaction, try again: {error:?}"
+        )))
+    })?;
+
+    call!(addr.apply_broadcast_transaction(transaction))
+        .await
+        .map_err(|_| BroadcastTransactionError::PostBroadcastFailed(Error::ActorNotFound))?
+        .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
+
+    Ok(())
 }

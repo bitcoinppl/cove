@@ -752,15 +752,20 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn current_block_height(&self) -> Result<u32, Error> {
-        let height =
-            call!(self.actor.get_height(false)).await.map_err(|_| Error::GetHeightError)?;
+        let height = call!(self.actor.get_height(false))
+            .await
+            .map_err(|_| Error::GetHeightError)?
+            .map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u32)
     }
 
     #[uniffi::method]
     pub async fn force_update_height(&self) -> Result<u32, Error> {
-        let height = call!(self.actor.get_height(true)).await.map_err(|_| Error::GetHeightError)?;
+        let height = call!(self.actor.get_height(true))
+            .await
+            .map_err(|_| Error::GetHeightError)?
+            .map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u32)
     }
@@ -1007,7 +1012,8 @@ impl RustWalletManager {
                 .await
                 .map_err(|source| {
                     WalletManagerUnableToSwitchError::new(wallet_address_type, source)
-                })?;
+                })?
+                .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
                 self.refresh_metadata_from_database()?;
 
                 // reset route as a navigation fallback; actor scan refreshes transactions
@@ -1021,7 +1027,8 @@ impl RustWalletManager {
                     .await
                     .map_err(|source| {
                         WalletManagerUnableToSwitchError::new(wallet_address_type, source)
-                    })?;
+                    })?
+                    .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
                 self.refresh_metadata_from_database()?;
 
                 debug!("switch done");

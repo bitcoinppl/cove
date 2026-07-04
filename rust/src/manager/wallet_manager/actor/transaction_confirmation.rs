@@ -77,8 +77,14 @@ impl WalletActor {
     async fn handle_watched_transaction_confirmation(&mut self, tx_id: Txid) -> ActorResult<()> {
         info!("handling watched transaction confirmation: {tx_id}");
 
-        self.update_block_id().await?;
-        self.perform_scan_for_single_tx_id(tx_id).await
+        let block_id_refresh = self.update_block_id().await?;
+        self.addr.send_fut_with(|addr| async move {
+            if matches!(block_id_refresh.await, Ok(Ok(_))) {
+                send!(addr.perform_scan_for_single_tx_id(tx_id));
+            }
+        });
+
+        Produces::ok(())
     }
 
     pub(crate) async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
@@ -90,14 +96,28 @@ impl WalletActor {
 
     pub async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-        let _ = self.update_height().await?.await;
+        let height_refresh = self.update_height().await?;
 
+        self.addr.send_fut_with(|addr| async move {
+            if matches!(height_refresh.await, Ok(Ok(_))) {
+                send!(addr.start_single_tx_sync_after_height(tx_id, start));
+            }
+        });
+
+        Produces::ok(())
+    }
+
+    async fn start_single_tx_sync_after_height(
+        &mut self,
+        tx_id: Txid,
+        start: u64,
+    ) -> ActorResult<()> {
         let chain_tip = self.wallet.bdk.local_chain().tip();
         let sync_request_builder = SyncRequest::builder().txids(vec![tx_id]).chain_tip(chain_tip);
 
         let sync_request = sync_request_builder.build();
 
-        let node_client = self.node_client().await?.clone();
+        let node_client = self.node_client()?.clone();
         let graph = self.wallet.bdk.tx_graph().clone();
 
         let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
