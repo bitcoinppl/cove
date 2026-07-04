@@ -114,8 +114,8 @@ mod tests {
         // m/44'/0'/0'/0/0
         let components = vec![
             0x80000000 + 44, // 44' (hardened)
-            0x80000000 + 0,  // 0' (hardened)
-            0x80000000 + 0,  // 0' (hardened)
+            0x80000000,      // 0' (hardened)
+            0x80000000,      // 0' (hardened)
             0,               // 0
             0,               // 0
         ];
@@ -148,8 +148,8 @@ mod tests {
         // m/84'/0'/0'
         let components = vec![
             0x80000000 + 84, // 84' (hardened)
-            0x80000000 + 0,  // 0' (hardened)
-            0x80000000 + 0,  // 0' (hardened)
+            0x80000000,      // 0' (hardened)
+            0x80000000,      // 0' (hardened)
         ];
         let keypath = CryptoKeypath::new(components, None, None);
         assert_eq!(keypath.to_path_string(), "84h/0h/0h");
@@ -157,8 +157,8 @@ mod tests {
         // m/44'/0'/0'/0/0 (mixed hardened and non-hardened)
         let components = vec![
             0x80000000 + 44, // 44' (hardened)
-            0x80000000 + 0,  // 0' (hardened)
-            0x80000000 + 0,  // 0' (hardened)
+            0x80000000,      // 0' (hardened)
+            0x80000000,      // 0' (hardened)
             0,               // 0
             0,               // 0
         ];

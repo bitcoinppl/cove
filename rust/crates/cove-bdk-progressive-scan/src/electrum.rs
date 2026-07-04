@@ -405,6 +405,24 @@ fn fetch_tip_and_latest_blocks(
     Ok((new_tip, new_blocks))
 }
 
+fn chain_update(
+    mut tip: CheckPoint,
+    latest_blocks: &BTreeMap<u32, BlockHash>,
+    anchors: impl Iterator<Item = (ConfirmationBlockTime, Txid)>,
+) -> std::result::Result<CheckPoint, electrum_client::Error> {
+    for (anchor, _txid) in anchors {
+        let height = anchor.block_id.height;
+        if tip.get(height).is_none() && height <= tip.height() {
+            let hash = match latest_blocks.get(&height) {
+                Some(&hash) => hash,
+                None => anchor.block_id.hash,
+            };
+            tip = tip.insert(BlockId { hash, height });
+        }
+    }
+    Ok(tip)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -1305,22 +1323,4 @@ mod tests {
         ));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
-}
-
-fn chain_update(
-    mut tip: CheckPoint,
-    latest_blocks: &BTreeMap<u32, BlockHash>,
-    anchors: impl Iterator<Item = (ConfirmationBlockTime, Txid)>,
-) -> std::result::Result<CheckPoint, electrum_client::Error> {
-    for (anchor, _txid) in anchors {
-        let height = anchor.block_id.height;
-        if tip.get(height).is_none() && height <= tip.height() {
-            let hash = match latest_blocks.get(&height) {
-                Some(&hash) => hash,
-                None => anchor.block_id.hash,
-            };
-            tip = tip.insert(BlockId { hash, height });
-        }
-    }
-    Ok(tip)
 }
