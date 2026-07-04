@@ -32,6 +32,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.WalletMetadata
 
@@ -212,38 +213,53 @@ internal fun DetailsWidget(
     val labelColor = if (isTotal) fg else sub
     val primaryColor = if (isTotal) fg else sub
 
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(
-                label,
-                color = labelColor,
-                fontSize = 15.sp,
-            )
-            if (showInfoIcon) {
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = onInfoClick,
-                    modifier = Modifier.size(24.dp),
-                    content = {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = null,
-                            tint = sub,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    },
+    KeyValueRow(
+        modifier = Modifier.fillMaxWidth(),
+        labelWeight = 1f,
+        valueWeight = null,
+        verticalAlignment = Alignment.Top,
+        labelContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    label,
+                    color = labelColor,
+                    fontSize = 15.sp,
+                )
+                if (showInfoIcon) {
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = onInfoClick,
+                        modifier = Modifier.size(24.dp),
+                        content = {
+                            Icon(
+                                imageVector = Icons.Outlined.Info,
+                                contentDescription = null,
+                                tint = sub,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                    )
+                }
+            }
+        },
+        valueContent = {
+            Column(horizontalAlignment = Alignment.End) {
+                AutoSizeText(
+                    primary,
+                    color = primaryColor,
+                    maxFontSize = 15.sp,
+                    minimumScaleFactor = 0.90f,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                AsyncText(
+                    text = secondary,
+                    color = sub,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                 )
             }
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            AutoSizeText(primary, color = primaryColor, maxFontSize = 15.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            AsyncText(text = secondary, color = sub, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp))
-        }
-    }
+        },
+    )
 }
 
 @Composable

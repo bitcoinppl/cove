@@ -68,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.BackupException
 import org.bitcoinppl.cove_core.BackupImportReport
@@ -112,8 +113,8 @@ fun BackupImportScreen(
     ) { uri ->
         uri?.let {
             scope.launch {
-                try {
-                    val (bytes, name) = withContext(Dispatchers.IO) {
+                runCatchingCancellable("BackupImport", "Failed to read file") {
+                    withContext(Dispatchers.IO) {
                         val maxSize = 50_000_000
                         val docFile = DocumentFile.fromSingleUri(context, uri)
                         val fileSize = docFile?.length() ?: 0
@@ -139,16 +140,13 @@ fun BackupImportScreen(
 
                         bytes to (DocumentFile.fromSingleUri(context, uri)?.name ?: "backup file")
                     }
-
+                }.onSuccess { (bytes, name) ->
                     fileData = bytes
                     fileName = name
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    android.util.Log.e("BackupImport", "Failed to read file", e)
+                }.onFailure { e ->
                     fileData = null
                     fileName = null
-                    errorMessage = backupErrorMessage(e)
+                    errorMessage = backupErrorMessage(e as Exception)
                 }
             }
         }

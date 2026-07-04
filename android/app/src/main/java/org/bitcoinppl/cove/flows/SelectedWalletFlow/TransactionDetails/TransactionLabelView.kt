@@ -45,10 +45,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.types.TxId
 
@@ -91,13 +91,10 @@ fun TransactionLabelView(
     }
 
     suspend fun updateDetails() {
-        try {
+        runCatchingCancellable(TAG, "Error getting updated label") {
             val details = manager.refreshTransactionDetails(txId)
             currentLabel = details.transactionLabel()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            android.util.Log.e(TAG, "Error getting updated label", e)
+        }.onFailure { e ->
             val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
             snackbarHostState.showSnackbar(
                 message = message,
@@ -112,28 +109,27 @@ fun TransactionLabelView(
         scope.launch {
             isOperationInProgress = true
             try {
-                val metadata = manager.walletMetadata
-                val label = editingLabel.text.trim()
-                labelManager.insertOrUpdateLabelsForTxn(
-                    details = transactionDetails,
-                    label = label,
-                    origin = metadata?.origin,
-                )
+                runCatchingCancellable(TAG, "Unable to save label") {
+                    val metadata = manager.walletMetadata
+                    val label = editingLabel.text.trim()
+                    labelManager.insertOrUpdateLabelsForTxn(
+                        details = transactionDetails,
+                        label = label,
+                        origin = metadata?.origin,
+                    )
 
-                currentLabel = label.ifEmpty { null }
-                isEditing = false
-                hasFocusedOnce = false
+                    currentLabel = label.ifEmpty { null }
+                    isEditing = false
+                    hasFocusedOnce = false
 
-                updateDetails()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e(TAG, "Unable to save label", e)
-                val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
-                snackbarHostState.showSnackbar(
-                    message = message,
-                    duration = SnackbarDuration.Short,
-                )
+                    updateDetails()
+                }.onFailure { e ->
+                    val message = context.getString(R.string.label_save_error, e.message ?: "Unknown error")
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
             } finally {
                 isOperationInProgress = false
             }
@@ -146,22 +142,21 @@ fun TransactionLabelView(
         scope.launch {
             isOperationInProgress = true
             try {
-                labelManager.deleteLabelsForTxn(txId = txId)
-                isEditing = false
-                hasFocusedOnce = false
-                editingLabel = TextFieldValue()
-                currentLabel = null
+                runCatchingCancellable(TAG, "Unable to delete label") {
+                    labelManager.deleteLabelsForTxn(txId = txId)
+                    isEditing = false
+                    hasFocusedOnce = false
+                    editingLabel = TextFieldValue()
+                    currentLabel = null
 
-                updateDetails()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e(TAG, "Unable to delete label", e)
-                val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
-                snackbarHostState.showSnackbar(
-                    message = message,
-                    duration = SnackbarDuration.Short,
-                )
+                    updateDetails()
+                }.onFailure { e ->
+                    val message = context.getString(R.string.label_delete_error, e.message ?: "Unknown error")
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
             } finally {
                 isOperationInProgress = false
             }

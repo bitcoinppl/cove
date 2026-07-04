@@ -41,11 +41,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.AppAlertState
@@ -465,12 +465,11 @@ private fun transactionLockStateForRow(
     val lockState = manager.transactionLockStates[txId]
 
     LaunchedEffect(manager.id, txId) {
-        try {
-            manager.transactionLockState(txId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            android.util.Log.e(TAG, "failed to load transaction lock state", e)
+        val loaded =
+            runCatchingCancellable(TAG, "failed to load transaction lock state") {
+                manager.transactionLockState(txId)
+            }.isSuccess
+        if (!loaded) {
             manager.clearTransactionLockState(txId)
         }
     }

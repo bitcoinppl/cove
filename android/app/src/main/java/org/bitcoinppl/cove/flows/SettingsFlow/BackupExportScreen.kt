@@ -70,6 +70,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.BackupException
 import org.bitcoinppl.cove_core.BackupManager
 import org.bitcoinppl.cove_core.BackupResult
@@ -126,28 +127,30 @@ fun BackupExportScreen(
         }
         scope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        output.write(result.data)
-                        output.flush()
-                    } ?: throw java.io.IOException("Failed to open output stream")
-                }
-                isExporting = false
-                pendingResult = null
+                runCatchingCancellable("BackupExport", "Failed to save backup") {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(result.data)
+                            output.flush()
+                        } ?: throw java.io.IOException("Failed to open output stream")
+                    }
+                }.onSuccess {
+                    isExporting = false
+                    pendingResult = null
 
-                if (result.warnings.isNotEmpty()) {
-                    warningMessage = "Some data could not be exported:\n" + result.warnings.joinToString("\n")
-                } else {
-                    handleDismiss()
+                    if (result.warnings.isNotEmpty()) {
+                        warningMessage = "Some data could not be exported:\n" + result.warnings.joinToString("\n")
+                    } else {
+                        handleDismiss()
+                    }
+                }.onFailure { e ->
+                    isExporting = false
+                    pendingResult = null
+                    errorMessage = "Failed to save backup: ${e.message}"
                 }
             } catch (e: CancellationException) {
                 isExporting = false
                 throw e
-            } catch (e: Exception) {
-                android.util.Log.e("BackupExport", "Failed to save backup", e)
-                isExporting = false
-                pendingResult = null
-                errorMessage = "Failed to save backup: ${e.message}"
             }
         }
     }

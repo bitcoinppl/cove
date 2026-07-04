@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -106,38 +107,104 @@ fun MaterialDividerPreview() {
 }
 
 @Composable
+@Suppress("FunctionNaming", "LongParameterList")
+fun KeyValueRow(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    labelWeight: Float = 1f,
+    valueWeight: Float = 1f,
+    labelStyle: TextStyle = MaterialTheme.typography.bodyLarge,
+    valueStyle: TextStyle = MaterialTheme.typography.bodyLarge,
+    labelColor: Color = Color.Unspecified,
+    valueColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    labelTextAlign: TextAlign = TextAlign.Start,
+    valueTextAlign: TextAlign = TextAlign.End,
+    labelMaxLines: Int = Int.MAX_VALUE,
+    valueMaxLines: Int = Int.MAX_VALUE,
+    verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    trailingContent: @Composable RowScope.() -> Unit = {},
+) {
+    KeyValueRow(
+        modifier = modifier,
+        labelWeight = labelWeight,
+        valueWeight = valueWeight,
+        verticalAlignment = verticalAlignment,
+        horizontalArrangement = horizontalArrangement,
+        labelContent = {
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = label,
+                style = labelStyle,
+                color = labelColor,
+                textAlign = labelTextAlign,
+                maxLines = labelMaxLines,
+            )
+        },
+        valueContent = {
+            Text(
+                text = value,
+                modifier = Modifier.fillMaxWidth(),
+                style = valueStyle,
+                color = valueColor,
+                textAlign = valueTextAlign,
+                maxLines = valueMaxLines,
+            )
+        },
+        trailingContent = trailingContent,
+    )
+}
+
+@Composable
+@Suppress("FunctionNaming", "LongParameterList")
+fun KeyValueRow(
+    modifier: Modifier = Modifier,
+    labelWeight: Float = 1f,
+    valueWeight: Float? = 1f,
+    verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    labelContent: @Composable RowScope.() -> Unit,
+    valueContent: @Composable RowScope.() -> Unit,
+    trailingContent: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = verticalAlignment,
+        horizontalArrangement = horizontalArrangement,
+    ) {
+        Row(
+            modifier = Modifier.weight(labelWeight),
+            verticalAlignment = verticalAlignment,
+            content = labelContent,
+        )
+
+        val valueModifier = valueWeight?.let { Modifier.weight(it) } ?: Modifier
+        Row(
+            modifier = valueModifier,
+            verticalAlignment = verticalAlignment,
+            horizontalArrangement = Arrangement.End,
+            content = valueContent,
+        )
+
+        trailingContent()
+    }
+}
+
+@Composable
 fun InfoRow(
     label: String,
     text: String,
 ) {
-    Row(
+    KeyValueRow(
+        label = label,
+        value = text,
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        Text(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Start,
-        )
-        Text(
-            text = text,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
-        )
-    }
+    )
 }
 
 @Preview
@@ -153,39 +220,22 @@ fun ClickableInfoRow(
     icon: ImageVector,
     onClick: () -> Unit,
 ) {
-    Row(
+    KeyValueRow(
+        label = label,
+        value = text,
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp)
                 .clickable(true, onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Start,
-        )
-        Text(
-            text = text,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
-        )
-        Icon(
-            imageVector = icon,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            contentDescription = "Forward",
-        )
-    }
+        trailingContent = {
+            Icon(
+                imageVector = icon,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = "Forward",
+            )
+        },
+    )
 }
 
 @Composable

@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.ui.theme.ResetStatusBarToTheme
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -88,17 +89,18 @@ fun TransactionDetailsScreen(
         stringResource(R.string.snackbar_transaction_lock_load_error)
 
     suspend fun refreshTransactionLockState(showSnackbar: Boolean) {
-        try {
-            manager.transactionLockState(txId)
-            lockStateLoadFailed = false
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            android.util.Log.e("TransactionDetails", "error fetching transaction lock state", e)
-            lockStateLoadFailed = true
-            if (showSnackbar) {
-                snackbarHostState.showSnackbar(transactionLockLoadErrorMessage)
+        val result =
+            runCatchingCancellable("TransactionDetails", "error fetching transaction lock state") {
+                manager.transactionLockState(txId)
             }
+        if (result.isSuccess) {
+            lockStateLoadFailed = false
+            return
+        }
+
+        lockStateLoadFailed = true
+        if (showSnackbar) {
+            snackbarHostState.showSnackbar(transactionLockLoadErrorMessage)
         }
     }
 
@@ -174,14 +176,10 @@ fun TransactionDetailsScreen(
 
     // immediately fetch fresh transaction details on screen load
     LaunchedEffect(manager, txId, refreshOnAppear) {
-        try {
-            if (refreshOnAppear) {
+        if (refreshOnAppear) {
+            runCatchingCancellable("TransactionDetails", "error fetching fresh details") {
                 refreshTransactionDetails()
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            android.util.Log.e("TransactionDetails", "error fetching fresh details", e)
         }
 
         refreshTransactionLockState(showSnackbar = false)
@@ -193,39 +191,27 @@ fun TransactionDetailsScreen(
     // load fiat amounts (update cached values with fresh async values)
     LaunchedEffect(transactionDetails) {
         feeFiatFmt =
-            try {
+            runCatchingCancellable("TransactionDetails", "Failed to fetch fiat fee amount") {
                 transactionDetails.feeFiatFmt()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("TransactionDetails", "Failed to fetch fiat fee amount", e)
+            }.getOrElse {
                 feeFiatFmt // keep cached value on error
             }
         sentSansFeeFiatFmt =
-            try {
+            runCatchingCancellable("TransactionDetails", "Failed to fetch sent sans fee fiat amount") {
                 transactionDetails.sentSansFeeFiatFmt()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("TransactionDetails", "Failed to fetch sent sans fee fiat amount", e)
+            }.getOrElse {
                 sentSansFeeFiatFmt // keep cached value on error
             }
         totalSpentFiatFmt =
-            try {
+            runCatchingCancellable("TransactionDetails", "Failed to fetch total fiat amount") {
                 transactionDetails.amountFiatFmt()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("TransactionDetails", "Failed to fetch total fiat amount", e)
+            }.getOrElse {
                 totalSpentFiatFmt // keep cached value on error
             }
         historicalFiatFmt =
-            try {
+            runCatchingCancellable("TransactionDetails", "Failed to fetch historical fiat amount") {
                 transactionDetails.historicalFiatFmt()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                android.util.Log.e("TransactionDetails", "Failed to fetch historical fiat amount", e)
+            }.getOrElse {
                 historicalFiatFmt // keep cached value on error
             }
     }
@@ -304,12 +290,8 @@ fun TransactionDetailsScreen(
             onRefresh = {
                 scope.launch {
                     isRefreshing = true
-                    try {
+                    runCatchingCancellable("TransactionDetails", "error refreshing details") {
                         refreshTransactionDetails()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        android.util.Log.e("TransactionDetails", "error refreshing details", e)
                     }
 
                     refreshTransactionLockState(showSnackbar = true)

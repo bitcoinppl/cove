@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,6 +56,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
@@ -388,82 +390,70 @@ private fun SummaryWidget(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Spacer(Modifier.height(28.dp))
-        KeyValueRow(
-            key = stringResource(R.string.label_address),
+        SummaryKeyValueRow(
+            label = stringResource(R.string.label_address),
             value = address,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onAddressClick),
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             valueColor = MaterialTheme.colorScheme.onSurface,
-            keyColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            boldValue = true,
-            onClick = onAddressClick,
+            valueFontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(20.dp))
-        KeyValueRow(
-            key = stringResource(R.string.label_network_fee),
+        SummaryKeyValueRow(
+            label = stringResource(R.string.label_network_fee),
             value = networkFee,
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            keyColor = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(20.dp))
-        KeyValueRow(
-            key = stringResource(R.string.label_they_will_receive),
+        SummaryKeyValueRow(
+            label = stringResource(R.string.label_they_will_receive),
             value = willReceive,
+            labelColor = MaterialTheme.colorScheme.onSurface,
             valueColor = MaterialTheme.colorScheme.onSurface,
-            boldValue = true,
-            boldKey = true,
-            keyColor = MaterialTheme.colorScheme.onSurface,
+            labelFontWeight = FontWeight.SemiBold,
+            valueFontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(20.dp))
-        KeyValueRow(
-            key = stringResource(R.string.label_you_will_pay),
+        SummaryKeyValueRow(
+            label = stringResource(R.string.label_you_will_pay),
             value = willPay,
+            labelColor = MaterialTheme.colorScheme.onSurface,
             valueColor = MaterialTheme.colorScheme.onSurface,
-            boldValue = true,
-            boldKey = true,
-            keyColor = MaterialTheme.colorScheme.onSurface,
+            labelFontWeight = FontWeight.SemiBold,
+            valueFontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(20.dp))
     }
 }
 
 @Composable
-private fun KeyValueRow(
-    key: String,
+@Suppress("FunctionNaming", "LongParameterList")
+private fun SummaryKeyValueRow(
+    label: String,
     value: String,
-    keyColor: Color,
+    labelColor: Color,
     valueColor: Color,
-    boldValue: Boolean = false,
-    boldKey: Boolean = false,
-    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    labelFontWeight: FontWeight = FontWeight.Normal,
+    valueFontWeight: FontWeight = FontWeight.Normal,
 ) {
-    val rowModifier =
-        if (onClick != null) {
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-        } else {
-            Modifier.fillMaxWidth()
-        }
-    Row(
-        modifier = rowModifier,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            key,
-            color = keyColor,
-            fontSize = 13.sp,
-            fontWeight = if (boldKey) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            value,
-            color = valueColor,
-            fontSize = 13.sp,
-            fontWeight = if (boldValue) FontWeight.SemiBold else FontWeight.Normal,
-            textAlign = TextAlign.Right,
-            modifier = Modifier.weight(2f),
-            maxLines = 4,
-        )
-    }
+    KeyValueRow(
+        label = label,
+        value = value,
+        modifier = modifier,
+        labelWeight = 1f,
+        valueWeight = 2f,
+        labelStyle = TextStyle(fontSize = 13.sp, fontWeight = labelFontWeight),
+        valueStyle = TextStyle(fontSize = 13.sp, fontWeight = valueFontWeight),
+        labelColor = labelColor,
+        valueColor = valueColor,
+        valueTextAlign = TextAlign.Right,
+        valueMaxLines = 4,
+    )
 }
 
 @Composable

@@ -150,14 +150,16 @@ class AppManager private constructor() : FfiReconcile {
 
     // multiple screens within the same wallet (send, coin control, tx details, settings)
     // call getWalletManager, this avoids recreating the actor and reconciler each time
-    internal var walletManager: WalletManager? = null
-        private set
+    private val managerCache = AndroidManagerCache(mainScope)
 
-    internal var sendFlowManager: SendFlowManager? = null
-        private set
+    internal val walletManager: WalletManager?
+        get() = managerCache.walletManager
 
-    internal var coinControlManager: CoinControlManager? = null
-        private set
+    internal val sendFlowManager: SendFlowManager?
+        get() = managerCache.sendFlowManager
+
+    internal val coinControlManager: CoinControlManager?
+        get() = managerCache.coinControlManager
 
     val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
@@ -193,170 +195,39 @@ class AppManager private constructor() : FfiReconcile {
     /**
      * set the cached wallet manager instance
      */
-    internal fun setWalletManager(manager: WalletManager) {
-        Log.d(tag, "setting wallet manager for wallet ${manager.id}")
-        walletManager = manager
-    }
+    internal fun setWalletManager(manager: WalletManager) = managerCache.setWalletManager(manager)
 
-    fun cachedWalletManager(id: WalletId): WalletManager? {
-        val manager = walletManager ?: return null
-        if (manager.id != id) return null
+    fun cachedWalletManager(id: WalletId): WalletManager? = managerCache.cachedWalletManager(id)
 
-        return manager
-    }
-
-    fun walletMetadata(id: WalletId): WalletMetadata? {
-        cachedWalletManager(id)?.walletMetadata?.let { return it }
-        return wallets.firstOrNull { it.id == id }
-    }
+    fun walletMetadata(id: WalletId): WalletMetadata? = managerCache.walletMetadata(id, wallets)
 
     /**
      * get or create wallet manager for the given wallet id
      * caches the instance so we don't recreate unnecessarily
      */
-    fun getWalletManager(id: WalletId): WalletManager {
-        walletManager?.let {
-            if (it.id == id) {
-                Log.d(tag, "found and using wallet manager for $id")
-                return it
-            }
-
-            // selecting a different wallet is the boundary for ending in-flight scans
-            Log.d(tag, "closing old wallet manager for ${it.id}")
-            clearWalletManager()
-        }
-
-        Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
-
-        return try {
-            val manager = WalletManager(id = id)
-            walletManager = manager
-            manager
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to create wallet manager", e)
-            throw e
-        }
-    }
+    fun getWalletManager(id: WalletId): WalletManager = managerCache.getWalletManager(id)
 
     /**
      * get or create send flow manager for the given wallet manager
      * caches the instance so we don't recreate unnecessarily
      */
-    fun getSendFlowManager(wm: WalletManager, presenter: SendFlowPresenter): SendFlowManager {
-        sendFlowManager?.let {
-            if (it.id == wm.id) {
-                Log.d(tag, "found and using sendflow manager for ${wm.id}")
-                it.presenter = presenter
-                return it
-            }
-            // close old manager before replacing
-            Log.d(tag, "closing old sendflow manager for ${it.id}")
-            clearSendFlowManager()
-        }
+    fun getSendFlowManager(wm: WalletManager, presenter: SendFlowPresenter): SendFlowManager =
+        managerCache.getSendFlowManager(wm, presenter)
 
-        Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
-        val manager = SendFlowManager(wm.newSendFlowManager(wm.balance), presenter)
-        sendFlowManager = manager
-        return manager
-    }
+    fun setCoinControlManager(manager: CoinControlManager) = managerCache.setCoinControlManager(manager)
 
-    fun setCoinControlManager(manager: CoinControlManager) {
-        coinControlManager = manager
-    }
+    fun clearCoinControlManager(manager: CoinControlManager) = managerCache.clearCoinControlManager(manager)
 
-    fun clearCoinControlManager(manager: CoinControlManager) {
-        if (coinControlManager === manager) {
-            coinControlManager = null
-        }
-    }
+    fun reconcileAfterLabelImport(walletId: WalletId) = managerCache.reconcileAfterLabelImport(walletId)
 
-    fun reconcileAfterLabelImport(walletId: WalletId) {
-        mainScope.launch {
-            val refreshed =
-                try {
-                    reconcileAfterLabelImportAndWait(walletId)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(tag, "failed to reconcile after label import", e)
-                    false
-                }
-            if (!refreshed) {
-                walletManager
-                    ?.takeIf { it.id == walletId }
-                    ?.notifyLabelRefreshFailed()
-            }
-        }
-    }
+    suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean =
+        managerCache.reconcileAfterLabelImportAndWait(walletId)
 
-    suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean {
-        val refreshed =
-            walletManager
-                ?.takeIf { it.id == walletId }
-                ?.reconcileAfterLabelImportAndWait()
-                ?: false
+    fun clearWalletManager() = managerCache.clearWalletManager()
 
-        coinControlManager
-            ?.takeIf { it.id == walletId }
-            ?.reloadLabels()
+    private fun clearWalletManager(id: WalletId) = managerCache.clearWalletManager(id)
 
-        sendFlowManager
-            ?.takeIf { it.id == walletId }
-            ?.reconcileAfterLabelImport()
-
-        return refreshed
-    }
-
-    fun clearWalletManager() {
-        clearWalletScopedChildManagers()
-
-        try {
-            walletManager?.close()
-        } catch (e: Exception) {
-            Log.w(tag, "Error closing WalletManager: ${e.message}")
-        }
-        walletManager = null
-    }
-
-    private fun clearWalletManager(id: WalletId) {
-        if (walletManager?.id == id) {
-            clearWalletManager()
-        }
-
-        if (sendFlowManager?.id == id) {
-            clearSendFlowManager()
-        }
-    }
-
-    private fun clearWalletScopedChildManagers() {
-        clearSendFlowManager()
-        clearActiveCoinControlManager()
-    }
-
-    private fun clearSendFlowManager() {
-        try {
-            sendFlowManager?.close()
-        } catch (e: Exception) {
-            Log.w(tag, "Error closing SendFlowManager: ${e.message}")
-        }
-        sendFlowManager = null
-    }
-
-    private fun clearActiveCoinControlManager() {
-        try {
-            coinControlManager?.close()
-        } catch (e: Exception) {
-            Log.w(tag, "Error closing CoinControlManager: ${e.message}")
-        }
-        coinControlManager = null
-    }
-
-    private fun clearInactiveSendFlowManager() {
-        val manager = sendFlowManager ?: return
-        if (routeStackContainsSendWallet(router.default, router.routes, manager.id)) return
-
-        clearSendFlowManager()
-    }
+    private fun clearInactiveSendFlowManager() = managerCache.clearInactiveSendFlowManager(router)
 
     val fullVersionId: String
         get() {
@@ -656,14 +527,7 @@ class AppManager private constructor() : FfiReconcile {
 
                 is AppStateReconcileMessage.FiatCurrencyChanged -> {
                     selectedFiatCurrency = message.v1
-
-                    // refresh fiat values in the wallet manager using IO
-                    walletManager?.let { wm ->
-                        launch(Dispatchers.IO) {
-                            wm.forceWalletScan()
-                            wm.updateWalletBalance()
-                        }
-                    }
+                    managerCache.refreshFiatValuesForCachedWallet(this)
                 }
 
                 is AppStateReconcileMessage.WalletModeChanged -> {
