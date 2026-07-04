@@ -41,7 +41,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     let notify: () -> Void
 }
 
-@Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
+@Observable final class WalletManager: ReconcilingManager, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
 
@@ -57,6 +57,8 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         OSAllocatedUnfairLock<InitialScanLifecycleChangedHandler?>(initialState: nil)
     @ObservationIgnored
     private var walletScanStarted = false
+    @ObservationIgnored
+    private weak var delegate: WalletManagerDelegate?
 
     var walletMetadata: WalletMetadata
     var ledgerState: WalletLedgerState
@@ -98,7 +100,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
-    init(id: WalletId) throws {
+    init(id: WalletId, delegate: WalletManagerDelegate? = AppManager.shared) throws {
         let rust = try RustWalletManager(id: id)
         let initialState = rust.initialState()
 
@@ -109,6 +111,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         self.ledgerState = initialState.ledgerState
         self.balancePresentation = initialState.balancePresentation
         self.balance = initialState.balance
+        self.delegate = delegate
         walletMetadata = initialState.metadata
         unsignedTransactions = initialState.unsignedTransactions
 
@@ -139,7 +142,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         }
     }
 
-    init(xpub: String) throws {
+    init(xpub: String, delegate: WalletManagerDelegate? = AppManager.shared) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
         let initialState = rust.initialState()
 
@@ -149,6 +152,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         self.ledgerState = initialState.ledgerState
         self.balancePresentation = initialState.balancePresentation
         self.balance = initialState.balance
+        self.delegate = delegate
         walletMetadata = initialState.metadata
         unsignedTransactions = initialState.unsignedTransactions
         id = initialState.metadata.id
@@ -160,7 +164,8 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         tapSigner: TapSigner,
         deriveInfo: DeriveInfo,
         backup: Data? = nil,
-        birthday: WalletBirthday? = nil
+        birthday: WalletBirthday? = nil,
+        delegate: WalletManagerDelegate? = AppManager.shared
     ) throws {
         let rust = try RustWalletManager.tryNewFromTapSigner(
             tapSigner: tapSigner,
@@ -176,6 +181,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         self.ledgerState = initialState.ledgerState
         self.balancePresentation = initialState.balancePresentation
         self.balance = initialState.balance
+        self.delegate = delegate
         walletMetadata = initialState.metadata
         unsignedTransactions = initialState.unsignedTransactions
         id = initialState.metadata.id
@@ -188,6 +194,10 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         case .btc: "btc"
         case .sat: "sats"
         }
+    }
+
+    private var amountFormatter: AmountFormatter {
+        AmountFormatter(metadata: walletMetadata)
     }
 
     var hasTransactions: Bool {
@@ -232,57 +242,37 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     }
 
     func amountFmt(_ amount: Amount) -> String {
-        switch walletMetadata.selectedUnit {
-        case .btc:
-            amount.btcString()
-        case .sat:
-            amount.satsString()
-        }
+        amountFormatter.amountFmt(amount)
     }
 
     func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
-        walletDisplayAmount(metadata: walletMetadata, amount: amount, showUnit: showUnit)
+        amountFormatter.displayAmount(amount, showUnit: showUnit)
     }
 
     func displayAmountPendingFmt(_ amount: Amount) -> String? {
-        walletDisplayAmountPendingFmt(metadata: walletMetadata, amount: amount)
+        amountFormatter.displayAmountPendingFmt(amount)
     }
 
     func displayAmountWithDirection(
         _ amount: Amount,
         direction: TransactionDirection
     ) -> String {
-        walletDisplayAmountWithDirection(
-            metadata: walletMetadata,
-            amount: amount,
-            direction: direction
-        )
+        amountFormatter.displayAmountWithDirection(amount, direction: direction)
     }
 
     func displaySentAndReceivedAmount(_ sentAndReceived: SentAndReceived) -> String {
-        walletDisplaySentAndReceivedAmount(
-            metadata: walletMetadata,
-            sentAndReceived: sentAndReceived
-        )
+        amountFormatter.displaySentAndReceivedAmount(sentAndReceived)
     }
 
     func displayFiatAmount(_ amount: Double, withSuffix: Bool = true) -> String {
-        walletDisplayFiatAmount(
-            metadata: walletMetadata,
-            amount: amount,
-            withSuffix: withSuffix
-        )
+        amountFormatter.displayFiatAmount(amount, withSuffix: withSuffix)
     }
 
     func displayFiatAmountPendingFmt(
         _ amount: Double,
         withSuffix: Bool = true
     ) -> String? {
-        walletDisplayFiatAmountPendingFmt(
-            metadata: walletMetadata,
-            amount: amount,
-            withSuffix: withSuffix
-        )
+        amountFormatter.displayFiatAmountPendingFmt(amount, withSuffix: withSuffix)
     }
 
     func displayFiatAmountWithDirection(
@@ -290,23 +280,19 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         direction: TransactionDirection,
         withSuffix: Bool = true
     ) -> String {
-        walletDisplayFiatAmountWithDirection(
-            metadata: walletMetadata,
-            amount: amount,
+        amountFormatter.displayFiatAmountWithDirection(
+            amount,
             direction: direction,
             withSuffix: withSuffix
         )
     }
 
     func amountInFiatCached(_ amount: Amount) -> Double? {
-        walletAmountInFiatCached(amount: amount)
+        amountFormatter.amountInFiatCached(amount)
     }
 
     func amountFmtUnit(_ amount: Amount) -> String {
-        switch walletMetadata.selectedUnit {
-        case .btc: amount.btcStringWithUnit()
-        case .sat: amount.satsStringWithUnit()
-        }
+        amountFormatter.amountFmtUnit(amount)
     }
 
     func transactionDetails(for txId: TxId) async throws -> TransactionDetails {
@@ -354,7 +340,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         await MainActor.run {
             transactionLockStates[txId] = state
         }
-        await AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
+        await delegate?.reconcileAfterLabelsChanged(walletId: id)
 
         return state
     }
@@ -364,7 +350,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         await MainActor.run {
             transactionLockStates[txId] = state
         }
-        await AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
+        await delegate?.reconcileAfterLabelsChanged(walletId: id)
 
         return state
     }
@@ -377,7 +363,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     @MainActor
     func importLabels(labels: Bip329Labels) throws {
         try LabelManager(id: id).import(labels: labels)
-        AppManager.shared.reconcileAfterLabelsChanged(walletId: id)
+        delegate?.reconcileAfterLabelsChanged(walletId: id)
     }
 
     @MainActor
@@ -537,7 +523,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
             self.sendFlowErrorAlert = TaggedItem(error)
 
         case let .hotWalletKeyMissing(walletId):
-            AppManager.shared.alertState = .init(.hotWalletKeyMissing(walletId: walletId))
+            delegate?.showWalletAlert(.hotWalletKeyMissing(walletId: walletId))
 
         case let .receiveAddressUpdated(state):
             self.receiveAddressState = state
@@ -602,20 +588,12 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         }
     }
 
-    func reconcile(message: Message) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            logger.debug("reconcile \(message)")
-            self.apply(message)
-        }
+    func logReconcile(message: Message) {
+        logger.debug("reconcile \(message)")
     }
 
-    func reconcileMany(messages: [Message]) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            logger.debug("reconcile_messages: \(messages)")
-            messages.forEach { self.apply($0) }
-        }
+    func logReconcileMany(messages: [Message]) {
+        logger.debug("reconcile_messages: \(messages)")
     }
 
     func dispatch(action: Action) {
@@ -656,6 +634,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
         self.balancePresentation = initialState.balancePresentation
         self.balance = initialState.balance
         self.walletMetadata = initialState.metadata
+        self.delegate = nil
         self.id = initialState.metadata.id
         self.unsignedTransactions = initialState.unsignedTransactions
 
