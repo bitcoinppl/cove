@@ -1,0 +1,1496 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>AbstractClassCanBeInterface:AppSheetState.kt:AppSheetState$AppSheetState</ID>
+    <ID>AbstractClassCanBeInterface:ChangePinView.kt:ChangePinState$ChangePinState</ID>
+    <ID>AbstractClassCanBeInterface:CloudBackupPresentationHost.kt:CloudBackupRootPresentation$CloudBackupRootPresentation</ID>
+    <ID>AbstractClassCanBeInterface:CloudBackupPresentationHost.kt:CloudBackupVerificationFeedback$CloudBackupVerificationFeedback</ID>
+    <ID>AbstractClassCanBeInterface:DecoyPinView.kt:DecoyPinState$DecoyPinState</ID>
+    <ID>AbstractClassCanBeInterface:MoreInfoPopover.kt:ExportType$ExportType</ID>
+    <ID>AbstractClassCanBeInterface:NewPinView.kt:NewPinState$NewPinState</ID>
+    <ID>AbstractClassCanBeInterface:NfcReader.kt:NfcScanResult$NfcScanResult</ID>
+    <ID>AbstractClassCanBeInterface:NfcWriter.kt:NfcWriteResult$NfcWriteResult</ID>
+    <ID>AbstractClassCanBeInterface:StartupRecovery.kt:BootstrapFailure$BootstrapFailure</ID>
+    <ID>AbstractClassCanBeInterface:StartupRecovery.kt:CatastrophicCloudRestoreCheck$CatastrophicCloudRestoreCheck</ID>
+    <ID>AbstractClassCanBeInterface:WipeDataPinView.kt:WipeDataPinState$WipeDataPinState</ID>
+    <ID>ComplexCondition:DriveAuthorizationHelper.kt:CachingDriveAuthorization$currentCacheKey == null || cached.cacheKey != currentCacheKey || cached.expiresAtMs &lt;= elapsedRealtime() || cached.token.token != accessToken.token</ID>
+    <ID>CyclomaticComplexMethod:AboutSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun AboutSettingsScreen</ID>
+    <ID>CyclomaticComplexMethod:AndroidCloudStorageSupport.kt:internal fun mapDriveListError: CloudStorageException</ID>
+    <ID>CyclomaticComplexMethod:AndroidCloudStorageSupport.kt:internal fun mapDriveUploadError: CloudStorageException</ID>
+    <ID>CyclomaticComplexMethod:AppManager.kt:AppManager$override fun reconcile</ID>
+    <ID>CyclomaticComplexMethod:BackupExportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupExportScreen</ID>
+    <ID>CyclomaticComplexMethod:BackupImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupImportScreen</ID>
+    <ID>CyclomaticComplexMethod:BackupVerifyScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupVerifyScreen</ID>
+    <ID>CyclomaticComplexMethod:BlockExplorerSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BlockExplorerSettingsScreen</ID>
+    <ID>CyclomaticComplexMethod:CloudBackupDetailContent.kt:@Composable internal fun CloudBackupDetailContent</ID>
+    <ID>CyclomaticComplexMethod:CloudBackupPresentationHost.kt:@Composable fun CloudBackupPresentationHost</ID>
+    <ID>CyclomaticComplexMethod:CloudOnlySection.kt:@Composable internal fun CloudOnlySection</ID>
+    <ID>CyclomaticComplexMethod:CoinControlCustomAmountSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CoinControlCustomAmountSheet</ID>
+    <ID>CyclomaticComplexMethod:CustomFeeRateSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomFeeRateSheet</ID>
+    <ID>CyclomaticComplexMethod:HotWalletImportCard.kt:@Composable private fun WordInputField</ID>
+    <ID>CyclomaticComplexMethod:HotWalletImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun HotWalletImportScreen</ID>
+    <ID>CyclomaticComplexMethod:LockView.kt:@Composable fun LockView</ID>
+    <ID>CyclomaticComplexMethod:MainActivity.kt:MainActivity$override fun onCreate</ID>
+    <ID>CyclomaticComplexMethod:MainActivityGlobalAlerts.kt:@Composable private fun GlobalAlertDialog</ID>
+    <ID>CyclomaticComplexMethod:MainSettingsScreen.kt:@Composable private fun cloudBackupSettingsSubtitle: String</ID>
+    <ID>CyclomaticComplexMethod:MainSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainSettingsScreen</ID>
+    <ID>CyclomaticComplexMethod:MainSettingsSecuritySection.kt:@Composable internal fun SecuritySection</ID>
+    <ID>CyclomaticComplexMethod:MainSettingsSecuritySection.kt:@Composable private fun SecuritySheetDialog</ID>
+    <ID>CyclomaticComplexMethod:MoreInfoPopover.kt:@Composable fun rememberWalletExportLaunchers: WalletExportLaunchers</ID>
+    <ID>CyclomaticComplexMethod:NewWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NewWalletSelectScreen</ID>
+    <ID>CyclomaticComplexMethod:NfcReader.kt:NfcReader$private fun processNdefMessage</ID>
+    <ID>CyclomaticComplexMethod:NfcScanSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcScanSheet</ID>
+    <ID>CyclomaticComplexMethod:NodeSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NodeSettingsScreen</ID>
+    <ID>CyclomaticComplexMethod:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingCloudBackupDetailsStepView</ID>
+    <ID>CyclomaticComplexMethod:OnboardingContainer.kt:@Composable internal fun OnboardingContainer</ID>
+    <ID>CyclomaticComplexMethod:OtherBackupsSection.kt:@Composable internal fun OtherBackupsSection</ID>
+    <ID>CyclomaticComplexMethod:QrCodeScanView.kt:@Composable @androidx.camera.core.ExperimentalGetImage private fun QrScannerContent</ID>
+    <ID>CyclomaticComplexMethod:QrExportView.kt:@Composable fun QrExportView</ID>
+    <ID>CyclomaticComplexMethod:SelectedWalletContainer.kt:@Composable fun SelectedWalletContainer</ID>
+    <ID>CyclomaticComplexMethod:SelectedWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SelectedWalletScreen</ID>
+    <ID>CyclomaticComplexMethod:SendFlowConfirmScreen.kt:@Composable private fun SwipeToSendStub</ID>
+    <ID>CyclomaticComplexMethod:SendFlowContainer.kt:@Composable fun SendFlowContainer</ID>
+    <ID>CyclomaticComplexMethod:SendFlowContainer.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SendFlowRouteToScreen</ID>
+    <ID>CyclomaticComplexMethod:SendFlowManager.kt:SendFlowManager$private fun apply</ID>
+    <ID>CyclomaticComplexMethod:SendFlowPresenter.kt:SendFlowPresenter$private fun errorAlertMessage: String</ID>
+    <ID>CyclomaticComplexMethod:SendFlowSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowSetAmountScreen</ID>
+    <ID>CyclomaticComplexMethod:SidebarContainer.kt:@Composable fun SidebarContainer</ID>
+    <ID>CyclomaticComplexMethod:SidebarView.kt:private fun WalletColor.toComposeColor: Color</ID>
+    <ID>CyclomaticComplexMethod:TapCardNfcManager.kt:TapCardNfcManager$suspend fun &lt;T&gt; performTapSignerCmd: Pair&lt;T, TapSignerResponse?&gt;</ID>
+    <ID>CyclomaticComplexMethod:TapSignerContainer.kt:@Composable fun TapSignerContainer</ID>
+    <ID>CyclomaticComplexMethod:TransactionDetailsContainer.kt:@Composable fun TransactionDetailsContainer</ID>
+    <ID>CyclomaticComplexMethod:TransactionDetailsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun TransactionDetailsScreen</ID>
+    <ID>CyclomaticComplexMethod:TransactionLabelView.kt:@Composable fun TransactionLabelView</ID>
+    <ID>CyclomaticComplexMethod:TransactionsCardView.kt:@Composable fun TransactionsCardView</ID>
+    <ID>CyclomaticComplexMethod:TransactionsRows.kt:@Composable internal fun ConfirmedTransactionWidget</ID>
+    <ID>CyclomaticComplexMethod:TransactionsRows.kt:@Composable internal fun UnconfirmedTransactionWidget</ID>
+    <ID>CyclomaticComplexMethod:VerifyWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun VerifyWordsScreen</ID>
+    <ID>CyclomaticComplexMethod:WalletColorExt.kt:fun WalletColor.toComposeColor: Color</ID>
+    <ID>CyclomaticComplexMethod:WalletManager.kt:WalletManager$private fun apply</ID>
+    <ID>CyclomaticComplexMethod:WalletSettingsContainer.kt:@Composable fun WalletSettingsContainer</ID>
+    <ID>CyclomaticComplexMethod:WalletSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletSettingsScreen</ID>
+    <ID>CyclomaticComplexMethod:WalletSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun WalletSheetsHost</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:CloudBackupWalletRows.kt:val (label, color, fill, border, icon) = when (status) { CloudBackupWalletStatus.DIRTY -&gt; StatusBadgeStyle(&quot;Dirty&quot;, colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber) CloudBackupWalletStatus.UPLOADING, CloudBackupWalletStatus.UPLOADED_PENDING_CONFIRMATION, -&gt; StatusBadgeStyle(&quot;Syncing&quot;, colors.cloudBlue, colors.cloudBlueFill, colors.cloudBlue.copy(alpha = 0.48f), Icons.Default.Refresh) CloudBackupWalletStatus.CONFIRMED -&gt; StatusBadgeStyle(&quot;Confirmed&quot;, colors.success, colors.successFill, colors.successBorder, Icons.Default.Check) CloudBackupWalletStatus.FAILED -&gt; StatusBadgeStyle(&quot;Failed&quot;, colors.danger, colors.dangerFill, colors.dangerBorder, Icons.Default.WarningAmber) CloudBackupWalletStatus.DELETED_FROM_DEVICE -&gt; StatusBadgeStyle(&quot;Not on device&quot;, colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.DoNotDisturbOn) CloudBackupWalletStatus.UNSUPPORTED_VERSION -&gt; StatusBadgeStyle(&quot;Unsupported&quot;, colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber) CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -&gt; StatusBadgeStyle(&quot;Unknown&quot;, colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber) }</ID>
+    <ID>ForbiddenComment:CoveApplication.kt:// TODO: make these configurable and store in database</ID>
+    <ID>ForbiddenComment:SelectedWalletContainer.kt:// TODO: get from theme</ID>
+    <ID>ForbiddenComment:TransactionDetailsWidget.kt:/* TODO: show fee info */</ID>
+    <ID>FunctionNaming:AboutDebugSection.kt:@Composable internal fun AboutDebugSection</ID>
+    <ID>FunctionNaming:AboutDebugSection.kt:@Composable private fun AboutActionRow</ID>
+    <ID>FunctionNaming:AboutSettingsScreen.kt:@Composable internal fun AboutSettingsPreviewContent</ID>
+    <ID>FunctionNaming:AboutSettingsScreen.kt:@Composable private fun AboutRow</ID>
+    <ID>FunctionNaming:AboutSettingsScreen.kt:@Composable private fun DebugRow</ID>
+    <ID>FunctionNaming:AboutSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun AboutSettingsScreen</ID>
+    <ID>FunctionNaming:AboutSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun AboutSettingsContent</ID>
+    <ID>FunctionNaming:AboutSettingsScreen.kt:@Preview( name = &quot;About Settings&quot;, showSystemUi = true, widthDp = 393, heightDp = 852, ) @Composable private fun AboutSettingsScreenPreview</ID>
+    <ID>FunctionNaming:AdvancedDetailsBottomSheet.kt:@Composable fun AdvancedDetailsBottomSheet</ID>
+    <ID>FunctionNaming:AdvancedDetailsBottomSheet.kt:@Composable private fun SentToSelfCard</ID>
+    <ID>FunctionNaming:AdvancedDetailsBottomSheet.kt:@Composable private fun UtxoCard</ID>
+    <ID>FunctionNaming:AdvancedDetailsBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Preview(showBackground = true) @Composable private fun AdvancedDetailsBottomSheetPreview</ID>
+    <ID>FunctionNaming:AdvancedDetailsBottomSheet.kt:@Preview(showBackground = true) @Composable private fun AdvancedDetailsContentPreview</ID>
+    <ID>FunctionNaming:AppearanceSettingsScreen.kt:@Composable private fun ColorSchemeRow</ID>
+    <ID>FunctionNaming:AppearanceSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun AppearanceSettingsScreen</ID>
+    <ID>FunctionNaming:AsyncView.kt:@Composable fun &lt;T&gt; AsyncView</ID>
+    <ID>FunctionNaming:AsyncView.kt:@Composable fun AsyncText</ID>
+    <ID>FunctionNaming:AutoSizeText.kt:@Composable fun AutoSizeText</ID>
+    <ID>FunctionNaming:AutoSizeText.kt:@Composable fun AutoSizeTextField</ID>
+    <ID>FunctionNaming:AutoSizeText.kt:@Composable fun BalanceAutoSizeText</ID>
+    <ID>FunctionNaming:BackupExportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupExportScreen</ID>
+    <ID>FunctionNaming:BackupImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupImportScreen</ID>
+    <ID>FunctionNaming:BackupVerifyScreen.kt:@Composable fun MetadataItem</ID>
+    <ID>FunctionNaming:BackupVerifyScreen.kt:@Composable fun VerifyResultContent</ID>
+    <ID>FunctionNaming:BackupVerifyScreen.kt:@Composable fun WalletSummaryCard</ID>
+    <ID>FunctionNaming:BackupVerifyScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupVerifyScreen</ID>
+    <ID>FunctionNaming:BitcoinShieldIcon.kt:@Composable fun BitcoinShieldIcon</ID>
+    <ID>FunctionNaming:BitcoinShieldIcon.kt:@Preview(showBackground = true, backgroundColor = 0xFF1A1A2E) @Composable private fun BitcoinShieldIconPreview</ID>
+    <ID>FunctionNaming:BlockExplorerSettingsScreen.kt:@Composable private fun BlockExplorerOptionRow</ID>
+    <ID>FunctionNaming:BlockExplorerSettingsScreen.kt:@Composable private fun NetworkPickerRow</ID>
+    <ID>FunctionNaming:BlockExplorerSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BlockExplorerSettingsScreen</ID>
+    <ID>FunctionNaming:ChangePinView.kt:@Composable fun ChangePinView</ID>
+    <ID>FunctionNaming:ChoiceDialog.kt:@Composable internal fun ChoiceAlertDialog</ID>
+    <ID>FunctionNaming:ChoiceDialog.kt:@Composable internal fun ChoiceAlertDialogNoCancelPreviewContent</ID>
+    <ID>FunctionNaming:ChoiceDialog.kt:@Composable internal fun ChoiceAlertDialogPreviewContent</ID>
+    <ID>FunctionNaming:ChoiceDialog.kt:@Composable private fun DialogChoiceRow</ID>
+    <ID>FunctionNaming:ChoiceDialog.kt:@Preview(showSystemUi = true, widthDp = 393, heightDp = 852) @Composable private fun ChoiceAlertDialogNoCancelPreview</ID>
+    <ID>FunctionNaming:ChoiceDialog.kt:@Preview(showSystemUi = true, widthDp = 393, heightDp = 852) @Composable private fun ChoiceAlertDialogPreview</ID>
+    <ID>FunctionNaming:ChooseWalletTypeSheet.kt:@Composable private fun ChooseWalletTypeSheetContent</ID>
+    <ID>FunctionNaming:ChooseWalletTypeSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ChooseWalletTypeSheet</ID>
+    <ID>FunctionNaming:ChooseWalletTypeSheet.kt:@Preview(showBackground = true) @Composable private fun ChooseWalletTypeSheetContentPreview</ID>
+    <ID>FunctionNaming:CloudBackupDetailContent.kt:@Composable internal fun CloudBackupDetailContent</ID>
+    <ID>FunctionNaming:CloudBackupDetailContent.kt:@Composable private fun DetailFormContent</ID>
+    <ID>FunctionNaming:CloudBackupDetailContent.kt:@Composable private fun MissingPasskeyContent</ID>
+    <ID>FunctionNaming:CloudBackupDetailContent.kt:@Composable private fun PendingUploadConfirmationStatus</ID>
+    <ID>FunctionNaming:CloudBackupDetailContent.kt:@Composable private fun UnsupportedPasskeyProviderContent</ID>
+    <ID>FunctionNaming:CloudBackupEnableOnboardingContent.kt:@Composable internal fun CloudBackupEnableBusyOverlay</ID>
+    <ID>FunctionNaming:CloudBackupEnableOnboardingContent.kt:@Composable internal fun CloudBackupEnableOnboardingView</ID>
+    <ID>FunctionNaming:CloudBackupEnableOnboardingContent.kt:@Composable private fun OnboardingToggleCard</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable fun CloudBackupPresentationHost</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable internal fun CloudBackupVerificationPromptDialog</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable internal fun CloudBackupVerificationPromptFailurePreviewContent</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable internal fun CloudBackupVerificationPromptPreviewContent</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable internal fun CloudBackupVerificationPromptRunningPreviewContent</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable private fun CloudBackupSuccessFloater</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable private fun CloudBackupVerificationPrompt</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable private fun CloudBackupVerificationPromptPreviewScaffold</ID>
+    <ID>FunctionNaming:CloudBackupPresentationHost.kt:@Composable private fun RowWithCheckIcon</ID>
+    <ID>FunctionNaming:CloudBackupPreviewData.kt:@Composable internal fun CloudBackupScreenPreviewContent</ID>
+    <ID>FunctionNaming:CloudBackupPreviewData.kt:@Preview( name = &quot;Cloud Backup Detail Dark&quot;, widthDp = 393, heightDp = 852, showSystemUi = true, uiMode = Configuration.UI_MODE_NIGHT_YES, ) @Composable private fun CloudBackupScreenPreview</ID>
+    <ID>FunctionNaming:CloudBackupPreviewData.kt:@Preview( name = &quot;Cloud Backup Detail Light&quot;, widthDp = 393, heightDp = 852, showSystemUi = true, uiMode = Configuration.UI_MODE_NIGHT_NO, ) @Composable private fun CloudBackupScreenLightPreview</ID>
+    <ID>FunctionNaming:CloudBackupScreen.kt:@Composable private fun CloudBackupSettingsEnableOnboarding</ID>
+    <ID>FunctionNaming:CloudBackupScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CloudBackupScreen</ID>
+    <ID>FunctionNaming:CloudBackupScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun CloudBackupScreenFrame</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupBitcoinMetadataText</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupGlassCard</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupIconBubble</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupIconText</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupProgressCard</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupProgressContent</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupSectionTitle</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupSimpleActionCard</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun CloudBackupTitledContentSection</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun ErrorInlineMessage</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable internal fun ErrorStateCard</ID>
+    <ID>FunctionNaming:CloudBackupVisuals.kt:@Composable private fun LoadingRow</ID>
+    <ID>FunctionNaming:CloudBackupWalletRows.kt:@Composable internal fun CloudBackupHeaderSection</ID>
+    <ID>FunctionNaming:CloudBackupWalletRows.kt:@Composable internal fun WalletRowsCard</ID>
+    <ID>FunctionNaming:CloudBackupWalletRows.kt:@Composable internal fun WalletSections</ID>
+    <ID>FunctionNaming:CloudBackupWalletRows.kt:@Composable private fun StatusBadge</ID>
+    <ID>FunctionNaming:CloudBackupWalletRows.kt:@Composable private fun WalletItemRow</ID>
+    <ID>FunctionNaming:CloudBackupWalletRows.kt:@Composable private fun WalletRowsSection</ID>
+    <ID>FunctionNaming:CloudOnlySection.kt:@Composable internal fun CloudOnlySection</ID>
+    <ID>FunctionNaming:CloudOnlySection.kt:@Composable internal fun CloudOnlyWalletActionSheetPreviewContent</ID>
+    <ID>FunctionNaming:CloudOnlySection.kt:@Composable private fun CloudOnlyWalletActionSheetContent</ID>
+    <ID>FunctionNaming:CloudOnlySection.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun CloudOnlyWalletActionSheet</ID>
+    <ID>FunctionNaming:CoinControlContainer.kt:@Composable fun CoinControlContainer</ID>
+    <ID>FunctionNaming:CoinControlCustomAmountSheet.kt:@Composable private fun UtxoDetailRow</ID>
+    <ID>FunctionNaming:CoinControlCustomAmountSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CoinControlCustomAmountSheet</ID>
+    <ID>FunctionNaming:CoinControlSetAmountScreen.kt:@Composable private fun AddressWidget</ID>
+    <ID>FunctionNaming:CoinControlSetAmountScreen.kt:@Composable private fun BalanceWidget</ID>
+    <ID>FunctionNaming:CoinControlSetAmountScreen.kt:@Composable private fun CoinControlAmountWidget</ID>
+    <ID>FunctionNaming:CoinControlSetAmountScreen.kt:@Composable private fun SpendingWidget</ID>
+    <ID>FunctionNaming:CoinControlSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CoinControlSetAmountScreen</ID>
+    <ID>FunctionNaming:ColdWalletQrScanScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ColdWalletQrScanScreen</ID>
+    <ID>FunctionNaming:ColumnMajorGrid.kt:@Composable fun &lt;T&gt; ColumnMajorGrid</ID>
+    <ID>FunctionNaming:ConfirmationIndicatorView.kt:@Composable fun ConfirmationIndicatorView</ID>
+    <ID>FunctionNaming:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview0</ID>
+    <ID>FunctionNaming:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview1</ID>
+    <ID>FunctionNaming:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview2</ID>
+    <ID>FunctionNaming:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview3</ID>
+    <ID>FunctionNaming:CoveNavDisplay.kt:@Composable fun CoveNavDisplay</ID>
+    <ID>FunctionNaming:CoveNavDisplay.kt:@Composable private fun LoadAndResetContent</ID>
+    <ID>FunctionNaming:CoveNavDisplay.kt:@Composable private fun RouteContent</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun CardItem</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun ClickableInfoRow</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun CustomSpacer</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun HStack</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun InfoRow</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun MaterialDivider</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun MaterialSection</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun SectionHeader</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun SwitchRow</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun ThemedSwitch</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Composable fun VStack</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun CardItemPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun CustomSpacerPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun InfoRowPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun MaterialDividerPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun MaterialSectionPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun SectionHeaderPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun SwitchRowPreview</ID>
+    <ID>FunctionNaming:CustomBaseViews.kt:@Preview @Composable fun ThemedSwitchPreview</ID>
+    <ID>FunctionNaming:CustomFeeRateSheet.kt:@Composable private fun DurationCapsule</ID>
+    <ID>FunctionNaming:CustomFeeRateSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomFeeRateSheet</ID>
+    <ID>FunctionNaming:DecoyPinView.kt:@Composable fun DecoyPinView</ID>
+    <ID>FunctionNaming:DisableCloudBackupSection.kt:@Composable internal fun DisableCloudBackupSection</ID>
+    <ID>FunctionNaming:DotMenuView.kt:@Composable fun DotMenuView</ID>
+    <ID>FunctionNaming:DotMenuView.kt:@Composable fun DotMenuViewCircle</ID>
+    <ID>FunctionNaming:DotMenuView.kt:@Preview @Composable private fun PreviewDotMenuView</ID>
+    <ID>FunctionNaming:EnterAddressView.kt:@Composable fun EnterAddressView</ID>
+    <ID>FunctionNaming:EnterAmountView.kt:@Composable fun EnterAmountView</ID>
+    <ID>FunctionNaming:FeeRateSelectorSheet.kt:@Composable private fun DurationCapsule</ID>
+    <ID>FunctionNaming:FeeRateSelectorSheet.kt:@Composable private fun FeeOptionCard</ID>
+    <ID>FunctionNaming:FeeRateSelectorSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun FeeRateSelectorSheet</ID>
+    <ID>FunctionNaming:FiatCurrencySettingsScreen.kt:@Composable private fun FiatCurrencyRow</ID>
+    <ID>FunctionNaming:FiatCurrencySettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun FiatCurrencySettingsScreen</ID>
+    <ID>FunctionNaming:FullPageLoadingView.kt:@Composable fun FullPageLoadingView</ID>
+    <ID>FunctionNaming:HeaderIcon.kt:@Composable internal fun CheckWithRingsWidget</ID>
+    <ID>FunctionNaming:HeaderIcon.kt:@Composable internal fun TransactionCapsule</ID>
+    <ID>FunctionNaming:HiddenPinTextField.kt:@Composable fun HiddenPinTextField</ID>
+    <ID>FunctionNaming:HotWalletCreateScreen.kt:@Composable private fun WordCardView</ID>
+    <ID>FunctionNaming:HotWalletCreateScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun HotWalletCreateScreen</ID>
+    <ID>FunctionNaming:HotWalletCreateScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun HotWalletCreateScreenPreview</ID>
+    <ID>FunctionNaming:HotWalletImportCard.kt:@Composable internal fun WordInputGrid</ID>
+    <ID>FunctionNaming:HotWalletImportCard.kt:@Composable private fun WordInputField</ID>
+    <ID>FunctionNaming:HotWalletImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun HotWalletImportScreen</ID>
+    <ID>FunctionNaming:HotWalletImportScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun HotWalletImportScreenPreview</ID>
+    <ID>FunctionNaming:HotWalletNfcScannerSheet.kt:@Composable private fun NfcReadingStateContent</ID>
+    <ID>FunctionNaming:HotWalletNfcScannerSheet.kt:@Composable private fun NfcSuccessState</ID>
+    <ID>FunctionNaming:HotWalletNfcScannerSheet.kt:@Composable private fun NfcWaitingState</ID>
+    <ID>FunctionNaming:HotWalletNfcScannerSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun NfcScannerSheet</ID>
+    <ID>FunctionNaming:HotWalletQrScannerSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun QrScannerSheet</ID>
+    <ID>FunctionNaming:HotWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun HotWalletSelectScreen</ID>
+    <ID>FunctionNaming:HotWalletSelectScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun HotWalletSelectScreenPreview</ID>
+    <ID>FunctionNaming:ImageButton.kt:@Composable fun ImageButton</ID>
+    <ID>FunctionNaming:ImageButton.kt:@Preview @Composable private fun PreviewImageButton</ID>
+    <ID>FunctionNaming:ImportWalletScreen.kt:@Composable private fun EnterWordWidget</ID>
+    <ID>FunctionNaming:ImportWalletScreen.kt:@Composable private fun EnterWordsWidget</ID>
+    <ID>FunctionNaming:ImportWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ImportWalletScreen</ID>
+    <ID>FunctionNaming:ImportWalletScreen.kt:@Preview @Composable private fun ImportWalletPreview12</ID>
+    <ID>FunctionNaming:ImportWalletScreen.kt:@Preview @Composable private fun ImportWalletPreview24</ID>
+    <ID>FunctionNaming:LockView.kt:@Composable fun LockView</ID>
+    <ID>FunctionNaming:LockView.kt:@Composable private fun BiometricView</ID>
+    <ID>FunctionNaming:LockView.kt:@Composable private fun PermissionsNeeded</ID>
+    <ID>FunctionNaming:MainActivityAppShell.kt:@Composable internal fun MainActivityAppShell</ID>
+    <ID>FunctionNaming:MainActivityGlobalAlerts.kt:@Composable internal fun GlobalAlertHandler</ID>
+    <ID>FunctionNaming:MainActivityGlobalAlerts.kt:@Composable private fun GlobalAlertDialog</ID>
+    <ID>FunctionNaming:MainActivityGlobalSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun SheetContent</ID>
+    <ID>FunctionNaming:MainActivityStartupViews.kt:@Composable internal fun BootstrapErrorView</ID>
+    <ID>FunctionNaming:MainActivityStartupViews.kt:@Composable internal fun CatastrophicRecoveryView</ID>
+    <ID>FunctionNaming:MainActivityStartupViews.kt:@Composable internal fun SplashLoadingView</ID>
+    <ID>FunctionNaming:MainSettingsScreen.kt:@Composable private fun BackupExportAuthDialog</ID>
+    <ID>FunctionNaming:MainSettingsScreen.kt:@Composable private fun BackupSection</ID>
+    <ID>FunctionNaming:MainSettingsScreen.kt:@Composable private fun BetaToggleSection</ID>
+    <ID>FunctionNaming:MainSettingsScreen.kt:@Composable private fun FullScreenSettingsModal</ID>
+    <ID>FunctionNaming:MainSettingsScreen.kt:@Composable private fun WalletSettingsSection</ID>
+    <ID>FunctionNaming:MainSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainSettingsScreen</ID>
+    <ID>FunctionNaming:MainSettingsSecuritySection.kt:@Composable internal fun SecuritySection</ID>
+    <ID>FunctionNaming:MainSettingsSecuritySection.kt:@Composable private fun SecurityAlertDialog</ID>
+    <ID>FunctionNaming:MainSettingsSecuritySection.kt:@Composable private fun SecuritySheetDialog</ID>
+    <ID>FunctionNaming:NetworkFeeBottomSheet.kt:@Composable private fun FeeOptionCard</ID>
+    <ID>FunctionNaming:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomNetworkFeeBottomSheet</ID>
+    <ID>FunctionNaming:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NetworkFeeBottomSheet</ID>
+    <ID>FunctionNaming:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Preview(showBackground = true) @Composable private fun NetworkFeeBottomSheetPreview</ID>
+    <ID>FunctionNaming:NetworkFeeBottomSheet.kt:@Preview(showBackground = true) @Composable private fun CustomNetworkFeeContentPreview</ID>
+    <ID>FunctionNaming:NetworkFeeBottomSheet.kt:@Preview(showBackground = true) @Composable private fun NetworkFeeContentPreview</ID>
+    <ID>FunctionNaming:NetworkSettingsScreen.kt:@Composable private fun NetworkRow</ID>
+    <ID>FunctionNaming:NetworkSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NetworkSettingsScreen</ID>
+    <ID>FunctionNaming:NewHotWalletContainer.kt:@Composable fun NewHotWalletContainer</ID>
+    <ID>FunctionNaming:NewHotWalletContainer.kt:@Composable private fun ImportWalletContainer</ID>
+    <ID>FunctionNaming:NewHotWalletContainer.kt:@Composable private fun PendingWalletContainer</ID>
+    <ID>FunctionNaming:NewPinView.kt:@Composable fun NewPinView</ID>
+    <ID>FunctionNaming:NewWalletContainer.kt:@Composable fun NewWalletContainer</ID>
+    <ID>FunctionNaming:NewWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NewWalletSelectScreen</ID>
+    <ID>FunctionNaming:NewWalletSelectScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun NewWalletSelectScreenPreview</ID>
+    <ID>FunctionNaming:NfcHelpSheet.kt:@Composable fun NfcHelpSheet</ID>
+    <ID>FunctionNaming:NfcHelpSheet.kt:@Composable private fun InstructionStep</ID>
+    <ID>FunctionNaming:NfcHelpSheet.kt:@Preview(showBackground = true) @Composable private fun NfcHelpSheetPreview</ID>
+    <ID>FunctionNaming:NfcLabelImportSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcLabelImportSheet</ID>
+    <ID>FunctionNaming:NfcScanSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcScanSheet</ID>
+    <ID>FunctionNaming:NfcWriteSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcWriteSheet</ID>
+    <ID>FunctionNaming:NodeSettingsScreen.kt:@Composable private fun NodeRow</ID>
+    <ID>FunctionNaming:NodeSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NodeSettingsScreen</ID>
+    <ID>FunctionNaming:NumberPadPinView.kt:@Composable fun NumberPadPinView</ID>
+    <ID>FunctionNaming:NumberPadPinView.kt:@Composable private fun NumberButton</ID>
+    <ID>FunctionNaming:OnboardingBackupViews.kt:@Composable internal fun OnboardingBackupWalletView</ID>
+    <ID>FunctionNaming:OnboardingBackupViews.kt:@Composable internal fun OnboardingCreatingWalletView</ID>
+    <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable internal fun OnboardingCloudBackupStepView</ID>
+    <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable internal fun OnboardingCloudBackupSuccessView</ID>
+    <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingCloudBackupDetailsStepView</ID>
+    <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingHardwareImportCloudBackupStepView</ID>
+    <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingSoftwareImportCloudBackupStepView</ID>
+    <ID>FunctionNaming:OnboardingCloudRestoreProgressViews.kt:@Composable internal fun OnboardingRestoreView</ID>
+    <ID>FunctionNaming:OnboardingCloudRestoreProgressViews.kt:@Composable private fun OnboardingRestoreContent</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable internal fun CloudCheckContent</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable internal fun OnboardingRestoreOfferView</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable private fun OnboardingCloudSearchHero</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable private fun OnboardingPasskeyCard</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable private fun OnboardingPasskeyDivider</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable private fun OnboardingRestoreErrorCard</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable private fun OnboardingRestoreMessageCard</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Composable private fun ProviderDetailItem</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun OnboardingRestoreOfferWithProviderDatePreview</ID>
+    <ID>FunctionNaming:OnboardingCloudRestorePromptViews.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun OnboardingRestoreOfferWithProviderHintPreview</ID>
+    <ID>FunctionNaming:OnboardingContainer.kt:@Composable internal fun OnboardingContainer</ID>
+    <ID>FunctionNaming:OnboardingContainer.kt:@Composable private fun BackableOnboardingStep</ID>
+    <ID>FunctionNaming:OnboardingExchangeFundingView.kt:@Composable internal fun OnboardingExchangeFundingView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable internal fun OnboardingHardwareImportFlowView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable internal fun OnboardingSoftwareImportFlowView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun CloudRestoreFoundAlert</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun OnboardingHardwareFileImportView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun OnboardingHardwareNfcImportView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun OnboardingHardwareQrImportView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun OnboardingHotWalletImportView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun OnboardingImportErrorView</ID>
+    <ID>FunctionNaming:OnboardingImportViews.kt:@Composable private fun OnboardingImportLoadingView</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable internal fun OnboardingBitcoinChoiceScreen</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable internal fun OnboardingRestoreOfflineScreen</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable internal fun OnboardingRestoreUnavailableScreen</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable internal fun OnboardingStorageChoiceScreen</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable internal fun OnboardingWelcomeScreen</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable private fun OnboardingChoiceDivider</ID>
+    <ID>FunctionNaming:OnboardingPromptViews.kt:@Composable private fun OnboardingCloudRestoreChoiceSection</ID>
+    <ID>FunctionNaming:OnboardingRecoveryWordsViews.kt:@Composable internal fun OnboardingSecretWordsView</ID>
+    <ID>FunctionNaming:OnboardingRecoveryWordsViews.kt:@Composable private fun OnboardingWordCard</ID>
+    <ID>FunctionNaming:OnboardingTermsViews.kt:@Composable internal fun OnboardingTermsScreen</ID>
+    <ID>FunctionNaming:OnboardingTermsViews.kt:@Composable private fun OnboardingTermsAgreementCard</ID>
+    <ID>FunctionNaming:OnboardingTermsViews.kt:@Composable private fun OnboardingTermsCheckIndicator</ID>
+    <ID>FunctionNaming:OnboardingTermsViews.kt:@Composable private fun OnboardingTermsCheckboxCard</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingBackground</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingChoiceCard</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingCloudRestoreChoiceCard</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingInlineMessage</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingPrimaryButton</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingPromptScreen</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingSecondaryButton</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingStatusCard</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingStatusHero</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingStepIndicator</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingThinProgressBar</ID>
+    <ID>FunctionNaming:OnboardingTheme.kt:@Composable internal fun OnboardingTopBackButton</ID>
+    <ID>FunctionNaming:OtherBackupsSection.kt:@Composable internal fun OtherBackupsLoadFailedSection</ID>
+    <ID>FunctionNaming:OtherBackupsSection.kt:@Composable internal fun OtherBackupsSection</ID>
+    <ID>FunctionNaming:PinCirclesView.kt:@Composable fun PinCirclesView</ID>
+    <ID>FunctionNaming:PinCirclesView.kt:@Composable private fun PinCircle</ID>
+    <ID>FunctionNaming:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun QrCodeImportScreen</ID>
+    <ID>FunctionNaming:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun HelpSheet</ID>
+    <ID>FunctionNaming:QrCodeScanView.kt:@Composable @androidx.camera.core.ExperimentalGetImage private fun QrScannerContent</ID>
+    <ID>FunctionNaming:QrCodeScanView.kt:@OptIn(ExperimentalPermissionsApi::class) @Composable fun QrCodeScanView</ID>
+    <ID>FunctionNaming:QrCodeScanView.kt:@OptIn(ExperimentalPermissionsApi::class) @Composable private fun PermissionDeniedContent</ID>
+    <ID>FunctionNaming:QrExportView.kt:@Composable fun QrExportView</ID>
+    <ID>FunctionNaming:QrExportView.kt:@Composable private fun DensityButtons</ID>
+    <ID>FunctionNaming:QrExportView.kt:@Composable private fun MinusButton</ID>
+    <ID>FunctionNaming:QrExportView.kt:@Composable private fun PlusButton</ID>
+    <ID>FunctionNaming:ReceiveAddressSheet.kt:@Composable private fun ReceiveAddressSheetContent</ID>
+    <ID>FunctionNaming:ReceiveAddressSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ReceiveAddressSheet</ID>
+    <ID>FunctionNaming:ReceiveAddressSheet.kt:@Preview(showBackground = true, heightDp = 800) @Composable private fun ReceiveAddressSheetPreview</ID>
+    <ID>FunctionNaming:ReceivedTransactionDetails.kt:@Composable internal fun ReceivedTransactionDetails</ID>
+    <ID>FunctionNaming:RecoveryWords.kt:@Composable fun RecoveryWordChip</ID>
+    <ID>FunctionNaming:RecoveryWords.kt:@Composable fun RecoveryWords</ID>
+    <ID>FunctionNaming:RecoveryWords.kt:@Composable private fun RecoveryWordsGrid</ID>
+    <ID>FunctionNaming:RecoveryWords.kt:@OptIn(ExperimentalFoundationApi::class) @Composable private fun RecoveryWordsPager</ID>
+    <ID>FunctionNaming:RecoveryWords.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun RecoveryWordsPreview</ID>
+    <ID>FunctionNaming:RoundRectImage.kt:@Composable fun RoundRectImage</ID>
+    <ID>FunctionNaming:RoundRectImage.kt:@Preview @Composable fun PreviewPainter</ID>
+    <ID>FunctionNaming:RouteView.kt:@Composable fun RouteView</ID>
+    <ID>FunctionNaming:RouteView.kt:@Composable private fun LoadAndResetContainer</ID>
+    <ID>FunctionNaming:SecretWordsScreen.kt:@Composable private fun RecoveryWordsGrid</ID>
+    <ID>FunctionNaming:SecretWordsScreen.kt:@Composable private fun SeedQrSheetContent</ID>
+    <ID>FunctionNaming:SecretWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SecretWordsScreen</ID>
+    <ID>FunctionNaming:SelectedWalletContainer.kt:@Composable fun SelectedWalletContainer</ID>
+    <ID>FunctionNaming:SelectedWalletContainer.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SelectedWalletLoadingScreen</ID>
+    <ID>FunctionNaming:SelectedWalletScreen.kt:@Composable private fun VerifyReminder</ID>
+    <ID>FunctionNaming:SelectedWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SelectedWalletScreen</ID>
+    <ID>FunctionNaming:SelectedWalletScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun SelectedWalletFunctionalPreview</ID>
+    <ID>FunctionNaming:SendFlowAdvancedDetailsView.kt:@Composable fun SendFlowAdvancedDetailsView</ID>
+    <ID>FunctionNaming:SendFlowAdvancedDetailsView.kt:@Composable private fun SectionCard</ID>
+    <ID>FunctionNaming:SendFlowAdvancedDetailsView.kt:@Composable private fun SectionDivider</ID>
+    <ID>FunctionNaming:SendFlowAdvancedDetailsView.kt:@Composable private fun TxRow</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@Composable private fun AmountWidget</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@Composable private fun BalanceWidget</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@Composable private fun KeyValueRow</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@Composable private fun SummaryWidget</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@Composable private fun SwipeToSendStub</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@Composable private fun ThreeDotsAnimation</ID>
+    <ID>FunctionNaming:SendFlowConfirmScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowConfirmScreen</ID>
+    <ID>FunctionNaming:SendFlowContainer.kt:@Composable fun SendFlowContainer</ID>
+    <ID>FunctionNaming:SendFlowContainer.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SendFlowRouteToScreen</ID>
+    <ID>FunctionNaming:SendFlowHardwareDetailsSheet.kt:@Composable internal fun TransactionDetailsSheet</ID>
+    <ID>FunctionNaming:SendFlowHardwareScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowHardwareScreen</ID>
+    <ID>FunctionNaming:SendFlowHardwareSections.kt:@Composable internal fun AccountSection</ID>
+    <ID>FunctionNaming:SendFlowHardwareSections.kt:@Composable internal fun AddressSection</ID>
+    <ID>FunctionNaming:SendFlowHardwareSections.kt:@Composable internal fun BalanceHeader</ID>
+    <ID>FunctionNaming:SendFlowHardwareSections.kt:@Composable internal fun HardwareSigningSection</ID>
+    <ID>FunctionNaming:SendFlowHardwareSections.kt:@Composable private fun SignTapSignerSection</ID>
+    <ID>FunctionNaming:SendFlowHardwareSections.kt:@Composable private fun SignTransactionSection</ID>
+    <ID>FunctionNaming:SendFlowHardwareSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun SendFlowHardwareBottomSheets</ID>
+    <ID>FunctionNaming:SendFlowHardwareSigning.kt:@Composable internal fun HardwareConfirmationDialogs</ID>
+    <ID>FunctionNaming:SendFlowHardwareSigning.kt:@Composable internal fun HardwareErrorAlert</ID>
+    <ID>FunctionNaming:SendFlowHardwareSigning.kt:@Composable internal fun HardwareNfcWriteSheet</ID>
+    <ID>FunctionNaming:SendFlowHardwareSigning.kt:@Composable internal fun HardwareQrScanner</ID>
+    <ID>FunctionNaming:SendFlowHeaderView.kt:@Composable fun SendFlowHeaderView</ID>
+    <ID>FunctionNaming:SendFlowSetAmountScreen.kt:@Composable private fun ImageButton</ID>
+    <ID>FunctionNaming:SendFlowSetAmountScreen.kt:@Composable private fun KeyboardToolbar</ID>
+    <ID>FunctionNaming:SendFlowSetAmountScreen.kt:@Composable private fun SpendingWidget</ID>
+    <ID>FunctionNaming:SendFlowSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowSetAmountScreen</ID>
+    <ID>FunctionNaming:SettingsContainer.kt:@Composable fun SettingsContainer</ID>
+    <ID>FunctionNaming:SettingsItem.kt:@Composable fun MaterialSettingsItem</ID>
+    <ID>FunctionNaming:SettingsItem.kt:@Composable fun SettingsItem</ID>
+    <ID>FunctionNaming:SettingsItem.kt:@Preview @Composable fun MaterialSettingsItemPreview</ID>
+    <ID>FunctionNaming:SettingsItem.kt:@Preview @Composable fun MaterialSettingsItemSwitchPreview</ID>
+    <ID>FunctionNaming:SettingsItem.kt:@Preview @Composable fun SettingsItemGo</ID>
+    <ID>FunctionNaming:SettingsItem.kt:@Preview @Composable fun SettingsItemSwitch</ID>
+    <ID>FunctionNaming:SettingsListAllWalletsScreen.kt:@Composable private fun SearchBar</ID>
+    <ID>FunctionNaming:SettingsListAllWalletsScreen.kt:@Composable private fun WalletRow</ID>
+    <ID>FunctionNaming:SettingsListAllWalletsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SettingsListAllWalletsScreen</ID>
+    <ID>FunctionNaming:SidebarContainer.kt:@Composable fun SidebarContainer</ID>
+    <ID>FunctionNaming:SidebarView.kt:@Composable fun SidebarView</ID>
+    <ID>FunctionNaming:SidebarView.kt:@Composable private fun WalletItem</ID>
+    <ID>FunctionNaming:TapSignerAdvancedChainCode.kt:@Composable fun TapSignerAdvancedChainCode</ID>
+    <ID>FunctionNaming:TapSignerChooseChainCode.kt:@Composable fun TapSignerChooseChainCode</ID>
+    <ID>FunctionNaming:TapSignerConfirmPinView.kt:@Composable fun TapSignerConfirmPinView</ID>
+    <ID>FunctionNaming:TapSignerContainer.kt:@Composable fun TapSignerContainer</ID>
+    <ID>FunctionNaming:TapSignerEnterPinView.kt:@Composable fun TapSignerEnterPinView</ID>
+    <ID>FunctionNaming:TapSignerImportRetryView.kt:@Composable fun TapSignerImportRetryView</ID>
+    <ID>FunctionNaming:TapSignerImportSuccessView.kt:@Composable fun TapSignerImportSuccessView</ID>
+    <ID>FunctionNaming:TapSignerNewPinView.kt:@Composable fun TapSignerNewPinView</ID>
+    <ID>FunctionNaming:TapSignerScanningOverlay.kt:@Composable fun TapSignerScanningOverlay</ID>
+    <ID>FunctionNaming:TapSignerSetupRetryView.kt:@Composable fun TapSignerSetupRetryView</ID>
+    <ID>FunctionNaming:TapSignerSetupSuccessView.kt:@Composable fun TapSignerSetupSuccessView</ID>
+    <ID>FunctionNaming:TapSignerStartingPinView.kt:@Composable fun TapSignerStartingPinView</ID>
+    <ID>FunctionNaming:Theme.kt:@Composable fun CoveTheme</ID>
+    <ID>FunctionNaming:Theme.kt:@Composable fun ForceLightStatusBarIcons</ID>
+    <ID>FunctionNaming:Theme.kt:@Composable fun ResetStatusBarToTheme</ID>
+    <ID>FunctionNaming:TransactionDetailsContainer.kt:@Composable fun TransactionDetailsContainer</ID>
+    <ID>FunctionNaming:TransactionDetailsContainer.kt:@Composable private fun TransactionDetailsLoadError</ID>
+    <ID>FunctionNaming:TransactionDetailsScreen.kt:@Composable private fun TransactionDetailsHeaderLabelRow</ID>
+    <ID>FunctionNaming:TransactionDetailsScreen.kt:@Composable private fun TransactionLockAction</ID>
+    <ID>FunctionNaming:TransactionDetailsScreen.kt:@Composable private fun TransactionLockControls</ID>
+    <ID>FunctionNaming:TransactionDetailsScreen.kt:@Composable private fun TransactionLockLoadError</ID>
+    <ID>FunctionNaming:TransactionDetailsScreen.kt:@Composable private fun TransactionLockedUtxosBadge</ID>
+    <ID>FunctionNaming:TransactionDetailsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun TransactionDetailsScreen</ID>
+    <ID>FunctionNaming:TransactionDetailsWidget.kt:@Composable internal fun DetailsWidget</ID>
+    <ID>FunctionNaming:TransactionDetailsWidget.kt:@Composable internal fun FiatPriceSection</ID>
+    <ID>FunctionNaming:TransactionDetailsWidget.kt:@Composable internal fun TransactionDetailsWidget</ID>
+    <ID>FunctionNaming:TransactionLabelView.kt:@Composable fun TransactionLabelView</ID>
+    <ID>FunctionNaming:TransactionsCardView.kt:@Composable fun TransactionsCardView</ID>
+    <ID>FunctionNaming:TransactionsRows.kt:@Composable internal fun ConfirmedTransactionWidget</ID>
+    <ID>FunctionNaming:TransactionsRows.kt:@Composable internal fun TransactionItem</ID>
+    <ID>FunctionNaming:TransactionsRows.kt:@Composable internal fun UnconfirmedTransactionWidget</ID>
+    <ID>FunctionNaming:TransactionsRows.kt:@OptIn(ExperimentalFoundationApi::class) @Composable internal fun UnsignedTransactionWidget</ID>
+    <ID>FunctionNaming:TransactionsScanState.kt:@Composable internal fun EmptyWalletScanSpinnerState</ID>
+    <ID>FunctionNaming:TransactionsScanState.kt:@Composable internal fun EmptyWalletScanState</ID>
+    <ID>FunctionNaming:TransactionsScanState.kt:@Composable internal fun TransactionsScanProgressStrip</ID>
+    <ID>FunctionNaming:TransactionsScanState.kt:@Composable internal fun TransactionsScanSpinnerStrip</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@Composable private fun ChangeBadge</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@Composable private fun SearchBar</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@Composable private fun SelectionCircle</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@Composable private fun SortChip</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@Composable private fun SortRow</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@OptIn(ExperimentalFoundationApi::class) @Composable private fun UtxoItemRow</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun UtxoListScreen</ID>
+    <ID>FunctionNaming:UtxoListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun UtxoListScreenContent</ID>
+    <ID>FunctionNaming:VerificationCompleteScreen.kt:@Composable fun VerificationCompleteScreen</ID>
+    <ID>FunctionNaming:VerificationCompleteScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun VerificationCompleteScreenPreview</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable internal fun VerificationSection</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun CancelledVerificationActions</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun CancelledVerificationRecoveryContent</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun PasskeyConfirmedSectionContent</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun VerificationFailureContent</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun VerifiedSectionContent</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun VerifiedSummary</ID>
+    <ID>FunctionNaming:VerificationSection.kt:@Composable private fun VerifyAgainButton</ID>
+    <ID>FunctionNaming:VerifyWordsContainer.kt:@Composable fun VerifyWordsContainer</ID>
+    <ID>FunctionNaming:VerifyWordsScreen.kt:@Composable private fun OptionChip</ID>
+    <ID>FunctionNaming:VerifyWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun VerifyWordsScreen</ID>
+    <ID>FunctionNaming:WalletBalanceHeaderView.kt:@Composable fun WalletBalanceHeaderView</ID>
+    <ID>FunctionNaming:WalletBalanceHeaderView.kt:@Composable internal fun BalanceWidget</ID>
+    <ID>FunctionNaming:WalletBalanceHeaderView.kt:@Composable private fun AmountDisplay</ID>
+    <ID>FunctionNaming:WalletBalanceHeaderView.kt:@Composable private fun SendReceiveButtons</ID>
+    <ID>FunctionNaming:WalletBalanceHeaderView.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun WalletBalanceHeaderViewHiddenPreview</ID>
+    <ID>FunctionNaming:WalletBalanceHeaderView.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun WalletBalanceHeaderViewPreview</ID>
+    <ID>FunctionNaming:WalletIcon.kt:@Composable fun WalletIcon</ID>
+    <ID>FunctionNaming:WalletImportHelpSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletImportHelpSheet</ID>
+    <ID>FunctionNaming:WalletMoreOptionsSheet.kt:@Composable private fun MenuOption</ID>
+    <ID>FunctionNaming:WalletMoreOptionsSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletMoreOptionsSheet</ID>
+    <ID>FunctionNaming:WalletSettingsChangeNameScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletSettingsChangeNameScreen</ID>
+    <ID>FunctionNaming:WalletSettingsContainer.kt:@Composable fun WalletSettingsContainer</ID>
+    <ID>FunctionNaming:WalletSettingsContainer.kt:@Composable private fun WalletSettingsLoadError</ID>
+    <ID>FunctionNaming:WalletSettingsScreen.kt:@Composable private fun WalletColorSelector</ID>
+    <ID>FunctionNaming:WalletSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletSettingsScreen</ID>
+    <ID>FunctionNaming:WalletSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun WalletSheetsHost</ID>
+    <ID>FunctionNaming:WipeDataPinView.kt:@Composable fun WipeDataPinView</ID>
+    <ID>HasPlatformType:TapSignerManager.kt:TapSignerManager$var id by mutableStateOf(UUID.randomUUID()) private set</ID>
+    <ID>ImplicitDefaultLocale:NodeSettingsScreen.kt:errorUnknown.format(e.message ?: &quot;&quot;)</ID>
+    <ID>ImplicitDefaultLocale:TapSignerAdvancedChainCode.kt:&quot;%02x&quot;.format(it)</ID>
+    <ID>InjectDispatcher:AboutDebugSection.kt:IO</ID>
+    <ID>InjectDispatcher:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$IO</ID>
+    <ID>InjectDispatcher:AppManager.kt:AppManager$IO</ID>
+    <ID>InjectDispatcher:BackupExportScreen.kt:IO</ID>
+    <ID>InjectDispatcher:BackupExportUtils.kt:IO</ID>
+    <ID>InjectDispatcher:BackupImportScreen.kt:IO</ID>
+    <ID>InjectDispatcher:BackupVerifyScreen.kt:IO</ID>
+    <ID>InjectDispatcher:CloudBackupManager.kt:CloudBackupManager$IO</ID>
+    <ID>InjectDispatcher:CoinControlManager.kt:CoinControlManager$IO</ID>
+    <ID>InjectDispatcher:CustomFeeRateSheet.kt:IO</ID>
+    <ID>InjectDispatcher:MoreInfoPopover.kt:IO</ID>
+    <ID>InjectDispatcher:NodeSettingsScreen.kt:IO</ID>
+    <ID>InjectDispatcher:OnboardingImportViews.kt:IO</ID>
+    <ID>InjectDispatcher:PendingWalletManager.kt:PendingWalletManager$IO</ID>
+    <ID>InjectDispatcher:SendFlowHardwareImportRoute.kt:IO</ID>
+    <ID>InjectDispatcher:SendFlowHardwareSigning.kt:IO</ID>
+    <ID>InjectDispatcher:TapCardNfcManager.kt:TapCardNfcManager$IO</ID>
+    <ID>InjectDispatcher:TapSignerImportSuccessView.kt:IO</ID>
+    <ID>InjectDispatcher:WalletManager.kt:WalletManager$IO</ID>
+    <ID>InjectDispatcher:WalletSheets.kt:IO</ID>
+    <ID>InstanceOfCheckForException:AboutDebugSection.kt:error is CancellationException</ID>
+    <ID>InstanceOfCheckForException:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$error is CancellationException</ID>
+    <ID>InstanceOfCheckForException:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$error is DriveHttpException</ID>
+    <ID>InstanceOfCheckForException:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$error is CancellationException</ID>
+    <ID>LargeClass:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess : CloudStorageAccess</ID>
+    <ID>LargeClass:AndroidCloudStorageAccessTest.kt:AndroidCloudStorageAccessTest</ID>
+    <ID>LargeClass:AppManager.kt:AppManager : FfiReconcile</ID>
+    <ID>LargeClass:WalletManager.kt:WalletManager : WalletManagerReconcilerCloseable</ID>
+    <ID>LongMethod:AboutDebugSection.kt:@Composable internal fun AboutDebugSection</ID>
+    <ID>LongMethod:AboutSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun AboutSettingsScreen</ID>
+    <ID>LongMethod:AboutSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun AboutSettingsContent</ID>
+    <ID>LongMethod:AdvancedDetailsBottomSheet.kt:@Composable fun AdvancedDetailsBottomSheet</ID>
+    <ID>LongMethod:AndroidCloudStorageAccessTest.kt:AndroidCloudStorageAccessTest$@Test fun sparseDriveAccountIdentityIsResolvedBeforeVerification</ID>
+    <ID>LongMethod:AppManager.kt:AppManager$override fun reconcile</ID>
+    <ID>LongMethod:AutoSizeText.kt:@Composable fun AutoSizeTextField</ID>
+    <ID>LongMethod:BackupExportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupExportScreen</ID>
+    <ID>LongMethod:BackupImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupImportScreen</ID>
+    <ID>LongMethod:BackupVerifyScreen.kt:@Composable fun VerifyResultContent</ID>
+    <ID>LongMethod:BackupVerifyScreen.kt:@Composable fun WalletSummaryCard</ID>
+    <ID>LongMethod:BackupVerifyScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupVerifyScreen</ID>
+    <ID>LongMethod:BlockExplorerSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BlockExplorerSettingsScreen</ID>
+    <ID>LongMethod:ChooseWalletTypeSheet.kt:@Composable private fun ChooseWalletTypeSheetContent</ID>
+    <ID>LongMethod:ChooseWalletTypeSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ChooseWalletTypeSheet</ID>
+    <ID>LongMethod:CloudBackupDetailContent.kt:@Composable internal fun CloudBackupDetailContent</ID>
+    <ID>LongMethod:CloudBackupEnableOnboardingContent.kt:@Composable internal fun CloudBackupEnableOnboardingView</ID>
+    <ID>LongMethod:CloudBackupPresentationHost.kt:@Composable fun CloudBackupPresentationHost</ID>
+    <ID>LongMethod:CloudBackupPreviewData.kt:private fun cloudBackupPreviewState: CloudBackupState</ID>
+    <ID>LongMethod:CloudBackupScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CloudBackupScreen</ID>
+    <ID>LongMethod:CloudBackupScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun CloudBackupScreenFrame</ID>
+    <ID>LongMethod:CloudBackupWalletRows.kt:@Composable internal fun CloudBackupHeaderSection</ID>
+    <ID>LongMethod:CloudBackupWalletRows.kt:@Composable private fun WalletItemRow</ID>
+    <ID>LongMethod:CloudOnlySection.kt:@Composable internal fun CloudOnlySection</ID>
+    <ID>LongMethod:CloudOnlySection.kt:@Composable private fun CloudOnlyWalletActionSheetContent</ID>
+    <ID>LongMethod:CoinControlContainer.kt:@Composable fun CoinControlContainer</ID>
+    <ID>LongMethod:CoinControlCustomAmountSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CoinControlCustomAmountSheet</ID>
+    <ID>LongMethod:CoinControlSetAmountScreen.kt:@Composable private fun AddressWidget</ID>
+    <ID>LongMethod:CoinControlSetAmountScreen.kt:@Composable private fun CoinControlAmountWidget</ID>
+    <ID>LongMethod:CoinControlSetAmountScreen.kt:@Composable private fun SpendingWidget</ID>
+    <ID>LongMethod:CoinControlSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CoinControlSetAmountScreen</ID>
+    <ID>LongMethod:ColdWalletQrScanScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ColdWalletQrScanScreen</ID>
+    <ID>LongMethod:CoveApplication.kt:CoveApplication$private fun cleanupFfiObjects</ID>
+    <ID>LongMethod:CustomFeeRateSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomFeeRateSheet</ID>
+    <ID>LongMethod:DisableCloudBackupSection.kt:@Composable internal fun DisableCloudBackupSection</ID>
+    <ID>LongMethod:EnterAddressView.kt:@Composable fun EnterAddressView</ID>
+    <ID>LongMethod:EnterAmountView.kt:@Composable fun EnterAmountView</ID>
+    <ID>LongMethod:FeeRateSelectorSheet.kt:@Composable private fun FeeOptionCard</ID>
+    <ID>LongMethod:FeeRateSelectorSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun FeeRateSelectorSheet</ID>
+    <ID>LongMethod:HeaderIcon.kt:@Composable internal fun CheckWithRingsWidget</ID>
+    <ID>LongMethod:HotWalletCreateScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun HotWalletCreateScreen</ID>
+    <ID>LongMethod:HotWalletImportCard.kt:@Composable internal fun WordInputGrid</ID>
+    <ID>LongMethod:HotWalletImportCard.kt:@Composable private fun WordInputField</ID>
+    <ID>LongMethod:HotWalletImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun HotWalletImportScreen</ID>
+    <ID>LongMethod:HotWalletNfcScannerSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun NfcScannerSheet</ID>
+    <ID>LongMethod:HotWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun HotWalletSelectScreen</ID>
+    <ID>LongMethod:ImportWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ImportWalletScreen</ID>
+    <ID>LongMethod:LockView.kt:@Composable fun LockView</ID>
+    <ID>LongMethod:LockView.kt:@Composable private fun BiometricView</ID>
+    <ID>LongMethod:MainActivity.kt:MainActivity$override fun onCreate</ID>
+    <ID>LongMethod:MainActivityAppShell.kt:@Composable internal fun MainActivityAppShell</ID>
+    <ID>LongMethod:MainActivityGlobalAlerts.kt:@Composable private fun GlobalAlertDialog</ID>
+    <ID>LongMethod:MainActivityStartupViews.kt:@Composable internal fun CatastrophicRecoveryView</ID>
+    <ID>LongMethod:MainSettingsScreen.kt:@Composable private fun BackupExportAuthDialog</ID>
+    <ID>LongMethod:MainSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun MainSettingsScreen</ID>
+    <ID>LongMethod:MainSettingsSecuritySection.kt:@Composable internal fun SecuritySection</ID>
+    <ID>LongMethod:MainSettingsSecuritySection.kt:@Composable private fun SecurityAlertDialog</ID>
+    <ID>LongMethod:MainSettingsSecuritySection.kt:@Composable private fun SecuritySheetDialog</ID>
+    <ID>LongMethod:MoreInfoPopover.kt:@Composable fun rememberWalletExportLaunchers: WalletExportLaunchers</ID>
+    <ID>LongMethod:NetworkFeeBottomSheet.kt:@Composable private fun FeeOptionCard</ID>
+    <ID>LongMethod:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomNetworkFeeBottomSheet</ID>
+    <ID>LongMethod:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Preview(showBackground = true) @Composable private fun NetworkFeeBottomSheetPreview</ID>
+    <ID>LongMethod:NetworkSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NetworkSettingsScreen</ID>
+    <ID>LongMethod:NewWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NewWalletSelectScreen</ID>
+    <ID>LongMethod:NfcLabelImportSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcLabelImportSheet</ID>
+    <ID>LongMethod:NfcReader.kt:NfcReader$private fun processNdefMessage</ID>
+    <ID>LongMethod:NfcScanSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcScanSheet</ID>
+    <ID>LongMethod:NfcWriteSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcWriteSheet</ID>
+    <ID>LongMethod:NodeSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NodeSettingsScreen</ID>
+    <ID>LongMethod:NumberPadPinView.kt:@Composable fun NumberPadPinView</ID>
+    <ID>LongMethod:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingCloudBackupDetailsStepView</ID>
+    <ID>LongMethod:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingHardwareImportCloudBackupStepView</ID>
+    <ID>LongMethod:OnboardingCloudRestoreProgressViews.kt:@Composable private fun OnboardingRestoreContent</ID>
+    <ID>LongMethod:OnboardingCloudRestorePromptViews.kt:@Composable internal fun OnboardingRestoreOfferView</ID>
+    <ID>LongMethod:OnboardingCloudRestorePromptViews.kt:@Composable private fun OnboardingPasskeyCard</ID>
+    <ID>LongMethod:OnboardingContainer.kt:@Composable internal fun OnboardingContainer</ID>
+    <ID>LongMethod:OnboardingExchangeFundingView.kt:@Composable internal fun OnboardingExchangeFundingView</ID>
+    <ID>LongMethod:OnboardingHelpersTest.kt:OnboardingHelpersTest$@Test fun shouldCompleteOnboardingCloudBackupRequiresCompletedVerification</ID>
+    <ID>LongMethod:OnboardingImportViews.kt:@Composable internal fun OnboardingSoftwareImportFlowView</ID>
+    <ID>LongMethod:OnboardingImportViews.kt:@Composable private fun OnboardingHardwareFileImportView</ID>
+    <ID>LongMethod:OnboardingImportViews.kt:@Composable private fun OnboardingHardwareNfcImportView</ID>
+    <ID>LongMethod:OnboardingRecoveryWordsViews.kt:@Composable internal fun OnboardingSecretWordsView</ID>
+    <ID>LongMethod:OnboardingTermsViews.kt:@Composable internal fun OnboardingTermsScreen</ID>
+    <ID>LongMethod:OnboardingTermsViews.kt:@Composable private fun OnboardingTermsAgreementCard</ID>
+    <ID>LongMethod:OnboardingTheme.kt:@Composable internal fun OnboardingPromptScreen</ID>
+    <ID>LongMethod:OtherBackupsSection.kt:@Composable internal fun OtherBackupsSection</ID>
+    <ID>LongMethod:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun QrCodeImportScreen</ID>
+    <ID>LongMethod:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun HelpSheet</ID>
+    <ID>LongMethod:QrCodeScanView.kt:@Composable @androidx.camera.core.ExperimentalGetImage private fun QrScannerContent</ID>
+    <ID>LongMethod:QrExportView.kt:@Composable fun QrExportView</ID>
+    <ID>LongMethod:ReceiveAddressSheet.kt:@Composable private fun ReceiveAddressSheetContent</ID>
+    <ID>LongMethod:ReceiveAddressSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ReceiveAddressSheet</ID>
+    <ID>LongMethod:ReceivedTransactionDetails.kt:@Composable internal fun ReceivedTransactionDetails</ID>
+    <ID>LongMethod:SecretWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SecretWordsScreen</ID>
+    <ID>LongMethod:SelectedWalletContainer.kt:@Composable fun SelectedWalletContainer</ID>
+    <ID>LongMethod:SelectedWalletContainer.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SelectedWalletLoadingScreen</ID>
+    <ID>LongMethod:SelectedWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SelectedWalletScreen</ID>
+    <ID>LongMethod:SendFlowAdvancedDetailsView.kt:@Composable fun SendFlowAdvancedDetailsView</ID>
+    <ID>LongMethod:SendFlowAdvancedDetailsView.kt:@Composable private fun TxRow</ID>
+    <ID>LongMethod:SendFlowConfirmScreen.kt:@Composable private fun AmountWidget</ID>
+    <ID>LongMethod:SendFlowConfirmScreen.kt:@Composable private fun SwipeToSendStub</ID>
+    <ID>LongMethod:SendFlowConfirmScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowConfirmScreen</ID>
+    <ID>LongMethod:SendFlowContainer.kt:@Composable fun SendFlowContainer</ID>
+    <ID>LongMethod:SendFlowContainer.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SendFlowRouteToScreen</ID>
+    <ID>LongMethod:SendFlowHardwareDetailsSheet.kt:@Composable internal fun TransactionDetailsSheet</ID>
+    <ID>LongMethod:SendFlowHardwareScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowHardwareScreen</ID>
+    <ID>LongMethod:SendFlowHardwareSections.kt:@Composable internal fun BalanceHeader</ID>
+    <ID>LongMethod:SendFlowHardwareSections.kt:@Composable private fun SignTransactionSection</ID>
+    <ID>LongMethod:SendFlowHardwareSigning.kt:@Composable internal fun HardwareConfirmationDialogs</ID>
+    <ID>LongMethod:SendFlowSetAmountScreen.kt:@Composable private fun SpendingWidget</ID>
+    <ID>LongMethod:SendFlowSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowSetAmountScreen</ID>
+    <ID>LongMethod:SettingsContainer.kt:@Composable fun SettingsContainer</ID>
+    <ID>LongMethod:SettingsListAllWalletsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SettingsListAllWalletsScreen</ID>
+    <ID>LongMethod:SidebarContainer.kt:@Composable fun SidebarContainer</ID>
+    <ID>LongMethod:SidebarView.kt:@Composable fun SidebarView</ID>
+    <ID>LongMethod:TapCardNfcManager.kt:TapCardNfcManager$suspend fun &lt;T&gt; performTapSignerCmd: Pair&lt;T, TapSignerResponse?&gt;</ID>
+    <ID>LongMethod:TapSignerAdvancedChainCode.kt:@Composable fun TapSignerAdvancedChainCode</ID>
+    <ID>LongMethod:TapSignerChooseChainCode.kt:@Composable fun TapSignerChooseChainCode</ID>
+    <ID>LongMethod:TapSignerConfirmPinView.kt:@Composable fun TapSignerConfirmPinView</ID>
+    <ID>LongMethod:TapSignerContainer.kt:@Composable fun TapSignerContainer</ID>
+    <ID>LongMethod:TapSignerEnterPinView.kt:@Composable fun TapSignerEnterPinView</ID>
+    <ID>LongMethod:TapSignerImportRetryView.kt:@Composable fun TapSignerImportRetryView</ID>
+    <ID>LongMethod:TapSignerImportSuccessView.kt:@Composable fun TapSignerImportSuccessView</ID>
+    <ID>LongMethod:TapSignerNewPinView.kt:@Composable fun TapSignerNewPinView</ID>
+    <ID>LongMethod:TapSignerScanningOverlay.kt:@Composable fun TapSignerScanningOverlay</ID>
+    <ID>LongMethod:TapSignerSetupRetryView.kt:@Composable fun TapSignerSetupRetryView</ID>
+    <ID>LongMethod:TapSignerSetupSuccessView.kt:@Composable fun TapSignerSetupSuccessView</ID>
+    <ID>LongMethod:TapSignerStartingPinView.kt:@Composable fun TapSignerStartingPinView</ID>
+    <ID>LongMethod:TransactionDetailsContainer.kt:@Composable fun TransactionDetailsContainer</ID>
+    <ID>LongMethod:TransactionDetailsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun TransactionDetailsScreen</ID>
+    <ID>LongMethod:TransactionDetailsWidget.kt:@Composable internal fun TransactionDetailsWidget</ID>
+    <ID>LongMethod:TransactionLabelView.kt:@Composable fun TransactionLabelView</ID>
+    <ID>LongMethod:TransactionsCardView.kt:@Composable fun TransactionsCardView</ID>
+    <ID>LongMethod:TransactionsCardView.kt:@OptIn(ExperimentalFoundationApi::class) fun LazyListScope.transactionItems</ID>
+    <ID>LongMethod:TransactionsRows.kt:@Composable internal fun ConfirmedTransactionWidget</ID>
+    <ID>LongMethod:TransactionsRows.kt:@Composable internal fun TransactionItem</ID>
+    <ID>LongMethod:TransactionsRows.kt:@Composable internal fun UnconfirmedTransactionWidget</ID>
+    <ID>LongMethod:TransactionsRows.kt:@OptIn(ExperimentalFoundationApi::class) @Composable internal fun UnsignedTransactionWidget</ID>
+    <ID>LongMethod:UtxoListScreen.kt:@OptIn(ExperimentalFoundationApi::class) @Composable private fun UtxoItemRow</ID>
+    <ID>LongMethod:UtxoListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun UtxoListScreen</ID>
+    <ID>LongMethod:UtxoListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun UtxoListScreenContent</ID>
+    <ID>LongMethod:VerificationCompleteScreen.kt:@Composable fun VerificationCompleteScreen</ID>
+    <ID>LongMethod:VerificationSection.kt:@Composable internal fun VerificationSection</ID>
+    <ID>LongMethod:VerifyWordsContainer.kt:@Composable fun VerifyWordsContainer</ID>
+    <ID>LongMethod:VerifyWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun VerifyWordsScreen</ID>
+    <ID>LongMethod:WalletBalanceHeaderView.kt:@Composable internal fun BalanceWidget</ID>
+    <ID>LongMethod:WalletImportHelpSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletImportHelpSheet</ID>
+    <ID>LongMethod:WalletManager.kt:WalletManager$private fun apply</ID>
+    <ID>LongMethod:WalletMoreOptionsSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletMoreOptionsSheet</ID>
+    <ID>LongMethod:WalletSettingsChangeNameScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletSettingsChangeNameScreen</ID>
+    <ID>LongMethod:WalletSettingsContainer.kt:@Composable fun WalletSettingsContainer</ID>
+    <ID>LongMethod:WalletSettingsScreen.kt:@Composable private fun WalletColorSelector</ID>
+    <ID>LongMethod:WalletSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletSettingsScreen</ID>
+    <ID>LongMethod:WalletSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun WalletSheetsHost</ID>
+    <ID>LongParameterList:AboutSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun AboutSettingsContent</ID>
+    <ID>LongParameterList:AsyncView.kt:@Composable fun AsyncText</ID>
+    <ID>LongParameterList:AutoSizeText.kt:@Composable fun AutoSizeText</ID>
+    <ID>LongParameterList:AutoSizeText.kt:@Composable fun AutoSizeTextField</ID>
+    <ID>LongParameterList:AutoSizeText.kt:@Composable fun BalanceAutoSizeText</ID>
+    <ID>LongParameterList:AutoSizeText.kt:private fun calculateOptimalFontSize: TextUnit</ID>
+    <ID>LongParameterList:AutoSizeText.kt:private fun calculateOptimalFontSizeAndWidth: Pair&lt;TextUnit, Float&gt;</ID>
+    <ID>LongParameterList:ChoiceDialog.kt:@Composable internal fun ChoiceAlertDialog</ID>
+    <ID>LongParameterList:CloudBackupEnableOnboardingContent.kt:@Composable internal fun CloudBackupEnableOnboardingView</ID>
+    <ID>LongParameterList:CloudBackupPresentationHost.kt:@Composable internal fun CloudBackupVerificationPromptDialog</ID>
+    <ID>LongParameterList:CloudBackupVisuals.kt:@Composable internal fun CloudBackupIconBubble</ID>
+    <ID>LongParameterList:CloudBackupVisuals.kt:@Composable internal fun CloudBackupIconText</ID>
+    <ID>LongParameterList:CloudBackupVisuals.kt:@Composable internal fun CloudBackupTitledContentSection</ID>
+    <ID>LongParameterList:CloudBackupWalletRows.kt:@Composable private fun WalletRowsSection</ID>
+    <ID>LongParameterList:CoinControlSetAmountScreen.kt:@Composable private fun AddressWidget</ID>
+    <ID>LongParameterList:CoinControlSetAmountScreen.kt:@Composable private fun SpendingWidget</ID>
+    <ID>LongParameterList:CoinControlSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CoinControlSetAmountScreen</ID>
+    <ID>LongParameterList:ColumnMajorGrid.kt:@Composable fun &lt;T&gt; ColumnMajorGrid</ID>
+    <ID>LongParameterList:CustomFeeRateSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomFeeRateSheet</ID>
+    <ID>LongParameterList:DotMenuView.kt:@Composable fun DotMenuView</ID>
+    <ID>LongParameterList:DotMenuView.kt:@Composable fun DotMenuViewCircle</ID>
+    <ID>LongParameterList:EnterAddressView.kt:@Composable fun EnterAddressView</ID>
+    <ID>LongParameterList:EnterAmountView.kt:@Composable fun EnterAmountView</ID>
+    <ID>LongParameterList:FeeRateSelectorSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun FeeRateSelectorSheet</ID>
+    <ID>LongParameterList:HiddenPinTextField.kt:@Composable fun HiddenPinTextField</ID>
+    <ID>LongParameterList:HotWalletImportCard.kt:@Composable internal fun WordInputGrid</ID>
+    <ID>LongParameterList:HotWalletImportCard.kt:@Composable private fun WordInputField</ID>
+    <ID>LongParameterList:HotWalletImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun HotWalletImportScreen</ID>
+    <ID>LongParameterList:ImageButton.kt:@Composable fun ImageButton</ID>
+    <ID>LongParameterList:MainActivityAppShell.kt:@Composable internal fun MainActivityAppShell</ID>
+    <ID>LongParameterList:MainActivityStartupViews.kt:@Composable internal fun CatastrophicRecoveryView</ID>
+    <ID>LongParameterList:MainSettingsSecuritySection.kt:@Composable private fun SecurityAlertDialog</ID>
+    <ID>LongParameterList:MainSettingsSecuritySection.kt:@Composable private fun SecuritySheetDialog</ID>
+    <ID>LongParameterList:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CustomNetworkFeeBottomSheet</ID>
+    <ID>LongParameterList:NewWalletSelectScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NewWalletSelectScreen</ID>
+    <ID>LongParameterList:NumberPadPinView.kt:@Composable fun NumberPadPinView</ID>
+    <ID>LongParameterList:OnboardingBackupViews.kt:@Composable internal fun OnboardingBackupWalletView</ID>
+    <ID>LongParameterList:OnboardingCloudRestorePromptViews.kt:@Composable internal fun OnboardingRestoreOfferView</ID>
+    <ID>LongParameterList:OnboardingImportViews.kt:@Composable internal fun OnboardingSoftwareImportFlowView</ID>
+    <ID>LongParameterList:OnboardingPromptViews.kt:@Composable private fun OnboardingCloudRestoreChoiceSection</ID>
+    <ID>LongParameterList:OnboardingTheme.kt:@Composable internal fun OnboardingPromptScreen</ID>
+    <ID>LongParameterList:OnboardingTheme.kt:@Composable internal fun OnboardingStatusCard</ID>
+    <ID>LongParameterList:QrCodeScanView.kt:private fun handleQrCode</ID>
+    <ID>LongParameterList:QrExportView.kt:@Composable fun QrExportView</ID>
+    <ID>LongParameterList:ReceiveAddressSheet.kt:@Composable private fun ReceiveAddressSheetContent</ID>
+    <ID>LongParameterList:RoundRectImage.kt:@Composable fun RoundRectImage</ID>
+    <ID>LongParameterList:SelectedWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SelectedWalletScreen</ID>
+    <ID>LongParameterList:SendFlowConfirmScreen.kt:@Composable private fun KeyValueRow</ID>
+    <ID>LongParameterList:SendFlowConfirmScreen.kt:@Composable private fun SwipeToSendStub</ID>
+    <ID>LongParameterList:SendFlowConfirmScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowConfirmScreen</ID>
+    <ID>LongParameterList:SendFlowContainer.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SendFlowRouteToScreen</ID>
+    <ID>LongParameterList:SendFlowHardwareSigning.kt:@Composable internal fun HardwareConfirmationDialogs</ID>
+    <ID>LongParameterList:SendFlowSetAmountScreen.kt:@Composable private fun SpendingWidget</ID>
+    <ID>LongParameterList:SendFlowSetAmountScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SendFlowSetAmountScreen</ID>
+    <ID>LongParameterList:SettingsItem.kt:@Composable fun MaterialSettingsItem</ID>
+    <ID>LongParameterList:SettingsItem.kt:@Composable fun SettingsItem</ID>
+    <ID>LongParameterList:TapSignerConfirmPinView.kt:private suspend fun checkPin</ID>
+    <ID>LongParameterList:TapSignerEnterPinView.kt:private suspend fun backupAction</ID>
+    <ID>LongParameterList:TapSignerEnterPinView.kt:private suspend fun deriveAction</ID>
+    <ID>LongParameterList:TapSignerEnterPinView.kt:private suspend fun runAction</ID>
+    <ID>LongParameterList:TapSignerEnterPinView.kt:private suspend fun signAction</ID>
+    <ID>LongParameterList:TransactionDetailsScreen.kt:@Composable private fun TransactionDetailsHeaderLabelRow</ID>
+    <ID>LongParameterList:TransactionDetailsScreen.kt:@Composable private fun TransactionLockAction</ID>
+    <ID>LongParameterList:TransactionDetailsScreen.kt:@Composable private fun TransactionLockControls</ID>
+    <ID>LongParameterList:TransactionDetailsWidget.kt:@Composable internal fun DetailsWidget</ID>
+    <ID>LongParameterList:TransactionDetailsWidget.kt:@Composable internal fun FiatPriceSection</ID>
+    <ID>LongParameterList:TransactionDetailsWidget.kt:@Composable internal fun TransactionDetailsWidget</ID>
+    <ID>LongParameterList:TransactionsCardView.kt:@Composable fun TransactionsCardView</ID>
+    <ID>LongParameterList:TransactionsCardView.kt:@OptIn(ExperimentalFoundationApi::class) fun LazyListScope.transactionItems</ID>
+    <ID>LongParameterList:TransactionsRows.kt:@Composable internal fun ConfirmedTransactionWidget</ID>
+    <ID>LongParameterList:TransactionsRows.kt:@Composable internal fun TransactionItem</ID>
+    <ID>LongParameterList:TransactionsRows.kt:@Composable internal fun UnconfirmedTransactionWidget</ID>
+    <ID>LongParameterList:TransactionsRows.kt:@OptIn(ExperimentalFoundationApi::class) @Composable internal fun UnsignedTransactionWidget</ID>
+    <ID>LongParameterList:TransactionsRows.kt:private fun formatAmountFor: String</ID>
+    <ID>LongParameterList:UtxoListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun UtxoListScreenContent</ID>
+    <ID>LongParameterList:VerifyWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun VerifyWordsScreen</ID>
+    <ID>LongParameterList:WalletBalanceHeaderView.kt:@Composable fun WalletBalanceHeaderView</ID>
+    <ID>LongParameterList:WalletBalanceHeaderView.kt:@Composable internal fun BalanceWidget</ID>
+    <ID>LongParameterList:WalletBalanceHeaderView.kt:@Composable private fun SendReceiveButtons</ID>
+    <ID>LongParameterList:WalletMoreOptionsSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun WalletMoreOptionsSheet</ID>
+    <ID>LongParameterList:WalletSheets.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun WalletSheetsHost</ID>
+    <ID>MagicNumber:AboutSettingsScreen.kt:2000</ID>
+    <ID>MagicNumber:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$200</ID>
+    <ID>MagicNumber:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$299</ID>
+    <ID>MagicNumber:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$404</ID>
+    <ID>MagicNumber:AndroidCloudStorageSupport.kt:1_000_000L</ID>
+    <ID>MagicNumber:AndroidCloudStorageSupport.kt:32</ID>
+    <ID>MagicNumber:AndroidPasskeyProvider.kt:120_000</ID>
+    <ID>MagicNumber:AndroidPasskeyProvider.kt:257</ID>
+    <ID>MagicNumber:AndroidPasskeyProvider.kt:7</ID>
+    <ID>MagicNumber:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$1_000</ID>
+    <ID>MagicNumber:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$32</ID>
+    <ID>MagicNumber:AutoSizeText.kt:0.1f</ID>
+    <ID>MagicNumber:BackupVerifyScreen.kt:50</ID>
+    <ID>MagicNumber:CoinControlCustomAmountSheet.kt:200</ID>
+    <ID>MagicNumber:CoveNavDisplay.kt:100</ID>
+    <ID>MagicNumber:CoveNavDisplay.kt:200</ID>
+    <ID>MagicNumber:CoveNavDisplay.kt:300</ID>
+    <ID>MagicNumber:FfiColorExt.kt:0xFFAF52DE</ID>
+    <ID>MagicNumber:FfiColorExt.kt:0xFFFF2D55</ID>
+    <ID>MagicNumber:FfiColorExt.kt:0xFFFF9500</ID>
+    <ID>MagicNumber:HapticFeedbackExt.kt:100</ID>
+    <ID>MagicNumber:HapticFeedbackExt.kt:50</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.15f</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.1f</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.4f</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.55f</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.5f</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.85f</ID>
+    <ID>MagicNumber:HeaderIcon.kt:0.9f</ID>
+    <ID>MagicNumber:HiddenPinTextField.kt:200</ID>
+    <ID>MagicNumber:HotWalletImportCard.kt:100</ID>
+    <ID>MagicNumber:HotWalletImportScreen.kt:12</ID>
+    <ID>MagicNumber:HotWalletImportScreen.kt:200</ID>
+    <ID>MagicNumber:HotWalletImportScreen.kt:24</ID>
+    <ID>MagicNumber:HotWalletImportScreen.kt:50</ID>
+    <ID>MagicNumber:HotWalletNfcScannerSheet.kt:0xFF4CAF50</ID>
+    <ID>MagicNumber:HotWalletNfcScannerSheet.kt:3</ID>
+    <ID>MagicNumber:HotWalletNfcScannerSheet.kt:300</ID>
+    <ID>MagicNumber:ImportWalletScreen.kt:50</ID>
+    <ID>MagicNumber:LockView.kt:30_000</ID>
+    <ID>MagicNumber:MainActivityStartupBootstrap.kt:66</ID>
+    <ID>MagicNumber:MainActivityStartupViews.kt:0.6f</ID>
+    <ID>MagicNumber:MainSettingsScreen.kt:0xFFFF9800</ID>
+    <ID>MagicNumber:MainSettingsScreen.kt:50</ID>
+    <ID>MagicNumber:NewWalletSelectScreen.kt:800</ID>
+    <ID>MagicNumber:NfcLabelImportSheet.kt:0xFF4CAF50</ID>
+    <ID>MagicNumber:NfcLabelImportSheet.kt:3</ID>
+    <ID>MagicNumber:NfcLabelImportSheet.kt:300</ID>
+    <ID>MagicNumber:NfcScanSheet.kt:0xFF4CAF50</ID>
+    <ID>MagicNumber:NfcScanSheet.kt:3</ID>
+    <ID>MagicNumber:NfcScanSheet.kt:300</ID>
+    <ID>MagicNumber:NfcWriteSheet.kt:0xFF4CAF50</ID>
+    <ID>MagicNumber:NfcWriteSheet.kt:3</ID>
+    <ID>MagicNumber:NfcWriteSheet.kt:300</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:100</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:10f</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:20f</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:3</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:30f</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:490</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:70</ID>
+    <ID>MagicNumber:NumberPadPinView.kt:9</ID>
+    <ID>MagicNumber:OnboardingBackupViews.kt:900</ID>
+    <ID>MagicNumber:OnboardingRecoveryWordsViews.kt:74</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:0x801E3A5C</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:0xFF1E4A6B</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:0xFF2A5A8B</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:100f</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:140f</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:280f</ID>
+    <ID>MagicNumber:OnboardingTheme.kt:920f</ID>
+    <ID>MagicNumber:QrCodeScanView.kt:1.2f</ID>
+    <ID>MagicNumber:QrCodeScanView.kt:5f</ID>
+    <ID>MagicNumber:QrExportView.kt:50</ID>
+    <ID>MagicNumber:ReceivedTransactionDetails.kt:5000</ID>
+    <ID>MagicNumber:SelectedWalletScreen.kt:0xFFFF9800</ID>
+    <ID>MagicNumber:SelectedWalletScreen.kt:0xFFFFEB3B</ID>
+    <ID>MagicNumber:SelectedWalletScreen.kt:1000f</ID>
+    <ID>MagicNumber:SendFlowConfirmScreen.kt:3</ID>
+    <ID>MagicNumber:SendFlowContainer.kt:5</ID>
+    <ID>MagicNumber:SendFlowContainer.kt:50</ID>
+    <ID>MagicNumber:SendFlowContainer.kt:8</ID>
+    <ID>MagicNumber:SendFlowHardwareDetailsSheet.kt:3f</ID>
+    <ID>MagicNumber:SendFlowHardwareSections.kt:3f</ID>
+    <ID>MagicNumber:SendFlowPresenter.kt:SendFlowPresenter$500</ID>
+    <ID>MagicNumber:SendFlowSetAmountScreen.kt:350</ID>
+    <ID>MagicNumber:TapSignerAdvancedChainCode.kt:64</ID>
+    <ID>MagicNumber:TapSignerConfirmPinView.kt:10f</ID>
+    <ID>MagicNumber:TapSignerConfirmPinView.kt:200</ID>
+    <ID>MagicNumber:TapSignerConfirmPinView.kt:20f</ID>
+    <ID>MagicNumber:TapSignerConfirmPinView.kt:30f</ID>
+    <ID>MagicNumber:TapSignerConfirmPinView.kt:6</ID>
+    <ID>MagicNumber:TapSignerConfirmPinView.kt:70</ID>
+    <ID>MagicNumber:TapSignerContainer.kt:2000</ID>
+    <ID>MagicNumber:TapSignerNewPinView.kt:6</ID>
+    <ID>MagicNumber:TapSignerScanningOverlay.kt:3</ID>
+    <ID>MagicNumber:TapSignerScanningOverlay.kt:400</ID>
+    <ID>MagicNumber:TapSignerStartingPinView.kt:0xFF3A4254</ID>
+    <ID>MagicNumber:TapSignerStartingPinView.kt:200</ID>
+    <ID>MagicNumber:TapSignerStartingPinView.kt:6</ID>
+    <ID>MagicNumber:TransactionDetailsScreen.kt:0.72f</ID>
+    <ID>MagicNumber:TransactionDetailsScreen.kt:3</ID>
+    <ID>MagicNumber:TransactionsRows.kt:0.6f</ID>
+    <ID>MagicNumber:TransactionsScanState.kt:0.72f</ID>
+    <ID>MagicNumber:VerificationCompleteScreen.kt:0.46f</ID>
+    <ID>MagicNumber:VerificationCompleteScreen.kt:3f</ID>
+    <ID>MagicNumber:VerifyWordsScreen.kt:10f</ID>
+    <ID>MagicNumber:VerifyWordsScreen.kt:4</ID>
+    <ID>MagicNumber:WalletBalanceHeaderView.kt:0.5f</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFF007AFF</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFF34C759</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFF5C6BC0</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFF8E8E93</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFF9E9E9E</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFAF52DE</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFB2DFDB</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFBBDEFB</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFD7CCC8</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFE0F2F1</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFF5F5F5</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFF2D55</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFF3B30</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFF9500</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFFCC00</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFFCDD2</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFFF9C4</ID>
+    <ID>MagicNumber:WalletColorExt.kt:0xFFFFFDE7</ID>
+    <ID>MagicNumber:WalletSettingsScreen.kt:3f</ID>
+    <ID>MagicNumber:WalletSettingsScreen.kt:5</ID>
+    <ID>MatchingDeclarationName:ChoiceDialog.kt:DialogChoice</ID>
+    <ID>MatchingDeclarationName:CloudBackupDetailContent.kt:CloudBackupDetailBodyState</ID>
+    <ID>MatchingDeclarationName:CloudBackupEnableOnboardingContent.kt:CloudBackupEnableOnboardingContext</ID>
+    <ID>MatchingDeclarationName:Extension.kt:Bip39AutoComplete : Bip39AutoCompleteAutoComplete</ID>
+    <ID>MatchingDeclarationName:HotWalletSelectScreen.kt:NextScreenDialog</ID>
+    <ID>MatchingDeclarationName:Motion.kt:MaterialMotion</ID>
+    <ID>MatchingDeclarationName:SendFlowContainer.kt:SendState</ID>
+    <ID>MatchingDeclarationName:SendFlowHardwareImportRoute.kt:TransactionImportErrors</ID>
+    <ID>MatchingDeclarationName:SendFlowHardwareSheets.kt:HardwareSheetState</ID>
+    <ID>MatchingDeclarationName:Spacing.kt:MaterialSpacing</ID>
+    <ID>MaxLineLength:AboutDebugSection.kt:text = { Text(&quot;Clears local keychain and DB backup state but keeps Google Drive files intact. Use this to test the recovery flow.&quot;) }</ID>
+    <ID>MaxLineLength:AboutSettingsScreen.kt:Text(&quot;Clears local keychain and DB backup state but keeps Google Drive files intact. Use this to test the recovery flow.&quot;)</ID>
+    <ID>MaxLineLength:AboutSettingsScreen.kt:text = { Text(if (currentlyEnabled) &quot;This will hide experimental features&quot; else &quot;This will enable experimental features&quot;) }</ID>
+    <ID>MaxLineLength:AndroidCloudStorageAccessTest.kt:AndroidCloudStorageAccessTest.RecordingDriveAuthorization$var account: DriveAccountIdentity? = DriveAccountIdentity(googleAccountId = &quot;account-1&quot;, email = &quot;person@example.com&quot;)</ID>
+    <ID>MaxLineLength:BackupExportScreen.kt:android.util.Log.w(&quot;BackupExport&quot;, &quot;Failed to save to password manager: ${e.type}: ${e.message}&quot;)</ID>
+    <ID>MaxLineLength:BackupExportScreen.kt:infoMessage = &quot;Unable to save to password manager. Make sure a password manager is set up on your device. Password has been copied to your clipboard.&quot;</ID>
+    <ID>MaxLineLength:BackupExportScreen.kt:text = { Text(&quot;Save the backup password to your password manager so you can retrieve it later during import.&quot;) }</ID>
+    <ID>MaxLineLength:BackupExportScreen.kt:text = { Text(&quot;This backup will contain all your wallet private keys. Make sure you keep the file and password secure.&quot;) }</ID>
+    <ID>MaxLineLength:BackupExportScreen.kt:visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation()</ID>
+    <ID>MaxLineLength:BackupImportScreen.kt:text = { Text(&quot;This will import wallets and restore settings from the backup. Existing wallets with the same fingerprint will be skipped.&quot;) }</ID>
+    <ID>MaxLineLength:BackupImportScreen.kt:tint = if (fileData != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface</ID>
+    <ID>MaxLineLength:BackupImportScreen.kt:visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation()</ID>
+    <ID>MaxLineLength:BackupVerifyScreen.kt:color = if (wallet.alreadyOnDevice) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary</ID>
+    <ID>MaxLineLength:BackupVerifyScreen.kt:tint = if (fileData != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface</ID>
+    <ID>MaxLineLength:BackupVerifyScreen.kt:visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation()</ID>
+    <ID>MaxLineLength:CloudBackupDetailContent.kt:PendingUploadConfirmationStatus(isBlockedOnAuthorization = manager.syncState is CloudBackupSyncState.Blocked)</ID>
+    <ID>MaxLineLength:CloudBackupDetailContent.kt:body = &quot;This passkey provider can&#39;t create the secure passkey required for Cloud Backup. Try again with a supported password manager such as Google Password Manager, 1Password, or Bitwarden.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupDetailContent.kt:body = &quot;Your cloud backup is not accessible until you use an existing passkey or add a new one. Without it, your backups can&#39;t be restored.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupEnableOnboardingContent.kt:.</ID>
+    <ID>MaxLineLength:CloudBackupEnableOnboardingContent.kt:Row</ID>
+    <ID>MaxLineLength:CloudBackupEnableOnboardingContent.kt:text = &quot;Cloud Backup is end-to-end encrypted before it leaves your device and stored in Google Drive, secured by a passkey that only you control.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupEnableOnboardingContent.kt:text = &quot;I understand that I need access to my Google account. If I lose access to my passkey or my Google account, my Cloud Backup won&#39;t be recoverable.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupEnableOnboardingContent.kt:text = &quot;I understand that my passkey is required to access my Cloud Backup. I must not delete my passkey.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupPresentationHost.kt:&quot;Add a new passkey to restore access to your cloud backup. Until you do, your backups can&#39;t be restored.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupPresentationHost.kt:&quot;Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (${it.nameSuffix}), use that passkey instead.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupPresentationHost.kt:message = &quot;Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupPresentationHost.kt:message = &quot;Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupPresentationHost.kt:var isActivityResumed by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }</ID>
+    <ID>MaxLineLength:CloudBackupScreen.kt:&quot;This will rebuild the backup index from wallets on this device. Wallets that only exist in the cloud backup will no longer be referenced.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupScreen.kt:&quot;This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost.&quot;</ID>
+    <ID>MaxLineLength:CloudBackupVisuals.kt:Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:-&gt;</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:CloudBackupWalletStatus.CONFIRMED -&gt; StatusBadgeStyle(&quot;Confirmed&quot;, colors.success, colors.successFill, colors.successBorder, Icons.Default.Check)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:CloudBackupWalletStatus.DELETED_FROM_DEVICE -&gt; StatusBadgeStyle(&quot;Not on device&quot;, colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.DoNotDisturbOn)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:CloudBackupWalletStatus.DIRTY -&gt; StatusBadgeStyle(&quot;Dirty&quot;, colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:CloudBackupWalletStatus.FAILED -&gt; StatusBadgeStyle(&quot;Failed&quot;, colors.danger, colors.dangerFill, colors.dangerBorder, Icons.Default.WarningAmber)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -&gt; StatusBadgeStyle(&quot;Unknown&quot;, colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:CloudBackupWalletStatus.UNSUPPORTED_VERSION -&gt; StatusBadgeStyle(&quot;Unsupported&quot;, colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:is CloudSyncHealth.AuthorizationRequired -&gt; Triple(Icons.Default.WarningAmber, colors.danger, &quot;Google Drive access needs to be reconnected: ${syncHealth.v1}&quot;)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:is CloudSyncHealth.Failed -&gt; Triple(Icons.Default.WarningAmber, colors.danger, &quot;Sync error: ${syncHealth.v1}&quot;)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:is CloudSyncHealth.NoFiles -&gt; Triple(Icons.Default.CloudOff, colors.secondaryText, &quot;No cloud backup files uploaded yet&quot;)</ID>
+    <ID>MaxLineLength:CloudBackupWalletRows.kt:is CloudSyncHealth.Unavailable -&gt; Triple(Icons.Default.CloudOff, colors.secondaryText, &quot;Google Drive is unavailable&quot;)</ID>
+    <ID>MaxLineLength:CoinControlContainer.kt:message = &quot;The wallet could not be opened for coin control. Please try again from the wallet screen.&quot;</ID>
+    <ID>MaxLineLength:CoinControlSetAmountScreen.kt:AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)</ID>
+    <ID>MaxLineLength:CoveApplication.kt:CoveApplication$Log.d(TAG, &quot;[LIFECYCLE] &lt; ${AUTO_UNLOCK_THRESHOLD_PIN_ONLY}s since lock (PIN only, no decoy), auto-unlocking&quot;)</ID>
+    <ID>MaxLineLength:CustomFeeRateSheet.kt:android.util.Log.e(&quot;CustomFeeRateSheet&quot;, &quot;Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}&quot;, e)</ID>
+    <ID>MaxLineLength:CustomFeeRateSheet.kt:message = &quot;The fee rate you entered is too high, we automatically selected a lower fee&quot;</ID>
+    <ID>MaxLineLength:CustomFeeRateSheet.kt:val computed = presenter.erroredFeeRate?.let { minOf(it + CustomFeeRateConstants.FEE_RATE_EPSILON, fast3) } ?: fast3</ID>
+    <ID>MaxLineLength:DisableCloudBackupSection.kt:&quot;Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.&quot;</ID>
+    <ID>MaxLineLength:DisableCloudBackupSection.kt:text = { Text(&quot;Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.&quot;) }</ID>
+    <ID>MaxLineLength:HotWalletNfcScannerSheet.kt:val words = org.bitcoinppl.cove_core.groupedPlainWordsOf(mnemonic = text, groups = GROUPS_OF.toUByte())</ID>
+    <ID>MaxLineLength:LockView.kt:biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS</ID>
+    <ID>MaxLineLength:LockView.kt:screen == Screen.BIOMETRIC &amp;&amp; (auth.type == AuthType.BIOMETRIC || auth.type == AuthType.BOTH) &amp;&amp; isBiometricAvailable</ID>
+    <ID>MaxLineLength:LockView.kt:text = &quot;Cove needs permissions to use biometric authentication to unlock your wallet. Please open settings and enable biometric authentication.&quot;</ID>
+    <ID>MaxLineLength:MainActivity.kt:MainActivity$&quot;Some wallet databases couldn&#39;t be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com&quot;</ID>
+    <ID>MaxLineLength:MainActivity.kt:MainActivity$Log.w(TAG, &quot;[STARTUP] bootstrap completed despite timeout — migration warning (if any) was lost and will retry on next launch&quot;)</ID>
+    <ID>MaxLineLength:MainActivity.kt:MainActivity$Log.w(TAG, &quot;[STARTUP] resumePendingCloudUploadVerification failed before startup routing&quot;, error)</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:app.loadAndReset(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWELVE, ImportType.MANUAL))))</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.MANUAL))))</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.NFC))))</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:app.pushRoute(Route.NewWallet(NewWalletRoute.HotWallet(HotWalletRoute.Import(NumberOfBip39Words.TWENTY_FOUR, ImportType.QR))))</ID>
+    <ID>MaxLineLength:MainActivityGlobalAlerts.kt:val route = RouteFactory().sendSetAmount(selectedWallet, state.address, state.amount)</ID>
+    <ID>MaxLineLength:MainActivityStartupViews.kt:&quot;Cove found Cloud Backup data for the selected Google account. This will erase the damaged local data on this device, then verify your passkey during restore.&quot;</ID>
+    <ID>MaxLineLength:MainActivityStartupViews.kt:&quot;This will permanently delete wallet data on this device. Make sure your recovery phrases are backed up before continuing.&quot;</ID>
+    <ID>MaxLineLength:MainSettingsScreen.kt:is CloudBackupSettingsRowStatus.DriveUnavailable -&gt; stringResource(R.string.cloud_backup_status_drive_unavailable)</ID>
+    <ID>MaxLineLength:MainSettingsScreen.kt:text = { Text(&quot;This is a very experimental feature. Use with caution. This is mostly used by developers for testing purposes.&quot;) }</ID>
+    <ID>MaxLineLength:MoreInfoPopover.kt:importLabels = { importLabelLauncher.launch(arrayOf(&quot;text/plain&quot;, &quot;application/json&quot;, &quot;application/x-jsonlines&quot;)) }</ID>
+    <ID>MaxLineLength:MoreInfoPopover.kt:snackbarHostState.showSnackbar(&quot;Labels imported successfully, but transaction list may need manual refresh&quot;)</ID>
+    <ID>MaxLineLength:MoreInfoPopover.kt:snackbarHostState.showSnackbar(&quot;Unable to export $errorType: ${e.localizedMessage ?: e.message}&quot;)</ID>
+    <ID>MaxLineLength:NetworkFeeBottomSheet.kt:color = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant</ID>
+    <ID>MaxLineLength:NetworkFeeBottomSheet.kt:color = if (isSelected) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outline</ID>
+    <ID>MaxLineLength:NetworkFeeBottomSheet.kt:containerColor = if (isSelected) MaterialTheme.coveColors.midnightBtn else MaterialTheme.colorScheme.surfaceVariant</ID>
+    <ID>MaxLineLength:OnboardingCloudBackupEnableViews.kt:subtitle = &quot;Cloud Backup makes it easier to restore this wallet&#39;s configuration and labels if you lose this device.&quot;</ID>
+    <ID>MaxLineLength:OnboardingCloudBackupEnableViews.kt:text = &quot;Enabling this also turns on Cloud Backup for Cove more broadly, so compatible wallets you create later, as well as wallet labels, will be backed up.&quot;</ID>
+    <ID>MaxLineLength:OnboardingCloudBackupEnableViews.kt:text = &quot;This backs up the imported hardware wallet configuration and labels stored in Cove so you can restore this wallet view later.&quot;</ID>
+    <ID>MaxLineLength:OnboardingCloudBackupEnableViews.kt:text = &quot;Your wallet backup is end-to-end encrypted before it leaves your device, stored in Google Drive, and locked with a passkey only you control.&quot;</ID>
+    <ID>MaxLineLength:OnboardingCloudRestoreProgressViews.kt:text = &quot;${report.labelsFailedWalletNames.size} restored wallet(s) had labels that could not be imported&quot;</ID>
+    <ID>MaxLineLength:OnboardingCloudRestorePromptViews.kt:Row</ID>
+    <ID>MaxLineLength:OnboardingCloudRestorePromptViews.kt:text = &quot;Your passkey is stored securely by your passkey provider, and your encrypted backup is stored in Google Drive app data.&quot;</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:OnboardingManager$val nextSnapshot = reduceOnboardingSnapshot(OnboardingSnapshot(state = state, isComplete = isComplete), message)</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.CloudBackupEnabled -&gt; snapshot.copy(state = snapshot.state.copy(cloudBackupEnabled = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.CloudRestoreAlertVisible -&gt; snapshot.copy(state = snapshot.state.copy(cloudRestoreAlertVisible = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.CloudRestoreMessageChanged -&gt; snapshot.copy(state = snapshot.state.copy(cloudRestoreMessage = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.CloudRestoreProviderHintChanged -&gt; snapshot.copy(state = snapshot.state.copy(cloudRestoreProviderHint = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.CloudRestoreState -&gt; snapshot.copy(state = snapshot.state.copy(cloudRestoreState = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.CreatedWords -&gt; snapshot.copy(state = snapshot.state.copy(createdWords = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.ErrorMessageChanged -&gt; snapshot.copy(state = snapshot.state.copy(errorMessage = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.RestoreStateChanged -&gt; snapshot.copy(state = snapshot.state.copy(restoreState = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.SecretWordsSaved -&gt; snapshot.copy(state = snapshot.state.copy(secretWordsSaved = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingManager.kt:is OnboardingReconcileMessage.ShouldOfferCloudRestore -&gt; snapshot.copy(state = snapshot.state.copy(shouldOfferCloudRestore = message.v1))</ID>
+    <ID>MaxLineLength:OnboardingPromptViews.kt:subtitle = &quot;Cove can&#39;t check for a Google Drive backup right now. You can continue onboarding and check Cloud Backup later in Settings.&quot;</ID>
+    <ID>MaxLineLength:OnboardingPromptViews.kt:subtitle = &quot;We couldn&#39;t find a Cove backup in Google Drive for this account. Continue without a backup, then set up Cloud Backup when you&#39;re ready.&quot;</ID>
+    <ID>MaxLineLength:OnboardingRecoveryWordsViews.kt:text = &quot;Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin.&quot;</ID>
+    <ID>MaxLineLength:OnboardingTermsViews.kt:text = &quot;I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.&quot;</ID>
+    <ID>MaxLineLength:OnboardingTermsViews.kt:text = &quot;I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.&quot;</ID>
+    <ID>MaxLineLength:OnboardingTermsViews.kt:text = &quot;I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.&quot;</ID>
+    <ID>MaxLineLength:OtherBackupsSection.kt:OtherBackupsRecoveryResult$add(&quot;Your current Cloud Backup passkey is unchanged. Verify your current passkey to make sure it opens your active backup.&quot;)</ID>
+    <ID>MaxLineLength:OtherBackupsSection.kt:Text(&quot;This will use the selected passkey once to decrypt these other backups. Your current Cloud Backup passkey will not change.&quot;)</ID>
+    <ID>MaxLineLength:OtherBackupsSection.kt:text = &quot;${pluralize(namespaceCount, &quot;backup set&quot;, &quot;backup sets&quot;)} protected by ${otherPasskeyLabel(passkeySuffixes)}, containing ${pluralize(walletCount, &quot;wallet&quot;, &quot;wallets&quot;)}&quot;</ID>
+    <ID>MaxLineLength:OtherBackupsSection.kt:text = { Text(&quot;These backups cannot be recovered later, even if you find the passkey that currently protects them.&quot;) }</ID>
+    <ID>MaxLineLength:QrCodeScanView.kt:drawLine(color, Offset(size.width - cornerLength, size.height), Offset(size.width, size.height), strokeWidth)</ID>
+    <ID>MaxLineLength:QrCodeScanView.kt:drawLine(color, Offset(size.width, size.height - cornerLength), Offset(size.width, size.height), strokeWidth)</ID>
+    <ID>MaxLineLength:ReceiveAddressSheet.kt:Text(&quot;This address has already received funds. For better privacy, create a new address before sharing.&quot;)</ID>
+    <ID>MaxLineLength:RouterManager.kt:RouteHelpers$fun</ID>
+    <ID>MaxLineLength:SecretWordsScreen.kt:&quot;Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to.&quot;</ID>
+    <ID>MaxLineLength:SelectedWalletContainer.kt:android.util.Log.d(&quot;SelectedWalletContainer&quot;, &quot;canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}&quot;)</ID>
+    <ID>MaxLineLength:SelectedWalletScreen.kt:onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) }</ID>
+    <ID>MaxLineLength:SelectedWalletScreen.kt:onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) }</ID>
+    <ID>MaxLineLength:SendFlowContainer.kt:message = &quot;The wallet could not be opened for sending. Please try again from the wallet screen.&quot;</ID>
+    <ID>MaxLineLength:SendFlowSetAmountScreen.kt:AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)</ID>
+    <ID>MaxLineLength:SidebarContainer.kt:val currentDragPosition = (targetOffset + gestureOffset).coerceIn(0f, sidebarWidthPx)</ID>
+    <ID>MaxLineLength:StartupRecovery.kt:&quot;App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com&quot;</ID>
+    <ID>MaxLineLength:TapCardNfcManager.kt:TapCardNfcManager$// create TapSignerReader using factory function (workaround for UniFFI async constructor limitation)</ID>
+    <ID>MaxLineLength:TapSignerAdvancedChainCode.kt:&quot;Enter your custom 32-byte chain code below. If you&#39;re unsure, select automatic on the previous screen.&quot;</ID>
+    <ID>MaxLineLength:TapSignerChooseChainCode.kt:&quot;You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.&quot;</ID>
+    <ID>MaxLineLength:TapSignerConfirmPinView.kt:&quot;The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You&#39;ll need it for signing transactions.&quot;</ID>
+    <ID>MaxLineLength:TapSignerNewPinView.kt:&quot;The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You&#39;ll need it for signing transactions.&quot;</ID>
+    <ID>MaxLineLength:TapSignerSetupSuccessView.kt:&quot;If you haven&#39;t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore your wallet.&quot;</ID>
+    <ID>MaxLineLength:TransactionDetailsScreen.kt:text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details)</ID>
+    <ID>MaxLineLength:TransactionDetailsWidget.kt:AutoSizeText(primary, color = primaryColor, maxFontSize = 15.sp, minimumScaleFactor = 0.90f, fontWeight = FontWeight.SemiBold)</ID>
+    <ID>MaxLineLength:TransactionsRows.kt:formatAmountFor(fiatOrBtc, AmountPosition.PRIMARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)</ID>
+    <ID>MaxLineLength:TransactionsRows.kt:formatAmountFor(fiatOrBtc, AmountPosition.SECONDARY, txn.v1.sentAndReceived(), txn.v1.fiatAmount(), direction, manager)</ID>
+    <ID>MaxLineLength:TransactionsRows.kt:message = &quot;Unable to delete transaction: ${e.localizedMessage ?: e.message ?: &quot;Unknown error&quot;}&quot;</ID>
+    <ID>MaxLineLength:TransactionsRows.kt:showsLockedTreatment &amp;&amp; type == TransactionType.RECEIVED -&gt; CoveColor.TransactionReceived.copy(alpha = 0.72f)</ID>
+    <ID>MaxLineLength:UtxoListScreen.kt:arrowUp = (amountPresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING</ID>
+    <ID>MaxLineLength:UtxoListScreen.kt:arrowUp = (changePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING</ID>
+    <ID>MaxLineLength:UtxoListScreen.kt:arrowUp = (datePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING</ID>
+    <ID>MaxLineLength:UtxoListScreen.kt:arrowUp = (namePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING</ID>
+    <ID>MaxLineLength:UtxoListScreen.kt:containerColor = if (anySelected) MaterialTheme.coveColors.midnightBtn else MaterialTheme.colorScheme.surfaceVariant</ID>
+    <ID>MaxLineLength:UtxoListScreen.kt:contentColor = if (anySelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant</ID>
+    <ID>MaxLineLength:VerificationCompleteScreen.kt:text = &quot;All set! You&#39;ve successfully verified your recovery words and can now access your wallet.&quot;</ID>
+    <ID>MaxLineLength:VerificationSection.kt:leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null, tint = CoveColor.WarningOrange) }</ID>
+    <ID>MaxLineLength:VerifyWordsContainer.kt:&quot;Whoever has your secret words has access to your bitcoin. Please keep these safe and don&#39;t show them to anyone else.&quot;</ID>
+    <ID>MaxLineLength:VerifyWordsScreen.kt:&quot;Are you sure you want to skip verifying words? Without having a backup of these words, you could lose your bitcoin&quot;</ID>
+    <ID>MaxLineLength:WalletBalanceHeaderView.kt:contentColor = if (receiveUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue</ID>
+    <ID>MaxLineLength:WalletBalanceHeaderView.kt:contentColor = if (sendUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue</ID>
+    <ID>MaxLineLength:WalletManager.kt:WalletManager$var</ID>
+    <ID>MaxLineLength:WalletSettingsContainer.kt:android.util.Log.e(tag, &quot;failed to leave wallet settings after recovery failure&quot;, result.navigationError)</ID>
+    <ID>MaxLineLength:WalletSettingsScreen.kt:if</ID>
+    <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share labels: ${e.localizedMessage ?: e.message}&quot;)</ID>
+    <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share transactions: ${e.localizedMessage ?: e.message}&quot;)</ID>
+    <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share xpub: ${e.localizedMessage ?: e.message}&quot;)</ID>
+    <ID>NestedBlockDepth:NfcReader.kt:NfcReader$private fun processNdefMessage</ID>
+    <ID>PackageNaming:AboutDebugSection.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:AboutSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:AdvancedDetailsBottomSheet.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:AppearanceSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:BackupExportScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:BackupExportUtils.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:BackupImportScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:BackupVerifyScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:BlockExplorerSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:ChangePinView.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:ChooseWalletTypeSheet.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:CoinControlContainer.kt:package org.bitcoinppl.cove.flows.CoinControlFlow</ID>
+    <ID>PackageNaming:CoinControlCustomAmountSheet.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:CoinControlSetAmountScreen.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:ColdWalletQrScanScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.cold_wallet</ID>
+    <ID>PackageNaming:DecoyPinView.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:EnterAddressView.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:EnterAmountView.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:FiatCurrencySettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:HeaderIcon.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails</ID>
+    <ID>PackageNaming:HiddenPinTextField.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:HotWalletCreateScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:HotWalletImportCard.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:HotWalletImportScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:HotWalletNfcScannerSheet.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:HotWalletQrScannerSheet.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:HotWalletSelectScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:ImportWalletScreen.kt:package org.bitcoinppl.cove.import_wallet</ID>
+    <ID>PackageNaming:MainSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:MainSettingsScreenHelpersTest.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:MainSettingsSecuritySection.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:NetworkFeeBottomSheet.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:NetworkSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:NewHotWalletContainer.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:NewPinView.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:NewWalletContainer.kt:package org.bitcoinppl.cove.flows.NewWalletFlow</ID>
+    <ID>PackageNaming:NewWalletSelectScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow</ID>
+    <ID>PackageNaming:NfcHelpSheet.kt:package org.bitcoinppl.cove.flows.NewWalletFlow</ID>
+    <ID>PackageNaming:NodeSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:OnboardingBackupViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingBackupViewsTest.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingCloudBackupEnableViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingCloudRestoreProgressViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingCloudRestorePromptViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingContainer.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingExchangeFundingView.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingImportViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingPromptViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingRecoveryWordsViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingTermsViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:OnboardingTheme.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
+    <ID>PackageNaming:PinCirclesView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:QrCodeImportScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.cold_wallet</ID>
+    <ID>PackageNaming:ReceiveAddressSheet.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:ReceivedTransactionDetails.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails</ID>
+    <ID>PackageNaming:SecretWordsScreen.kt:package org.bitcoinppl.cove.secret_words</ID>
+    <ID>PackageNaming:SelectedWalletContainer.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:SelectedWalletScreen.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:SelectedWalletScreenHelpersTest.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:SendFlowAdvancedDetailsView.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowConfirmScreen.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowContainer.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHardwareDetailsSheet.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHardwareImportRoute.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHardwareScreen.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHardwareSections.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHardwareSheets.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHardwareSigning.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowHeaderView.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowManager.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowPresenter.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SendFlowSetAmountScreen.kt:package org.bitcoinppl.cove.flows.SendFlow</ID>
+    <ID>PackageNaming:SettingsContainer.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:SettingsListAllWalletsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:TapSignerAdvancedChainCode.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerChooseChainCode.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerConfirmPinView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerContainer.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerEnterPinView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerImportRetryView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerImportSuccessView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerManager.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerNewPinView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerNfcHelper.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerScanningOverlay.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerSetupRetryView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerSetupSuccessView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TapSignerStartingPinView.kt:package org.bitcoinppl.cove.flows.TapSignerFlow</ID>
+    <ID>PackageNaming:TransactionDetailsContainer.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails</ID>
+    <ID>PackageNaming:TransactionDetailsScreen.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails</ID>
+    <ID>PackageNaming:TransactionDetailsWidget.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails</ID>
+    <ID>PackageNaming:TransactionLabelView.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails</ID>
+    <ID>PackageNaming:TransactionsCardPreviews.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:TransactionsCardView.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:TransactionsRows.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:TransactionsScanState.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:UtxoListScreen.kt:package org.bitcoinppl.cove.flows.CoinControlFlow</ID>
+    <ID>PackageNaming:VerificationCompleteScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:VerifyWordsContainer.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:VerifyWordsScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet</ID>
+    <ID>PackageNaming:WalletBalanceHeaderView.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:WalletImportHelpSheet.kt:package org.bitcoinppl.cove.flows.NewWalletFlow.cold_wallet</ID>
+    <ID>PackageNaming:WalletMoreOptionsSheet.kt:package org.bitcoinppl.cove.flows.SelectedWalletFlow</ID>
+    <ID>PackageNaming:WalletSettingsChangeNameScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:WalletSettingsContainer.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:WalletSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:WipeDataPinView.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>RedundantSuspendModifier:AppManager.kt:AppManager$suspend</ID>
+    <ID>RedundantSuspendModifier:CoinControlManager.kt:CoinControlManager$suspend</ID>
+    <ID>RedundantSuspendModifier:SendFlowManager.kt:SendFlowManager$suspend</ID>
+    <ID>RedundantSuspendModifier:TapSignerImportSuccessView.kt:suspend</ID>
+    <ID>RedundantSuspendModifier:WalletManager.kt:WalletManager$suspend</ID>
+    <ID>RethrowCaughtException:SidebarContainer.kt:throw e</ID>
+    <ID>ReturnCount:AppManager.kt:AppManager$fun cachedWalletManager: WalletManager?</ID>
+    <ID>ReturnCount:AppManager.kt:AppManager$internal fun popRouteForRecovery: RoutePopResult</ID>
+    <ID>ReturnCount:AppManager.kt:AppManager$private fun pushRouteWithoutNavigationGeneration: Boolean</ID>
+    <ID>ReturnCount:AuthManager.kt:AuthManager$fun handleAndReturnUnlockMode: UnlockMode</ID>
+    <ID>ReturnCount:CloudBackupManager.kt:CloudBackupManager$private fun reconcileDisabledState</ID>
+    <ID>ReturnCount:CloudBackupPresentationHost.kt:CloudBackupPresentationCoordinator$fun reconcile</ID>
+    <ID>ReturnCount:CloudBackupPresentationHost.kt:internal fun isCloudBackupPresentationPresentable: Boolean</ID>
+    <ID>ReturnCount:CustomFeeRateSheet.kt:fun getTotalSatsDeduped</ID>
+    <ID>ReturnCount:DisableCloudBackupSection.kt:private fun disableUnavailableMessage: String?</ID>
+    <ID>ReturnCount:DriveAuthorizationHelper.kt:DriveAccountIdentity$fun matches: Boolean</ID>
+    <ID>ReturnCount:NfcWriter.kt:NfcWriter$private fun handleTag</ID>
+    <ID>ReturnCount:OnboardingCloudBackupEnableViews.kt:internal fun shouldCompleteOnboardingCloudBackup: Boolean</ID>
+    <ID>ReturnCount:OnboardingCloudRestoreProgressViews.kt:internal fun combinedRestoreProgress: Float</ID>
+    <ID>SwallowedException:BackupExportScreen.kt:e: androidx.credentials.exceptions.NoCredentialException</ID>
+    <ID>SwallowedException:BackupImportScreen.kt:e: androidx.credentials.exceptions.NoCredentialException</ID>
+    <ID>SwallowedException:BackupVerifyScreen.kt:e: androidx.credentials.exceptions.NoCredentialException</ID>
+    <ID>SwallowedException:BlockExplorerSettingsScreen.kt:e: Exception</ID>
+    <ID>SwallowedException:CustomFeeRateSheet.kt:e: SendFlowException.WalletManager</ID>
+    <ID>SwallowedException:HotWalletImportScreen.kt:e: ImportWalletException.InvalidWordGroup</ID>
+    <ID>SwallowedException:NfcReader.kt:NfcReader$e: Exception</ID>
+    <ID>SwallowedException:NfcWriter.kt:NfcWriter$closeError: Exception</ID>
+    <ID>SwallowedException:ScanManager.kt:ScanManager$e: ImportWalletException.InvalidWordGroup</ID>
+    <ID>SwallowedException:SelectedWalletContainer.kt:ex: Exception</ID>
+    <ID>SwallowedException:SendFlowAdvancedDetailsView.kt:e: Exception</ID>
+    <ID>SwallowedException:TapSignerConfirmPinView.kt:e: Exception</ID>
+    <ID>ThrowsCount:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$override suspend fun deleteWalletBackup</ID>
+    <ID>ThrowsCount:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$private suspend fun &lt;T&gt; runDriveOperation: T</ID>
+    <ID>ThrowsCount:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$private suspend fun verifiedDriveAccessToken: DriveAccessToken</ID>
+    <ID>ThrowsCount:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$override fun authenticateWithPrf: ByteArray</ID>
+    <ID>ThrowsCount:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$override fun createPasskey: PasskeyRegistrationResult</ID>
+    <ID>ThrowsCount:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$override fun discoverAndAuthenticateWithPrf: DiscoveredPasskeyResult</ID>
+    <ID>ThrowsCount:BackupExportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupExportScreen</ID>
+    <ID>ThrowsCount:BackupImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupImportScreen</ID>
+    <ID>ThrowsCount:BackupVerifyScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun BackupVerifyScreen</ID>
+    <ID>ThrowsCount:DriveAuthorizationHelper.kt:DriveAuthorizationHelper$private suspend fun resolveIfNeeded: AuthorizationResult</ID>
+    <ID>ThrowsCount:RustHandleGuard.kt:RustHandleGuard$fun &lt;Handle, T&gt; withHandle: T</ID>
+    <ID>ThrowsCount:RustHandleGuard.kt:RustHandleGuard$suspend fun &lt;Handle, T&gt; withHandleSuspend: T</ID>
+    <ID>ThrowsCount:TransactionDetailsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun TransactionDetailsScreen</ID>
+    <ID>ThrowsCount:WalletManager.kt:WalletManager$suspend fun reconcileAfterLabelImportAndWait: Boolean</ID>
+    <ID>TooGenericExceptionCaught:AboutDebugSection.kt:error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:AboutSettingsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AboutSettingsScreen.kt:error: Exception</ID>
+    <ID>TooGenericExceptionCaught:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$retryError: Throwable</ID>
+    <ID>TooGenericExceptionCaught:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess$retryTokenError: Throwable</ID>
+    <ID>TooGenericExceptionCaught:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:AppManager.kt:AppManager$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AsyncView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AuthManager.kt:AuthManager$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BackupExportScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BackupExportUtils.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BackupImportScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BackupVerifyScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BlockExplorerSettingsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ChooseWalletTypeSheet.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CloudBackupManager.kt:CloudBackupManager$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:CoinControlContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ColdWalletQrScanScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CoveApplication.kt:CoveApplication$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CustomFeeRateSheet.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:DriveAuthorizationHelper.kt:DriveAuthorizationHelper$error: RuntimeException</ID>
+    <ID>TooGenericExceptionCaught:HapticFeedbackExt.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:HotWalletCreateScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:HotWalletImportScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:HotWalletNfcScannerSheet.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImportWalletScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MainActivity.kt:MainActivity$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MainActivity.kt:MainActivity$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:MainActivityGlobalAlerts.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MainSettingsSecuritySection.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MoreInfoPopover.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NewHotWalletContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NewWalletSelectScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NfcLabelImportSheet.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NfcReader.kt:NfcReader$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NfcScanSheet.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NfcWriter.kt:NfcWriter$closeError: Exception</ID>
+    <ID>TooGenericExceptionCaught:NfcWriter.kt:NfcWriter$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NodeSettingsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:OnboardingExchangeFundingView.kt:error: Exception</ID>
+    <ID>TooGenericExceptionCaught:OnboardingImportViews.kt:error: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrCodeImportScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrCodeScanView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrExportView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ScanManager.kt:ScanManager$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ScanManager.kt:ScanManager$selectError: Exception</ID>
+    <ID>TooGenericExceptionCaught:SecretWordsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SelectedWalletContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SelectedWalletContainer.kt:ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:SendFlowAdvancedDetailsView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SendFlowContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SendFlowHardwareImportRoute.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SendFlowHardwareScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SendFlowHardwareSigning.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapCardNfcManager.kt:TapCardNfcManager$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapCardNfcManager.kt:TapCardTransport$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerConfirmPinView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerEnterPinView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerImportRetryView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerImportSuccessView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerNfcHelper.kt:TapSignerNfcHelper$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerSetupRetryView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TapSignerSetupSuccessView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TransactionDetailsContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TransactionDetailsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TransactionLabelView.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TransactionsRows.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:UtxoListScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:VerificationCompleteScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:VerifyWordsContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletManager.kt:WalletManager$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletMoreOptionsSheet.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletSelectionRecovery.kt:navigationError: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletSelectionRecovery.kt:recoveryError: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletSettingsContainer.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletSettingsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:WalletSettingsScreen.kt:e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:WalletSheets.kt:e: Exception</ID>
+    <ID>TooGenericExceptionThrown:CoveApplication.kt:CoveApplication$throw RuntimeException(&quot;Failed to initialize app data directory&quot;, e)</ID>
+    <ID>TooGenericExceptionThrown:CoveApplication.kt:CoveApplication$throw RuntimeException(&quot;Failed to initialize security infrastructure&quot;, e)</ID>
+    <ID>TooGenericExceptionThrown:MoreInfoPopover.kt:throw Exception(&quot;Unable to read file&quot;)</ID>
+    <ID>TooGenericExceptionThrown:SendFlowHardwareImportRoute.kt:throw Exception(TransactionImportErrors.FILE_READ_ERROR)</ID>
+    <ID>TooGenericExceptionThrown:TapCardNfcManager.kt:TapCardNfcManager$throw Exception(&quot;Activity no longer available&quot;)</ID>
+    <ID>TooGenericExceptionThrown:TapCardNfcManager.kt:TapCardNfcManager$throw Exception(&quot;Command completed but result extraction failed&quot;)</ID>
+    <ID>TooGenericExceptionThrown:TapCardNfcManager.kt:TapCardNfcManager$throw Exception(&quot;NFC is disabled. Please enable it in Settings&quot;)</ID>
+    <ID>TooGenericExceptionThrown:TapCardNfcManager.kt:TapCardNfcManager$throw Exception(&quot;NFC not available on this device&quot;)</ID>
+    <ID>TooGenericExceptionThrown:TapCardNfcManager.kt:TapCardNfcManager$throw Exception(&quot;NFC scan timed out. Please try again&quot;)</ID>
+    <ID>TooGenericExceptionThrown:TapCardNfcManager.kt:TapCardNfcManager$throw Exception(&quot;Tag doesn&#39;t support IsoDep (ISO7816)&quot;)</ID>
+    <ID>TooGenericExceptionThrown:TapSignerNfcHelper.kt:TapSignerNfcHelper$throw Exception( &quot;Unexpected response type for Backup command: ${response?.javaClass?.simpleName}&quot;, )</ID>
+    <ID>TooGenericExceptionThrown:TapSignerNfcHelper.kt:TapSignerNfcHelper$throw Exception( &quot;Unexpected response type for Change command: ${response?.javaClass?.simpleName}&quot;, )</ID>
+    <ID>TooGenericExceptionThrown:TapSignerNfcHelper.kt:TapSignerNfcHelper$throw Exception( &quot;Unexpected response type for Derive command: ${response?.javaClass?.simpleName}&quot;, )</ID>
+    <ID>TooGenericExceptionThrown:TapSignerNfcHelper.kt:TapSignerNfcHelper$throw Exception( &quot;Unexpected response type for Setup command: ${resp?.javaClass?.simpleName}&quot;, )</ID>
+    <ID>TooGenericExceptionThrown:TapSignerNfcHelper.kt:TapSignerNfcHelper$throw Exception( &quot;Unexpected response type for Setup command: ${response?.javaClass?.simpleName}&quot;, )</ID>
+    <ID>TooGenericExceptionThrown:TapSignerNfcHelper.kt:TapSignerNfcHelper$throw Exception( &quot;Unexpected response type for Sign command: ${response?.javaClass?.simpleName}&quot;, )</ID>
+    <ID>TooManyFunctions:AndroidCloudStorageAccess.kt:AndroidCloudStorageAccess : CloudStorageAccess</ID>
+    <ID>TooManyFunctions:AndroidCloudStorageSupport.kt:org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageSupport.kt</ID>
+    <ID>TooManyFunctions:AndroidPasskeyProvider.kt:AndroidPasskeyProvider : PasskeyProvider</ID>
+    <ID>TooManyFunctions:AndroidPasskeyProvider.kt:org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider.kt</ID>
+    <ID>TooManyFunctions:AppManager.kt:AppManager : FfiReconcile</ID>
+    <ID>TooManyFunctions:AuthManager.kt:AuthManager : AuthManagerReconciler</ID>
+    <ID>TooManyFunctions:CloudBackupManager.kt:CloudBackupManager : CloudBackupManagerReconcilerCloseable</ID>
+    <ID>TooManyFunctions:CloudBackupPresentationHost.kt:org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost.kt</ID>
+    <ID>TooManyFunctions:CloudBackupVisuals.kt:org.bitcoinppl.cove.cloudbackup.CloudBackupVisuals.kt</ID>
+    <ID>TooManyFunctions:CoinControlManager.kt:CoinControlManager : CoinControlManagerReconcilerCloseable</ID>
+    <ID>TooManyFunctions:CustomBaseViews.kt:org.bitcoinppl.cove.views.CustomBaseViews.kt</ID>
+    <ID>TooManyFunctions:OnboardingCloudRestorePromptViews.kt:org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCloudRestorePromptViews.kt</ID>
+    <ID>TooManyFunctions:OnboardingImportViews.kt:org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingImportViews.kt</ID>
+    <ID>TooManyFunctions:OnboardingTheme.kt:org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTheme.kt</ID>
+    <ID>TooManyFunctions:RouterManager.kt:RouteHelpers</ID>
+    <ID>TooManyFunctions:SendFlowManager.kt:SendFlowManager : SendFlowManagerReconcilerCloseable</ID>
+    <ID>TooManyFunctions:WalletManager.kt:WalletManager : WalletManagerReconcilerCloseable</ID>
+    <ID>UnnecessaryNotNullOperator:TapSignerScanningOverlay.kt:errorMessage!!</ID>
+    <ID>UnreachableCode:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$return runBlocking { try { val activity = ForegroundUiBridge.requireActivity() val response = credentialManager.createCredential( activity, CreatePublicKeyCredentialRequest( requestJson = buildCreateRequestJson(rpId, challenge, user), ), ) val registration = response as? CreatePublicKeyCredentialResponse ?: throw passkeyRequestFailed( PasskeyOperation.REGISTRATION, PasskeyFailureReason.UnexpectedCredentialType, ) validatePasskeyRegistrationPrf(registration.registrationResponseJson) PasskeyRegistrationResult( credentialId = extractCreatedCredentialId(registration.registrationResponseJson), providerAaguid = extractCreatedProviderAaguid(registration.registrationResponseJson), registeredPlatform = PasskeyRegistrationPlatform.ANDROID, ) } catch (error: Exception) { if (error is CancellationException) throw error throw mapPasskeyCreateError(error) } }</ID>
+    <ID>UnreachableCode:AndroidPasskeyProvider.kt:AndroidPasskeyProvider$return runBlocking { try { val activity = ForegroundUiBridge.requireActivity() val response = credentialManager.getCredential( activity, buildGetCredentialRequest( requestJson = buildAssertionRequestJson(rpId, null, prfSalt, challenge), preferImmediatelyAvailableCredentials = false, ), ) val credential = response.credential as? PublicKeyCredential ?: throw PasskeyException.NoCredentialFound() DiscoveredPasskeyResult( prfOutput = extractPrfOutput(credential.authenticationResponseJson), credentialId = extractCredentialId(credential.authenticationResponseJson), ) } catch (error: Exception) { if (error is CancellationException) throw error throw mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION) } }</ID>
+    <ID>UnreachableCode:AppManager.kt:AppManager$router = RouterManager(it.router)</ID>
+    <ID>UnreachableCode:AuthManager.kt:AuthManager$Instant.ofEpochSecond(it.toLong())</ID>
+    <ID>UnreachableCode:BackupExportUtils.kt:app.alertState = TaggedItem( AppAlertState.General( title = &quot;Backup Saved!&quot;, message = &quot;Your backup has been saved successfully!&quot;, ), )</ID>
+    <ID>UnreachableCode:CloudBackupDetailContent.kt:ErrorInlineMessage(it)</ID>
+    <ID>UnreachableCode:MoreInfoPopover.kt:it.write(data)</ID>
+    <ID>UnreachableCode:QrCodeScanView.kt:onComplete(result.data)</ID>
+    <ID>UnreachableCode:QrCodeScanView.kt:onProgress(result.progress)</ID>
+    <ID>UnreachableCode:QrCodeScanView.kt:result.haptic.trigger(context)</ID>
+    <ID>UnreachableCode:QrCodeScanView.kt:val result = scanner.scan(qrData)</ID>
+    <ID>UnreachableCode:SendFlowHardwareImportRoute.kt:return Pair(record, parsed)</ID>
+    <ID>UnreachableCode:SendFlowHardwareImportRoute.kt:val record = try { db.getTxThrow(txId = parsed.txId()) } catch (e: Exception) { throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e) }</ID>
+    <ID>UnreachableCode:TapSignerNfcHelper.kt:TapSignerNfcHelper$return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { resp -&gt; when (resp) { is TapSignerResponse.Setup -&gt; resp.v1 else -&gt; throw Exception( &quot;Unexpected response type for Setup command: ${resp?.javaClass?.simpleName}&quot;, ) } }</ID>
+    <ID>UnreachableCode:TapSignerNfcHelper.kt:TapSignerNfcHelper$return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { response -&gt; when (response) { is TapSignerResponse.Setup -&gt; response.v1 else -&gt; throw Exception( &quot;Unexpected response type for Setup command: ${response?.javaClass?.simpleName}&quot;, ) } }</ID>
+    <ID>UnsafeCallOnNullableType:CloudBackupDetailContent.kt:manager.detail!!</ID>
+    <ID>UnsafeCallOnNullableType:CoveApplication.kt:CoveApplication$connectivityMonitor!!</ID>
+    <ID>UnsafeCallOnNullableType:CustomBaseViews.kt:height!!</ID>
+    <ID>UnsafeCallOnNullableType:CustomBaseViews.kt:titleColor!!</ID>
+    <ID>UnsafeCallOnNullableType:HotWalletNfcScannerSheet.kt:errorMessage!!</ID>
+    <ID>UnsafeCallOnNullableType:MainActivity.kt:MainActivity$bootstrapError!!</ID>
+    <ID>UnsafeCallOnNullableType:NetworkFeeBottomSheet.kt:customFeeOption!!</ID>
+    <ID>UnsafeCallOnNullableType:NewHotWalletContainer.kt:manager!!</ID>
+    <ID>UnsafeCallOnNullableType:NfcScanSheet.kt:errorMessage!!</ID>
+    <ID>UnsafeCallOnNullableType:NfcWriteSheet.kt:errorMessage!!</ID>
+    <ID>UnsafeCallOnNullableType:OnboardingExchangeFundingView.kt:addressRaw!!</ID>
+    <ID>UnsafeCallOnNullableType:OnboardingExchangeFundingView.kt:addressText!!</ID>
+    <ID>UnsafeCallOnNullableType:OnboardingExchangeFundingView.kt:errorMessage!!</ID>
+    <ID>UnsafeCallOnNullableType:OnboardingImportViews.kt:errorMessage!!</ID>
+    <ID>UnsafeCallOnNullableType:OnboardingImportViews.kt:manager!!</ID>
+    <ID>UnsafeCallOnNullableType:QrCodeScanView.kt:barcode.rawBytes!!</ID>
+    <ID>UnsafeCallOnNullableType:QrCodeScanView.kt:barcode.rawValue!!</ID>
+    <ID>UnsafeCallOnNullableType:QrExportView.kt:error!!</ID>
+    <ID>UnsafeCallOnNullableType:SendFlowContainer.kt:walletManager.sendFlowErrorAlert!!</ID>
+    <ID>UnsafeCallOnNullableType:TapCardNfcManager.kt:TapCardNfcManager$pendingDisableRunnable!!</ID>
+    <ID>UnsafeCallOnNullableType:TapSignerImportSuccessView.kt:error!!</ID>
+    <ID>UnsafeCallOnNullableType:TapSignerManager.kt:TapSignerManager$nfc!!</ID>
+    <ID>UnsafeCallOnNullableType:TransactionDetailsContainer.kt:detailsError!!</ID>
+    <ID>UnsafeCallOnNullableType:TransactionDetailsContainer.kt:error!!</ID>
+    <ID>UnsafeCallOnNullableType:TransactionDetailsContainer.kt:manager!!</ID>
+    <ID>UnusedParameter:EnterAmountView.kt:onClearAmount: () -&gt; Unit = {}</ID>
+    <ID>UnusedParameter:MoreInfoPopover.kt:app: AppManager</ID>
+    <ID>UnusedParameter:NewHotWalletContainer.kt:modifier: Modifier = Modifier</ID>
+    <ID>UnusedParameter:SelectedWalletScreen.kt:isDarkList: Boolean</ID>
+    <ID>UnusedParameter:SendFlowConfirmScreen.kt:sendFlowManager: SendFlowManager</ID>
+    <ID>UnusedParameter:SendFlowHardwareSections.kt:tapSigner: TapSigner</ID>
+    <ID>UnusedParameter:SendFlowSetAmountScreen.kt:app: AppManager</ID>
+    <ID>UnusedParameter:TapSignerAdvancedChainCode.kt:app: AppManager</ID>
+    <ID>UnusedParameter:TapSignerConfirmPinView.kt:activity: android.app.Activity</ID>
+    <ID>UnusedParameter:TapSignerEnterPinView.kt:activity: android.app.Activity</ID>
+    <ID>UnusedParameter:TapSignerEnterPinView.kt:tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner</ID>
+    <ID>UnusedParameter:TapSignerImportSuccessView.kt:manager: TapSignerManager</ID>
+    <ID>UnusedParameter:TapSignerNewPinView.kt:app: AppManager</ID>
+    <ID>UnusedParameter:TapSignerSetupSuccessView.kt:manager: TapSignerManager</ID>
+    <ID>UnusedParameter:TapSignerStartingPinView.kt:app: AppManager</ID>
+    <ID>UnusedParameter:UtxoListScreen.kt:modifier: Modifier = Modifier</ID>
+    <ID>UnusedPrivateFunction:AboutSettingsScreen.kt:@Preview( name = &quot;About Settings&quot;, showSystemUi = true, widthDp = 393, heightDp = 852, ) @Composable private fun AboutSettingsScreenPreview</ID>
+    <ID>UnusedPrivateFunction:AdvancedDetailsBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Preview(showBackground = true) @Composable private fun AdvancedDetailsBottomSheetPreview</ID>
+    <ID>UnusedPrivateFunction:AdvancedDetailsBottomSheet.kt:@Preview(showBackground = true) @Composable private fun AdvancedDetailsContentPreview</ID>
+    <ID>UnusedPrivateFunction:AppManager.kt:AppManager$private fun resetRouteWithoutNavigationGeneration</ID>
+    <ID>UnusedPrivateFunction:BitcoinShieldIcon.kt:@Preview(showBackground = true, backgroundColor = 0xFF1A1A2E) @Composable private fun BitcoinShieldIconPreview</ID>
+    <ID>UnusedPrivateFunction:ChoiceDialog.kt:@Preview(showSystemUi = true, widthDp = 393, heightDp = 852) @Composable private fun ChoiceAlertDialogNoCancelPreview</ID>
+    <ID>UnusedPrivateFunction:ChoiceDialog.kt:@Preview(showSystemUi = true, widthDp = 393, heightDp = 852) @Composable private fun ChoiceAlertDialogPreview</ID>
+    <ID>UnusedPrivateFunction:ChooseWalletTypeSheet.kt:@Preview(showBackground = true) @Composable private fun ChooseWalletTypeSheetContentPreview</ID>
+    <ID>UnusedPrivateFunction:CloudBackupPreviewData.kt:@Preview( name = &quot;Cloud Backup Detail Dark&quot;, widthDp = 393, heightDp = 852, showSystemUi = true, uiMode = Configuration.UI_MODE_NIGHT_YES, ) @Composable private fun CloudBackupScreenPreview</ID>
+    <ID>UnusedPrivateFunction:CloudBackupPreviewData.kt:@Preview( name = &quot;Cloud Backup Detail Light&quot;, widthDp = 393, heightDp = 852, showSystemUi = true, uiMode = Configuration.UI_MODE_NIGHT_NO, ) @Composable private fun CloudBackupScreenLightPreview</ID>
+    <ID>UnusedPrivateFunction:CloudBackupVisuals.kt:@Composable private fun LoadingRow</ID>
+    <ID>UnusedPrivateFunction:CloudBackupWalletRows.kt:private fun Network.cloudBackupDisplayName: String</ID>
+    <ID>UnusedPrivateFunction:CloudBackupWalletRows.kt:private fun WalletType.cloudBackupDisplayName: String</ID>
+    <ID>UnusedPrivateFunction:CoinControlManager.kt:CoinControlManager$private fun &lt;T&gt; withRust: T</ID>
+    <ID>UnusedPrivateFunction:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview0</ID>
+    <ID>UnusedPrivateFunction:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview1</ID>
+    <ID>UnusedPrivateFunction:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview2</ID>
+    <ID>UnusedPrivateFunction:ConfirmationIndicatorView.kt:@Preview(showBackground = true) @Composable private fun ConfirmationIndicatorPreview3</ID>
+    <ID>UnusedPrivateFunction:DotMenuView.kt:@Preview @Composable private fun PreviewDotMenuView</ID>
+    <ID>UnusedPrivateFunction:HotWalletCreateScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun HotWalletCreateScreenPreview</ID>
+    <ID>UnusedPrivateFunction:HotWalletImportScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun HotWalletImportScreenPreview</ID>
+    <ID>UnusedPrivateFunction:HotWalletSelectScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun HotWalletSelectScreenPreview</ID>
+    <ID>UnusedPrivateFunction:ImageButton.kt:@Preview @Composable private fun PreviewImageButton</ID>
+    <ID>UnusedPrivateFunction:ImportWalletScreen.kt:@Preview @Composable private fun ImportWalletPreview12</ID>
+    <ID>UnusedPrivateFunction:ImportWalletScreen.kt:@Preview @Composable private fun ImportWalletPreview24</ID>
+    <ID>UnusedPrivateFunction:NetworkFeeBottomSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Preview(showBackground = true) @Composable private fun NetworkFeeBottomSheetPreview</ID>
+    <ID>UnusedPrivateFunction:NetworkFeeBottomSheet.kt:@Preview(showBackground = true) @Composable private fun CustomNetworkFeeContentPreview</ID>
+    <ID>UnusedPrivateFunction:NetworkFeeBottomSheet.kt:@Preview(showBackground = true) @Composable private fun NetworkFeeContentPreview</ID>
+    <ID>UnusedPrivateFunction:NewWalletSelectScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun NewWalletSelectScreenPreview</ID>
+    <ID>UnusedPrivateFunction:NfcHelpSheet.kt:@Preview(showBackground = true) @Composable private fun NfcHelpSheetPreview</ID>
+    <ID>UnusedPrivateFunction:OnboardingCloudRestorePromptViews.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun OnboardingRestoreOfferWithProviderDatePreview</ID>
+    <ID>UnusedPrivateFunction:OnboardingCloudRestorePromptViews.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun OnboardingRestoreOfferWithProviderHintPreview</ID>
+    <ID>UnusedPrivateFunction:ReceiveAddressSheet.kt:@Preview(showBackground = true, heightDp = 800) @Composable private fun ReceiveAddressSheetPreview</ID>
+    <ID>UnusedPrivateFunction:RecoveryWords.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun RecoveryWordsPreview</ID>
+    <ID>UnusedPrivateFunction:SelectedWalletScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun SelectedWalletFunctionalPreview</ID>
+    <ID>UnusedPrivateFunction:VerificationCompleteScreen.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun VerificationCompleteScreenPreview</ID>
+    <ID>UnusedPrivateFunction:VerificationSection.kt:@Composable private fun CancelledVerificationRecoveryContent</ID>
+    <ID>UnusedPrivateFunction:WalletBalanceHeaderView.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun WalletBalanceHeaderViewHiddenPreview</ID>
+    <ID>UnusedPrivateFunction:WalletBalanceHeaderView.kt:@Preview(showBackground = true, backgroundColor = 0xFF0D1B2A) @Composable private fun WalletBalanceHeaderViewPreview</ID>
+    <ID>UnusedPrivateProperty:TapSignerNfcHelper.kt:TapSignerNfcHelper$private val tapSigner: TapSigner</ID>
+    <ID>UnusedPrivateProperty:TransactionsCardView.kt:private const val SCROLL_THRESHOLD_INDEX = 5</ID>
+    <ID>UnusedVariable:CloudBackupPresentationHost.kt:val intent = presentation.intent</ID>
+    <ID>UnusedVariable:OnboardingManager.kt:OnboardingManager$val actionType = action::class.simpleName ?: &quot;Unknown&quot;</ID>
+    <ID>UnusedVariable:QrCodeScanView.kt:val context = LocalContext.current</ID>
+    <ID>UnusedVariable:SelectedWalletScreen.kt:val isScrolled = scrollProgress &gt; 0f</ID>
+    <ID>UnusedVariable:SelectedWalletScreen.kt:val listCard = MaterialTheme.colorScheme.surface</ID>
+    <ID>UnusedVariable:VerifyWordsScreen.kt:val config = remember { stateMachine.config() }</ID>
+    <ID>UnusedVariable:WalletMoreOptionsSheet.kt:val scope = rememberCoroutineScope()</ID>
+    <ID>UseCheckOrError:DriveAuthorizationHelper.kt:DriveAuthorizationHelper$throw IllegalStateException(&quot;drive authorization succeeded but returned a blank access token&quot;)</ID>
+    <ID>UseCheckOrError:DriveAuthorizationHelper.kt:DriveAuthorizationHelper$throw IllegalStateException(&quot;google drive authorization result is missing intent data&quot;)</ID>
+    <ID>UseCheckOrError:TapSignerEnterPinView.kt:throw IllegalStateException(&quot;Backup not available for this TapSigner&quot;)</ID>
+    <ID>UseCheckOrError:WalletMoreOptionsSheet.kt:throw IllegalStateException(&quot;Backup not available&quot;)</ID>
+    <ID>UseOrEmpty:CoinControlCustomAmountSheet.kt:enteringAmount ?: &quot;&quot;</ID>
+    <ID>UseOrEmpty:NodeSettingsScreen.kt:e.message ?: &quot;&quot;</ID>
+    <ID>UseOrEmpty:QrExportView.kt:qrStrings.getOrNull(safeIndex) ?: qrStrings.firstOrNull() ?: &quot;&quot;</ID>
+    <ID>UseOrEmpty:SendFlowHardwareSigning.kt:clipData?.getItemAt(0)?.text?.toString() ?: &quot;&quot;</ID>
+    <ID>UseOrEmpty:WalletSettingsScreen.kt:manager.masterFingerprint() ?: &quot;&quot;</ID>
+    <ID>VarCouldBeVal:AppManager.kt:AppManager$// rust bridge - not observable private var rust: FfiApp = FfiApp() private set</ID>
+    <ID>VarCouldBeVal:CoinControlCustomAmountSheet.kt:var isEditing by remember { mutableStateOf(false) }</ID>
+    <ID>WildcardImport:AdvancedDetailsBottomSheet.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:AdvancedDetailsBottomSheet.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:AdvancedDetailsBottomSheet.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:AppManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:AppManager.kt:import org.bitcoinppl.cove_core.tapcard.*</ID>
+    <ID>WildcardImport:AppManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:AppSheetState.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:AuthManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:AuthManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:CoinControlContainer.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:CoinControlContainer.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:CoinControlCustomAmountSheet.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:CoinControlCustomAmountSheet.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:CoinControlCustomAmountSheet.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:CoinControlManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:CoinControlManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:CoinControlSetAmountScreen.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:CoinControlSetAmountScreen.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:CustomFeeRateSheet.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:CustomFeeRateSheet.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:CustomFeeRateSheet.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:FeeRateSelectorSheet.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:FeeRateSelectorSheet.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:FeeRateSelectorSheet.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:HotWalletCreateScreen.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:HotWalletCreateScreen.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:HotWalletSelectScreen.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:HotWalletSelectScreen.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:ImportWalletManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:ImportWalletManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:ImportWalletScreen.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:ImportWalletScreen.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:ImportWalletScreen.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:NetworkFeeBottomSheet.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:NetworkFeeBottomSheet.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:NetworkFeeBottomSheet.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:PendingWalletManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:PendingWalletManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:QrCodeImportScreen.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:QrCodeImportScreen.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:QrCodeImportScreen.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:QrCodeScanView.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:QrCodeScanView.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:QrCodeScanView.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:RecoveryWords.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:RouteView.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:RouteView.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:RouterManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:RouterManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:ScanManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:ScanManager.kt:import org.bitcoinppl.cove_core.tapcard.*</ID>
+    <ID>WildcardImport:ScanManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:SendFlowConfirmScreen.kt:import androidx.compose.foundation.layout.*</ID>
+    <ID>WildcardImport:SendFlowConfirmScreen.kt:import androidx.compose.material3.*</ID>
+    <ID>WildcardImport:SendFlowConfirmScreen.kt:import androidx.compose.runtime.*</ID>
+    <ID>WildcardImport:SendFlowContainer.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:SendFlowContainer.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:SendFlowManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:SendFlowManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:SendFlowPresenter.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:SendFlowPresenter.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:SettingsContainer.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:SettingsContainer.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:TapCardNfcManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:TapSignerNfcHelper.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:VerificationCompleteScreen.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:VerificationCompleteScreen.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:WalletColorExt.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:WalletColorExt.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:WalletManager.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:WalletManager.kt:import org.bitcoinppl.cove_core.types.*</ID>
+    <ID>WildcardImport:WalletSettingsContainer.kt:import org.bitcoinppl.cove_core.*</ID>
+    <ID>WildcardImport:WalletSettingsContainer.kt:import org.bitcoinppl.cove_core.types.*</ID>
+  </CurrentIssues>
+</SmellBaseline>

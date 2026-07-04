@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("com.android.compose.screenshot")
+    id("dev.detekt")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jlleitschuh.gradle.ktlint")
 }
@@ -160,4 +161,33 @@ ktlint {
         exclude("**/cove_core/**")
         exclude("**/uniffi/**")
     }
+}
+
+val detektBaselineFile = file("$rootDir/detekt-baseline.xml")
+
+detekt {
+    toolVersion = "2.0.0-alpha.3"
+    config.setFrom(files("$rootDir/detekt.yml"))
+    buildUponDefaultConfig = true
+    baseline = detektBaselineFile
+    basePath.set(rootDir)
+    failOnSeverity = dev.detekt.gradle.extensions.FailOnSeverity.Warning
+}
+
+tasks.withType<dev.detekt.gradle.Detekt>().configureEach {
+    baseline.set(detektBaselineFile)
+    exclude("**/cove_core/**")
+    exclude("**/uniffi/**")
+    exclude("**/build/**")
+}
+
+tasks.withType<dev.detekt.gradle.DetektCreateBaselineTask>().configureEach {
+    baseline.set(detektBaselineFile)
+    exclude("**/cove_core/**")
+    exclude("**/uniffi/**")
+    exclude("**/build/**")
+}
+
+tasks.named("detekt") {
+    dependsOn("detektDevDebug")
 }

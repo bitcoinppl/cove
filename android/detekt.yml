@@ -1,0 +1,17 @@
+complexity:
+  CyclomaticComplexMethod:
+    active: true
+  LargeClass:
+    active: true
+  LongMethod:
+    active: true
+
+exceptions:
+  SwallowedException:
+    active: true
+  TooGenericExceptionCaught:
+    active: true
+
+potential-bugs:
+  UnsafeCallOnNullableType:
+    active: true

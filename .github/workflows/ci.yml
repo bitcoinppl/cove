@@ -48,6 +48,8 @@ jobs:
           java-version: '17'
       - name: Run ktlint
         run: cd android && ./gradlew ktlintCheck
+      - name: Run detekt
+        run: cd android && ./gradlew detekt
 
   compile-android:
     runs-on: ubuntu-latest
