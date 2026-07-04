@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
-use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
@@ -164,7 +163,9 @@ impl RustCloudBackupManager {
         );
 
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let outcome = restore_session
             .restore_record(&reader, record_id)

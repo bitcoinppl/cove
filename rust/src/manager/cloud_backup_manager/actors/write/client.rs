@@ -1,6 +1,5 @@
 use act_zero::{Addr, call};
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_util::ResultExt as _;
 
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
@@ -37,16 +36,17 @@ impl CloudBackupWriteClient {
         &self,
         receiver: CloudBackupWriteResultReceiver<T>,
     ) -> Result<T, CloudBackupError> {
-        let result = receiver
-            .await
-            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?;
+        let result = receiver.await.map_err(|source| {
+            CloudBackupError::internal_context("wait for cloud backup write supervisor", source)
+        })?;
 
         let context = result.context();
         let context_id = context.id();
         if context.origin() != self.origin {
             return Err(CloudBackupError::Internal(format!(
                 "cloud backup write supervisor returned mismatched operation origin for command {context_id:?}",
-            )));
+            )
+            .into()));
         }
 
         result.into_result()
@@ -75,7 +75,9 @@ impl CloudBackupWriteClient {
                 call!(self.supervisor.upload_wallet_backup(cloud, namespace, record_id, data)).await
             }
         }
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
 
         self.await_result(receiver).await
     }
@@ -96,7 +98,9 @@ impl CloudBackupWriteClient {
             self.supervisor.upload_master_key_backup_for_operation(cloud, namespace, data, origin)
         )
         .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
 
         self.await_result(receiver).await
     }
@@ -119,7 +123,9 @@ impl CloudBackupWriteClient {
                 cloud, namespace, data, completion, origin
             ))
             .await
-            .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("start cloud backup write supervisor", source)
+            })?;
 
         self.await_result(receiver).await
     }
@@ -145,7 +151,9 @@ impl CloudBackupWriteClient {
             origin
         ))
         .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
 
         self.await_result(receiver).await
     }

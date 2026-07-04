@@ -4,7 +4,6 @@ use cove_cspp::backup_data::{
     DescriptorPair, WalletEntry, WalletMode, WalletSecret as CloudWalletSecret,
 };
 use cove_device::keychain::Keychain;
-use cove_util::ResultExt as _;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tracing::warn;
@@ -88,8 +87,9 @@ impl WalletBackupRevisionPayload {
     }
 
     fn content_revision_hash(&self) -> Result<String, CloudBackupError> {
-        let bytes = serde_json::to_vec(self)
-            .map_err_prefix("serialize revision payload", CloudBackupError::Internal)?;
+        let bytes = serde_json::to_vec(self).map_err(|source| {
+            CloudBackupError::internal_context("serialize revision payload", source)
+        })?;
 
         Ok(hex::encode(Sha256::digest(bytes)))
     }
@@ -114,7 +114,7 @@ pub async fn build_wallet_entry(
     let secret = match metadata.wallet_type {
         WalletType::Hot => {
             let mnemonic = keychain.get_wallet_key(id).map_err(|error| {
-                CloudBackupError::Internal(format!("failed to get wallet mnemonic: {error}"))
+                CloudBackupError::Internal(format!("failed to get wallet mnemonic: {error}").into())
             })?;
             let Some(mnemonic) = mnemonic else {
                 return Err(CloudBackupError::Internal("hot wallet has no mnemonic".into()));
@@ -130,14 +130,14 @@ pub async fn build_wallet_entry(
         Ok(Some(xpub)) => Some(xpub.to_string()),
         Ok(None) => None,
         Err(error) => {
-            return Err(CloudBackupError::Internal(format!("failed to read xpub: {error}")));
+            return Err(CloudBackupError::Internal(format!("failed to read xpub: {error}").into()));
         }
     };
 
     let descriptors = backup_descriptors(keychain, metadata, id, &secret)?;
 
     let metadata_value = serde_json::to_value(metadata.clone_without_local_scan_state())
-        .map_err_prefix("serialize metadata", CloudBackupError::Internal)?;
+        .map_err(|source| CloudBackupError::internal_context("serialize metadata", source))?;
 
     let wallet_mode = mode.into();
 
@@ -184,14 +184,16 @@ fn backup_descriptors(
         }
         Ok(None) => {}
         Err(error) => {
-            return Err(CloudBackupError::Internal(format!("failed to read descriptors: {error}")));
+            return Err(CloudBackupError::Internal(
+                format!("failed to read descriptors: {error}").into(),
+            ));
         }
     }
 
     match secret {
         CloudWalletSecret::Mnemonic(mnemonic) => {
             let mnemonic = bip39::Mnemonic::from_str(mnemonic).map_err(|error| {
-                CloudBackupError::Internal(format!("failed to parse mnemonic: {error}"))
+                CloudBackupError::Internal(format!("failed to parse mnemonic: {error}").into())
             })?;
             let descriptors =
                 mnemonic.into_descriptors(None, metadata.network, metadata.address_type);
@@ -226,9 +228,9 @@ fn build_cold_wallet_secret(
             warn!("Tap signer wallet has no backup, exporting without it");
             Ok(CloudWalletSecret::WatchOnly)
         }
-        Err(error) => {
-            Err(CloudBackupError::Internal(format!("failed to read tap signer backup: {error}")))
-        }
+        Err(error) => Err(CloudBackupError::Internal(
+            format!("failed to read tap signer backup: {error}").into(),
+        )),
     }
 }
 
@@ -256,7 +258,7 @@ fn prepare_cloud_labels(labels_jsonl: &str) -> Result<PreparedCloudLabels, Cloud
     } else {
         Some(
             crate::backup::crypto::compress(labels_jsonl.as_bytes())
-                .map_err_prefix("compress labels", CloudBackupError::Internal)?,
+                .map_err(|source| CloudBackupError::internal_context("compress labels", source))?,
         )
     };
 
@@ -281,7 +283,7 @@ where
     T: Serialize,
 {
     let bytes = serde_json::to_vec(value)
-        .map_err_prefix("serialize sync field", CloudBackupError::Internal)?;
+        .map_err(|source| CloudBackupError::internal_context("serialize sync field", source))?;
     Ok(hex::encode(Sha256::digest(bytes)))
 }
 
@@ -296,9 +298,9 @@ async fn export_wallet_labels_jsonl(
     wallet_id: &crate::wallet::metadata::WalletId,
 ) -> Result<String, CloudBackupError> {
     let manager = LabelManager::try_new(wallet_id.clone())
-        .map_err(|error| CloudBackupError::Internal(format!("open labels db: {error}")))?;
+        .map_err(|error| CloudBackupError::Internal(format!("open labels db: {error}").into()))?;
 
-    manager.export().await.map_err_str(CloudBackupError::Internal)
+    manager.export().await.map_err(CloudBackupError::internal)
 }
 
 pub fn decode_cloud_labels_jsonl(entry: &WalletEntry) -> Result<Option<String>, CloudBackupError> {
@@ -307,13 +309,13 @@ pub fn decode_cloud_labels_jsonl(entry: &WalletEntry) -> Result<Option<String>, 
     };
 
     let decompressed = crate::backup::crypto::decompress(compressed_labels)
-        .map_err_prefix("decompress labels", CloudBackupError::Internal)?;
+        .map_err(|source| CloudBackupError::internal_context("decompress labels", source))?;
 
     ensure_cloud_labels_size(decompressed.len(), "decompressed")?;
 
-    String::from_utf8(decompressed.to_vec())
-        .map(Some)
-        .map_err(|error| CloudBackupError::Internal(format!("decode labels as utf8: {error}")))
+    String::from_utf8(decompressed.to_vec()).map(Some).map_err(|error| {
+        CloudBackupError::Internal(format!("decode labels as utf8: {error}").into())
+    })
 }
 
 fn ensure_cloud_labels_size(size: usize, label_state: &str) -> Result<(), CloudBackupError> {
@@ -321,9 +323,9 @@ fn ensure_cloud_labels_size(size: usize, label_state: &str) -> Result<(), CloudB
         return Ok(());
     }
 
-    Err(CloudBackupError::Internal(format!(
-        "{label_state} labels exceed {MAX_CLOUD_LABELS_SIZE} byte limit",
-    )))
+    Err(CloudBackupError::Internal(
+        format!("{label_state} labels exceed {MAX_CLOUD_LABELS_SIZE} byte limit",).into(),
+    ))
 }
 
 pub fn convert_cloud_secret(secret: &CloudWalletSecret) -> LocalWalletSecret {

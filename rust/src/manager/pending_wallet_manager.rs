@@ -14,6 +14,7 @@ use crate::{
     pending_wallet::PendingWallet,
     router::{HotWalletRoute, NewWalletRoute, Route},
     wallet::{Wallet, fingerprint::Fingerprint, metadata::WalletMetadata},
+    xpub::XpubError,
 };
 
 type Error = PendingWalletManagerError;
@@ -205,7 +206,7 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::BdkError(error) => Self::Bdk(error),
             WalletError::PersistError(error) => Self::Persist(error),
             WalletError::MultiFormat(error) => Self::MultiFormat(error),
-            WalletError::ParseXpubError(error) => Self::Import(error.to_string()),
+            WalletError::ParseXpubError(error) => error.into(),
             WalletError::WalletAlreadyExists(id) => {
                 Self::Import(format!("wallet already exists: {id}"))
             }
@@ -226,6 +227,12 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
                 Self::Unexpected(format!("descriptor key parse error during creation: {error}"))
             }
         }
+    }
+}
+
+impl From<XpubError> for WalletCreationError {
+    fn from(error: XpubError) -> Self {
+        Self::Import(error.to_string())
     }
 }
 

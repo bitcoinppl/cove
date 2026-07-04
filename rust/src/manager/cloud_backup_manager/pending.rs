@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use act_zero::send;
 use backon::{BackoffBuilder as _, FibonacciBuilder};
-use cove_util::ResultExt as _;
 
 use self::queue_processor::PendingUploadVerifier;
 use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
@@ -47,7 +46,7 @@ impl RustCloudBackupManager {
         Database::global()
             .cloud_blob_sync_states
             .set_if_current(current_state, &next_sync_state)
-            .map_err_prefix(error_context, CloudBackupError::Internal)
+            .map_err(|source| CloudBackupError::internal_context(error_context, source))
     }
 
     pub(crate) fn mark_blob_uploaded_pending_confirmation(
@@ -72,10 +71,9 @@ impl RustCloudBackupManager {
             state,
         );
 
-        Database::global()
-            .cloud_blob_sync_states
-            .set(&sync_state)
-            .map_err_prefix("persist uploaded cloud blob state", CloudBackupError::Internal)?;
+        Database::global().cloud_blob_sync_states.set(&sync_state).map_err(|source| {
+            CloudBackupError::internal_context("persist uploaded cloud blob state", source)
+        })?;
 
         if starts_master_key_grace {
             send!(
@@ -159,10 +157,9 @@ impl RustCloudBackupManager {
         let dirty_state = current_state
             .with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }));
 
-        Database::global()
-            .cloud_blob_sync_states
-            .set(&dirty_state)
-            .map_err_prefix("persist dirty cloud blob state", CloudBackupError::Internal)
+        Database::global().cloud_blob_sync_states.set(&dirty_state).map_err(|source| {
+            CloudBackupError::internal_context("persist dirty cloud blob state", source)
+        })
     }
 
     pub(crate) fn remove_blob_sync_states<I>(&self, record_ids: I) -> Result<(), CloudBackupError>
@@ -172,9 +169,9 @@ impl RustCloudBackupManager {
         let table = &Database::global().cloud_blob_sync_states;
 
         for record_id in record_ids {
-            table
-                .delete(&record_id)
-                .map_err_prefix("remove cloud blob sync state", CloudBackupError::Internal)?;
+            table.delete(&record_id).map_err(|source| {
+                CloudBackupError::internal_context("remove cloud blob sync state", source)
+            })?;
         }
 
         self.refresh_pending_upload_verification_state();

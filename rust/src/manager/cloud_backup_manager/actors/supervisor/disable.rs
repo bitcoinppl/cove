@@ -128,10 +128,10 @@ impl CloudBackupSupervisor {
         self.runtime_passkey_authorization = None;
         call!(self.sync_health.clear_upload_runtime_state())
             .await
-            .map_err(|error| CloudBackupError::Internal(error.to_string()))?;
+            .map_err(CloudBackupError::internal)?;
         call!(self.uploads.clear_upload_runtime_state())
             .await
-            .map_err(|error| CloudBackupError::Internal(error.to_string()))?;
+            .map_err(CloudBackupError::internal)?;
 
         manager.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         manager.apply_sync_outcome(CloudBackupSyncOutcome::Completed);

@@ -25,7 +25,8 @@ use tracing::{debug, error, warn};
 
 use crate::{
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, WalletManagerError, WalletManagerReconcileMessage,
+        Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
+        WalletManagerFeesError, WalletManagerReconcileMessage,
         actor::{WalletActor, current_wallet_unspent_outpoints_for_txid, exclude_locked_outpoints},
         payjoin::{PayjoinActor, PayjoinSender, build_sender},
     },
@@ -51,7 +52,7 @@ impl WalletActor {
 
         exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
-        let psbt = tx_builder.finish().map_err(Error::from)?;
+        let psbt = tx_builder.finish()?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
 
         Ok(psbt)
@@ -80,7 +81,7 @@ impl WalletActor {
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish().map_err(Error::from)?;
+        let psbt = tx_builder.finish()?;
         Ok(psbt)
     }
 
@@ -117,13 +118,13 @@ impl WalletActor {
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
 
         let mut tx_builder = self.wallet.bdk.build_tx();
-        tx_builder.add_utxos(&utxos).map_err_str(Error::AddUtxosError)?;
+        tx_builder.add_utxos(&utxos)?;
         tx_builder.manually_selected_only();
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(address.script_pubkey(), send_amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish().map_err(Error::from)?;
+        let psbt = tx_builder.finish()?;
         Ok(psbt)
     }
 
@@ -199,15 +200,15 @@ impl WalletActor {
         let options = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.fast,
-                fast_psbt.fee().map_err_str(Error::FeesError)?,
+                fast_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             medium: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.medium,
-                medium_psbt.fee().map_err_str(Error::FeesError)?,
+                medium_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             slow: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.slow,
-                slow_psbt.fee().map_err_str(Error::FeesError)?,
+                slow_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             custom: None,
         };
@@ -260,15 +261,15 @@ impl WalletActor {
         let options = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.fast,
-                fast_psbt.fee().map_err_str(Error::FeesError)?,
+                fast_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             medium: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.medium,
-                medium_psbt.fee().map_err_str(Error::FeesError)?,
+                medium_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             slow: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.slow,
-                slow_psbt.fee().map_err_str(Error::FeesError)?,
+                slow_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             custom: None,
         };
@@ -301,15 +302,15 @@ impl WalletActor {
         let options_with_fee = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
                 options.fast,
-                fast_psbt.fee().map_err_str(Error::FeesError)?,
+                fast_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             medium: FeeRateOptionWithTotalFee::new(
                 options.medium,
-                medium_psbt.fee().map_err_str(Error::FeesError)?,
+                medium_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             slow: FeeRateOptionWithTotalFee::new(
                 options.slow,
-                slow_psbt.fee().map_err_str(Error::FeesError)?,
+                slow_psbt.fee().map_err(WalletManagerFeesError::from)?,
             ),
             custom: None,
         };
@@ -691,8 +692,7 @@ impl WalletActor {
             let mut utxo_total_amount = Amount::ZERO;
             let mut total_fee_amount = Amount::ZERO;
 
-            let weighted_utxos =
-                self.get_weighted_utxos(utxos).map_err_str(Error::AddUtxosError)?;
+            let weighted_utxos = self.get_weighted_utxos(utxos)?;
 
             for weighted_utxo in weighted_utxos {
                 let weight = TxIn::default()
@@ -729,7 +729,7 @@ impl WalletActor {
                 }
 
                 let mut tx_builder = self.wallet.bdk.build_tx();
-                tx_builder.add_utxos(utxos).map_err_str(Error::AddUtxosError)?;
+                tx_builder.add_utxos(utxos)?;
                 tx_builder.manually_selected_only();
                 tx_builder.ordering(TxOrdering::Untouched);
                 tx_builder.add_recipient(address.script_pubkey(), max_send_estimate);
@@ -755,13 +755,13 @@ impl WalletActor {
 
                         max_send_estimate = reduced_estimate;
                     }
-                    Err(err) => return Err(Error::from(err)),
+                    Err(err) => return Err(err.into()),
                 }
             }
 
             let fee_psbt = fee_psbt.expect("unwrapped in while");
             self.wallet.unreserve_tx_change_addresses(&fee_psbt.unsigned_tx);
-            fee_psbt.fee().map_err_str(Error::BuildTxError)?
+            fee_psbt.fee().map_err(WalletManagerBuildTxError::from)?
         };
 
         let max_send_amount = utxo_total_amount.checked_sub(fee).ok_or_else(|| {

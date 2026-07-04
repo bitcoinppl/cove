@@ -468,7 +468,7 @@ impl NamespacePasskeyMatcher {
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 return Err(CloudBackupError::UnsupportedPasskeyProvider);
             }
-            Err(error) => return Err(CloudBackupError::Passkey(error.to_string())),
+            Err(error) => return Err(CloudBackupError::passkey(error)),
         };
 
         let mut matches = Vec::new();
@@ -604,7 +604,7 @@ fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
         error if is_android_passkey_association_error(&error) => {
             CloudBackupError::Passkey(android_passkey_association_message().into())
         }
-        other => CloudBackupError::Passkey(other.to_string()),
+        other => CloudBackupError::passkey(other),
     }
 }
 
@@ -618,7 +618,7 @@ fn map_enable_passkey_error(error: PasskeyError) -> CloudBackupError {
         error if is_android_passkey_association_error(&error) => {
             CloudBackupError::Passkey(android_passkey_association_message().into())
         }
-        other => CloudBackupError::Passkey(other.to_string()),
+        other => CloudBackupError::passkey(other),
     }
 }
 

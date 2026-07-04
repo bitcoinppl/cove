@@ -338,7 +338,9 @@ impl CloudBackupSupervisor {
                 upload.passkey.prf_salt,
                 &upload.namespace_id,
             )
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("save cspp credentials", source)
+            })?;
 
         let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
             upload.namespace_id.clone(),
@@ -419,7 +421,7 @@ impl CloudBackupSupervisor {
 
         let decrypted_master =
             master_key_crypto::decrypt_master_key(&encrypted_master, &passkey.prf_key)
-                .map_err_str(CloudBackupError::Crypto);
+                .map_err(CloudBackupError::crypto);
         let decrypted_master = match decrypted_master {
             Ok(decrypted_master) => decrypted_master,
             Err(error) => {

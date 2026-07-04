@@ -12,7 +12,6 @@ use cove_cspp::{backup_data::MASTER_KEY_RECORD_ID, master_key_crypto};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
-use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 
 use super::cleanup::{CleanupSourceNamespace, CloudBackupCleanupJob, CloudBackupCleanupWorker};
@@ -269,15 +268,16 @@ impl CloudBackupSupervisor {
         receiver: CloudBackupWriteResultReceiver<T>,
         origin: CloudBackupExclusiveOperationClaim,
     ) -> Result<T, CloudBackupError> {
-        let result: CloudBackupWriteCommandResult<T> = receiver
-            .await
-            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?;
+        let result: CloudBackupWriteCommandResult<T> = receiver.await.map_err(|source| {
+            CloudBackupError::internal_context("wait for cloud backup write supervisor", source)
+        })?;
         let context = result.context();
         if context.origin() != Some(origin) {
             return Err(CloudBackupError::Internal(format!(
                 "cloud backup write supervisor returned mismatched operation origin for command {:?}",
                 context.id()
-            )));
+            )
+            .into()));
         }
 
         result.into_result()
@@ -295,7 +295,9 @@ impl CloudBackupSupervisor {
             origin
         ))
         .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
 
         Self::await_cloud_backup_write_for_operation(receiver, origin).await.map_err(|error| {
             let error = match error {
@@ -323,7 +325,9 @@ impl CloudBackupSupervisor {
             origin
         ))
         .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
 
         Self::await_cloud_backup_write_for_operation(receiver, origin).await
     }
@@ -335,7 +339,9 @@ impl CloudBackupSupervisor {
     ) -> Result<(), CloudBackupError> {
         let receiver = call!(write.apply_completion_for_operation(completion, origin))
             .await
-            .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("start cloud backup write supervisor", source)
+            })?;
 
         Self::await_cloud_backup_write_for_operation(receiver, origin).await
     }
@@ -481,7 +487,7 @@ impl CloudBackupSupervisor {
         let result = Database::global()
             .cloud_backup_state
             .set(&state)
-            .map_err(|error| CloudBackupError::Internal(format!("{context}: {error}")));
+            .map_err(|error| CloudBackupError::Internal(format!("{context}: {error}").into()));
         if result.is_ok() {
             manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(&state));
             manager.refresh_persisted_flags();

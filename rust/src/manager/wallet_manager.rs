@@ -19,7 +19,8 @@ use std::{
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
 pub use balance_presentation::BalancePresentation;
-use bdk_wallet::error::CreateTxError;
+use bdk_wallet::{AddUtxoError, error::CreateTxError};
+use futures::channel::oneshot;
 pub use ledger_state::WalletLedgerState;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
@@ -395,6 +396,122 @@ pub enum WalletManagerError {
     ReceiveAddressError(String),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WalletManagerBuildTxError {
+    #[error(transparent)]
+    Create(#[from] CreateTxError),
+
+    #[error(transparent)]
+    Psbt(#[from] bitcoin::psbt::Error),
+}
+
+impl From<WalletManagerBuildTxError> for WalletManagerError {
+    fn from(error: WalletManagerBuildTxError) -> Self {
+        match error {
+            WalletManagerBuildTxError::Create(CreateTxError::OutputBelowDustLimit(_)) => {
+                Self::OutputBelowDustLimit
+            }
+            WalletManagerBuildTxError::Create(CreateTxError::CoinSelection(error)) => {
+                Self::InsufficientFunds(error.to_string())
+            }
+            error => Self::BuildTxError(error.to_string()),
+        }
+    }
+}
+
+impl From<CreateTxError> for WalletManagerError {
+    fn from(error: CreateTxError) -> Self {
+        Self::from(WalletManagerBuildTxError::from(error))
+    }
+}
+
+impl From<AddUtxoError> for WalletManagerError {
+    fn from(error: AddUtxoError) -> Self {
+        Self::AddUtxosError(error.to_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WalletManagerFeesError {
+    #[error(transparent)]
+    Fetch(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    Psbt(#[from] bitcoin::psbt::Error),
+}
+
+impl From<WalletManagerFeesError> for WalletManagerError {
+    fn from(error: WalletManagerFeesError) -> Self {
+        Self::FeesError(error.to_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{context}: {source}")]
+pub(crate) struct WalletManagerPendingUnsignedTransactionsLoadError {
+    context: String,
+
+    #[source]
+    source: crate::database::Error,
+}
+
+impl WalletManagerPendingUnsignedTransactionsLoadError {
+    pub(crate) fn new(context: impl Into<String>, source: crate::database::Error) -> Self {
+        Self { context: context.into(), source }
+    }
+}
+
+impl From<WalletManagerPendingUnsignedTransactionsLoadError> for WalletManagerError {
+    fn from(error: WalletManagerPendingUnsignedTransactionsLoadError) -> Self {
+        Self::PendingUnsignedTransactionsLoadError(error.to_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{source}")]
+pub(crate) struct WalletManagerDatabaseCorruptionError {
+    id: WalletId,
+
+    #[source]
+    source: crate::database::wallet_data::WalletDataError,
+}
+
+impl WalletManagerDatabaseCorruptionError {
+    pub(crate) fn new(id: WalletId, source: crate::database::wallet_data::WalletDataError) -> Self {
+        Self { id, source }
+    }
+}
+
+impl From<WalletManagerDatabaseCorruptionError> for WalletManagerError {
+    fn from(error: WalletManagerDatabaseCorruptionError) -> Self {
+        Self::DatabaseCorruption { id: error.id, error: error.source.to_string() }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{source}")]
+pub(crate) struct WalletManagerUnableToSwitchError {
+    wallet_address_type: WalletAddressType,
+
+    #[source]
+    source: oneshot::Canceled,
+}
+
+impl WalletManagerUnableToSwitchError {
+    pub(crate) const fn new(
+        wallet_address_type: WalletAddressType,
+        source: oneshot::Canceled,
+    ) -> Self {
+        Self { wallet_address_type, source }
+    }
+}
+
+impl From<WalletManagerUnableToSwitchError> for WalletManagerError {
+    fn from(error: WalletManagerUnableToSwitchError) -> Self {
+        Self::UnableToSwitch(error.wallet_address_type, error.source.to_string())
+    }
+}
+
 fn initial_state_from_snapshot(
     metadata: WalletMetadata,
     scan_status: WalletScanStatus,
@@ -438,25 +555,14 @@ fn unsigned_transactions_for_wallet(
 ) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
     let db = Database::global();
     let context = format!("wallet id={wallet_id:?}");
-    let txns = db
-        .unsigned_transactions()
-        .get_by_wallet_id(wallet_id)
-        .map_err_prefix(&context, Error::PendingUnsignedTransactionsLoadError)?;
+    let txns = db.unsigned_transactions().get_by_wallet_id(wallet_id).map_err(|source| {
+        WalletManagerPendingUnsignedTransactionsLoadError::new(context.clone(), source)
+    })?;
 
     let txns =
         txns.into_iter().map(|txn| Arc::new(txn.into())).collect::<Vec<Arc<UnsignedTransaction>>>();
 
     Ok(txns)
-}
-
-impl From<CreateTxError> for WalletManagerError {
-    fn from(error: CreateTxError) -> Self {
-        match error {
-            CreateTxError::OutputBelowDustLimit(_) => Self::OutputBelowDustLimit,
-            CreateTxError::CoinSelection(error) => Self::InsufficientFunds(error.to_string()),
-            error => Self::BuildTxError(error.to_string()),
-        }
-    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -544,7 +650,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
-        let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
+        let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
         Ok(fees.into())
     }
@@ -844,7 +950,7 @@ impl RustWalletManager {
 
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
-        let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
+        let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
         Ok(fees.into())
     }
@@ -899,7 +1005,9 @@ impl RustWalletManager {
                     actor.switch_descriptor_to_new_address_type(descriptors, wallet_address_type)
                 )
                 .await
-                .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+                .map_err(|source| {
+                    WalletManagerUnableToSwitchError::new(wallet_address_type, source)
+                })?;
                 self.refresh_metadata_from_database()?;
 
                 // reset route as a navigation fallback; actor scan refreshes transactions
@@ -911,7 +1019,9 @@ impl RustWalletManager {
                 let actor = self.actor.clone();
                 call!(actor.switch_mnemonic_to_new_address_type(wallet_address_type))
                     .await
-                    .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+                    .map_err(|source| {
+                        WalletManagerUnableToSwitchError::new(wallet_address_type, source)
+                    })?;
                 self.refresh_metadata_from_database()?;
 
                 debug!("switch done");

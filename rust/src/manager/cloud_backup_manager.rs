@@ -25,7 +25,6 @@ use std::sync::{Arc, LazyLock};
 use act_zero::{Addr, call, send};
 use cove_device::cloud_storage::{CloudStorageClient, CloudSyncHealth};
 use cove_tokio::task::spawn_actor;
-use cove_util::ResultExt as _;
 use flume::Receiver;
 use parking_lot::RwLock;
 use tracing::{error, info, warn};
@@ -678,7 +677,9 @@ impl RustCloudBackupManager {
     ) -> Result<T, CloudBackupError> {
         receiver
             .await
-            .map_err_prefix("wait for cloud backup write supervisor", CloudBackupError::Internal)?
+            .map_err(|source| {
+                CloudBackupError::internal_context("wait for cloud backup write supervisor", source)
+            })?
             .into_result()
     }
 
@@ -707,7 +708,9 @@ impl RustCloudBackupManager {
                 cloud, namespace, record_id, data, completion
             ))
             .await
-            .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("start cloud backup write supervisor", source)
+            })?;
 
         Self::await_cloud_backup_write(receiver).await
     }
@@ -726,7 +729,9 @@ impl RustCloudBackupManager {
             count_refresh
         ))
         .await
-        .map_err_prefix("start cloud backup write supervisor", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
 
         Self::await_cloud_backup_write(receiver).await
     }
@@ -1028,7 +1033,7 @@ impl RustCloudBackupManager {
         Database::global()
             .cloud_backup_state
             .set(state)
-            .map_err(|error| CloudBackupError::Internal(format!("{context}: {error}")))?;
+            .map_err(|source| CloudBackupError::internal_context(context, source))?;
 
         self.reconcile_runtime_status(Self::runtime_status_for(state));
         self.refresh_persisted_flags();

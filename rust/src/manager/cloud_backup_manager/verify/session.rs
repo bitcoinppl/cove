@@ -14,7 +14,6 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyCredentialPresence};
-use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _};
 use tracing::{debug, info, warn};
 use zeroize::Zeroizing;
@@ -315,9 +314,9 @@ impl VerificationSession {
         let keychain = Keychain::global().clone();
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        let local_master_key = cspp
-            .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?;
+        let local_master_key = cspp.load_master_key_from_store().map_err(|source| {
+            CloudBackupError::internal_context("load local master key", source)
+        })?;
 
         Ok(Self {
             manager: manager.clone(),
@@ -447,10 +446,12 @@ impl VerificationSession {
         match self.cloud.download_master_key_backup(self.namespace.clone()).await {
             Ok(json) => {
                 let encrypted: EncryptedMasterKeyBackup =
-                    serde_json::from_slice(&json).map_err_str(CloudBackupError::Internal)?;
+                    serde_json::from_slice(&json).map_err(CloudBackupError::internal)?;
                 encrypted.remote_metadata.normalized_master_key(&self.namespace).map_err(
                     |error| {
-                        CloudBackupError::Internal(format!("normalize master key payload: {error}"))
+                        CloudBackupError::Internal(
+                            format!("normalize master key payload: {error}").into(),
+                        )
                     },
                 )?;
 
@@ -563,18 +564,18 @@ impl VerificationSession {
         let repaired = match &self.local_master_key {
             // restore the missing local key from the verified cloud backup
             None => {
-                self.cspp
-                    .save_master_key(master_key)
-                    .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
+                self.cspp.save_master_key(master_key).map_err(|source| {
+                    CloudBackupError::internal_context("repair local master key", source)
+                })?;
                 info!("Repaired local master key from cloud");
                 true
             }
 
             // replace a stale local key after cloud decryption proves the cloud key is valid
             Some(local_key) if local_key.as_bytes() != master_key.as_bytes() => {
-                self.cspp
-                    .save_master_key(master_key)
-                    .map_err_prefix("repair local master key", CloudBackupError::Internal)?;
+                self.cspp.save_master_key(master_key).map_err(|source| {
+                    CloudBackupError::internal_context("repair local master key", source)
+                })?;
                 info!("Repaired local master key to match cloud");
                 true
             }

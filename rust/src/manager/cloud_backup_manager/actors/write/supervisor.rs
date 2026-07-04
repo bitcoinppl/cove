@@ -433,10 +433,13 @@ impl CloudBackupWriteSupervisor {
         };
 
         if active.context != context {
-            active.complete(Err(CloudBackupError::Internal(format!(
-                "cloud backup write supervisor received mismatched completion for command {:?}",
-                context.id()
-            ))));
+            active.complete(Err(CloudBackupError::Internal(
+                format!(
+                    "cloud backup write supervisor received mismatched completion for command {:?}",
+                    context.id()
+                )
+                .into(),
+            )));
             self.start_next_pending_write();
             self.complete_drain_waiters_if_idle();
             return Produces::ok(());

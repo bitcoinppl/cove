@@ -1,7 +1,6 @@
 use cove_cspp::backup_data::wallet_record_id;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
-use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _};
 use tracing::warn;
 use zeroize::Zeroizing;
@@ -40,9 +39,9 @@ impl RustCloudBackupManager {
         let db = Database::global();
         let local_wallets = CloudBackupStore::new(&db).all_wallets()?;
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let Some(master_key) = cspp
-            .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+        let Some(master_key) = cspp.load_master_key_from_store().map_err(|source| {
+            CloudBackupError::internal_context("load local master key", source)
+        })?
         else {
             return Ok(RemoteWalletTruth {
                 unknown_record_ids: wallet_record_ids.iter().cloned().collect(),

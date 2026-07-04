@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
-use cove_util::result_ext::ResultExt as _;
 use tracing::debug;
 
 use crate::{fee_client::FEE_CLIENT, transaction::FeeRate, wallet::Address};
@@ -13,8 +12,8 @@ use cove_types::{
 };
 
 use super::{
-    Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
-    state::FeeSelection,
+    Error, Message, Result, RustSendFlowManager, SendFlowError, SendFlowFeeDetailsError,
+    SendFlowMaxSendError, state::EnterMode, state::FeeSelection,
 };
 
 fn selected_fee_rate_for_options(
@@ -47,7 +46,7 @@ impl RustSendFlowManager {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
-        let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
+        let total_fee = psbt.fee().map_err(SendFlowFeeDetailsError::from)?;
 
         let fee_rate_option =
             FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
@@ -228,15 +227,16 @@ impl RustSendFlowManager {
                     return None;
                 }
                 Err(error) => {
-                    let error = SendFlowError::UnableToGetMaxSend(error.to_string());
+                    let error = Error::from(SendFlowMaxSendError::from(error));
                     self.reconciler.send_async(Message::SetAlert(error.into())).await;
                     return None;
                 }
             };
 
-        let total_fee = match psbt.fee().map_err_str(Error::UnableToGetFeeDetails) {
+        let total_fee = match psbt.fee().map_err(SendFlowFeeDetailsError::from) {
             Ok(total_fee) => total_fee,
             Err(error) => {
+                let error = Error::from(SendFlowMaxSendError::from(error));
                 self.reconciler.send_async(Message::SetAlert(error.into())).await;
                 return None;
             }

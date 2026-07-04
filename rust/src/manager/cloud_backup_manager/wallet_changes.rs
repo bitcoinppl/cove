@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use act_zero::send;
 use cove_cspp::backup_data::wallet_record_id;
-use cove_util::ResultExt as _;
 use tracing::{error, warn};
 
 use super::wallets::wallet_metadata_change_requires_upload;
@@ -81,10 +80,9 @@ impl RustCloudBackupManager {
                 PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
             );
 
-            Database::global()
-                .cloud_blob_sync_states
-                .set(&sync_state)
-                .map_err_prefix("persist dirty cloud backup state", CloudBackupError::Internal)?;
+            Database::global().cloud_blob_sync_states.set(&sync_state).map_err(|source| {
+                CloudBackupError::internal_context("persist dirty cloud backup state", source)
+            })?;
         }
 
         self.refresh_sync_health();

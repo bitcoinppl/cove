@@ -76,11 +76,15 @@ impl CloudBackupSupervisor {
             MASTER_KEY_RECORD_ID.to_string()
         ))
         .await
-        .map_err_prefix("start pending enable remote cleanup", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start pending enable remote cleanup", source)
+        })?;
 
         receiver
             .await
-            .map_err_prefix("wait for pending enable remote cleanup", CloudBackupError::Internal)?
+            .map_err(|source| {
+                CloudBackupError::internal_context("wait for pending enable remote cleanup", source)
+            })?
             .into_result()
             .or_else(|error| match error {
                 CloudBackupError::CloudStorage(CloudStorageError::NotFound(_)) => Ok(()),

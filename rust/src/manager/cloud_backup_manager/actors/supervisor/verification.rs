@@ -222,7 +222,9 @@ impl CloudBackupSupervisor {
             Ok((resume, authorization)) => {
                 if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
                     .save_passkey(&authorization.credential_id, authorization.prf_salt)
-                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
+                    .map_err(|source| {
+                        CloudBackupError::internal_context("save cspp credentials", source)
+                    })
                 {
                     self.finish_deep_verification_continuation_with_error(
                         manager,
@@ -838,7 +840,9 @@ impl CloudBackupSupervisor {
             Ok((uploaded, authorization)) => {
                 if let Err(error) = CloudBackupKeychain::new(Keychain::global().clone())
                     .save_passkey(&authorization.credential_id, authorization.prf_salt)
-                    .map_err_prefix("save cspp credentials", CloudBackupError::Internal)
+                    .map_err(|source| {
+                        CloudBackupError::internal_context("save cspp credentials", source)
+                    })
                 {
                     manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                         action: RecoveryAction::RepairPasskey,

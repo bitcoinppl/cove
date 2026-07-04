@@ -4,7 +4,6 @@ use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_types::network::Network;
-use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _, TryStreamExt as _};
 use strum::IntoEnumIterator as _;
 
@@ -42,7 +41,9 @@ impl CloudBackupStore {
                 crate::manager::cloud_backup_manager::current_timestamp(),
                 wallet_count,
             ))
-            .map_err_prefix("persist cloud backup state", CloudBackupError::Internal)
+            .map_err(|source| {
+                CloudBackupError::internal_context("persist cloud backup state", source)
+            })
     }
 
     pub(crate) fn last_sync(&self) -> Option<u64> {
@@ -53,7 +54,9 @@ impl CloudBackupStore {
     pub(crate) fn all_wallets(&self) -> Result<Vec<WalletMetadata>, CloudBackupError> {
         all_local_wallets_from(|network, mode| {
             self.0.wallets.get_all(network, mode).map_err(|error| {
-                CloudBackupError::Internal(format!("read wallets for {network}/{mode}: {error}"))
+                CloudBackupError::Internal(
+                    format!("read wallets for {network}/{mode}: {error}").into(),
+                )
             })
         })
     }
@@ -84,10 +87,9 @@ impl CloudBackupStore {
                 critical_key,
                 remote_metadata,
             )
-            .map_err_str(CloudBackupError::Crypto)?;
+            .map_err(CloudBackupError::crypto)?;
 
-            let wallet_json =
-                serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
+            let wallet_json = serde_json::to_vec(&encrypted).map_err(CloudBackupError::internal)?;
 
             writes
                 .upload_wallet_backup(
@@ -128,7 +130,9 @@ impl CloudBackupStore {
         self.0
             .cloud_blob_sync_states
             .list()
-            .map_err_prefix("list cloud blob sync states", CloudBackupError::Internal)
+            .map_err(|source| {
+                CloudBackupError::internal_context("list cloud blob sync states", source)
+            })
             .map(|states| {
                 states
                     .into_iter()
@@ -142,15 +146,15 @@ impl CloudBackupStore {
         wallet_count: u32,
     ) -> Result<(), CloudBackupError> {
         let now = crate::manager::cloud_backup_manager::current_timestamp();
-        let current = self
-            .0
-            .cloud_backup_state
-            .get()
-            .map_err_prefix("read cloud backup state", CloudBackupError::Internal)?;
+        let current = self.0.cloud_backup_state.get().map_err(|source| {
+            CloudBackupError::internal_context("read cloud backup state", source)
+        })?;
         self.0
             .cloud_backup_state
             .set(&current.mark_enabled_preserving_verification(now, wallet_count))
-            .map_err_prefix("persist cloud backup state", CloudBackupError::Internal)
+            .map_err(|source| {
+                CloudBackupError::internal_context("persist cloud backup state", source)
+            })
     }
 }
 

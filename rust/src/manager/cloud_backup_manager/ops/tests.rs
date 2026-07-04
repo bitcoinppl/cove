@@ -216,7 +216,7 @@ async fn run_enable_operation(
     assert!(manager.projected_exclusive_operation().is_none(), "enable operation finishes");
 
     match manager.current_status() {
-        CloudBackupStatus::Error(message) => Err(CloudBackupError::Internal(message)),
+        CloudBackupStatus::Error(message) => Err(CloudBackupError::Internal(message.into())),
         CloudBackupStatus::UnsupportedPasskeyProvider => {
             Err(CloudBackupError::UnsupportedPasskeyProvider)
         }
@@ -241,7 +241,9 @@ where
             crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY.into(),
             namespace_id.to_owned(),
         )
-        .map_err_prefix("save namespace_id", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::Internal(format!("save namespace_id: {source}").into())
+        })?;
     Ok((master_key, namespace_id))
 }
 

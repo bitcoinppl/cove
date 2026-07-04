@@ -21,8 +21,8 @@ use crate::{
 
 use super::{
     Error, Message, ReconcileChannel, RustWalletManager, SingleOrMany, WalletActor,
-    WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletScanStatus, WalletSnapshot,
-    downgrade_and_notify_if_needed,
+    WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletManagerDatabaseCorruptionError,
+    WalletScanStatus, WalletSnapshot, downgrade_and_notify_if_needed,
 };
 
 fn start_discovery_scanner(
@@ -95,7 +95,7 @@ impl RustWalletManager {
             scan_status.clone(),
             wallet_snapshot.clone(),
         )
-        .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
 
         let discovery_scanner = start_discovery_scanner(metadata.clone(), channel.raw_sender());
@@ -132,7 +132,7 @@ impl RustWalletManager {
             scan_status.clone(),
             wallet_snapshot.clone(),
         )
-        .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
         let discovery_scanner = start_discovery_scanner(metadata.clone(), channel.raw_sender());
         let label_manager = LabelManager::new(id.clone()).into();
@@ -177,7 +177,7 @@ impl RustWalletManager {
             scan_status.clone(),
             wallet_snapshot.clone(),
         )
-        .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 

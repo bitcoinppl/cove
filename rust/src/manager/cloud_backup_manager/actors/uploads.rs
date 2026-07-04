@@ -298,7 +298,7 @@ impl CloudBackupUploadWorker {
                 if let Some(manager) = self.manager() {
                     manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(message.clone()));
                 }
-                return Err(CloudBackupError::Internal(message).into());
+                return Err(CloudBackupError::Internal(message.into()).into());
             }
         };
 
