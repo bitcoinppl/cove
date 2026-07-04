@@ -12,7 +12,12 @@ use bdk_wallet::chain::{
 use futures::{TryStreamExt as _, future::BoxFuture, stream::FuturesOrdered};
 
 use crate::{
-    Error, ProgressTracker, ProgressiveScanner, Result, ScanEvent, ScanUpdate,
+    Error, ProgressiveScanner, Result, ScanEvent,
+    core::{
+        KeychainScanResult, ScanAccumulator, SpkBatcher, StopGapTracker, confirmed_status,
+        insert_evicted_ats_from_expected, insert_prevout_txouts, insert_tx_status,
+        scan_update_for_keychain,
+    },
     event::{
         clone_full_scan_response, send_complete_async_unless_cancelled, send_progress,
         send_update_async,
@@ -128,10 +133,7 @@ where
     let start_time = request.start_time();
     let keychains = request.keychains();
     let chain_tip = request.chain_tip();
-    let mut tx_update = TxUpdate::<ConfirmationBlockTime>::default();
-    let mut inserted_txs = HashSet::<Txid>::new();
-    let mut last_active_indices = BTreeMap::<K, u32>::new();
-    let mut progress = ProgressTracker::new(stop_gap);
+    let mut scan = ScanAccumulator::<K>::new(stop_gap);
 
     for keychain in keychains {
         if cancel_token.is_cancelled() {
@@ -147,8 +149,7 @@ where
             &chain_tip,
             latest_blocks.as_ref(),
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             keychain.clone(),
             keychain_spks,
             last_revealed_indices.get(&keychain).copied(),
@@ -156,16 +157,14 @@ where
             parallel_requests,
         )
         .await?;
-        tx_update.extend(keychain_result.update);
-        if let Some(last_active_index) = keychain_result.last_active_index {
-            last_active_indices.insert(keychain, last_active_index);
-        }
+        scan.finish_keychain(keychain, keychain_result);
     }
 
     if cancel_token.is_cancelled() {
         return Err(Error::Cancelled);
     }
 
+    let (tx_update, last_active_indices) = scan.into_response_parts();
     let chain_update = match (chain_tip, latest_blocks) {
         (Some(chain_tip), Some(latest_blocks)) => {
             Some(client.chain_update(&latest_blocks, &chain_tip, &tx_update.anchors).await?)
@@ -184,11 +183,6 @@ where
     Ok(response)
 }
 
-struct KeychainScanResult {
-    update: TxUpdate<ConfirmationBlockTime>,
-    last_active_index: Option<u32>,
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn fetch_txs_with_keychain_spks<K, I, C>(
     client: C,
@@ -197,10 +191,9 @@ async fn fetch_txs_with_keychain_spks<K, I, C>(
     chain_tip: &Option<CheckPoint>,
     latest_blocks: Option<&BTreeMap<u32, BlockHash>>,
     cancel_token: &tokio_util::sync::CancellationToken,
-    progress: &mut ProgressTracker<K>,
-    inserted_txs: &mut HashSet<Txid>,
+    scan: &mut ScanAccumulator<K>,
     keychain: K,
-    mut keychain_spks: I,
+    keychain_spks: I,
     last_revealed_index: Option<u32>,
     stop_gap: usize,
     parallel_requests: usize,
@@ -210,21 +203,24 @@ where
     I: Iterator<Item = Indexed<SpkWithExpectedTxids>> + Send,
     C: EsploraScanClient + Clone + Send + Sync,
 {
-    type TxsOfSpkIndex = (u32, Vec<esplora_client::Tx>, HashSet<Txid>);
+    type TxsOfSpkIndex = (u32, Vec<esplora_client::Tx>, HashSet<Txid>, HashSet<Txid>);
 
     let mut update = TxUpdate::<ConfirmationBlockTime>::default();
-    let mut last_active_index = Option::<u32>::None;
-    let mut stop_gap_unused_count = 0usize;
-    let gap_limit = stop_gap.max(1);
+    let mut stop_gap = StopGapTracker::new(stop_gap, last_revealed_index);
+    let mut batcher = SpkBatcher::new(keychain_spks);
 
     loop {
         if cancel_token.is_cancelled() {
             return Err(Error::Cancelled);
         }
 
-        let handles = keychain_spks
-            .by_ref()
-            .take(parallel_requests)
+        let spks = batcher.next_batch(parallel_requests);
+        if spks.is_empty() {
+            break;
+        }
+
+        let handles = spks
+            .into_iter()
             .map(|(spk_index, spk)| {
                 let client = client.clone();
                 let expected_txids = spk.expected_txids;
@@ -242,34 +238,27 @@ where
                         }
                     }
                     let got_txids = spk_txs.iter().map(|tx| tx.txid).collect::<HashSet<_>>();
-                    let evicted_txids =
-                        expected_txids.difference(&got_txids).copied().collect::<HashSet<_>>();
-                    Result::<TxsOfSpkIndex, EsploraError>::Ok((spk_index, spk_txs, evicted_txids))
+                    Result::<TxsOfSpkIndex, EsploraError>::Ok((
+                        spk_index,
+                        spk_txs,
+                        got_txids,
+                        expected_txids,
+                    ))
                 }
             })
             .collect::<FuturesOrdered<_>>();
 
-        if handles.is_empty() {
-            break;
-        }
-
         let mut partial_update = TxUpdate::<ConfirmationBlockTime>::default();
-        for (index, txs, evicted) in handles.try_collect::<Vec<TxsOfSpkIndex>>().await? {
+        for (index, txs, got_txids, expected_txids) in
+            handles.try_collect::<Vec<TxsOfSpkIndex>>().await?
+        {
             let used = !txs.is_empty();
-            let scan_progress = progress.checked(keychain.clone(), used);
+            let scan_progress = scan.checked(keychain.clone(), used);
             send_progress(events, scan_progress);
-
-            if txs.is_empty() {
-                if last_revealed_index.is_none_or(|last_revealed| index > last_revealed) {
-                    stop_gap_unused_count = stop_gap_unused_count.saturating_add(1);
-                }
-            } else {
-                stop_gap_unused_count = 0;
-                last_active_index = Some(last_active_index.unwrap_or(index).max(index));
-            }
+            stop_gap.record_spk(index, used);
 
             for tx in txs {
-                if !inserted_txs.insert(tx.txid) {
+                if !scan.insert_txid(tx.txid) {
                     continue;
                 }
 
@@ -282,7 +271,12 @@ where
                 );
                 insert_prevouts(&mut partial_update, tx.vin);
             }
-            partial_update.evicted_ats.extend(evicted.into_iter().map(|txid| (txid, start_time)));
+            insert_evicted_ats_from_expected(
+                &mut partial_update,
+                &expected_txids,
+                &got_txids,
+                start_time,
+            );
         }
 
         if !partial_update.is_empty() {
@@ -292,24 +286,23 @@ where
                 ),
                 _ => None,
             };
-            let scan_update = ScanUpdate {
-                chain_update: partial_chain_update,
-                tx_update: partial_update.clone(),
-                last_active_indices: last_active_index
-                    .map(|index| BTreeMap::from([(keychain.clone(), index)]))
-                    .unwrap_or_default(),
-            };
+            let scan_update = scan_update_for_keychain(
+                keychain.clone(),
+                &partial_update,
+                partial_chain_update,
+                stop_gap.last_active_index(),
+            );
 
             send_update_async(events, scan_update).await?;
             update.extend(partial_update);
         }
 
-        if stop_gap_unused_count >= gap_limit {
+        if stop_gap.reached_stop_gap() {
             break;
         }
     }
 
-    Ok(KeychainScanResult { update, last_active_index })
+    Ok(KeychainScanResult::new(update, stop_gap.last_active_index()))
 }
 
 fn insert_anchor_or_seen_at_from_status(
@@ -325,11 +318,9 @@ fn insert_anchor_or_seen_at_from_status(
         block_time: Some(time),
     } = status
     {
-        let anchor =
-            ConfirmationBlockTime { block_id: BlockId { height, hash }, confirmation_time: time };
-        update.anchors.insert((anchor, txid));
+        insert_tx_status(update, start_time, txid, confirmed_status(height, hash, time));
     } else {
-        update.seen_ats.insert((txid, start_time));
+        insert_tx_status(update, start_time, txid, crate::core::TxStatusPlan::Seen);
     }
 }
 
@@ -339,15 +330,18 @@ fn insert_prevouts(
 ) {
     let prevouts =
         esplora_inputs.into_iter().filter_map(|vin| Some((vin.txid, vin.vout, vin.prevout?)));
-    for (prev_txid, prev_vout, prev_txout) in prevouts {
-        update.txouts.insert(
-            OutPoint::new(prev_txid, prev_vout),
-            TxOut {
-                script_pubkey: prev_txout.scriptpubkey,
-                value: Amount::from_sat(prev_txout.value),
-            },
-        );
-    }
+    insert_prevout_txouts(
+        update,
+        prevouts.map(|(prev_txid, prev_vout, prev_txout)| {
+            (
+                OutPoint::new(prev_txid, prev_vout),
+                TxOut {
+                    script_pubkey: prev_txout.scriptpubkey,
+                    value: Amount::from_sat(prev_txout.value),
+                },
+            )
+        }),
+    );
 }
 
 async fn fetch_latest_blocks<S>(
@@ -446,57 +440,57 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
-        str::FromStr as _,
-        sync::{Arc, Mutex},
-    };
+    use std::collections::{BTreeMap, BTreeSet};
 
     use bdk_esplora::esplora_client;
-    use bdk_wallet::bitcoin::Network;
     use bdk_wallet::{
-        KeychainKind, Wallet,
+        KeychainKind,
         chain::{
             BlockId, CheckPoint, ConfirmationBlockTime, TxUpdate,
             bitcoin::{Amount, OutPoint, ScriptBuf, Txid},
             spk_client::SpkWithExpectedTxids,
         },
-        test_utils::get_test_wpkh_and_change_desc,
     };
     use futures::future::BoxFuture;
     use tokio_util::sync::CancellationToken;
 
     use crate::{
-        Error, ProgressTracker, ScanEvent,
+        Error, ScanEvent,
+        core::ScanAccumulator,
         esplora::{
             EsploraError, EsploraScanClient, fetch_txs_with_keychain_spks,
             insert_anchor_or_seen_at_from_status, insert_prevouts, run_with_esplora_client,
+        },
+        test_fixtures::{
+            QueuedResponse, ResponseQueue, SharedCounter, block_hash, collect_events,
+            confirmed_esplora_tx, empty_spks, esplora_input, esplora_tx, event_channel,
+            external_request, revealed_external_request, txid,
         },
     };
 
     #[derive(Clone, Debug)]
     struct FakeEsplora {
-        responses: Arc<Mutex<VecDeque<Option<Vec<esplora_client::Tx>>>>>,
-        chain_update_requests: Arc<Mutex<usize>>,
+        responses: ResponseQueue<esplora_client::Tx>,
+        chain_update_requests: SharedCounter,
     }
 
     impl FakeEsplora {
         fn with_responses(responses: impl IntoIterator<Item = Vec<esplora_client::Tx>>) -> Self {
             Self {
-                responses: Arc::new(Mutex::new(responses.into_iter().map(Some).collect())),
-                chain_update_requests: Arc::new(Mutex::new(0)),
+                responses: ResponseQueue::with_responses(responses),
+                chain_update_requests: SharedCounter::default(),
             }
         }
 
         fn with_history_error() -> Self {
             Self {
-                responses: Arc::new(Mutex::new(VecDeque::from([None]))),
-                chain_update_requests: Arc::new(Mutex::new(0)),
+                responses: ResponseQueue::with_error(),
+                chain_update_requests: SharedCounter::default(),
             }
         }
 
         fn chain_update_count(&self) -> usize {
-            *self.chain_update_requests.lock().expect("request count lock not poisoned")
+            self.chain_update_requests.get()
         }
     }
 
@@ -507,13 +501,13 @@ mod tests {
             _: Option<Txid>,
         ) -> BoxFuture<'a, std::result::Result<Vec<esplora_client::Tx>, EsploraError>> {
             Box::pin(async move {
-                match self.responses.lock().expect("response lock not poisoned").pop_front() {
-                    Some(Some(txs)) => Ok(txs),
-                    Some(None) => Err(Box::new(esplora_client::Error::HttpResponse {
+                match self.responses.pop() {
+                    QueuedResponse::Response(txs) => Ok(txs),
+                    QueuedResponse::Error => Err(Box::new(esplora_client::Error::HttpResponse {
                         status: 500,
                         message: "history failed".to_string(),
                     })),
-                    None => Ok(Vec::new()),
+                    QueuedResponse::Exhausted => Ok(Vec::new()),
                 }
             })
         }
@@ -525,10 +519,10 @@ mod tests {
             _: &'a BTreeSet<(ConfirmationBlockTime, Txid)>,
         ) -> BoxFuture<'a, std::result::Result<bdk_wallet::chain::CheckPoint, EsploraError>>
         {
-            let chain_update_requests = Arc::clone(&self.chain_update_requests);
+            let chain_update_requests = self.chain_update_requests.clone();
 
             Box::pin(async move {
-                *chain_update_requests.lock().expect("request count lock not poisoned") += 1;
+                chain_update_requests.increment();
                 Ok(local_tip.clone())
             })
         }
@@ -537,12 +531,11 @@ mod tests {
     #[test]
     fn empty_histories_emit_progress_without_updates_until_stop_gap() {
         let fake = FakeEsplora::with_responses([Vec::new(), Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = None;
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let spks = empty_spks(5);
 
         let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
             fake,
@@ -551,8 +544,7 @@ mod tests {
             &chain_tip,
             None,
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -561,7 +553,7 @@ mod tests {
         ))
         .expect("scan succeeds");
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(result.update.is_empty());
         assert_eq!(result.last_active_index, None);
         assert_eq!(events.len(), 2);
@@ -572,12 +564,11 @@ mod tests {
     fn mempool_history_emits_update_and_final_last_active_index() {
         let txid = txid(8);
         let fake = FakeEsplora::with_responses([vec![esplora_tx(txid)], Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = None;
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let spks = empty_spks(5);
 
         let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
             fake,
@@ -586,8 +577,7 @@ mod tests {
             &chain_tip,
             None,
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -596,7 +586,7 @@ mod tests {
         ))
         .expect("scan succeeds");
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         let updates = events
             .iter()
             .filter_map(|event| match event {
@@ -622,10 +612,9 @@ mod tests {
             Vec::new(),
             Vec::new(),
         ]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = None;
         let spks = [4, 1, 5, 6]
             .into_iter()
@@ -638,8 +627,7 @@ mod tests {
             &chain_tip,
             None,
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -663,21 +651,14 @@ mod tests {
     #[test]
     fn confirmed_history_emits_partial_chain_update() {
         let txid = txid(9);
-        let mut tx = esplora_tx(txid);
-        tx.status = esplora_client::TxStatus {
-            confirmed: true,
-            block_height: Some(2),
-            block_hash: Some(block_hash(2)),
-            block_time: Some(123),
-        };
+        let tx = confirmed_esplora_tx(txid, 2, block_hash(2), 123);
         let fake = FakeEsplora::with_responses([vec![tx], Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
         let latest_blocks = BTreeMap::new();
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let spks = empty_spks(5);
 
         let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
             fake,
@@ -686,8 +667,7 @@ mod tests {
             &chain_tip,
             Some(&latest_blocks),
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -715,25 +695,15 @@ mod tests {
     #[test]
     fn duplicate_confirmed_history_does_not_emit_duplicate_update() {
         let txid = txid(10);
-        let make_tx = || {
-            let mut tx = esplora_tx(txid);
-            tx.status = esplora_client::TxStatus {
-                confirmed: true,
-                block_height: Some(2),
-                block_hash: Some(block_hash(2)),
-                block_time: Some(123),
-            };
-            tx
-        };
+        let make_tx = || confirmed_esplora_tx(txid, 2, block_hash(2), 123);
         let fake =
             FakeEsplora::with_responses([vec![make_tx()], vec![make_tx()], Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
         let latest_blocks = BTreeMap::new();
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let spks = empty_spks(5);
 
         let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
             fake.clone(),
@@ -742,8 +712,7 @@ mod tests {
             &chain_tip,
             Some(&latest_blocks),
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -769,14 +738,9 @@ mod tests {
 
     #[test]
     fn update_send_failure_returns_channel_closed() {
-        let request = bdk_wallet::chain::spk_client::FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
+        let request = external_request(0, 5);
         let fake = FakeEsplora::with_responses([vec![esplora_tx(txid(8))], Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         drop(receiver);
         let cancel_token = CancellationToken::new();
 
@@ -797,13 +761,12 @@ mod tests {
     #[test]
     fn cancelled_scan_returns_cancelled_without_update() {
         let fake = FakeEsplora::with_responses([Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
         cancel_token.cancel();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = None;
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let spks = empty_spks(5);
 
         let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
             fake,
@@ -812,8 +775,7 @@ mod tests {
             &chain_tip,
             None,
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -828,12 +790,11 @@ mod tests {
     #[test]
     fn provider_error_does_not_emit_update() {
         let fake = FakeEsplora::with_history_error();
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
+        let mut scan = ScanAccumulator::new(2);
         let chain_tip = None;
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let spks = empty_spks(5);
 
         let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
             fake,
@@ -842,8 +803,7 @@ mod tests {
             &chain_tip,
             None,
             &cancel_token,
-            &mut progress,
-            &mut inserted_txs,
+            &mut scan,
             "external",
             spks,
             None,
@@ -857,14 +817,9 @@ mod tests {
 
     #[test]
     fn successful_empty_scan_sends_complete_once_without_update() {
-        let request = bdk_wallet::chain::spk_client::FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
+        let request = external_request(0, 5);
         let fake = FakeEsplora::with_responses([Vec::new(), Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
 
         let response = futures::executor::block_on(run_with_esplora_client(
@@ -879,7 +834,7 @@ mod tests {
         ))
         .expect("scan succeeds");
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(response.tx_update.is_empty());
         assert!(response.last_active_indices.is_empty());
         assert_eq!(
@@ -891,22 +846,9 @@ mod tests {
 
     #[test]
     fn revealed_range_is_scanned_before_stop_gap_extension() {
-        let (external_descriptor, internal_descriptor) = get_test_wpkh_and_change_desc();
-        let mut wallet = Wallet::create(external_descriptor, internal_descriptor)
-            .network(Network::Signet)
-            .create_wallet_no_persist()
-            .expect("wallet is created");
-        let _ = wallet.reveal_addresses_to(KeychainKind::External, 3).last();
-        let last_revealed_indices = wallet.spk_index().last_revealed_indices();
-        let spks = wallet
-            .spk_index()
-            .unbounded_spk_iter(KeychainKind::External)
-            .expect("external keychain exists");
-        let request = bdk_wallet::chain::spk_client::FullScanRequest::builder_at(0)
-            .spks_for_keychain(KeychainKind::External, spks)
-            .build();
+        let (request, last_revealed_indices) = revealed_external_request(3);
         let fake = FakeEsplora::with_responses(std::iter::repeat_with(Vec::new).take(16));
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
 
         let response = futures::executor::block_on(run_with_esplora_client(
@@ -937,14 +879,9 @@ mod tests {
 
     #[test]
     fn complete_send_failure_returns_channel_closed() {
-        let request = bdk_wallet::chain::spk_client::FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
+        let request = external_request(0, 5);
         let fake = FakeEsplora::with_responses([Vec::new(), Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         drop(receiver);
         let cancel_token = CancellationToken::new();
 
@@ -964,14 +901,9 @@ mod tests {
 
     #[test]
     fn cancelled_scan_returns_cancelled_without_complete() {
-        let request = bdk_wallet::chain::spk_client::FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
+        let request = external_request(0, 5);
         let fake = FakeEsplora::with_responses([Vec::new(), Vec::new(), Vec::new()]);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
         cancel_token.cancel();
 
@@ -986,21 +918,16 @@ mod tests {
             1,
         ));
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(matches!(result, Err(Error::Cancelled)));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
 
     #[test]
     fn provider_error_does_not_emit_complete() {
-        let request = bdk_wallet::chain::spk_client::FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
+        let request = external_request(0, 5);
         let fake = FakeEsplora::with_history_error();
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
 
         let result = futures::executor::block_on(run_with_esplora_client(
@@ -1014,7 +941,7 @@ mod tests {
             1,
         ));
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(matches!(result, Err(Error::Esplora(_))));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
@@ -1130,50 +1057,5 @@ mod tests {
             })
         );
         assert_eq!(update.txouts.len(), 1);
-    }
-
-    fn esplora_input(
-        txid: Txid,
-        vout: u32,
-        prevout: Option<(u64, ScriptBuf)>,
-    ) -> esplora_client::api::Vin {
-        esplora_client::api::Vin {
-            txid,
-            vout,
-            prevout: prevout
-                .map(|(value, scriptpubkey)| esplora_client::api::PrevOut { value, scriptpubkey }),
-            scriptsig: ScriptBuf::new(),
-            witness: Vec::new(),
-            sequence: 0,
-            is_coinbase: false,
-        }
-    }
-
-    fn txid(byte: u8) -> Txid {
-        Txid::from_str(&format!("{byte:02x}{}", "00".repeat(31))).expect("valid txid")
-    }
-
-    fn block_hash(byte: u8) -> bdk_wallet::chain::bitcoin::BlockHash {
-        bdk_wallet::chain::bitcoin::BlockHash::from_str(&format!("{byte:02x}{}", "00".repeat(31)))
-            .expect("valid block hash")
-    }
-
-    fn esplora_tx(txid: Txid) -> esplora_client::Tx {
-        esplora_client::Tx {
-            txid,
-            version: 2,
-            locktime: 0,
-            vin: Vec::new(),
-            vout: Vec::new(),
-            size: 0,
-            weight: 0,
-            status: esplora_client::TxStatus {
-                confirmed: false,
-                block_height: None,
-                block_hash: None,
-                block_time: None,
-            },
-            fee: 0,
-        }
     }
 }

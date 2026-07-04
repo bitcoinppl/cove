@@ -1,9 +1,12 @@
+mod core;
 mod electrum;
 mod error;
 mod esplora;
 mod event;
 mod progress;
 mod scanner;
+#[cfg(test)]
+mod test_fixtures;
 
 pub use electrum::ProgressiveElectrumScanner;
 pub use error::{Error, Result};
