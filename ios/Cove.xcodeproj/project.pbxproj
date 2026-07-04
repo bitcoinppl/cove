@@ -19,6 +19,7 @@
 		C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000132F00000000000001 /* TransactionsScanUiTests.swift */; };
 		C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */; };
 		C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */; };
+		C0B000182F00000000000001 /* ICloudDriveHelperDecompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000192F00000000000001 /* ICloudDriveHelperDecompositionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 		C0B000132F00000000000001 /* TransactionsScanUiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsScanUiTests.swift; sourceTree = "<group>"; };
 		C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingBackupViewsTests.swift; sourceTree = "<group>"; };
 		C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomFeeRateErrorTests.swift; sourceTree = "<group>"; };
+		C0B000192F00000000000001 /* ICloudDriveHelperDecompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudDriveHelperDecompositionTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -122,6 +124,7 @@
 			children = (
 				C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */,
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
+				C0B000192F00000000000001 /* ICloudDriveHelperDecompositionTests.swift */,
 				C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */,
 				C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
@@ -308,6 +311,7 @@
 			files = (
 				C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */,
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,
+				C0B000182F00000000000001 /* ICloudDriveHelperDecompositionTests.swift in Sources */,
 				C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */,
 				C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
