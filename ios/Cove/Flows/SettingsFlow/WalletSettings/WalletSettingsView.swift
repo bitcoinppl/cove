@@ -197,6 +197,17 @@ struct WalletSettingsView: View {
                             "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
                         )
                     }
+
+                    if app.canKeyTeleportSend(walletId: manager.walletMetadata.id) {
+                        Button {
+                            let keyTeleportManager = app.ensureKeyTeleportManager()
+                            keyTeleportManager.dispatch(.startSendFromWallet(manager.walletMetadata.id))
+                            app.pushRoute(RouteFactory().keyTeleportSend())
+                        } label: {
+                            Text("Send with Key Teleport")
+                                .font(.subheadline)
+                        }
+                    }
                 }
 
                 Button {

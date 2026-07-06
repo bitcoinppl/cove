@@ -181,6 +181,25 @@ struct NewWalletSelectScreen: View {
                 )
             }
 
+            Button {
+                app.pushRoute(RouteFactory().keyTeleportReceive())
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.down.left.and.arrow.up.right")
+                        .font(.subheadline)
+
+                    Text("Key Teleport")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.btnPrimary.opacity(0.9))
+                .foregroundColor(.midnightBlue)
+                .cornerRadius(10)
+            }
+            .buttonStyle(PlainButtonStyle())
+
             if nfcCalled {
                 Button(action: {
                     sheetState = TaggedItem(.nfcHelp)

@@ -39,6 +39,10 @@ import SwiftUI
 
                 try manager.importLabels(labels: labels)
                 app.alertState = .init(.importedLabelsSuccessfully)
+            case let .keyTeleportReceiver(packet):
+                handleKeyTeleportReceiver(packet)
+            case let .keyTeleportSender(packet):
+                handleKeyTeleportSender(packet)
             }
         } catch {
             switch error {
@@ -77,6 +81,10 @@ import SwiftUI
 
     @MainActor
     func handleFileOpen(_ url: URL) {
+        if handleKeyTeleportUrl(url) {
+            return
+        }
+
         let fileHandler = FileHandler(filePath: url.absoluteString)
 
         do {
@@ -107,6 +115,10 @@ import SwiftUI
                 return try manager.importLabels(labels: labels)
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
+            case let .keyTeleportReceiver(packet):
+                handleKeyTeleportReceiver(packet)
+            case let .keyTeleportSender(packet):
+                handleKeyTeleportSender(packet)
             }
         } catch {
             switch error {
@@ -133,6 +145,38 @@ import SwiftUI
 }
 
 extension ScanManager {
+    @MainActor
+    private func handleKeyTeleportUrl(_ url: URL) -> Bool {
+        guard url.host?.lowercased().contains("keyteleport.com") == true else {
+            return false
+        }
+
+        do {
+            let multiFormat = try StringOrData(url.absoluteString).toMultiFormat()
+            handleMultiFormat(multiFormat)
+            return true
+        } catch {
+            app.alertState = .init(
+                .invalidFormat(message: "This Key Teleport link is not supported.")
+            )
+            return true
+        }
+    }
+
+    @MainActor
+    private func handleKeyTeleportReceiver(_ packet: KeyTeleportReceiverPacket) {
+        let manager = app.ensureKeyTeleportManager()
+        manager.ingest(packet.bbqrPart())
+        app.pushRoute(RouteFactory().keyTeleportSend())
+    }
+
+    @MainActor
+    private func handleKeyTeleportSender(_ packet: KeyTeleportSenderPacket) {
+        let manager = app.ensureKeyTeleportManager()
+        manager.ingest(packet.bbqrPart())
+        app.pushRoute(RouteFactory().keyTeleportReceive())
+    }
+
     @MainActor
     private func importHotWallet(_ words: [String]) {
         do {
