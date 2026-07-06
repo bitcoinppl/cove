@@ -16,7 +16,7 @@ extension FfiApp: NavigationRouteClient {}
 
 @Observable final class NavigationCoordinator {
     typealias Sleep = @MainActor (Duration) async throws -> Void
-    typealias RouteOwnershipReconciler = () -> Void
+    typealias RouteOwnershipReconciler = (Router) -> Void
 
     @ObservationIgnored
     private let routeClient: NavigationRouteClient
@@ -102,7 +102,7 @@ extension FfiApp: NavigationRouteClient {}
         guard !isDuplicateTopRoute(route, router: router) else { return }
 
         router.routes.append(route)
-        reconcileRouteOwnership()
+        reconcileRouteOwnership(router)
     }
 
     func pushRoutes(
@@ -118,7 +118,7 @@ extension FfiApp: NavigationRouteClient {}
 
         isSidebarVisible = false
         router.routes.append(contentsOf: routes)
-        reconcileRouteOwnership()
+        reconcileRouteOwnership(router)
     }
 
     func popRoute(
@@ -129,7 +129,7 @@ extension FfiApp: NavigationRouteClient {}
 
         if !router.routes.isEmpty {
             router.routes.removeLast()
-            reconcileRouteOwnership()
+            reconcileRouteOwnership(router)
         }
     }
 
@@ -140,7 +140,7 @@ extension FfiApp: NavigationRouteClient {}
     ) {
         advanceNavigationGeneration()
         router.routes = routes
-        reconcileRouteOwnership()
+        reconcileRouteOwnership(router)
     }
 
     func scanNfc(
@@ -246,7 +246,7 @@ extension FfiApp: NavigationRouteClient {}
     ) {
         let didChangeRoute = router.routes != routes
         router.routes = routes
-        reconcileRouteOwnership()
+        reconcileRouteOwnership(router)
 
         if didChangeRoute {
             scheduleNavigationSettledForCurrentGeneration()
@@ -265,7 +265,7 @@ extension FfiApp: NavigationRouteClient {}
         }
 
         router.routes.append(route)
-        reconcileRouteOwnership()
+        reconcileRouteOwnership(router)
         scheduleNavigationSettledForCurrentGeneration()
     }
 
@@ -279,7 +279,7 @@ extension FfiApp: NavigationRouteClient {}
         router.routes = nestedRoutes
         router.default = route
         routeId = UUID()
-        reconcileRouteOwnership()
+        reconcileRouteOwnership(router)
         scheduleNavigationSettledForCurrentGeneration()
     }
 

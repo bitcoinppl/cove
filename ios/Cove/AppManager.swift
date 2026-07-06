@@ -257,8 +257,8 @@ private let walletModeChangeDelayMs = 250
             route,
             router: &router,
             isSidebarVisible: &isSidebarVisible
-        ) {
-            self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+        ) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
         }
     }
 
@@ -267,20 +267,20 @@ private let walletModeChangeDelayMs = 250
             routes,
             router: &router,
             isSidebarVisible: &isSidebarVisible
-        ) {
-            self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+        ) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
         }
     }
 
     func popRoute() {
-        navigationCoordinator.popRoute(router: &router) {
-            self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+        navigationCoordinator.popRoute(router: &router) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
         }
     }
 
     func setRoute(_ routes: [Route]) {
-        navigationCoordinator.setRoute(routes, router: &router) {
-            self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+        navigationCoordinator.setRoute(routes, router: &router) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
         }
     }
 
@@ -332,8 +332,8 @@ private let walletModeChangeDelayMs = 250
                     router: &self.router,
                     isSidebarVisible: &self.isSidebarVisible,
                     advancesGeneration: false
-                ) {
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
                 }
             } else {
                 self.navigationCoordinator.resetRoute(
@@ -351,8 +351,8 @@ private let walletModeChangeDelayMs = 250
                 router: &self.router,
                 isSidebarVisible: &self.isSidebarVisible,
                 advancesGeneration: false
-            ) {
-                self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
             }
         }
     }
@@ -364,8 +364,8 @@ private let walletModeChangeDelayMs = 250
                 router: &self.router,
                 isSidebarVisible: &self.isSidebarVisible,
                 advancesGeneration: false
-            ) {
-                self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
             }
         }
     }
@@ -427,8 +427,8 @@ private let walletModeChangeDelayMs = 250
                 navigationCoordinator.applyRouteUpdated(
                     routes: routes,
                     router: &router
-                ) {
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
                 }
 
             case let .pushedRoute(route):
@@ -436,8 +436,8 @@ private let walletModeChangeDelayMs = 250
                     route,
                     router: &router,
                     isSidebarVisible: &isSidebarVisible
-                ) {
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
                 }
 
             case .databaseUpdated:
@@ -460,8 +460,8 @@ private let walletModeChangeDelayMs = 250
                     nestedRoutes: nestedRoutes,
                     router: &router,
                     routeId: &routeId
-                ) {
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: self.router)
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
                 }
 
             case let .fiatPricesChanged(prices):

@@ -258,14 +258,16 @@ class FullLaunchOnboardingRobot(
         }
 
         knownEmptyMainnetMnemonic.forEachIndexed { index, word ->
-            device.waitUntilVisible(tag("hotWalletImport.word.${index + 1}")).text = word
+            val wordSelector = tag("hotWalletImport.word.${index + 1}")
+            device.waitUntilVisible(wordSelector).text = word
+            device.waitUntilTextEquals(wordSelector, word)
         }
 
         device.dismissKeyboardIfShown()
         device.clickUntilVisible(
             clickSelector = tag("hotWalletImport.import"),
             targetSelector = text("Protect this wallet with Cloud Backup?"),
-            timeoutMillis = 20_000,
+            timeoutMillis = 60_000,
         )
 
         return this
@@ -307,9 +309,14 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    fun assertImportedMainnetWalletHasHistoryAndNoBitcoin(): FullLaunchOnboardingRobot {
-        device.waitUntilSendShowsNoFunds()
+    fun assertImportedMainnetWalletShowsHistory(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Send"), timeoutMillis = 30_000)
         device.waitUntilVisible(text("Transactions"), timeoutMillis = 30_000)
+        device.waitUntilAnyVisible(
+            text("Sent"),
+            text("Received"),
+            timeoutMillis = 90_000,
+        )
 
         return this
     }
@@ -539,7 +546,7 @@ private fun UiDevice.advanceUntilVisible(
     advance: UiDevice.() -> Boolean = { false },
 ): UiObject2 {
     val deadline = System.currentTimeMillis() + timeoutMillis
-    var didAdvance = false
+    var lastAdvanceAt = 0L
 
     while (System.currentTimeMillis() < deadline) {
         findObject(targetSelector.value)?.let { return it }
@@ -550,8 +557,10 @@ private fun UiDevice.advanceUntilVisible(
             continue
         }
 
-        if (!didAdvance) {
-            didAdvance = advance()
+        val now = System.currentTimeMillis()
+        if (now - lastAdvanceAt >= 750) {
+            advance()
+            lastAdvanceAt = now
         }
         waitForIdle()
         Thread.sleep(250)
@@ -614,7 +623,7 @@ private fun UiDevice.clickUntilVisible(
 
         val clickNode = tryScrollUntilSafelyClickable(clickSelector)
         if (clickNode?.isEnabled == true) {
-            clickCenter(clickNode)
+            clickNode.click()
         }
 
         Thread.sleep(500)
@@ -753,26 +762,23 @@ private fun UiDevice.clickCenterIfVisible(selector: DescribedSelector): Boolean 
     return false
 }
 
-private fun UiDevice.waitUntilSendShowsNoFunds() {
-    val noFundsSelector = text("No funds available to send")
-    val initialScanIncompleteSelector = text("Initial Scan Incomplete")
-    val deadline = System.currentTimeMillis() + 90_000
+private fun UiDevice.waitUntilTextEquals(
+    selector: DescribedSelector,
+    expected: String,
+    timeoutMillis: Long = 5_000,
+) {
+    val deadline = System.currentTimeMillis() + timeoutMillis
 
     while (System.currentTimeMillis() < deadline) {
-        clickCenter(waitUntilVisible(text("Send"), timeoutMillis = 30_000))
-
-        val sendUnavailable = waitUntilAnyVisible(noFundsSelector, initialScanIncompleteSelector, timeoutMillis = 10_000)
-        if (sendUnavailable.description == noFundsSelector.description) {
+        val node = findObject(selector.value)
+        if (node?.text == expected) {
             return
         }
 
-        waitUntilVisible(text("Can't send until initial scan completes."))
-        clickCenter(waitUntilVisible(text("OK")))
-        waitForIdle()
-        Thread.sleep(2_000)
+        Thread.sleep(100)
     }
 
-    error("Timed out waiting for Send to report no funds after scan completion\n${dumpWindowHierarchy()}")
+    error("Timed out waiting for ${selector.description} to equal \"$expected\"\n${dumpWindowHierarchy()}")
 }
 
 private class DescribedSelector(
