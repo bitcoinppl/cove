@@ -24,6 +24,7 @@ struct AboutScreen: View {
     @State private var buildTapTimer: Timer? = nil
     @State private var isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
     @State private var alertState: TaggedItem<AboutAlertState>? = nil
+    @State private var isSendDiagnosticsPresented = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -105,6 +106,19 @@ struct AboutScreen: View {
                             .font(.footnote)
                     }
                 }
+
+                Button {
+                    isSendDiagnosticsPresented = true
+                } label: {
+                    HStack {
+                        Text("Send Diagnostics")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text("Review before upload")
+                            .foregroundStyle(.secondary)
+                            .font(.footnote)
+                    }
+                }
             }
 
             #if DEBUG
@@ -125,6 +139,9 @@ struct AboutScreen: View {
         }
         .navigationTitle("About")
         .onDisappear { buildTapTimer?.invalidate(); buildTapTimer = nil }
+        .sheet(isPresented: $isSendDiagnosticsPresented) {
+            SendDiagnosticsSheet()
+        }
         .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
     }
 

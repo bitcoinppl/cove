@@ -368,7 +368,7 @@ fun MainSettingsScreen(
 }
 
 @Composable
-private fun FullScreenSettingsModal(
+internal fun FullScreenSettingsModal(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {

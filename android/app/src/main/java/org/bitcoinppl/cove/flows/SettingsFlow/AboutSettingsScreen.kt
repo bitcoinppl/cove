@@ -72,6 +72,7 @@ fun AboutSettingsScreen(
     var showWipeCloudDialog by remember { mutableStateOf(false) }
     var wipeCloudResult by remember { mutableStateOf<WipeCloudResult?>(null) }
     var showResetLocalStateDialog by remember { mutableStateOf(false) }
+    var showSendDiagnostics by remember { mutableStateOf(false) }
     var resetLocalStateMessage by remember { mutableStateOf<String?>(null) }
     var isBetaEnabled by remember {
         mutableStateOf(
@@ -107,6 +108,7 @@ fun AboutSettingsScreen(
             }
             context.startActivity(intent)
         },
+        onSendDiagnosticsClick = { showSendDiagnostics = true },
         onWipeCloudBackupClick = { showWipeCloudDialog = true },
         onResetLocalBackupStateClick = { showResetLocalStateDialog = true },
         modifier = modifier,
@@ -253,6 +255,12 @@ fun AboutSettingsScreen(
             },
         )
     }
+
+    if (showSendDiagnostics) {
+        FullScreenSettingsModal(onDismiss = { showSendDiagnostics = false }) {
+            SendDiagnosticsSheet(onDismiss = { showSendDiagnostics = false })
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -266,6 +274,7 @@ internal fun AboutSettingsContent(
     onBack: () -> Unit,
     onBuildNumberClick: () -> Unit,
     onFeedbackClick: () -> Unit,
+    onSendDiagnosticsClick: () -> Unit,
     onWipeCloudBackupClick: () -> Unit,
     onResetLocalBackupStateClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -325,6 +334,13 @@ internal fun AboutSettingsContent(
                             value = "feedback@covebitcoinwallet.com",
                             valueStyle = MaterialTheme.typography.bodySmall,
                             onClick = onFeedbackClick,
+                        )
+                        MaterialDivider()
+                        AboutRow(
+                            label = "Send Diagnostics",
+                            value = "Review before upload",
+                            valueStyle = MaterialTheme.typography.bodySmall,
+                            onClick = onSendDiagnosticsClick,
                         )
                     }
                 }
@@ -388,6 +404,7 @@ internal fun AboutSettingsPreviewContent() {
             onBack = { },
             onBuildNumberClick = { },
             onFeedbackClick = { },
+            onSendDiagnosticsClick = { },
             onWipeCloudBackupClick = { },
             onResetLocalBackupStateClick = { },
         )
