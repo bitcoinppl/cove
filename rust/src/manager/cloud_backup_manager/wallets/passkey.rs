@@ -28,14 +28,14 @@ pub(crate) async fn delay_before_new_passkey_auth() {
     tokio::time::sleep(delay).await;
 }
 
-pub struct NamespaceMatch {
-    pub namespace_id: String,
-    pub master_key: cove_cspp::master_key::MasterKey,
-    pub prf_salt: [u8; 32],
-    pub credential_id: Vec<u8>,
+pub(crate) struct NamespaceMatch {
+    pub(crate) namespace_id: String,
+    pub(crate) master_key: cove_cspp::master_key::MasterKey,
+    pub(crate) prf_salt: [u8; 32],
+    pub(crate) credential_id: Vec<u8>,
 }
 
-pub enum NamespaceMatchOutcome {
+pub(crate) enum NamespaceMatchOutcome {
     Matched(Vec<NamespaceMatch>),
     UserDeclined,
     NoMatch,
@@ -44,12 +44,12 @@ pub enum NamespaceMatchOutcome {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PasskeyMaterialPurpose {
+pub(crate) enum PasskeyMaterialPurpose {
     EnableCloudBackup,
     RepairWrapper,
 }
 
-pub enum PasskeyMaterialOutcome {
+pub(crate) enum PasskeyMaterialOutcome {
     Authenticated(UnpersistedPrfKey),
     RegisteredForConfirmation(StagedPrfKey),
 }
@@ -105,24 +105,26 @@ impl PasskeyMaterialPurpose {
 }
 
 /// Acquires passkey PRF material without persisting it to the keychain
-pub struct PasskeyMaterialAcquirer {
+pub(crate) struct PasskeyMaterialAcquirer {
     passkey: PasskeyAccess,
 }
 
 impl PasskeyMaterialAcquirer {
     /// Builds an acquirer from the passkey service handle
-    pub fn new(passkey: &PasskeyAccess) -> Self {
+    pub(crate) fn new(passkey: &PasskeyAccess) -> Self {
         Self { passkey: passkey.clone() }
     }
 
     /// Creates a passkey for wrapper repair without persisting keychain state
-    pub async fn create_for_wrapper_repair(&self) -> Result<UnpersistedPrfKey, CloudBackupError> {
+    pub(crate) async fn create_for_wrapper_repair(
+        &self,
+    ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         info!("Creating new passkey for wrapper repair");
         self.create_new_prf_key_with_mapper(map_wrapper_repair_passkey_error).await
     }
 
     /// Registers an enable passkey without immediately authenticating it
-    pub async fn register_for_enable(&self) -> Result<StagedPrfKey, CloudBackupError> {
+    pub(crate) async fn register_for_enable(&self) -> Result<StagedPrfKey, CloudBackupError> {
         info!("Registering new passkey for cloud backup enable");
         let prf_salt: [u8; 32] = rand::rng().random();
         let (registration, name_suffix) =
@@ -136,7 +138,7 @@ impl PasskeyMaterialAcquirer {
     }
 
     /// Confirms a registered enable passkey by acquiring PRF material with targeted auth
-    pub async fn confirm_registered_for_enable(
+    pub(crate) async fn confirm_registered_for_enable(
         &self,
         staged: &StagedPrfKey,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
@@ -157,7 +159,7 @@ impl PasskeyMaterialAcquirer {
     }
 
     /// Discovers an existing passkey for wrapper repair or creates a new one
-    pub async fn discover_or_create_for_wrapper_repair(
+    pub(crate) async fn discover_or_create_for_wrapper_repair(
         &self,
     ) -> Result<UnpersistedPrfKey, CloudBackupError> {
         match self.acquire(PasskeyMaterialPurpose::RepairWrapper).await? {
@@ -171,7 +173,7 @@ impl PasskeyMaterialAcquirer {
     }
 
     /// Discovers an existing enable passkey or registers a new passkey for later confirmation
-    pub async fn discover_or_register_for_enable(
+    pub(crate) async fn discover_or_register_for_enable(
         &self,
     ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
         self.acquire(PasskeyMaterialPurpose::EnableCloudBackup).await
@@ -389,19 +391,19 @@ fn passkey_provider_hint(
 }
 
 /// Matches a discoverable passkey against candidate cloud backup namespaces
-pub struct NamespacePasskeyMatcher {
+pub(crate) struct NamespacePasskeyMatcher {
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
 }
 
 impl NamespacePasskeyMatcher {
     /// Builds a matcher from cloud and passkey service handles
-    pub fn new(cloud: &CloudStorageClient, passkey: &PasskeyAccess) -> Self {
+    pub(crate) fn new(cloud: &CloudStorageClient, passkey: &PasskeyAccess) -> Self {
         Self { cloud: cloud.clone(), passkey: passkey.clone() }
     }
 
     /// Downloads candidate wrappers and tries the selected passkey against each PRF salt
-    pub async fn match_namespaces(
+    pub(crate) async fn match_namespaces(
         &self,
         namespaces: &[String],
     ) -> Result<NamespaceMatchOutcome, CloudBackupError> {
@@ -468,7 +470,7 @@ impl NamespacePasskeyMatcher {
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 return Err(CloudBackupError::UnsupportedPasskeyProvider);
             }
-            Err(error) => return Err(CloudBackupError::Passkey(error.to_string())),
+            Err(error) => return Err(CloudBackupError::passkey(error)),
         };
 
         let mut matches = Vec::new();
@@ -604,7 +606,7 @@ fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
         error if is_android_passkey_association_error(&error) => {
             CloudBackupError::Passkey(android_passkey_association_message().into())
         }
-        other => CloudBackupError::Passkey(other.to_string()),
+        other => CloudBackupError::passkey(other),
     }
 }
 
@@ -618,7 +620,7 @@ fn map_enable_passkey_error(error: PasskeyError) -> CloudBackupError {
         error if is_android_passkey_association_error(&error) => {
             CloudBackupError::Passkey(android_passkey_association_message().into())
         }
-        other => CloudBackupError::Passkey(other.to_string()),
+        other => CloudBackupError::passkey(other),
     }
 }
 

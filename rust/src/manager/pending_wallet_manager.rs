@@ -1,17 +1,20 @@
 use std::sync::Arc;
 
-use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
     database::{self, Database},
     keychain::KeychainError,
-    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
+    manager::{
+        cloud_backup_manager::CLOUD_BACKUP_MANAGER, deferred_sender::SingleOrMany,
+        reconcile_channel::ReconcileChannel,
+    },
     mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     multi_format::MultiFormatError,
     pending_wallet::PendingWallet,
     router::{HotWalletRoute, NewWalletRoute, Route},
     wallet::{Wallet, fingerprint::Fingerprint, metadata::WalletMetadata},
+    xpub::XpubError,
 };
 
 type Error = PendingWalletManagerError;
@@ -40,8 +43,7 @@ pub trait PendingWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'stati
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct RustPendingWalletManager {
     pub state: Arc<RwLock<PendingWalletManagerState>>,
-    pub reconciler: Sender<PendingWalletManagerReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<PendingWalletManagerReconcileMessage>>,
+    pub reconciler: ReconcileChannel<PendingWalletManagerReconcileMessage>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -91,12 +93,9 @@ pub enum WalletCreationError {
 impl RustPendingWalletManager {
     #[uniffi::constructor]
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
-        let (sender, receiver) = flume::bounded(1000);
-
         Self {
             state: Arc::new(RwLock::new(PendingWalletManagerState::new(number_of_words))),
-            reconciler: sender,
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: ReconcileChannel::new(1000),
         }
     }
 
@@ -158,12 +157,12 @@ impl RustPendingWalletManager {
     // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn PendingWalletManagerReconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                // call the reconcile method on the frontend
-                reconciler.reconcile(field);
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => {
+                for message in messages {
+                    reconciler.reconcile(message);
+                }
             }
         });
     }
@@ -175,13 +174,11 @@ impl RustPendingWalletManager {
             PendingWalletManagerAction::UpdateWords(words) => {
                 {
                     let mut state = self.state.write();
-                    state.wallet = PendingWallet::new(words, None).into();
+                    state.wallet = PendingWallet::new(words).into();
                     state.number_of_words = words;
                 }
 
-                self.reconciler
-                    .send(PendingWalletManagerReconcileMessage::Words(words))
-                    .expect("failed to send update");
+                self.reconciler.send_sync(PendingWalletManagerReconcileMessage::Words(words));
             }
         }
     }
@@ -189,7 +186,7 @@ impl RustPendingWalletManager {
 
 impl PendingWalletManagerState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
-        Self { number_of_words, wallet: PendingWallet::new(number_of_words, None).into() }
+        Self { number_of_words, wallet: PendingWallet::new(number_of_words).into() }
     }
 }
 
@@ -209,7 +206,7 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::BdkError(error) => Self::Bdk(error),
             WalletError::PersistError(error) => Self::Persist(error),
             WalletError::MultiFormat(error) => Self::MultiFormat(error),
-            WalletError::ParseXpubError(error) => Self::Import(error.to_string()),
+            WalletError::ParseXpubError(error) => error.into(),
             WalletError::WalletAlreadyExists(id) => {
                 Self::Import(format!("wallet already exists: {id}"))
             }
@@ -230,6 +227,12 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
                 Self::Unexpected(format!("descriptor key parse error during creation: {error}"))
             }
         }
+    }
+}
+
+impl From<XpubError> for WalletCreationError {
+    fn from(error: XpubError) -> Self {
+        Self::Import(error.to_string())
     }
 }
 

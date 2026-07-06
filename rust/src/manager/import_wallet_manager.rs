@@ -1,9 +1,5 @@
-use std::sync::Arc;
-
 use bip39::{Language, Mnemonic};
 use cove_util::result_ext::ResultExt as _;
-use flume::{Receiver, Sender};
-use parking_lot::RwLock;
 
 use crate::{
     app::reconcile::{Update, Updater},
@@ -18,38 +14,10 @@ use crate::{
     },
 };
 
-use cove_macros::impl_default_for;
 use tracing::{info, warn};
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum ImportWalletManagerReconcileMessage {
-    NoOp,
-}
-
-#[uniffi::export(callback_interface)]
-pub trait ImportWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
-    /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: ImportWalletManagerReconcileMessage);
-}
-
 #[derive(Clone, Debug, uniffi::Object)]
-pub struct RustImportWalletManager {
-    #[allow(dead_code)]
-    pub state: Arc<RwLock<ImportWalletManagerState>>,
-    #[allow(dead_code)]
-    pub reconciler: Sender<ImportWalletManagerReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<ImportWalletManagerReconcileMessage>>,
-}
-
-#[derive(Clone, Debug, uniffi::Record)]
-pub struct ImportWalletManagerState {}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum ImportWalletManagerAction {
-    NoOp,
-}
-
-impl_default_for!(RustImportWalletManager);
+pub struct RustImportWalletManager;
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -82,25 +50,7 @@ pub type Error = ImportWalletError;
 impl RustImportWalletManager {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        let (sender, receiver) = flume::bounded(1000);
-
-        Self {
-            state: Arc::new(RwLock::new(ImportWalletManagerState::new())),
-            reconciler: sender,
-            reconcile_receiver: Arc::new(receiver),
-        }
-    }
-
-    #[uniffi::method]
-    pub fn listen_for_updates(&self, reconciler: Box<dyn ImportWalletManagerReconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                // call the reconcile method on the frontend
-                reconciler.reconcile(field);
-            }
-        });
+        Self
     }
 
     /// Import wallet view from entered words
@@ -183,20 +133,5 @@ impl RustImportWalletManager {
         CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());
 
         Ok(metadata)
-    }
-
-    /// Action from the frontend to change the state of the view model
-    #[uniffi::method]
-    pub const fn dispatch(&self, action: ImportWalletManagerAction) {
-        match action {
-            ImportWalletManagerAction::NoOp => {}
-        }
-    }
-}
-
-impl_default_for!(ImportWalletManagerState);
-impl ImportWalletManagerState {
-    pub const fn new() -> Self {
-        Self {}
     }
 }

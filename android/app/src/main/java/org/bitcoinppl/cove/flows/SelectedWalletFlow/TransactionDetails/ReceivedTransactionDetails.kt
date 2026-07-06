@@ -34,12 +34,11 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove_core.TransactionDetails
-import java.text.NumberFormat
 
 @Composable
 internal fun ReceivedTransactionDetails(
     transactionDetails: TransactionDetails,
-    numberOfConfirmations: Int?,
+    numberOfConfirmationsFmt: String?,
     currentFiatFmt: String?,
     historicalFiatFmt: String?,
     lockControl: @Composable () -> Unit = {},
@@ -65,9 +64,9 @@ internal fun ReceivedTransactionDetails(
                         fontSize = 12.sp,
                     )
                     Spacer(Modifier.height(8.dp))
-                    if (numberOfConfirmations != null) {
+                    if (numberOfConfirmationsFmt != null) {
                         Text(
-                            NumberFormat.getNumberInstance().format(numberOfConfirmations),
+                            numberOfConfirmationsFmt,
                             color = fg,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,

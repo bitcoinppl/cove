@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -443,6 +442,11 @@ class WalletManager :
             numberOfConfirmations(blockHeight)
         }
 
+    fun displayConfirmationCount(confirmations: UInt): String =
+        withRustOr("") {
+            displayConfirmationCount(confirmations)
+        }
+
     fun amountFmt(amount: Amount): String =
         when (walletMetadata?.selectedUnit) {
             BitcoinUnit.BTC -> amount.btcString()
@@ -578,38 +582,31 @@ class WalletManager :
         var refreshedDetails = true
 
         for (txId in cachedTransactionIds) {
-            try {
-                refreshTransactionDetails(txId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(tag, "failed to refresh transaction details after label import", e)
+            val refreshed =
+                runCatchingCancellable(tag, "failed to refresh transaction details after label import") {
+                    refreshTransactionDetails(txId)
+                }.isSuccess
+            if (!refreshed) {
                 refreshedDetails = false
             }
         }
 
         for (txId in cachedLockStateTransactionIds) {
-            try {
-                transactionLockState(txId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(tag, "failed to refresh transaction lock state after label import", e)
+            val refreshed =
+                runCatchingCancellable(tag, "failed to refresh transaction lock state after label import") {
+                    transactionLockState(txId)
+                }.isSuccess
+            if (!refreshed) {
                 clearTransactionLockState(txId)
             }
         }
 
-        return try {
+        return runCatchingCancellable(tag, "failed to refresh transactions after label import") {
             withRustSuspend {
                 getTransactions()
             }
             refreshedDetails
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(tag, "failed to refresh transactions after label import", e)
-            false
-        }
+        }.getOrDefault(false)
     }
 
     fun notifyLabelRefreshFailed() {

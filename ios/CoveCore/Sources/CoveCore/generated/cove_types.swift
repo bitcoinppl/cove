@@ -2088,6 +2088,8 @@ public protocol FeeRateProtocol: AnyObject, Sendable {
 
     func satPerVb()  -> Float
 
+    func satsPerVbyteString()  -> String
+
 }
 open class FeeRate: FeeRateProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2160,6 +2162,15 @@ open func satPerVb() -> Float  {
 })
 }
 
+open func satsPerVbyteString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_feerate_sats_per_vbyte_string(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 
 
 }
@@ -2221,6 +2232,8 @@ public protocol FeeRateOptionProtocol: AnyObject, Sendable {
     func isEqual(rhs: FeeRateOption)  -> Bool
 
     func satPerVb()  -> Float
+
+    func satsPerVbyteString()  -> String
 
 }
 open class FeeRateOption: FeeRateOptionProtocol, @unchecked Sendable {
@@ -2332,6 +2345,15 @@ open func satPerVb() -> Float  {
 })
 }
 
+open func satsPerVbyteString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_feerateoption_sats_per_vbyte_string(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 
 
 }
@@ -2397,6 +2419,8 @@ public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject, Sendable {
     func isEqual(rhs: FeeRateOptionWithTotalFee)  -> Bool
 
     func satPerVb()  -> Float
+
+    func satsPerVbyteString()  -> String
 
     func totalFee()  -> Amount?
 
@@ -2524,6 +2548,15 @@ open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sat_per_vb(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func satsPerVbyteString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_feerateoptionwithtotalfee_sats_per_vbyte_string(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -6599,6 +6632,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_types_checksum_method_feerate_sats_per_vbyte_string() != 28324) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_types_checksum_method_feerateoption_duration() != 37929) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6612,6 +6648,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoption_sat_per_vb() != 38044) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_feerateoption_sats_per_vbyte_string() != 46546) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_duration() != 34003) {
@@ -6633,6 +6672,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 61796) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_sats_per_vbyte_string() != 22579) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionwithtotalfee_total_fee() != 12787) {

@@ -1,7 +1,7 @@
 use super::*;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn start_enable_operation(&mut self, context: CloudBackupEnableContext) {
+    pub(crate) fn begin_enable_operation(&mut self, context: CloudBackupEnableContext) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };
         let Some(claim) =
@@ -38,7 +38,7 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub(crate) fn start_enable_force_new_operation(&mut self, context: CloudBackupEnableContext) {
+    pub(crate) fn begin_enable_force_new_operation(&mut self, context: CloudBackupEnableContext) {
         let Some(manager) = self.manager() else { return };
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::EnableForceNew)
@@ -64,7 +64,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        manager.apply_enable_outcome(CloudBackupEnableOutcome::CreatingPasskey);
+        manager.apply_enable_state(CloudBackupEnableState::CreatingPasskey);
         self.schedule_enable_passkey_registration(
             manager,
             claim,
@@ -73,7 +73,7 @@ impl CloudBackupSupervisor {
         );
     }
 
-    pub(crate) fn start_enable_no_discovery_operation(
+    pub(crate) fn begin_enable_no_discovery_operation(
         &mut self,
         context: CloudBackupEnableContext,
     ) {
@@ -121,9 +121,7 @@ impl CloudBackupSupervisor {
             return;
         };
 
-        manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Started(
-            RecoveryAction::ReinitializeBackup,
-        ));
+        manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::ReinitializeBackup));
 
         match self.start_ready_enable_upload_if_present(
             manager.clone(),

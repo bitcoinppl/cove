@@ -3,7 +3,6 @@ use std::str::FromStr as _;
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
-use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -49,7 +48,7 @@ impl WalletBackupReader {
                 "download {record_id}: not found in cloud backup"
             ))),
             WalletBackupLookup::UnsupportedVersion(version) => Err(CloudBackupError::Internal(
-                format!("download {record_id}: unsupported wallet backup version {version}"),
+                format!("download {record_id}: unsupported wallet backup version {version}").into(),
             )),
         }
     }
@@ -75,8 +74,10 @@ impl WalletBackupReader {
     ) -> Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError> {
         match self.lookup_entry(record_id).await? {
             WalletBackupLookup::Found(entry) => {
-                let metadata = serde_json::from_value(entry.metadata.clone())
-                    .map_err_prefix("parse wallet metadata", CloudBackupError::Internal)?;
+                let metadata =
+                    serde_json::from_value(entry.metadata.clone()).map_err(|source| {
+                        CloudBackupError::internal_context("parse wallet metadata", source)
+                    })?;
                 Ok(WalletBackupLookup::Found(DownloadedWalletBackup { metadata, entry }))
             }
             WalletBackupLookup::NotFound => Ok(WalletBackupLookup::NotFound),
@@ -94,12 +95,14 @@ impl WalletBackupReader {
             WalletBackupLookup::Found(encrypted) => {
                 let entry = self
                     .decrypt_entry(&encrypted)
-                    .map_err_prefix("decrypt wallet", CloudBackupError::Crypto)?;
+                    .map_err(|source| CloudBackupError::crypto_context("decrypt wallet", source))?;
                 encrypted
                     .remote_metadata
                     .normalized_wallet(&self.namespace, record_id, Some(entry.wallet_id.as_str()))
                     .map_err(|error| {
-                        CloudBackupError::Internal(format!("normalize wallet payload: {error}"))
+                        CloudBackupError::Internal(
+                            format!("normalize wallet payload: {error}").into(),
+                        )
                     })?;
 
                 Ok(WalletBackupLookup::Found(entry))
@@ -127,7 +130,7 @@ impl WalletBackupReader {
         };
 
         let encrypted: EncryptedWalletBackup = serde_json::from_slice(&wallet_json)
-            .map_err_prefix("deserialize wallet", CloudBackupError::Internal)?;
+            .map_err(|source| CloudBackupError::internal_context("deserialize wallet", source))?;
 
         if encrypted.version != 1 {
             let version = encrypted.version;
@@ -223,8 +226,9 @@ impl DownloadedWalletBackup {
             labels_jsonl: None,
         };
 
-        identity_key_for_backup(&self.metadata, &backup_model)
-            .map_err_prefix("cloud wallet duplicate identity", CloudBackupError::Internal)
+        identity_key_for_backup(&self.metadata, &backup_model).map_err(|source| {
+            CloudBackupError::internal_context("cloud wallet duplicate identity", source)
+        })
     }
 
     fn fallback_duplicate_key(&self) -> WalletIdentityKey {
@@ -242,12 +246,15 @@ impl DownloadedWalletBackup {
 
         match &backup_model.secret {
             LocalWalletSecret::Mnemonic(words) => {
-                let mnemonic = bip39::Mnemonic::from_str(words)
-                    .map_err_prefix("invalid mnemonic", CloudBackupError::Internal)?;
+                let mnemonic = bip39::Mnemonic::from_str(words).map_err(|source| {
+                    CloudBackupError::internal_context("invalid mnemonic", source)
+                })?;
 
                 crate::backup::import::restore_cloud_mnemonic_wallet(&self.metadata, mnemonic)
                     .map_err(|(error, _)| {
-                        CloudBackupError::Internal(format!("restore mnemonic wallet: {error}"))
+                        CloudBackupError::Internal(
+                            format!("restore mnemonic wallet: {error}").into(),
+                        )
                     })?;
             }
             _ => {
@@ -256,7 +263,7 @@ impl DownloadedWalletBackup {
                     &backup_model,
                 )
                 .map_err(|(error, _)| {
-                    CloudBackupError::Internal(format!("restore descriptor wallet: {error}"))
+                    CloudBackupError::Internal(format!("restore descriptor wallet: {error}").into())
                 })?;
             }
         }

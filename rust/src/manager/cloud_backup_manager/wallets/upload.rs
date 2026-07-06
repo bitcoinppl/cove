@@ -11,7 +11,6 @@ use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
-use cove_util::ResultExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
@@ -112,7 +111,7 @@ impl DirtyWalletUploadPreparationError {
 
 impl RustCloudBackupManager {
     /// Upload wallets to cloud and update local cache
-    pub async fn do_backup_wallets(
+    pub(crate) async fn do_backup_wallets(
         &self,
         wallets: &[crate::wallet::metadata::WalletMetadata],
     ) -> Result<(), CloudBackupError> {
@@ -303,20 +302,21 @@ impl RustCloudBackupManager {
             Ok(()) => Err(upload_error),
             Err(persist_error) => Err(CloudBackupError::Internal(format!(
                 "wallet upload failed: {upload_error}; persist partial wallet upload batch failed: {persist_error}"
-            ))),
+            )
+            .into())),
         }
     }
 
-    pub async fn do_upload_wallet_if_dirty(
+    pub(crate) async fn do_upload_wallet_if_dirty(
         &self,
         wallet_id: &crate::wallet::metadata::WalletId,
     ) -> Result<(), CloudBackupError> {
         self.ensure_cloud_backup_writes_allowed()?;
         let record_id = wallet_record_id(wallet_id.as_ref());
-        let Some(current_state) = Database::global()
-            .cloud_blob_sync_states
-            .get(&record_id)
-            .map_err_prefix("read cloud blob sync state", CloudBackupError::Internal)?
+        let Some(current_state) =
+            Database::global().cloud_blob_sync_states.get(&record_id).map_err(|source| {
+                CloudBackupError::internal_context("read cloud blob sync state", source)
+            })?
         else {
             return Ok(());
         };
@@ -371,7 +371,9 @@ impl RustCloudBackupManager {
         let wrote_uploading = Database::global()
             .cloud_blob_sync_states
             .set_if_current(&current_state, &uploading_state)
-            .map_err_prefix("persist uploading cloud blob state", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("persist uploading cloud blob state", source)
+            })?;
         if !wrote_uploading {
             return Ok(());
         }
@@ -416,7 +418,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let issue = CloudStorageIssue::from(&error);
         let retryable = Self::is_upload_failure_retryable(&error);
-        let persisted_issue = Self::cloud_blob_failure_issue(issue);
+        let persisted_issue = Self::persistable_cloud_storage_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
         if is_connectivity_related_issue(issue) {
             self.mark_blob_dirty_state(current_state)?;
@@ -453,7 +455,7 @@ impl RustCloudBackupManager {
             current_state,
             revision_hash,
             Self::is_upload_preparation_failure_retryable(&error),
-            Self::cloud_blob_failure_issue(issue),
+            Self::persistable_cloud_storage_issue(issue),
             error.to_string(),
         )?;
         Err(error)
@@ -478,10 +480,12 @@ impl RustCloudBackupManager {
         let wrote_dirty = Database::global()
             .cloud_blob_sync_states
             .set_if_current(&current_state, &dirty_state)
-            .map_err_prefix(
-                "persist stale uploading cloud blob state",
-                CloudBackupError::Internal,
-            )?;
+            .map_err(|source| {
+                CloudBackupError::internal_context(
+                    "persist stale uploading cloud blob state",
+                    source,
+                )
+            })?;
 
         Ok(wrote_dirty.then_some(dirty_state))
     }
@@ -518,11 +522,11 @@ impl RustCloudBackupManager {
             &critical_key,
             remote_metadata,
         )
-        .map_err_str(CloudBackupError::Crypto)
+        .map_err(CloudBackupError::crypto)
         .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash.clone()))?;
 
         let wallet_json = serde_json::to_vec(&encrypted)
-            .map_err_str(CloudBackupError::Internal)
+            .map_err(CloudBackupError::internal)
             .map_err(|source| DirtyWalletUploadPreparationError::new(source, revision_hash))?;
 
         Ok(PreparedDirtyWalletUpload { prepared, wallet_json })
@@ -558,10 +562,10 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let current_state = Database::global()
-            .cloud_blob_sync_states
-            .get(&record_id)
-            .map_err_prefix("read cloud blob sync state", CloudBackupError::Internal)?;
+        let current_state =
+            Database::global().cloud_blob_sync_states.get(&record_id).map_err(|source| {
+                CloudBackupError::internal_context("read cloud blob sync state", source)
+            })?;
 
         if let Some(current_state) = current_state {
             let _ = self.mark_blob_uploaded_pending_confirmation_if_current(
@@ -635,9 +639,9 @@ async fn prepare_cloud_wallet_upload(
         critical_key,
         remote_metadata,
     )
-    .map_err_str(CloudBackupError::Crypto)?;
+    .map_err(CloudBackupError::crypto)?;
 
-    let wallet_json = serde_json::to_vec(&encrypted).map_err_str(CloudBackupError::Internal)?;
+    let wallet_json = serde_json::to_vec(&encrypted).map_err(CloudBackupError::internal)?;
 
     Ok(PreparedCloudWalletUpload { prepared, wallet_json })
 }

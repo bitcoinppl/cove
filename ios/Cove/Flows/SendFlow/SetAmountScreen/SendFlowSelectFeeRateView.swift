@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 10/30/24.
 //
 
-import Foundation
 import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
@@ -118,10 +117,6 @@ private struct FeeOptionView: View {
         feeOption.totalFee()?.satsString()
     }
 
-    var satsPerVbyte: Double {
-        Double(feeOption.satPerVb())
-    }
-
     private var fiatAmount: String? {
         guard let totalFee = feeOption.totalFee() else { return nil }
 
@@ -148,7 +143,7 @@ private struct FeeOptionView: View {
                 }
 
                 HStack {
-                    Text("\(String(format: "%.2f", satsPerVbyte)) sats/vbyte")
+                    Text(feeOption.satsPerVbyteString())
                         .font(.subheadline)
                         .foregroundColor(fontColor)
                 }

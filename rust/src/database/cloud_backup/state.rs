@@ -572,15 +572,25 @@ pub struct CloudBlobFailedState {
     pub retryable: bool,
     pub error: String,
     #[serde(default)]
-    pub issue: Option<CloudBlobFailureIssue>,
+    pub issue: Option<CloudStorageIssue>,
     pub failed_at: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CloudBlobFailureIssue {
+pub enum CloudStorageIssue {
     AuthorizationRequired,
     Offline,
     Unavailable,
     NotFound,
     QuotaExceeded,
+    Other,
+}
+
+impl CloudStorageIssue {
+    pub(crate) fn persistable(self) -> Option<Self> {
+        match self {
+            Self::Other => None,
+            issue => Some(issue),
+        }
+    }
 }

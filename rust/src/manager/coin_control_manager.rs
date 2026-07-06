@@ -18,14 +18,12 @@ use parking_lot::Mutex;
 
 use crate::{
     label_manager::{LabelManager, LabelManagerError},
-    manager::deferred_sender::{self, DeferredSender},
+    manager::deferred_sender,
     wallet::metadata::WalletMetadata,
 };
-use cove_tokio::task;
-use flume::Receiver;
 use tracing::trace;
 
-use super::deferred_sender::MessageSender;
+use super::reconcile_channel::ReconcileChannel;
 
 type Message = CoinControlManagerReconcileMessage;
 type Action = CoinControlManagerAction;
@@ -44,8 +42,7 @@ pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustCoinControlManager {
     pub state: Arc<Mutex<State>>,
-    pub reconciler: MessageSender<Message>,
-    pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
+    pub reconciler: ReconcileChannel<Message>,
 }
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerReconcileMessage {
@@ -196,15 +193,11 @@ impl RustCoinControlManager {
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        task::spawn(async move {
-            while let Ok(field) = reconcile_receiver.recv_async().await {
-                trace!("reconcile_receiver: {field:?}");
-                match field {
-                    SingleOrMany::Single(message) => reconciler.reconcile(message),
-                    SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-                }
+        self.reconciler.listen_async(move |field| {
+            trace!("reconcile_receiver: {field:?}");
+            match field {
+                SingleOrMany::Single(message) => reconciler.reconcile(message),
+                SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
             }
         });
     }
@@ -243,18 +236,12 @@ impl RustCoinControlManager {
 
 impl RustCoinControlManager {
     pub fn new(metadata: WalletMetadata, local_outputs: Vec<LocalOutput>) -> Self {
-        let (sender, receiver) = flume::bounded(10);
-
         let mut state = State::new(metadata, local_outputs);
 
         state.sort_utxos(CoinControlListSort::Date(ListSortDirection::Descending));
         state.load_utxo_labels();
 
-        Self {
-            state: Arc::new(Mutex::new(state)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
-        }
+        Self { state: Arc::new(Mutex::new(state)), reconciler: ReconcileChannel::new(10) }
     }
 
     pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
@@ -289,7 +276,7 @@ impl RustCoinControlManager {
             }
         }
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         let sort = get_new_sort(current_sort, sort_button_pressed);
 
         self.state.lock().sort = SortState::Active(sort);
@@ -300,7 +287,7 @@ impl RustCoinControlManager {
     }
 
     fn toggle_select_all(self: Arc<Self>) {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         let old_selected_utxos = self.state.lock().selected_utxos.clone();
 
@@ -351,7 +338,7 @@ impl RustCoinControlManager {
             return;
         }
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         // update the search state
         self.state.lock().search = search.clone();
@@ -585,7 +572,7 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(wallet_id);
 
         manager.clone().notify_search_changed(search);
-        while manager.reconcile_receiver.try_recv().is_ok() {}
+        while manager.reconciler.receiver().try_recv().is_ok() {}
 
         wallet_db
             .labels
@@ -594,7 +581,7 @@ mod tests {
 
         manager.reload_labels().await;
 
-        let message = manager.reconcile_receiver.recv_async().await.expect("reconcile message");
+        let message = manager.reconciler.receiver().recv_async().await.expect("reconcile message");
         let SingleOrMany::Single(Message::UpdateUtxos(utxos)) = message else {
             panic!("expected utxo update");
         };
@@ -718,13 +705,7 @@ impl CoinControlListSortKey {
 impl RustCoinControlManager {
     #[uniffi::constructor(default(output_count = 20, change_count = 4))]
     pub fn preview_new(output_count: u8, change_count: u8) -> Self {
-        let (sender, receiver) = flume::bounded(10);
-
         let state = State::preview_new(output_count, change_count);
-        Self {
-            state: Arc::new(Mutex::new(state)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
-        }
+        Self { state: Arc::new(Mutex::new(state)), reconciler: ReconcileChannel::new(10) }
     }
 }

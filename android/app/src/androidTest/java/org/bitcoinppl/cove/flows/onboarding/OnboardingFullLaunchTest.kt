@@ -197,7 +197,7 @@ class OnboardingFullLaunchTest {
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()
             .chooseNativeImportedWalletFromSelectionSheet()
-            .assertImportedMainnetWalletHasHistoryAndNoBitcoin()
+            .assertImportedMainnetWalletShowsHistory()
     }
 
     @Test

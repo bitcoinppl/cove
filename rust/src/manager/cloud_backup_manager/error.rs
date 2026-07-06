@@ -1,13 +1,149 @@
-use cove_device::cloud_storage::CloudStorageError;
+use std::{error::Error as StdError, fmt, ops::Deref};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CloudStorageIssue {
-    AuthorizationRequired,
-    Offline,
-    Unavailable,
-    NotFound,
-    QuotaExceeded,
-    Other,
+use cove_device::{cloud_storage::CloudStorageError, passkey::PasskeyError};
+
+use crate::database::cloud_backup::CloudStorageIssue;
+
+#[derive(Debug)]
+struct CloudBackupErrorSource {
+    message: String,
+    source: Option<Box<dyn StdError + Send + Sync + 'static>>,
+}
+
+impl CloudBackupErrorSource {
+    fn message(message: impl Into<String>) -> Self {
+        Self { message: message.into(), source: None }
+    }
+
+    fn source(source: impl StdError + Send + Sync + 'static) -> Self {
+        Self { message: source.to_string(), source: Some(Box::new(source)) }
+    }
+
+    pub(crate) fn context(
+        context: impl fmt::Display,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        let message = format!("{context}: {source}");
+
+        Self { message, source: Some(Box::new(source)) }
+    }
+}
+
+impl fmt::Display for CloudBackupErrorSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.message.fmt(f)
+    }
+}
+
+impl StdError for CloudBackupErrorSource {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.source.as_deref().map(|source| source as &(dyn StdError + 'static))
+    }
+}
+
+impl Deref for CloudBackupErrorSource {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.message
+    }
+}
+
+impl PartialEq<&str> for CloudBackupErrorSource {
+    fn eq(&self, other: &&str) -> bool {
+        self.message == *other
+    }
+}
+
+impl PartialEq<str> for CloudBackupErrorSource {
+    fn eq(&self, other: &str) -> bool {
+        self.message == other
+    }
+}
+
+impl PartialEq<String> for CloudBackupErrorSource {
+    fn eq(&self, other: &String) -> bool {
+        self.message == *other
+    }
+}
+
+macro_rules! cloud_backup_source_error {
+    ($name:ident) => {
+        #[derive(Debug)]
+        pub(crate) struct $name(CloudBackupErrorSource);
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+
+        impl StdError for $name {
+            fn source(&self) -> Option<&(dyn StdError + 'static)> {
+                self.0.source()
+            }
+        }
+
+        impl Deref for $name {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            fn eq(&self, other: &&str) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl PartialEq<str> for $name {
+            fn eq(&self, other: &str) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl PartialEq<String> for $name {
+            fn eq(&self, other: &String) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(message: String) -> Self {
+                Self(CloudBackupErrorSource::message(message))
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(message: &str) -> Self {
+                Self(CloudBackupErrorSource::message(message))
+            }
+        }
+    };
+}
+
+cloud_backup_source_error!(CloudBackupPasskeyError);
+cloud_backup_source_error!(CloudBackupCryptoError);
+cloud_backup_source_error!(CloudBackupInternalError);
+
+impl CloudBackupCryptoError {
+    pub(crate) fn context(
+        context: impl fmt::Display,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self(CloudBackupErrorSource::context(context, source))
+    }
+}
+
+impl CloudBackupInternalError {
+    pub(crate) fn context(
+        context: impl fmt::Display,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self(CloudBackupErrorSource::context(context, source))
+    }
 }
 
 pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>) -> bool {
@@ -138,10 +274,10 @@ pub(crate) enum CloudBackupError {
     RecoveryRequired(String),
 
     #[error("passkey error: {0}")]
-    Passkey(String),
+    Passkey(#[source] CloudBackupPasskeyError),
 
     #[error("crypto error: {0}")]
-    Crypto(String),
+    Crypto(#[source] CloudBackupCryptoError),
 
     #[error("cloud storage error: {0}")]
     Cloud(String),
@@ -159,7 +295,7 @@ pub(crate) enum CloudBackupError {
     Deferred(String),
 
     #[error("internal error: {0}")]
-    Internal(String),
+    Internal(#[source] CloudBackupInternalError),
 
     #[error("compatibility error: {0}")]
     Compatibility(String),
@@ -178,6 +314,32 @@ pub(crate) enum CloudBackupError {
 }
 
 impl CloudBackupError {
+    pub(crate) fn passkey(source: impl StdError + Send + Sync + 'static) -> Self {
+        Self::Passkey(CloudBackupPasskeyError(CloudBackupErrorSource::source(source)))
+    }
+
+    pub(crate) fn crypto(source: impl StdError + Send + Sync + 'static) -> Self {
+        Self::Crypto(CloudBackupCryptoError(CloudBackupErrorSource::source(source)))
+    }
+
+    pub(crate) fn crypto_context(
+        context: impl fmt::Display,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::Crypto(CloudBackupCryptoError::context(context, source))
+    }
+
+    pub(crate) fn internal(source: impl StdError + Send + Sync + 'static) -> Self {
+        Self::Internal(CloudBackupInternalError(CloudBackupErrorSource::source(source)))
+    }
+
+    pub(crate) fn internal_context(
+        context: impl fmt::Display,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::Internal(CloudBackupInternalError::context(context, source))
+    }
+
     pub(crate) fn cloud_storage_context(
         context: impl Into<String>,
         source: CloudStorageError,
@@ -187,5 +349,41 @@ impl CloudBackupError {
 
     pub(crate) fn is_cloud_error(&self) -> bool {
         matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
+    }
+}
+
+impl From<CloudBackupPasskeyError> for CloudBackupError {
+    fn from(error: CloudBackupPasskeyError) -> Self {
+        Self::Passkey(error)
+    }
+}
+
+impl From<PasskeyError> for CloudBackupError {
+    fn from(error: PasskeyError) -> Self {
+        Self::passkey(error)
+    }
+}
+
+impl From<CloudBackupCryptoError> for CloudBackupError {
+    fn from(error: CloudBackupCryptoError) -> Self {
+        Self::Crypto(error)
+    }
+}
+
+impl From<cove_cspp::CsppError> for CloudBackupError {
+    fn from(error: cove_cspp::CsppError) -> Self {
+        Self::crypto(error)
+    }
+}
+
+impl From<CloudBackupInternalError> for CloudBackupError {
+    fn from(error: CloudBackupInternalError) -> Self {
+        Self::Internal(error)
+    }
+}
+
+impl From<serde_json::Error> for CloudBackupError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::internal(error)
     }
 }

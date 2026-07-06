@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use backon::{BackoffBuilder as _, FibonacciBuilder};
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
-use cove_util::ResultExt as _;
 
 use super::blocking_cloud_error;
 use crate::database::Database;
@@ -63,10 +62,12 @@ impl RustCloudBackupManager {
                 Database::global()
                     .cloud_backup_state
                     .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
-                    .map_err_prefix(
-                        "persist initial cloud backup disabling state",
-                        CloudBackupError::Internal,
-                    )?;
+                    .map_err(|source| {
+                        CloudBackupError::internal_context(
+                            "persist initial cloud backup disabling state",
+                            source,
+                        )
+                    })?;
                 disabling
             }
             PersistedCloudBackupState::Disabling(disabling) => disabling,
@@ -230,7 +231,7 @@ impl RustCloudBackupManager {
         Database::global()
             .cloud_backup_state
             .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
-            .map_err_prefix(context, CloudBackupError::Internal)
+            .map_err(|source| CloudBackupError::internal_context(context, source))
     }
 
     pub(crate) fn persist_disabling_failure(
@@ -261,24 +262,23 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn persist_disabled_after_remote_delete(&self) -> Result<(), CloudBackupError> {
-        Database::global()
-            .cloud_backup_state
-            .set(&PersistedCloudBackupState::Disabled)
-            .map_err_prefix("persist disabled cloud backup state", CloudBackupError::Internal)?;
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::Disabled).map_err(
+            |source| {
+                CloudBackupError::internal_context("persist disabled cloud backup state", source)
+            },
+        )?;
         self.reconcile_runtime_status(CloudBackupStatus::Disabled);
         self.refresh_persisted_flags();
         Ok(())
     }
 
     pub(crate) fn finish_disable_local_cleanup(&self) -> Result<(), CloudBackupError> {
-        CloudBackupKeychain::global().clear_local_state().map_err_prefix(
-            "clear cloud backup local keychain state",
-            CloudBackupError::Internal,
-        )?;
-        Database::global()
-            .cloud_blob_sync_states
-            .delete_all()
-            .map_err_prefix("clear cloud backup blob sync state", CloudBackupError::Internal)?;
+        CloudBackupKeychain::global().clear_local_state().map_err(|source| {
+            CloudBackupError::internal_context("clear cloud backup local keychain state", source)
+        })?;
+        Database::global().cloud_blob_sync_states.delete_all().map_err(|source| {
+            CloudBackupError::internal_context("clear cloud backup blob sync state", source)
+        })?;
 
         self.apply_detail_outcome(
             crate::manager::cloud_backup_manager::CloudBackupDetailOutcome::Cleared,
@@ -289,9 +289,7 @@ impl RustCloudBackupManager {
         self.apply_other_backups_outcome(
             crate::manager::cloud_backup_manager::CloudBackupOtherBackupsOutcome::Idle,
         );
-        self.apply_recovery_outcome(
-            crate::manager::cloud_backup_manager::CloudBackupRecoveryOutcome::Idle,
-        );
+        self.apply_recovery_state(crate::manager::cloud_backup_manager::RecoveryState::Idle);
         Ok(())
     }
 
@@ -359,7 +357,9 @@ impl RustCloudBackupManager {
         Database::global()
             .cloud_backup_state
             .set(&PersistedCloudBackupState::Configured(disabling.previous_configured.clone()))
-            .map_err_prefix("restore configured cloud backup state", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("restore configured cloud backup state", source)
+            })?;
 
         Ok(true)
     }

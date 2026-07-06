@@ -1,23 +1,15 @@
 package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Stable
-class ImportWalletManager :
-    ImportWalletManagerReconciler,
-    Closeable {
+class ImportWalletManager : Closeable {
     private val tag = "ImportWalletManager"
     private val isClosed = AtomicBoolean(false)
-    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val rustGuard =
         RustHandleGuard(
             ownerName = "ImportWalletManager",
@@ -32,35 +24,11 @@ class ImportWalletManager :
     init {
         Log.d(tag, "Initializing ImportWalletManager")
         rust = RustImportWalletManager()
-        rust.listenForUpdates(this)
     }
 
     private fun <T> withRust(
         block: RustImportWalletManager.() -> T,
     ): T = rustGuard.withHandle(rust, block)
-
-    private fun <T> withRustOr(
-        defaultValue: T,
-        block: RustImportWalletManager.() -> T,
-    ): T = rustGuard.withHandleOr(rust, defaultValue, block)
-
-    override fun reconcile(message: ImportWalletManagerReconcileMessage) {
-        Log.d(tag, "Reconcile: $message")
-        mainScope.launch {
-            when (message) {
-                ImportWalletManagerReconcileMessage.NO_OP -> {
-                    // no-op
-                }
-            }
-        }
-    }
-
-    fun dispatch(action: ImportWalletManagerAction) {
-        Log.d(tag, "Dispatch: $action")
-        withRustOr(Unit) {
-            dispatch(action)
-        }
-    }
 
     /**
      * Import wallet from entered words
@@ -79,7 +47,6 @@ class ImportWalletManager :
     override fun close() {
         rustGuard.closeOnce {
             Log.d(tag, "Closing ImportWalletManager")
-            mainScope.cancel()
             rust.close()
         }
     }

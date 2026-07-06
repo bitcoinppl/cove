@@ -10,7 +10,7 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobFailureIssue, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    CloudStorageIssue, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 
 pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
@@ -140,7 +140,7 @@ impl RustCloudBackupManager {
                 return None;
             };
 
-            if failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired) {
+            if failed_state.issue == Some(CloudStorageIssue::AuthorizationRequired) {
                 return Some(CloudSyncHealth::AuthorizationRequired(sync_health_failed_message(
                     sync_state,
                     failed_state,
@@ -270,7 +270,7 @@ mod tests {
                 revision_hash: None,
                 retryable: true,
                 error: "authorization required".into(),
-                issue: Some(CloudBlobFailureIssue::AuthorizationRequired),
+                issue: Some(CloudStorageIssue::AuthorizationRequired),
                 failed_at: 2,
             }),
         );

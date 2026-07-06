@@ -11,7 +11,6 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
-use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -31,9 +30,9 @@ use self::wrapper_repair::{WrapperRepairOperation, WrapperRepairStrategy};
 use super::CloudBackupStore;
 use super::{
     BlockingCloudStep, CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain,
-    CloudBackupRetryAction, CloudBackupRetryContext, CloudBackupStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager, is_connectivity_related_issue,
+    CloudBackupRetryAction, CloudBackupStatus, DeepVerificationFailure, DeepVerificationReport,
+    DeepVerificationResult, PendingVerificationCompletion, PendingVerificationUpload,
+    RustCloudBackupManager, is_connectivity_related_issue,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -81,19 +80,18 @@ impl RustCloudBackupManager {
         error: CloudBackupError,
     ) -> DeepVerificationResult {
         error!("Deep verification unexpected error: {error}");
-        let retry_context = is_connectivity_related_issue(&error).then(|| {
-            let action = if force_discoverable {
+        let retry_action = is_connectivity_related_issue(&error).then_some({
+            if force_discoverable {
                 CloudBackupRetryAction::VerifyDiscoverable
             } else {
                 CloudBackupRetryAction::Verify
-            };
-            CloudBackupRetryContext::connectivity(action)
+            }
         });
 
         DeepVerificationResult::Failed(DeepVerificationFailure::retry(
             error.to_string(),
             None,
-            retry_context,
+            retry_action,
         ))
     }
 
@@ -161,7 +159,7 @@ impl RustCloudBackupManager {
                             "wallet upload failed: {source}; persist partial wallet upload batch failed: {finalize_error}"
                         );
 
-                        CloudBackupError::Internal(message)
+                        CloudBackupError::Internal(message.into())
                     })?;
 
                 return Err(source);
@@ -267,7 +265,7 @@ impl RustCloudBackupManager {
 
         let local_master_key = cspp
             .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
             .ok_or_else(|| CloudBackupError::Internal("no local master key".into()))?;
 
         let wallet_record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
@@ -418,9 +416,9 @@ impl RustCloudBackupManager {
         };
 
         let encrypted: EncryptedMasterKeyBackup =
-            serde_json::from_slice(&master_json).map_err_str(CloudBackupError::Internal)?;
+            serde_json::from_slice(&master_json).map_err(CloudBackupError::internal)?;
         encrypted.remote_metadata.normalized_master_key(namespace).map_err(|error| {
-            CloudBackupError::Internal(format!("normalize master key payload: {error}"))
+            CloudBackupError::Internal(format!("normalize master key payload: {error}").into())
         })?;
         match encrypted.backup_version() {
             Ok(MasterKeyBackupVersion::V1) => {}
@@ -460,9 +458,12 @@ impl RustCloudBackupManager {
 
         CloudBackupKeychain::new(keychain.clone())
             .save_passkey(&authenticated.credential_id, encrypted.prf_salt)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
-        cspp.save_master_key(&master_key)
-            .map_err_prefix("save recovered master key", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("save cspp credentials", source)
+            })?;
+        cspp.save_master_key(&master_key).map_err(|source| {
+            CloudBackupError::internal_context("save recovered master key", source)
+        })?;
 
         info!("Recovered local master key from cloud");
         Ok(master_key)

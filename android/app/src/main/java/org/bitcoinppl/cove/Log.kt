@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove
 
 import android.util.Log as AndroidLog
+import kotlin.coroutines.cancellation.CancellationException
 
 object Log {
     fun d(tag: String, message: String) {
@@ -35,3 +36,18 @@ object Log {
         AndroidLog.i(tag, message)
     }
 }
+
+@Suppress("TooGenericExceptionCaught")
+inline fun <T> runCatchingCancellable(
+    tag: String,
+    message: String,
+    block: () -> T,
+): Result<T> =
+    try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.e(tag, message, e)
+        Result.failure(e)
+    }

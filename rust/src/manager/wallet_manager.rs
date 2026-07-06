@@ -19,8 +19,8 @@ use std::{
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
 pub use balance_presentation::BalancePresentation;
-use bdk_wallet::error::CreateTxError;
-use flume::Receiver;
+use bdk_wallet::{AddUtxoError, error::CreateTxError};
+use futures::channel::oneshot;
 pub use ledger_state::WalletLedgerState;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
@@ -60,7 +60,8 @@ use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
     coin_control_manager::RustCoinControlManager,
-    deferred_sender::{self, DeferredSender, MessageSender},
+    deferred_sender::{self, DeferredSender},
+    reconcile_channel::ReconcileChannel,
     send_flow_manager::RustSendFlowManager,
 };
 
@@ -279,8 +280,7 @@ pub struct RustWalletManager {
     // faster to access, but adds complexity to the code because we have to make sure its updated
     // in all the places
     pub metadata: Arc<RwLock<WalletMetadata>>,
-    pub reconciler: MessageSender<Message>,
-    pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
+    pub reconciler: ReconcileChannel<Message>,
     scan_status: Arc<RwLock<WalletScanStatus>>,
     wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
     unsigned_transactions: WalletBootstrapUnsignedTransactions,
@@ -396,6 +396,122 @@ pub enum WalletManagerError {
     ReceiveAddressError(String),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WalletManagerBuildTxError {
+    #[error(transparent)]
+    Create(#[from] CreateTxError),
+
+    #[error(transparent)]
+    Psbt(#[from] bitcoin::psbt::Error),
+}
+
+impl From<WalletManagerBuildTxError> for WalletManagerError {
+    fn from(error: WalletManagerBuildTxError) -> Self {
+        match error {
+            WalletManagerBuildTxError::Create(CreateTxError::OutputBelowDustLimit(_)) => {
+                Self::OutputBelowDustLimit
+            }
+            WalletManagerBuildTxError::Create(CreateTxError::CoinSelection(error)) => {
+                Self::InsufficientFunds(error.to_string())
+            }
+            error => Self::BuildTxError(error.to_string()),
+        }
+    }
+}
+
+impl From<CreateTxError> for WalletManagerError {
+    fn from(error: CreateTxError) -> Self {
+        Self::from(WalletManagerBuildTxError::from(error))
+    }
+}
+
+impl From<AddUtxoError> for WalletManagerError {
+    fn from(error: AddUtxoError) -> Self {
+        Self::AddUtxosError(error.to_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WalletManagerFeesError {
+    #[error(transparent)]
+    Fetch(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    Psbt(#[from] bitcoin::psbt::Error),
+}
+
+impl From<WalletManagerFeesError> for WalletManagerError {
+    fn from(error: WalletManagerFeesError) -> Self {
+        Self::FeesError(error.to_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{context}: {source}")]
+pub(crate) struct WalletManagerPendingUnsignedTransactionsLoadError {
+    context: String,
+
+    #[source]
+    source: crate::database::Error,
+}
+
+impl WalletManagerPendingUnsignedTransactionsLoadError {
+    pub(crate) fn new(context: impl Into<String>, source: crate::database::Error) -> Self {
+        Self { context: context.into(), source }
+    }
+}
+
+impl From<WalletManagerPendingUnsignedTransactionsLoadError> for WalletManagerError {
+    fn from(error: WalletManagerPendingUnsignedTransactionsLoadError) -> Self {
+        Self::PendingUnsignedTransactionsLoadError(error.to_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{source}")]
+pub(crate) struct WalletManagerDatabaseCorruptionError {
+    id: WalletId,
+
+    #[source]
+    source: crate::database::wallet_data::WalletDataError,
+}
+
+impl WalletManagerDatabaseCorruptionError {
+    pub(crate) fn new(id: WalletId, source: crate::database::wallet_data::WalletDataError) -> Self {
+        Self { id, source }
+    }
+}
+
+impl From<WalletManagerDatabaseCorruptionError> for WalletManagerError {
+    fn from(error: WalletManagerDatabaseCorruptionError) -> Self {
+        Self::DatabaseCorruption { id: error.id, error: error.source.to_string() }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{source}")]
+pub(crate) struct WalletManagerUnableToSwitchError {
+    wallet_address_type: WalletAddressType,
+
+    #[source]
+    source: oneshot::Canceled,
+}
+
+impl WalletManagerUnableToSwitchError {
+    pub(crate) const fn new(
+        wallet_address_type: WalletAddressType,
+        source: oneshot::Canceled,
+    ) -> Self {
+        Self { wallet_address_type, source }
+    }
+}
+
+impl From<WalletManagerUnableToSwitchError> for WalletManagerError {
+    fn from(error: WalletManagerUnableToSwitchError) -> Self {
+        Self::UnableToSwitch(error.wallet_address_type, error.source.to_string())
+    }
+}
+
 fn initial_state_from_snapshot(
     metadata: WalletMetadata,
     scan_status: WalletScanStatus,
@@ -439,25 +555,14 @@ fn unsigned_transactions_for_wallet(
 ) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
     let db = Database::global();
     let context = format!("wallet id={wallet_id:?}");
-    let txns = db
-        .unsigned_transactions()
-        .get_by_wallet_id(wallet_id)
-        .map_err_prefix(&context, Error::PendingUnsignedTransactionsLoadError)?;
+    let txns = db.unsigned_transactions().get_by_wallet_id(wallet_id).map_err(|source| {
+        WalletManagerPendingUnsignedTransactionsLoadError::new(context.clone(), source)
+    })?;
 
     let txns =
         txns.into_iter().map(|txn| Arc::new(txn.into())).collect::<Vec<Arc<UnsignedTransaction>>>();
 
     Ok(txns)
-}
-
-impl From<CreateTxError> for WalletManagerError {
-    fn from(error: CreateTxError) -> Self {
-        match error {
-            CreateTxError::OutputBelowDustLimit(_) => Self::OutputBelowDustLimit,
-            CreateTxError::CoinSelection(error) => Self::InsufficientFunds(error.to_string()),
-            error => Self::BuildTxError(error.to_string()),
-        }
-    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -545,7 +650,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
-        let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
+        let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
         Ok(fees.into())
     }
@@ -647,15 +752,20 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn current_block_height(&self) -> Result<u32, Error> {
-        let height =
-            call!(self.actor.get_height(false)).await.map_err(|_| Error::GetHeightError)?;
+        let height = call!(self.actor.get_height(false))
+            .await
+            .map_err(|_| Error::GetHeightError)?
+            .map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u32)
     }
 
     #[uniffi::method]
     pub async fn force_update_height(&self) -> Result<u32, Error> {
-        let height = call!(self.actor.get_height(true)).await.map_err(|_| Error::GetHeightError)?;
+        let height = call!(self.actor.get_height(true))
+            .await
+            .map_err(|_| Error::GetHeightError)?
+            .map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u32)
     }
@@ -845,22 +955,16 @@ impl RustWalletManager {
 
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
-        let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
+        let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
         Ok(fees.into())
     }
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                match field {
-                    SingleOrMany::Single(message) => reconciler.reconcile(message),
-                    SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-                }
-            }
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
         });
     }
 
@@ -906,6 +1010,9 @@ impl RustWalletManager {
                     actor.switch_descriptor_to_new_address_type(descriptors, wallet_address_type)
                 )
                 .await
+                .map_err(|source| {
+                    WalletManagerUnableToSwitchError::new(wallet_address_type, source)
+                })?
                 .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
                 self.refresh_metadata_from_database()?;
 
@@ -918,6 +1025,9 @@ impl RustWalletManager {
                 let actor = self.actor.clone();
                 call!(actor.switch_mnemonic_to_new_address_type(wallet_address_type))
                     .await
+                    .map_err(|source| {
+                        WalletManagerUnableToSwitchError::new(wallet_address_type, source)
+                    })?
                     .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
                 self.refresh_metadata_from_database()?;
 
@@ -1140,24 +1250,27 @@ impl RustWalletManager {
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
         let metadata = preview_ledger_ready_metadata(metadata);
-        let (sender, receiver) = flume::bounded(100);
+        let channel = ReconcileChannel::new(100);
 
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor =
-            WalletActor::new(wallet, sender.clone(), scan_status.clone(), wallet_snapshot.clone())
-                .expect("failed to open wallet database for preview wallet");
+        let wallet_actor = WalletActor::new(
+            wallet,
+            channel.raw_sender(),
+            scan_status.clone(),
+            wallet_snapshot.clone(),
+        )
+        .expect("failed to open wallet database for preview wallet");
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
             id: metadata.id.clone(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: channel,
             scan_status,
             wallet_snapshot,
             unsigned_transactions,

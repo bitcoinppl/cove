@@ -173,7 +173,8 @@ impl RustSendFlowManager {
             let details = match confirm_details {
                 Ok(details) => details,
                 Err(error) => {
-                    return me.send_alert_async(SendFlowError::from(error)).await;
+                    let error = SendFlowError::from(error);
+                    return me.send_alert_async(error).await;
                 }
             };
 
@@ -183,7 +184,7 @@ impl RustSendFlowManager {
             if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
                 && let Err(e) = manager.save_unsigned_transaction(details.clone())
             {
-                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                let error = SendFlowError::unable_to_save_unsigned_transaction(e);
                 me.send_alert_async(error).await;
             }
 
@@ -197,7 +198,7 @@ impl RustSendFlowManager {
                 }
                 WalletType::WatchOnly => {
                     return me
-                        .send_alert_async(SendFlowError::UnableToBuildTxn("watch only".to_string()))
+                        .send_alert_async(SendFlowError::unable_to_build_txn("watch only"))
                         .await;
                 }
             };
@@ -289,8 +290,8 @@ mod tests {
     };
 
     use super::super::{
-        App, DebouncedTask, FeeSelection, MessageSender, RustSendFlowManager, SendFlowAlertState,
-        SendFlowWarningKind,
+        App, DebouncedTask, FeeSelection, ReconcileChannel, RustSendFlowManager,
+        SendFlowAlertState, SendFlowWarningKind,
     };
     use super::*;
 
@@ -298,7 +299,6 @@ mod tests {
         crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
 
-        let (sender, receiver) = flume::bounded(50);
         let balance = Arc::new(Balance::default());
         let state = super::super::State::new(WalletMetadata::preview_new(), balance);
         let wallet_manager = Arc::new(RustWalletManager::preview_new_wallet());
@@ -307,8 +307,7 @@ mod tests {
             app: App::global().clone(),
             wallet_manager,
             state: state.into_inner(),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: ReconcileChannel::new(50),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
         })
     }
@@ -427,7 +426,7 @@ mod tests {
             Some(total_fee),
         );
 
-        let message = manager.reconcile_receiver.try_recv().expect("warning is reconciled");
+        let message = manager.reconciler.receiver().try_recv().expect("warning is reconciled");
         let SingleOrMany::Single(message) = message else {
             panic!("expected a single reconcile message");
         };

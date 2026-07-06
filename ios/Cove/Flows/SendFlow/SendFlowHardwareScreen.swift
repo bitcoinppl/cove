@@ -8,15 +8,10 @@
 import Foundation
 import SwiftUI
 
-private enum SheetState: Equatable {
+enum SendFlowHardwareSheetState: Equatable {
     case details
     case inputOutputDetails
     case exportQr
-}
-
-private enum DetailsSheetState: Equatable {
-    case main
-    case inputOutputDetails
 }
 
 private enum ConfirmationState: Equatable {
@@ -24,7 +19,7 @@ private enum ConfirmationState: Equatable {
     case importSignature
 }
 
-private enum AlertState: Equatable {
+enum SendFlowHardwareAlertState: Equatable {
     case bbqrError(String)
     case fileError(String)
     case nfcError(String)
@@ -40,8 +35,8 @@ struct SendFlowHardwareScreen: View {
     let prices: PriceResponse? = nil
 
     // sheets, alerts, confirmations
-    @State private var alertState: TaggedItem<AlertState>? = .none
-    @State private var sheetState: TaggedItem<SheetState>? = .none
+    @State private var alertState: TaggedItem<SendFlowHardwareAlertState>? = .none
+    @State private var sheetState: TaggedItem<SendFlowHardwareSheetState>? = .none
     @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
     @State private var inputOutputDetailsPresentationSize: PresentationDetent = .height(300)
 
@@ -60,6 +55,15 @@ struct SendFlowHardwareScreen: View {
 
         let amount = details.sendingAmount()
         return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+    }
+
+    private var presentationContext: SendFlowHardwarePresentationContext {
+        SendFlowHardwarePresentationContext(
+            manager: manager,
+            details: details,
+            alertState: $alertState,
+            inputOutputDetailsPresentationSize: $inputOutputDetailsPresentationSize
+        )
     }
 
     var body: some View {
@@ -212,19 +216,13 @@ struct SendFlowHardwareScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
             .background(Color.background)
-            .sheet(item: $sheetState, content: SheetContent)
+            .presentingSheet($sheetState, context: presentationContext)
             .confirmationDialog(
                 confirmationDialogTitle,
                 isPresented: confirmationDialogIsPresented,
                 actions: ConfirmationDialogView
             )
-            .alert(
-                alertTitle,
-                isPresented: showingAlert,
-                presenting: alertState,
-                actions: { MyAlert($0).actions },
-                message: { MyAlert($0).message }
-            )
+            .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
                 allowedContentTypes: [.plainText, .psbt, .txn],
@@ -392,78 +390,6 @@ struct SendFlowHardwareScreen: View {
                 scanNfc: { app.nfcReader.scan() }
             )
         case .none: EmptyView()
-        }
-    }
-
-    // MARK: Sheet
-
-    @ViewBuilder
-    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
-        switch state.item {
-        case .details:
-            SendFlowDetailsSheetView(manager: manager, details: details)
-                .presentationDetents([.height(425), .height(600), .large])
-                .padding()
-        case .inputOutputDetails:
-            SendFlowAdvancedDetailsView(manager: manager, details: details)
-                .presentationDetents(
-                    [.height(300), .height(400), .height(500), .large],
-                    selection: $inputOutputDetailsPresentationSize
-                )
-        case .exportQr:
-            QrExportView(details: details)
-                .presentationDetents([.height(550), .height(650), .large])
-                .padding()
-                .padding(.top, 10)
-        }
-    }
-
-    // MARK: Alerts
-
-    var showingAlert: Binding<Bool> {
-        Binding(
-            get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
-        )
-    }
-
-    private var alertTitle: String {
-        guard let alertState else { return "Error" }
-        return MyAlert(alertState).title
-    }
-
-    private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
-        let singleOkCancel = {
-            Button("Ok", role: .cancel) {
-                alertState = .none
-            }
-        }
-
-        switch alert.item {
-        case let .bbqrError(message):
-            return AlertBuilder(
-                title: "QR Error",
-                message: "Unable to create BBQr: \(message)",
-                actions: singleOkCancel
-            )
-        case let .fileError(message):
-            return AlertBuilder(
-                title: "File Import Error",
-                message: message,
-                actions: singleOkCancel
-            )
-        case let .nfcError(error):
-            return AlertBuilder(
-                title: "NFC Error",
-                message: error,
-                actions: singleOkCancel
-            )
-        case let .pasteError(error):
-            return AlertBuilder(
-                title: "Paste Error",
-                message: error,
-                actions: singleOkCancel
-            )
         }
     }
 }

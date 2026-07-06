@@ -14,7 +14,7 @@ mod tables;
 pub(crate) use compat::ensure_table_type_compatibility;
 pub use state::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
-    CloudBlobFailureIssue, CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
+    CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
     PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
     PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
     PersistedConfiguredCloudBackup, PersistedDeepVerificationReport, PersistedDisablingCloudBackup,

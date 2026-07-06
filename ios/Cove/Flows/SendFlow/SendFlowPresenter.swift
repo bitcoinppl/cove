@@ -26,6 +26,7 @@ import SwiftUI
     var focusField: SetAmountFocusField?
     var sheetState: TaggedItem<SheetState>? = .none
     var alertState: TaggedItem<SendFlowAlertState>? = .none
+    var confirmationAlertState: TaggedItem<SendFlowConfirmAlertState>? = .none
 
     var lastWorkingFeeRate: Float?
     var erroredFeeRate: Float?
@@ -40,10 +41,26 @@ import SwiftUI
         case fee
     }
 
-    var showingAlert: Binding<Bool> {
+    var alertStateBinding: Binding<TaggedItem<SendFlowAlertState>?> {
         Binding(
-            get: { self.alertState != nil && !self.disappearing },
-            set: { if !$0 { self.clearAlert() }}
+            get: {
+                if self.disappearing { return nil }
+                return self.alertState
+            },
+            set: { newValue in
+                if newValue == nil {
+                    self.clearAlert()
+                } else {
+                    self.alertState = newValue
+                }
+            }
+        )
+    }
+
+    var confirmationAlertStateBinding: Binding<TaggedItem<SendFlowConfirmAlertState>?> {
+        Binding(
+            get: { self.confirmationAlertState },
+            set: { self.confirmationAlertState = $0 }
         )
     }
 
@@ -54,19 +71,6 @@ import SwiftUI
                 self.sheetState = newValue
             }
         )
-    }
-
-    var alertTitle: String {
-        switch alertState?.item {
-        case let .error(error):
-            errorAlertTitle(error)
-        case let .some(.general(title: title, message: _)):
-            title
-        case let .some(.warning(kind: _, title: title, message: _)):
-            title
-        case .none:
-            ""
-        }
     }
 
     func setDisappearing() {
@@ -86,125 +90,5 @@ import SwiftUI
         }
 
         alertState = .none
-    }
-
-    private func errorAlertTitle(_ error: SendFlowError) -> String {
-        switch error {
-        case .EmptyAddress, .InvalidAddress, .WrongNetwork:
-            "Invalid Address"
-        case .InvalidNumber, .ZeroAmount: "Invalid Amount"
-        case .InsufficientFunds, .NoBalance: "Insufficient Funds"
-        case .SendBelowDustLimit: "Amount Below Dust Limit"
-        case .UnableToGetFeeRate: "Unable to get fee rate"
-        case .UnableToBuildTxn: "Unable to build transaction"
-        case .UnableToGetMaxSend:
-            "Unable to get max send"
-        case .UnableToSaveUnsignedTransaction:
-            "Unable to Save Unsigned Transaction"
-        case .WalletManager(.LockedOutputsSelected):
-            "Insufficient Funds"
-        case .WalletManager:
-            "Error"
-        case .UnableToGetFeeDetails:
-            "Fee Details Error"
-        }
-    }
-
-    @ViewBuilder
-    func alertMessage(alert: TaggedItem<SendFlowAlertState>) -> some View {
-        switch alert.item {
-        case let .error(error):
-            Text(errorAlertMessage(error))
-        case let .general(title: _, message: message):
-            Text(message)
-        case let .warning(kind: _, title: _, message: message):
-            Text(message)
-        }
-    }
-
-    private func errorAlertMessage(_ error: SendFlowError) -> String {
-        switch error {
-        case .EmptyAddress:
-            "Please enter an address"
-        case .InvalidNumber:
-            "Please enter a valid number for the amout to send"
-        case .ZeroAmount:
-            "Can't send an empty transaction. Please enter a valid amount"
-        case .NoBalance:
-            "You do not have any bitcoin in your wallet. Please add some to send a transaction"
-        case let .InvalidAddress(address):
-            "The address \(address) is invalid"
-        case let .WrongNetwork(address: address, validFor: validFor, current: currentNetwork):
-            "The address \(address) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
-        case .InsufficientFunds:
-            "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-        case .SendBelowDustLimit:
-            "This amount is below Bitcoin's dust limit for this address type. The network would reject it. Please send a bit more."
-        case .UnableToGetFeeRate:
-            "Are you connected to the internet?"
-        case .WalletManager(.LockedOutputsSelected):
-            "Selected coins include locked coins. Unlock them or choose different coins."
-        case let .WalletManager(msg):
-            msg.description
-        case let .UnableToGetFeeDetails(msg):
-            msg
-        case let .UnableToBuildTxn(msg):
-            msg
-        case let .UnableToGetMaxSend(msg):
-            msg
-        case let .UnableToSaveUnsignedTransaction(msg):
-            msg
-        }
-    }
-
-    @ViewBuilder
-    func alertButtons(
-        alert: TaggedItem<SendFlowAlertState>,
-        acknowledgeWarning: @escaping (SendFlowWarningKind) -> Void
-    ) -> some View {
-        switch alert.item {
-        case let .error(error):
-            errorAlertButtons(error)
-        case .general:
-            Button("OK") { self.clearAlert() }
-        case let .warning(kind: kind, title: _, message: _):
-            Button("Send Anyway") {
-                acknowledgeWarning(kind)
-            }
-            Button("Cancel", role: .cancel) {
-                self.clearAlert()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func errorAlertButtons(_ error: SendFlowError) -> some View {
-        switch error {
-        case .EmptyAddress, .WrongNetwork, .InvalidAddress:
-            Button("OK") {
-                self.clearAlert()
-                self.focusField = .address
-            }
-        case .NoBalance:
-            Button("Go Back") {
-                self.clearAlert()
-                self.app.popRoute()
-            }
-        case .InvalidNumber, .InsufficientFunds, .SendBelowDustLimit, .ZeroAmount, .WalletManager, .UnableToGetFeeDetails:
-            Button("OK") {
-                self.focusField = .amount
-                self.clearAlert()
-            }
-        case .UnableToGetFeeRate, .UnableToBuildTxn, .UnableToSaveUnsignedTransaction:
-            Button("OK") {
-                self.focusField = .amount
-                self.clearAlert()
-            }
-        case .UnableToGetMaxSend:
-            Button("OK") {
-                self.focusField = .amount
-                self.clearAlert()
-            }
-        }
     }
 }

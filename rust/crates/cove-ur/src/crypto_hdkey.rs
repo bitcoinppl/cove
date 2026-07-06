@@ -510,20 +510,14 @@ mod tests {
 
         // mainnet: m/84'/0'/0'
         let mut hdkey = CryptoHdkey::from_xpub(&xpub);
-        hdkey.origin = Some(CryptoKeypath::new(
-            vec![0x80000000 + 84, 0x80000000 + 0, 0x80000000 + 0],
-            None,
-            None,
-        ));
+        hdkey.origin =
+            Some(CryptoKeypath::new(vec![0x80000000 + 84, 0x80000000, 0x80000000], None, None));
         assert_eq!(hdkey.infer_network(), bitcoin::Network::Bitcoin);
 
         // testnet: m/84'/1'/0'
         let mut hdkey = CryptoHdkey::from_xpub(&xpub);
-        hdkey.origin = Some(CryptoKeypath::new(
-            vec![0x80000000 + 84, 0x80000000 + 1, 0x80000000 + 0],
-            None,
-            None,
-        ));
+        hdkey.origin =
+            Some(CryptoKeypath::new(vec![0x80000000 + 84, 0x80000000 + 1, 0x80000000], None, None));
         assert_eq!(hdkey.infer_network(), bitcoin::Network::Testnet);
     }
 
@@ -583,7 +577,7 @@ mod tests {
         encoder.u32(IS_PRIVATE).unwrap();
         encoder.bool(false).unwrap();
         encoder.u32(KEY_DATA).unwrap();
-        encoder.bytes(&vec![0x02; lengths::COMPRESSED_PUBKEY]).unwrap();
+        encoder.bytes(&[0x02; lengths::COMPRESSED_PUBKEY]).unwrap();
 
         let result = CryptoHdkey::from_cbor(&cbor);
         assert!(result.is_err());
@@ -630,7 +624,7 @@ mod tests {
         encoder.u32(IS_PRIVATE).unwrap();
         encoder.bool(false).unwrap(); // public key
         encoder.u32(KEY_DATA).unwrap();
-        encoder.bytes(&vec![0x02; lengths::PRIVATE_KEY]).unwrap(); // wrong length for public key
+        encoder.bytes(&[0x02; lengths::PRIVATE_KEY]).unwrap(); // wrong length for public key
 
         let result = CryptoHdkey::from_cbor(&cbor);
         assert!(result.is_err());
@@ -656,7 +650,7 @@ mod tests {
         encoder.u32(IS_PRIVATE).unwrap();
         encoder.bool(false).unwrap(); // is_private
         encoder.u32(KEY_DATA).unwrap();
-        encoder.bytes(&vec![0x02; lengths::COMPRESSED_PUBKEY]).unwrap(); // key_data (public)
+        encoder.bytes(&[0x02; lengths::COMPRESSED_PUBKEY]).unwrap(); // key_data (public)
         encoder.u32(99).unwrap(); // unknown key
         encoder.str("future field").unwrap();
 

@@ -1,13 +1,10 @@
 use act_zero::call;
 use cove_types::{amount::Amount, psbt::Psbt};
-use cove_util::result_ext::ResultExt as _;
 use tracing::debug;
 
 use crate::{transaction::FeeRate, wallet::Address};
 
-use super::{
-    AmountOrMax, CoinControlMode, EnterMode, Error, Result, RustSendFlowManager, SendFlowError,
-};
+use super::{AmountOrMax, CoinControlMode, EnterMode, Result, RustSendFlowManager, SendFlowError};
 
 impl RustSendFlowManager {
     pub(crate) async fn build_psbt(
@@ -41,7 +38,7 @@ impl RustSendFlowManager {
             let amount_sats = amount
                 .map(|amount| amount.to_sat())
                 .or_else(|| state.amount_sats)
-                .ok_or_else(|| Error::UnableToBuildTxn("no amount".to_string()))?;
+                .ok_or_else(|| SendFlowError::unable_to_build_txn("no amount"))?;
 
             let amount = if state.max_selected.is_some() {
                 AmountOrMax::Max
@@ -51,7 +48,7 @@ impl RustSendFlowManager {
 
             let address = address
                 .or_else(|| state.address.clone().map(|address| address.as_ref().clone()))
-                .ok_or_else(|| Error::UnableToBuildTxn("no address".to_string()))?;
+                .ok_or_else(|| SendFlowError::unable_to_build_txn("no address"))?;
 
             (amount, address)
         };
@@ -90,7 +87,7 @@ impl RustSendFlowManager {
 
             let address = address
                 .or_else(|| state.address.clone().map(|address| address.as_ref().clone()))
-                .ok_or_else(|| Error::UnableToBuildTxn("no address".to_string()))?;
+                .ok_or_else(|| SendFlowError::unable_to_build_txn("no address"))?;
 
             (address, bitcoin::Amount::from(amount))
         };
@@ -100,7 +97,7 @@ impl RustSendFlowManager {
         let psbt =
             call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate)).await;
 
-        let psbt = psbt.map_err_str(SendFlowError::UnableToBuildTxn)??;
+        let psbt = psbt.map_err(SendFlowError::unable_to_build_txn)??;
         Ok(psbt.into())
     }
 }

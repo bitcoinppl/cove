@@ -1,29 +1,25 @@
 import MijickPopups
 import Observation
 import SwiftUI
-import UIKit
 
 private let walletModeChangeDelayMs = 250
-private let sidebarNavigationDelayMs = 250
-private let navigationSettleDelayMs = 800
 
 @Observable final class AppManager: FfiReconcile {
     static let shared = makeShared()
 
     private let logger = Log(id: "AppManager")
-    @ObservationIgnored
-    private let navigationGenerations = GenerationTracker()
-    @ObservationIgnored
-    private var pendingSidebarNavigationTask: Task<Void, Never>?
-    @ObservationIgnored
-    private var navigationSettleTask: Task<Void, Never>?
 
     var rust: FfiApp
     var router: Router
     var database: Database
+    var navigationCoordinator: NavigationCoordinator
+    var managerCache: ManagerCache
     var wallets: [WalletMetadata] = []
     var isSidebarVisible = false
-    var isNavigationSettled = true
+    var isNavigationSettled: Bool {
+        navigationCoordinator.isNavigationSettled
+    }
+
     var asyncRuntimeReady = false
 
     var alertState: TaggedItem<AppAlertState>? = .none
@@ -53,19 +49,17 @@ private let navigationSettleDelayMs = 800
     var routeId = UUID()
 
     /// AppManager is the sole owner of the live wallet manager used by wallet-backed routes.
-    private(set) var walletManager: WalletManager?
-    /// Background time is tied to the cached wallet manager, not a route instance
-    @ObservationIgnored
-    private var initialScanBackgroundTask: UIBackgroundTaskIdentifier = .invalid
-    @ObservationIgnored
-    private weak var initialScanBackgroundTaskWalletManager: WalletManager?
-    @ObservationIgnored
-    private var initialScanBackgroundTaskAllowed = false
+    var walletManager: WalletManager? {
+        managerCache.walletManager
+    }
 
-    private(set) var sendFlowManager: SendFlowManager?
+    var sendFlowManager: SendFlowManager? {
+        managerCache.sendFlowManager
+    }
 
-    @ObservationIgnored
-    weak var coinControlManager: CoinControlManager?
+    var coinControlManager: CoinControlManager? {
+        managerCache.coinControlManager
+    }
 
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
@@ -100,6 +94,8 @@ private let navigationSettleDelayMs = 800
 
         router = state.router
         self.rust = rust
+        navigationCoordinator = NavigationCoordinator(routeClient: rust)
+        managerCache = ManagerCache(backgroundScanTaskHandler: BackgroundScanTaskHandler())
         database = Database()
         wallets = (try? database.wallets().all()) ?? []
         needsOnboarding = rust.needsOnboarding()
@@ -119,179 +115,47 @@ private let navigationSettleDelayMs = 800
     }
 
     func cachedWalletManager(id: WalletId) -> WalletManager? {
-        guard let walletManager, walletManager.id == id else { return nil }
-        return walletManager
+        managerCache.cachedWalletManager(id: id)
     }
 
     func walletMetadata(id: WalletId) -> WalletMetadata? {
-        if let walletManager = cachedWalletManager(id: id) {
-            return walletManager.walletMetadata
-        }
-
-        return wallets.first(where: { $0.id == id })
+        managerCache.walletMetadata(id: id, wallets: wallets)
     }
 
     func ensureWalletManager(id: WalletId) throws -> WalletManager {
-        if let walletManager = cachedWalletManager(id: id) {
-            logger.debug("found and using vm for \(id)")
-            return walletManager
-        }
-
-        logger.debug(
-            "did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")"
-        )
-        clearWalletManager()
-
-        let walletManager = try WalletManager(id: id)
-        observeInitialScanLifecycle(for: walletManager)
-        self.walletManager = walletManager
-        return walletManager
-    }
-
-    private func observeInitialScanLifecycle(for walletManager: WalletManager) {
-        walletManager.setInitialScanLifecycleChanged { [weak self, weak walletManager] in
-            DispatchQueue.main.async { [weak self, weak walletManager] in
-                guard let self, let walletManager else { return }
-                guard self.walletManager === walletManager else { return }
-
-                self.updateInitialScanBackgroundTask()
-            }
-        }
+        try managerCache.ensureWalletManager(id: id, delegate: self)
     }
 
     func beginInitialScanBackgroundTaskIfNeeded() {
-        initialScanBackgroundTaskAllowed = true
-        updateInitialScanBackgroundTask()
+        managerCache.beginInitialScanBackgroundTaskIfNeeded()
     }
 
     func endInitialScanBackgroundTask() {
-        initialScanBackgroundTaskAllowed = false
-        endInitialScanBackgroundTaskHandle()
-    }
-
-    private func updateInitialScanBackgroundTask() {
-        guard let walletManager, walletManager.activeIncompleteInitialScan else {
-            endInitialScanBackgroundTaskHandle()
-            return
-        }
-
-        guard initialScanBackgroundTaskAllowed else {
-            endInitialScanBackgroundTaskHandle()
-            return
-        }
-
-        guard initialScanBackgroundTask == .invalid else {
-            endInitialScanBackgroundTaskIfInactive()
-            return
-        }
-
-        let backgroundTask = UIApplication.shared.beginBackgroundTask(
-            withName: "Initial wallet scan"
-        ) { [weak self] in
-            DispatchQueue.main.async { [weak self] in
-                Log.warn("Initial wallet scan background task expired")
-                self?.endInitialScanBackgroundTask()
-            }
-        }
-
-        guard backgroundTask != .invalid else {
-            Log.warn("Unable to start initial wallet scan background task")
-            return
-        }
-
-        initialScanBackgroundTask = backgroundTask
-        initialScanBackgroundTaskWalletManager = walletManager
-        logger.debug("Started initial wallet scan background task for wallet \(walletManager.id)")
-
-        endInitialScanBackgroundTaskIfInactive()
-    }
-
-    private func endInitialScanBackgroundTaskHandle() {
-        guard initialScanBackgroundTask != .invalid else { return }
-
-        let backgroundTask = initialScanBackgroundTask
-        initialScanBackgroundTask = .invalid
-        initialScanBackgroundTaskWalletManager = nil
-
-        UIApplication.shared.endBackgroundTask(backgroundTask)
-        logger.debug("Ended initial wallet scan background task")
-    }
-
-    private func endInitialScanBackgroundTaskIfInactive() {
-        guard initialScanBackgroundTask != .invalid else { return }
-        guard let walletManager,
-              let initialScanBackgroundTaskWalletManager,
-              walletManager === initialScanBackgroundTaskWalletManager,
-              walletManager.activeIncompleteInitialScan
-        else {
-            endInitialScanBackgroundTaskHandle()
-            return
-        }
+        managerCache.endInitialScanBackgroundTask()
     }
 
     func cachedSendFlowManager(id: WalletId) -> SendFlowManager? {
-        guard let sendFlowManager, sendFlowManager.id == id else { return nil }
-        return sendFlowManager
+        managerCache.cachedSendFlowManager(id: id)
     }
 
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
         presenter: SendFlowPresenter
     ) throws -> SendFlowManager {
-        if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
-            logger.debug("found and using sendflow manager for \(walletManager.id)")
-            sendFlowManager.presenter = presenter
-            return sendFlowManager
-        }
-
-        logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
-        clearSendFlowManager()
-
-        let sendFlowManager = try SendFlowManager(
-            walletManager.rust.newSendFlowManager(balance: walletManager.balance),
-            presenter: presenter
-        )
-        self.sendFlowManager = sendFlowManager
-        return sendFlowManager
+        try managerCache.ensureSendFlowManager(walletManager, presenter: presenter)
     }
 
     public func setCoinControlManager(_ manager: CoinControlManager) {
-        coinControlManager = manager
+        managerCache.setCoinControlManager(manager)
     }
 
     public func clearCoinControlManager(_ manager: CoinControlManager) {
-        if coinControlManager === manager {
-            coinControlManager = nil
-        }
-    }
-
-    private func clearCoinControlManager() {
-        guard let coinControlManager else { return }
-
-        self.coinControlManager = nil
-        coinControlManager.close()
-    }
-
-    private func reconcileCoinControlManagerOwnership() {
-        guard coinControlManager != nil else { return }
-        guard !router.containsCoinControlRoute else { return }
-
-        clearCoinControlManager()
+        managerCache.clearCoinControlManager(manager)
     }
 
     @MainActor
     public func reconcileAfterLabelsChanged(walletId: WalletId) {
-        if let walletManager, walletManager.id == walletId {
-            walletManager.reconcileAfterLabelsChanged()
-        }
-
-        if let coinControlManager, coinControlManager.id == walletId {
-            Task { await coinControlManager.reloadLabels() }
-        }
-
-        if let sendFlowManager, sendFlowManager.id == walletId {
-            sendFlowManager.reconcileAfterLabelsChanged()
-        }
+        managerCache.reconcileAfterLabelsChanged(walletId: walletId)
     }
 
     public var fullVersionId: String {
@@ -301,28 +165,11 @@ private let navigationSettleDelayMs = 800
     }
 
     func clearWalletManager(id: WalletId? = nil) {
-        if id == nil {
-            endInitialScanBackgroundTask()
-            walletManager?.setInitialScanLifecycleChanged(nil)
-            walletManager?.close()
-            walletManager = nil
-            clearSendFlowManager()
-            return
-        }
-
-        if walletManager?.id == id {
-            endInitialScanBackgroundTask()
-            walletManager?.setInitialScanLifecycleChanged(nil)
-            walletManager?.close()
-            walletManager = nil
-        }
-
-        clearSendFlowManager(id: id)
+        managerCache.clearWalletManager(id: id)
     }
 
     func clearSendFlowManager(id: WalletId? = nil) {
-        guard id == nil || sendFlowManager?.id == id else { return }
-        sendFlowManager = nil
+        managerCache.clearSendFlowManager(id: id)
     }
 
     public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
@@ -339,17 +186,12 @@ private let navigationSettleDelayMs = 800
 
     /// Reset the manager state
     public func reset() {
-        pendingSidebarNavigationTask?.cancel()
-        pendingSidebarNavigationTask = nil
-        navigationSettleTask?.cancel()
-        navigationSettleTask = nil
-        advanceNavigationGeneration()
+        navigationCoordinator.reset()
 
         database = Database()
         needsOnboarding = rust.needsOnboarding()
         clearWalletManager()
-        coinControlManager?.close()
-        coinControlManager = nil
+        managerCache.clearCoinControlManager()
 
         let state = rust.state()
         router = state.router
@@ -363,10 +205,6 @@ private let navigationSettleDelayMs = 800
 
     var currentRoute: Route {
         router.routes.last ?? router.default
-    }
-
-    private func isDuplicateTopRoute(_ route: Route) -> Bool {
-        currentRoute.isSameNavigationDestination(routeToCheck: route)
     }
 
     var hasWallets: Bool {
@@ -387,13 +225,11 @@ private let navigationSettleDelayMs = 800
     }
 
     func selectWalletOrThrow(_ id: WalletId) throws {
-        advanceNavigationGeneration()
-        try selectWalletWithoutNavigationGeneration(id)
-    }
-
-    private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
-        try rust.dispatch(action: .selectWallet(id: id))
-        isSidebarVisible = false
+        try navigationCoordinator.selectWallet(
+            id,
+            router: router,
+            isSidebarVisible: &isSidebarVisible
+        )
     }
 
     func trySelectLatestOrNewWallet() {
@@ -405,9 +241,7 @@ private let navigationSettleDelayMs = 800
     }
 
     func selectLatestOrNewWallet() throws {
-        advanceNavigationGeneration()
-        try rust.dispatch(action: .selectLatestOrNewWallet)
-        isSidebarVisible = false
+        try navigationCoordinator.selectLatestOrNewWallet(isSidebarVisible: &isSidebarVisible)
     }
 
     func toggleSidebar() {
@@ -419,127 +253,71 @@ private let navigationSettleDelayMs = 800
     }
 
     func pushRoute(_ route: Route) {
-        guard !isDuplicateTopRoute(route) else {
-            isSidebarVisible = false
-            return
+        navigationCoordinator.pushRoute(
+            route,
+            router: &router,
+            isSidebarVisible: &isSidebarVisible
+        ) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
         }
-
-        advanceNavigationGeneration()
-        pushRouteWithoutNavigationGeneration(route)
-    }
-
-    private func pushRouteWithoutNavigationGeneration(_ route: Route) {
-        isSidebarVisible = false
-        guard !isDuplicateTopRoute(route) else { return }
-
-        router.routes.append(route)
-        reconcileCoinControlManagerOwnership()
     }
 
     func pushRoutes(_ routes: [Route]) {
-        advanceNavigationGeneration()
-        pushRoutesWithoutNavigationGeneration(routes)
-    }
-
-    private func pushRoutesWithoutNavigationGeneration(_ routes: [Route]) {
-        isSidebarVisible = false
-        router.routes.append(contentsOf: routes)
-        reconcileCoinControlManagerOwnership()
+        navigationCoordinator.pushRoutes(
+            routes,
+            router: &router,
+            isSidebarVisible: &isSidebarVisible
+        ) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+        }
     }
 
     func popRoute() {
-        advanceNavigationGeneration()
-
-        if !router.routes.isEmpty {
-            router.routes.removeLast()
-            reconcileCoinControlManagerOwnership()
+        navigationCoordinator.popRoute(router: &router) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
         }
     }
 
     func setRoute(_ routes: [Route]) {
-        advanceNavigationGeneration()
-        router.routes = routes
-        reconcileCoinControlManagerOwnership()
+        navigationCoordinator.setRoute(routes, router: &router) { router in
+            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+        }
     }
 
     func scanQr() {
-        advanceNavigationGeneration()
+        navigationCoordinator.advanceNavigationGeneration()
         sheetState = TaggedItem(.qr)
     }
 
     func scanNfc() {
-        advanceNavigationGeneration()
-        scanNfcWithoutNavigationGeneration()
-    }
-
-    private func scanNfcWithoutNavigationGeneration() {
-        nfcReader.scan()
+        navigationCoordinator.scanNfc {
+            self.nfcReader.scan()
+        }
     }
 
     @MainActor
     func resetRoute(to routes: [Route]) {
-        advanceNavigationGeneration()
-        resetRouteWithoutNavigationGeneration(to: routes)
-    }
-
-    @MainActor
-    private func resetRouteWithoutNavigationGeneration(to routes: [Route]) {
-        if routes.count > 1 {
-            rust.resetNestedRoutesTo(defaultRoute: routes[0], nestedRoutes: Array(routes[1...]))
-        } else if let route = routes.first {
-            rust.resetDefaultRouteTo(route: route)
-        }
+        navigationCoordinator.resetRoute(to: routes)
     }
 
     func resetRoute(to route: Route) {
-        advanceNavigationGeneration()
-        resetRouteWithoutNavigationGeneration(to: route)
-    }
-
-    private func resetRouteWithoutNavigationGeneration(to route: Route) {
-        rust.resetDefaultRouteTo(route: route)
+        navigationCoordinator.resetRoute(to: route)
     }
 
     @MainActor
     func loadAndReset(to route: Route) {
-        advanceNavigationGeneration()
-        rust.loadAndResetDefaultRoute(route: route)
-    }
-
-    @discardableResult
-    private func advanceNavigationGeneration() -> GenerationToken {
-        let generation = navigationGenerations.advance()
-        scheduleNavigationSettled(for: generation)
-        return generation
-    }
-
-    private func scheduleNavigationSettledForCurrentGeneration() {
-        scheduleNavigationSettled(for: navigationGenerations.capture())
-    }
-
-    private func scheduleNavigationSettled(for generation: GenerationToken) {
-        navigationSettleTask?.cancel()
-        isNavigationSettled = false
-
-        navigationSettleTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: .milliseconds(navigationSettleDelayMs))
-            } catch {
-                return
-            }
-
-            guard let self else { return }
-            guard self.isNavigationGenerationCurrent(generation) else { return }
-
-            self.isNavigationSettled = true
-            self.navigationSettleTask = nil
-        }
+        navigationCoordinator.loadAndReset(to: route)
     }
 
     func closeSidebarAndSelectWallet(_ id: WalletId) {
         closeSidebarThenNavigate {
             do {
-                try self.selectWalletWithoutNavigationGeneration(id)
+                try self.navigationCoordinator.selectWallet(
+                    id,
+                    router: self.router,
+                    isSidebarVisible: &self.isSidebarVisible,
+                    advancesGeneration: false
+                )
             } catch {
                 Log.error("Unable to select wallet \(id), error: \(error)")
             }
@@ -549,85 +327,94 @@ private let navigationSettleDelayMs = 800
     func closeSidebarAndOpenNewWallet() {
         closeSidebarThenNavigate {
             if self.hasWallets {
-                self.pushRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
+                self.navigationCoordinator.pushRoute(
+                    RouteFactory().newWalletSelect(),
+                    router: &self.router,
+                    isSidebarVisible: &self.isSidebarVisible,
+                    advancesGeneration: false
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                }
             } else {
-                self.resetRouteWithoutNavigationGeneration(to: [RouteFactory().newWalletSelect()])
+                self.navigationCoordinator.resetRoute(
+                    to: [RouteFactory().newWalletSelect()],
+                    advancesGeneration: false
+                )
             }
         }
     }
 
     func closeSidebarAndOpenSettings() {
         closeSidebarThenNavigate {
-            self.pushRouteWithoutNavigationGeneration(.settings(.main))
+            self.navigationCoordinator.pushRoute(
+                .settings(.main),
+                router: &self.router,
+                isSidebarVisible: &self.isSidebarVisible,
+                advancesGeneration: false
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            }
         }
     }
 
     func closeSidebarAndOpenWalletSettings(_ id: WalletId) {
         closeSidebarThenNavigate {
-            self.pushRoutesWithoutNavigationGeneration(RouteFactory().nestedWalletSettings(id: id))
+            self.navigationCoordinator.pushRoutes(
+                RouteFactory().nestedWalletSettings(id: id),
+                router: &self.router,
+                isSidebarVisible: &self.isSidebarVisible,
+                advancesGeneration: false
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            }
         }
     }
 
     func closeSidebarAndScanNfc() {
         closeSidebarThenNavigate {
-            self.scanNfcWithoutNavigationGeneration()
+            self.navigationCoordinator.scanNfc(advancesGeneration: false) {
+                self.nfcReader.scan()
+            }
         }
     }
 
     private func closeSidebarThenNavigate(_ action: @escaping @MainActor () -> Void) {
-        pendingSidebarNavigationTask?.cancel()
-        let generation = advanceNavigationGeneration()
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            isSidebarVisible = false
-        }
-
-        pendingSidebarNavigationTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .milliseconds(sidebarNavigationDelayMs))
-            } catch {
-                return
-            }
-
-            guard isNavigationGenerationCurrent(generation) else { return }
-            action()
-        }
+        navigationCoordinator.closeSidebarThenNavigate(
+            isSidebarVisible: &isSidebarVisible,
+            action: action
+        )
     }
 
     @MainActor
     func captureLoadAndResetGeneration() -> GenerationToken {
-        navigationGenerations.capture()
+        navigationCoordinator.captureLoadAndResetGeneration()
     }
 
     @MainActor
     func startLoadAndResetTargetPrewarm(generation: GenerationToken, routes: [Route]) {
-        Task { [weak self] in
-            await self?.prewarmLoadAndResetTargetIfCurrent(generation: generation, routes: routes)
-        }
-    }
+        navigationCoordinator.startLoadAndResetTargetPrewarm(
+            generation: generation,
+            routes: routes
+        ) { [weak self] id in
+            guard let self else { return }
 
-    @MainActor
-    func prewarmLoadAndResetTargetIfCurrent(generation: GenerationToken, routes: [Route]) async {
-        guard isNavigationGenerationCurrent(generation) else { return }
-        guard case let .selectedWallet(id) = routes.first else { return }
-
-        do {
-            let manager = try ensureWalletManager(id: id)
-            try await manager.startWalletScanIfNeeded()
-        } catch {
-            logger.error("Unable to prewarm selected wallet \(id): \(error)")
+            do {
+                let manager = try self.ensureWalletManager(id: id)
+                try await manager.startWalletScanIfNeeded()
+            } catch {
+                self.logger.error("Unable to prewarm selected wallet \(id): \(error)")
+            }
         }
     }
 
     @MainActor
     func resetAfterLoadingIfCurrent(generation: GenerationToken, route: Route, nextRoute: [Route]) {
-        guard isNavigationGenerationCurrent(generation) else { return }
-        guard router.default == route else { return }
-        rust.resetAfterLoading(to: nextRoute)
-    }
-
-    private func isNavigationGenerationCurrent(_ generation: GenerationToken) -> Bool {
-        navigationGenerations.isCurrent(capturedToken: generation)
+        navigationCoordinator.resetAfterLoadingIfCurrent(
+            generation: generation,
+            route: route,
+            nextRoute: nextRoute,
+            router: router
+        )
     }
 
     func reconcile(message: AppStateReconcileMessage) {
@@ -637,23 +424,21 @@ private let navigationSettleDelayMs = 800
 
             switch message {
             case let .routeUpdated(routes: routes):
-                let didChangeRoute = router.routes != routes
-                router.routes = routes
-                reconcileCoinControlManagerOwnership()
-
-                if didChangeRoute {
-                    scheduleNavigationSettledForCurrentGeneration()
+                navigationCoordinator.applyRouteUpdated(
+                    routes: routes,
+                    router: &router
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
                 }
 
             case let .pushedRoute(route):
-                guard !isDuplicateTopRoute(route) else {
-                    isSidebarVisible = false
-                    return
+                navigationCoordinator.applyPushedRoute(
+                    route,
+                    router: &router,
+                    isSidebarVisible: &isSidebarVisible
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
                 }
-
-                router.routes.append(route)
-                reconcileCoinControlManagerOwnership()
-                scheduleNavigationSettledForCurrentGeneration()
 
             case .databaseUpdated:
                 database = Database()
@@ -670,11 +455,14 @@ private let navigationSettleDelayMs = 800
                 loadWallets()
 
             case let .defaultRouteChanged(route, nestedRoutes):
-                router.routes = nestedRoutes
-                router.default = route
-                routeId = UUID()
-                reconcileCoinControlManagerOwnership()
-                scheduleNavigationSettledForCurrentGeneration()
+                navigationCoordinator.applyDefaultRouteChanged(
+                    route: route,
+                    nestedRoutes: nestedRoutes,
+                    router: &router,
+                    routeId: &routeId
+                ) { router in
+                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                }
 
             case let .fiatPricesChanged(prices):
                 self.prices = prices
@@ -729,15 +517,8 @@ private let navigationSettleDelayMs = 800
     }
 }
 
-private extension Router {
-    var containsCoinControlRoute: Bool {
-        self.default.isCoinControlRoute || routes.contains { $0.isCoinControlRoute }
-    }
-}
-
-private extension Route {
-    var isCoinControlRoute: Bool {
-        if case .coinControl = self { return true }
-        return false
+extension AppManager: WalletManagerDelegate {
+    func showWalletAlert(_ alertState: AppAlertState) {
+        self.alertState = .init(alertState)
     }
 }

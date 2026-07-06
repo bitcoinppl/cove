@@ -783,9 +783,6 @@ internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod0 : 
 internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-internal interface UniffiCallbackInterfaceImportWalletManagerReconcilerMethod0 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
-}
 internal interface UniffiCallbackInterfaceOnboardingManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -895,25 +892,6 @@ internal open class UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
         `uniffiClone` = other.`uniffiClone`
         `reconcile` = other.`reconcile`
         `reconcileMany` = other.`reconcileMany`
-    }
-
-}
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "reconcile")
-internal open class UniffiVTableCallbackInterfaceImportWalletManagerReconciler(
-    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
-    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
-    @JvmField internal var `reconcile`: UniffiCallbackInterfaceImportWalletManagerReconcilerMethod0? = null,
-) : Structure() {
-    class UniffiByValue(
-        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
-        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
-        `reconcile`: UniffiCallbackInterfaceImportWalletManagerReconcilerMethod0? = null,
-    ): UniffiVTableCallbackInterfaceImportWalletManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,), Structure.ByValue
-
-   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceImportWalletManagerReconciler) {
-        `uniffiFree` = other.`uniffiFree`
-        `uniffiClone` = other.`uniffiClone`
-        `reconcile` = other.`reconcile`
     }
 
 }
@@ -1519,11 +1497,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_state(
     ): Short
-    external fun uniffi_cove_checksum_method_rustimportwalletmanager_dispatch(
-    ): Short
     external fun uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustimportwalletmanager_listen_for_updates(
     ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id(
     ): Short
@@ -1696,6 +1670,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount_pending_fmt(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_display_confirmation_count(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount(
     ): Short
@@ -2077,8 +2053,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many(
     ): Short
-    external fun uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile(
-    ): Short
     external fun uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile(
     ): Short
     external fun uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile(
@@ -2118,7 +2092,6 @@ internal object UniffiLib {
         uniffiCallbackInterfaceCloudBackupManagerReconciler.register(this)
         uniffiCallbackInterfaceCoinControlManagerReconciler.register(this)
         uniffiCallbackInterfaceFfiReconcile.register(this)
-        uniffiCallbackInterfaceImportWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceOnboardingManagerReconciler.register(this)
         uniffiCallbackInterfacePendingWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
@@ -2615,12 +2588,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_rustimportwalletmanager_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_method_rustimportwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
     external fun uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(`ptr`: Long,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
     external fun uniffi_cove_fn_clone_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2826,6 +2795,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_display_amount_pending_fmt(`ptr`: Long,`amount`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_amount_with_direction(`ptr`: Long,`amount`: Long,`direction`: RustBufferTransactionDirection.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_display_confirmation_count(`ptr`: Long,`confirmations`: Int,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_display_fiat_amount(`ptr`: Long,`amount`: Double,`withSuffix`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3259,8 +3230,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCoinControlManagerReconciler,
     ): Unit
-    external fun uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceImportWalletManagerReconciler,
-    ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_onboardingmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceOnboardingManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfacePendingWalletManagerReconciler,
@@ -3425,6 +3394,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_hardwarewalletmetadata_istapsigner(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_walletbirthday_block_height_fmt(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wallettype_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4365,13 +4336,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 6624.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_listen_for_updates() != 1669.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633.toShort()) {
@@ -4630,6 +4595,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_amount_with_direction() != 18925.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_confirmation_count() != 48659.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 25193.toShort()) {
@@ -5200,9 +5168,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_importwalletmanagerreconciler_reconcile() != 55979.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875.toShort()) {
@@ -19582,16 +19547,9 @@ public object FfiConverterTypeRustConnectivityManager: FfiConverter<RustConnecti
 public interface RustImportWalletManagerInterface {
 
     /**
-     * Action from the frontend to change the state of the view model
-     */
-    fun `dispatch`(`action`: ImportWalletManagerAction)
-
-    /**
      * Import wallet view from entered words
      */
     fun `importWallet`(`enteredWords`: List<List<kotlin.String>>): WalletMetadata
-
-    fun `listenForUpdates`(`reconciler`: ImportWalletManagerReconciler)
 
     companion object
 }
@@ -19707,22 +19665,6 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
 
 
     /**
-     * Action from the frontend to change the state of the view model
-     */override fun `dispatch`(`action`: ImportWalletManagerAction)
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_dispatch(
-        it,
-
-        FfiConverterTypeImportWalletManagerAction.lower(`action`),_status)
-}
-    }
-
-
-
-
-    /**
      * Import wallet view from entered words
      */
     @Throws(ImportWalletException::class)override fun `importWallet`(`enteredWords`: List<List<kotlin.String>>): WalletMetadata {
@@ -19737,19 +19679,6 @@ open class RustImportWalletManager: Disposable, AutoCloseable, RustImportWalletM
     }
     )
     }
-
-
-    override fun `listenForUpdates`(`reconciler`: ImportWalletManagerReconciler)
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustimportwalletmanager_listen_for_updates(
-        it,
-
-        FfiConverterTypeImportWalletManagerReconciler.lower(`reconciler`),_status)
-}
-    }
-
 
 
 
@@ -21354,6 +21283,8 @@ public interface RustWalletManagerInterface {
      */
     fun `displayAmountWithDirection`(`amount`: Amount, `direction`: TransactionDirection): kotlin.String
 
+    fun `displayConfirmationCount`(`confirmations`: kotlin.UInt): kotlin.String
+
     fun `displayFiatAmount`(`amount`: kotlin.Double, `withSuffix`: kotlin.Boolean = true): kotlin.String
 
     /**
@@ -22419,6 +22350,20 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
         FfiConverterTypeAmount.lower(`amount`),
         FfiConverterTypeTransactionDirection.lower(`direction`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `displayConfirmationCount`(`confirmations`: kotlin.UInt): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_display_confirmation_count(
+        it,
+
+        FfiConverterUInt.lower(`confirmations`),_status)
 }
     }
     )
@@ -28276,34 +28221,6 @@ public object FfiConverterTypeAppState: FfiConverterRustBuffer<AppState> {
 
 
 
-class AuthManagerState {
-    override fun equals(other: Any?): Boolean {
-        return other is AuthManagerState
-    }
-
-    override fun hashCode(): Int {
-        return javaClass.hashCode()
-    }
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeAuthManagerState: FfiConverterRustBuffer<AuthManagerState> {
-    override fun read(buf: ByteBuffer): AuthManagerState {
-        return AuthManagerState()
-    }
-
-    override fun allocationSize(value: AuthManagerState) = 0UL
-
-    override fun write(value: AuthManagerState, buf: ByteBuffer) {
-    }
-}
-
-
-
 /**
  * Report of what happened during a backup import
  */
@@ -29027,47 +28944,6 @@ public object FfiConverterTypeCloudBackupRestoreReport: FfiConverterRustBuffer<C
             FfiConverterSequenceString.write(value.`failedWalletErrors`, buf)
             FfiConverterSequenceString.write(value.`labelsFailedWalletNames`, buf)
             FfiConverterSequenceString.write(value.`labelsFailedErrors`, buf)
-    }
-}
-
-
-
-/**
- * Retry instruction attached to a retryable deep verification failure
- */
-data class CloudBackupRetryContext (
-    var `issue`: CloudBackupRetryIssue
-    ,
-    var `action`: CloudBackupRetryAction
-
-){
-
-
-
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext> {
-    override fun read(buf: ByteBuffer): CloudBackupRetryContext {
-        return CloudBackupRetryContext(
-            FfiConverterTypeCloudBackupRetryIssue.read(buf),
-            FfiConverterTypeCloudBackupRetryAction.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: CloudBackupRetryContext) = (
-            FfiConverterTypeCloudBackupRetryIssue.allocationSize(value.`issue`) +
-            FfiConverterTypeCloudBackupRetryAction.allocationSize(value.`action`)
-    )
-
-    override fun write(value: CloudBackupRetryContext, buf: ByteBuffer) {
-            FfiConverterTypeCloudBackupRetryIssue.write(value.`issue`, buf)
-            FfiConverterTypeCloudBackupRetryAction.write(value.`action`, buf)
     }
 }
 
@@ -29886,34 +29762,6 @@ public object FfiConverterTypeHistoricalPriceRecord: FfiConverterRustBuffer<Hist
             FfiConverterOptionalFloat.write(value.`chf`, buf)
             FfiConverterOptionalFloat.write(value.`aud`, buf)
             FfiConverterOptionalFloat.write(value.`jpy`, buf)
-    }
-}
-
-
-
-class ImportWalletManagerState {
-    override fun equals(other: Any?): Boolean {
-        return other is ImportWalletManagerState
-    }
-
-    override fun hashCode(): Int {
-        return javaClass.hashCode()
-    }
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeImportWalletManagerState: FfiConverterRustBuffer<ImportWalletManagerState> {
-    override fun read(buf: ByteBuffer): ImportWalletManagerState {
-        return ImportWalletManagerState()
-    }
-
-    override fun allocationSize(value: ImportWalletManagerState) = 0UL
-
-    override fun write(value: ImportWalletManagerState, buf: ByteBuffer) {
     }
 }
 
@@ -37222,42 +37070,6 @@ public object FfiConverterTypeCloudBackupRetryAction: FfiConverterRustBuffer<Clo
 
 
 /**
- * Retry issue category for a user-visible verification retry
- */
-
-enum class CloudBackupRetryIssue {
-
-    CONNECTIVITY;
-
-
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeCloudBackupRetryIssue: FfiConverterRustBuffer<CloudBackupRetryIssue> {
-    override fun read(buf: ByteBuffer) = try {
-        CloudBackupRetryIssue.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: CloudBackupRetryIssue) = 4UL
-
-    override fun write(value: CloudBackupRetryIssue, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-/**
  * Root-level prompt the UI should show for the current cloud backup state
  */
 sealed class CloudBackupRootPrompt {
@@ -39929,7 +39741,7 @@ sealed class DeepVerificationFailure {
     data class Retry(
         val `message`: kotlin.String,
         val `detail`: org.bitcoinppl.cove_core.CloudBackupDetail?,
-        val `retryContext`: org.bitcoinppl.cove_core.CloudBackupRetryContext?) : DeepVerificationFailure()
+        val `retryAction`: org.bitcoinppl.cove_core.CloudBackupRetryAction?) : DeepVerificationFailure()
 
     {
 
@@ -40007,7 +39819,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
             1 -> DeepVerificationFailure.Retry(
                 FfiConverterString.read(buf),
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
-                FfiConverterOptionalTypeCloudBackupRetryContext.read(buf),
+                FfiConverterOptionalTypeCloudBackupRetryAction.read(buf),
                 )
             2 -> DeepVerificationFailure.RecreateManifest(
                 FfiConverterString.read(buf),
@@ -40034,7 +39846,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
                 4UL
                 + FfiConverterString.allocationSize(value.`message`)
                 + FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
-                + FfiConverterOptionalTypeCloudBackupRetryContext.allocationSize(value.`retryContext`)
+                + FfiConverterOptionalTypeCloudBackupRetryAction.allocationSize(value.`retryAction`)
             )
         }
         is DeepVerificationFailure.RecreateManifest -> {
@@ -40071,7 +39883,7 @@ public object FfiConverterTypeDeepVerificationFailure : FfiConverterRustBuffer<D
                 buf.putInt(1)
                 FfiConverterString.write(value.`message`, buf)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
-                FfiConverterOptionalTypeCloudBackupRetryContext.write(value.`retryContext`, buf)
+                FfiConverterOptionalTypeCloudBackupRetryAction.write(value.`retryAction`, buf)
                 Unit
             }
             is DeepVerificationFailure.RecreateManifest -> {
@@ -42538,72 +42350,6 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
     }
 
 }
-
-
-
-
-enum class ImportWalletManagerAction {
-
-    NO_OP;
-
-
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeImportWalletManagerAction: FfiConverterRustBuffer<ImportWalletManagerAction> {
-    override fun read(buf: ByteBuffer) = try {
-        ImportWalletManagerAction.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: ImportWalletManagerAction) = 4UL
-
-    override fun write(value: ImportWalletManagerAction, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
-enum class ImportWalletManagerReconcileMessage {
-
-    NO_OP;
-
-
-
-
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeImportWalletManagerReconcileMessage: FfiConverterRustBuffer<ImportWalletManagerReconcileMessage> {
-    override fun read(buf: ByteBuffer) = try {
-        ImportWalletManagerReconcileMessage.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: ImportWalletManagerReconcileMessage) = 4UL
-
-    override fun write(value: ImportWalletManagerReconcileMessage, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
 
 
 
@@ -52566,6 +52312,16 @@ sealed class WalletBirthday {
 
 
 
+     fun `blockHeightFmt`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletbirthday_block_height_fmt(FfiConverterTypeWalletBirthday.lower(this),
+        _status)
+}
+    )
+    }
+
+
 
 
 
@@ -56876,69 +56632,6 @@ public object FfiConverterTypeFfiReconcile: FfiConverterCallbackInterface<FfiRec
 
 
 
-public interface ImportWalletManagerReconciler {
-
-    /**
-     * Tells the frontend to reconcile the view model changes
-     */
-    fun `reconcile`(`message`: ImportWalletManagerReconcileMessage)
-
-    companion object
-}
-
-
-
-// Put the implementation in an object so we don't pollute the top-level namespace
-internal object uniffiCallbackInterfaceImportWalletManagerReconciler {
-    internal object `reconcile`: UniffiCallbackInterfaceImportWalletManagerReconcilerMethod0 {
-        override fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
-            val uniffiObj = FfiConverterTypeImportWalletManagerReconciler.handleMap.get(uniffiHandle)
-            val makeCall = { ->
-                uniffiObj.`reconcile`(
-                    FfiConverterTypeImportWalletManagerReconcileMessage.lift(`message`),
-                )
-            }
-            val writeReturn = { _: Unit -> Unit }
-            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
-        }
-    }
-
-    internal object uniffiFree: UniffiCallbackInterfaceFree {
-        override fun callback(handle: Long) {
-            FfiConverterTypeImportWalletManagerReconciler.handleMap.remove(handle)
-        }
-    }
-
-    internal object uniffiClone: UniffiCallbackInterfaceClone {
-        override fun callback(handle: Long): Long {
-            return FfiConverterTypeImportWalletManagerReconciler.handleMap.clone(handle)
-        }
-    }
-
-    internal var vtable = UniffiVTableCallbackInterfaceImportWalletManagerReconciler.UniffiByValue(
-        uniffiFree,
-        uniffiClone,
-        `reconcile`,
-    )
-
-    // Registers the foreign callback with the Rust side.
-    // This method is generated for each callback interface.
-    internal fun register(lib: UniffiLib) {
-        lib.uniffi_cove_fn_init_callback_vtable_importwalletmanagerreconciler(vtable)
-    }
-}
-
-/**
- * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
- *
- * @suppress
- */
-public object FfiConverterTypeImportWalletManagerReconciler: FfiConverterCallbackInterface<ImportWalletManagerReconciler>()
-
-
-
-
-
 public interface OnboardingManagerReconciler {
 
     fun `reconcile`(`message`: OnboardingReconcileMessage)
@@ -57905,38 +57598,6 @@ public object FfiConverterOptionalTypeCloudBackupProgress: FfiConverterRustBuffe
 /**
  * @suppress
  */
-public object FfiConverterOptionalTypeCloudBackupRetryContext: FfiConverterRustBuffer<CloudBackupRetryContext?> {
-    override fun read(buf: ByteBuffer): CloudBackupRetryContext? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeCloudBackupRetryContext.read(buf)
-    }
-
-    override fun allocationSize(value: CloudBackupRetryContext?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeCloudBackupRetryContext.allocationSize(value)
-        }
-    }
-
-    override fun write(value: CloudBackupRetryContext?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeCloudBackupRetryContext.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeCloudRestoreProviderHint: FfiConverterRustBuffer<CloudRestoreProviderHint?> {
     override fun read(buf: ByteBuffer): CloudRestoreProviderHint? {
         if (buf.get().toInt() == 0) {
@@ -58183,6 +57844,38 @@ public object FfiConverterOptionalTypeBlockSizeLast: FfiConverterRustBuffer<Bloc
         } else {
             buf.put(1)
             FfiConverterTypeBlockSizeLast.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeCloudBackupRetryAction: FfiConverterRustBuffer<CloudBackupRetryAction?> {
+    override fun read(buf: ByteBuffer): CloudBackupRetryAction? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeCloudBackupRetryAction.read(buf)
+    }
+
+    override fun allocationSize(value: CloudBackupRetryAction?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeCloudBackupRetryAction.allocationSize(value)
+        }
+    }
+
+    override fun write(value: CloudBackupRetryAction?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeCloudBackupRetryAction.write(value, buf)
         }
     }
 }

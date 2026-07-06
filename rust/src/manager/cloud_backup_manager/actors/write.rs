@@ -10,10 +10,7 @@ mod types;
 mod worker;
 
 pub(crate) use self::client::CloudBackupWriteClient;
-pub(crate) use self::supervisor::{
-    CloudBackupWriteBlocker, CloudBackupWriteCommandResult, CloudBackupWriteResultReceiver,
-    CloudBackupWriteSupervisor,
-};
+pub(crate) use self::supervisor::{CloudBackupWriteBlocker, CloudBackupWriteSupervisor};
 pub(crate) use self::types::{
     CloudBackupUploadedWallet, CloudBackupUploadedWalletsStateMode, CloudBackupWalletCountRefresh,
     CloudBackupWriteCompletion,

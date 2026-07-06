@@ -1293,6 +1293,7 @@ dependencies = [
  "bdk_wallet",
  "flume",
  "futures",
+ "parking_lot",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",

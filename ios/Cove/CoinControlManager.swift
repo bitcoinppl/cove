@@ -11,7 +11,7 @@ private enum CoinControlManagerError: LocalizedError {
     }
 }
 
-@Observable final class CoinControlManager: AnyReconciler, CoinControlManagerReconciler {
+@Observable final class CoinControlManager: ReconcilingManager, CoinControlManagerReconciler {
     typealias Message = CoinControlManagerReconcileMessage
     typealias Action = CoinControlManagerAction
 
@@ -155,7 +155,11 @@ private enum CoinControlManagerError: LocalizedError {
         }
     }
 
-    private func apply(_ message: Message) {
+    var canApplyReconcileMessages: Bool {
+        rust != nil
+    }
+
+    func apply(_ message: Message) {
         switch message {
         case let .updateSort(sort):
             withAnimation { self.sort = sort }
@@ -201,20 +205,12 @@ private enum CoinControlManagerError: LocalizedError {
         try await rust.setUtxoSpendability(outpoint: outpoint, spendable: spendable)
     }
 
-    func reconcile(message: Message) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.rust != nil else { return }
-            logger.debug("reconcile: \(message)")
-            apply(message)
-        }
+    func logReconcile(message: Message) {
+        logger.debug("reconcile: \(message)")
     }
 
-    func reconcileMany(messages: [Message]) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.rust != nil else { return }
-            logger.debug("reconcile_messages: \(messages)")
-            messages.forEach { self.apply($0) }
-        }
+    func logReconcileMany(messages: [Message]) {
+        logger.debug("reconcile_messages: \(messages)")
     }
 
     public func dispatch(action: Action) {

@@ -9,13 +9,13 @@ import SwiftUI
 
 private let groupsOf = HotWalletImportScreen.GROUPS_OF
 
-private enum AlertState: Equatable {
+enum HotWalletImportAlertState: Equatable {
     case invalidWords
     case duplicateWallet(WalletId)
     case scanError(String)
 }
 
-private enum SheetState: Equatable {
+enum HotWalletImportSheetState: Equatable {
     case qrCode
 }
 
@@ -118,8 +118,8 @@ struct HotWalletImportScreen: View {
     @State var filteredSuggestions: [String] = []
 
     // alerts & sheets
-    @State private var alertState: TaggedItem<AlertState>? = .none
-    @State private var sheetState: TaggedItem<SheetState>? = .none
+    @State private var alertState: TaggedItem<HotWalletImportAlertState>? = .none
+    @State private var sheetState: TaggedItem<HotWalletImportSheetState>? = .none
 
     // qr code scanning
     @Environment(\.dismiss) var dismiss
@@ -131,6 +131,15 @@ struct HotWalletImportScreen: View {
     // nfc scanning
     @State private var nfcReader: NFCReader = .init()
     @State private var tasks: [Task<Void, any Error>] = []
+
+    private var presentationContext: HotWalletImportPresentationContext {
+        HotWalletImportPresentationContext(
+            app: app,
+            alertState: $alertState,
+            handleScan: handleScan,
+            onImported: onImported
+        )
+    }
 
     func initOnAppear() {
         nfcReader = NFCReader()
@@ -354,14 +363,8 @@ struct HotWalletImportScreen: View {
         .navigationTitle("Import Wallet")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .sheet(item: $sheetState, content: SheetContent)
-        .alert(
-            alertTitle,
-            isPresented: showingAlert,
-            presenting: alertState,
-            actions: { MyAlert($0).actions },
-            message: { MyAlert($0).message }
-        )
+        .presentingSheet($sheetState, context: presentationContext)
+        .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
         .modifier(ConditionalTintModifier())
         .onAppear(perform: initOnAppear)
         .onChange(of: sheetState, initial: true) { oldState, newState in
@@ -405,85 +408,6 @@ struct HotWalletImportScreen: View {
         )
         .background(Color.midnightBlue)
         .tint(.white)
-    }
-
-    // MARK: Alerts
-
-    private var showingAlert: Binding<Bool> {
-        Binding(
-            get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
-        )
-    }
-
-    private var alertTitle: String {
-        guard let alertState else { return "Error" }
-        return MyAlert(alertState).title
-    }
-
-    private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
-        let singleOkCancel = {
-            Button("Ok", role: .cancel) {
-                alertState = .none
-            }
-        }
-
-        switch alert.item {
-        case .invalidWords:
-            return AlertBuilder(
-                title: "Words not valid",
-                message:
-                "The words you entered does not create a valid wallet. Please check the words and try again.",
-                actions: singleOkCancel
-            )
-        case let .duplicateWallet(walletId):
-            return AlertBuilder(
-                title: "Duplicate Wallet",
-                message: "This wallet has already been imported!",
-                actions: {
-                    Button("OK", role: .cancel) {
-                        alertState = .none
-                        if let onImported {
-                            onImported(walletId)
-                            return
-                        }
-
-                        do {
-                            try app.selectWalletOrThrow(walletId)
-                            app.resetRoute(to: .selectedWallet(walletId))
-                        } catch {
-                            app.alertState = TaggedItem(.general(
-                                title: "Unable to Select Wallet",
-                                message: error.localizedDescription
-                            ))
-                        }
-                    }
-                }
-            )
-        case let .scanError(error):
-            return AlertBuilder(
-                title: "Error Scanning QR Code",
-                message: error,
-                actions: singleOkCancel
-            )
-        }
-    }
-
-    // MARK: Sheet
-
-    @ViewBuilder
-    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
-        switch state.item {
-        case .qrCode:
-            ScannerView(
-                codeTypes: [.qr],
-                scanMode: .oncePerCode,
-                scanInterval: 0.1
-            ) { response in
-                handleScan(result: response)
-            }
-            .ignoresSafeArea(.all)
-        }
     }
 
     // MARK: OnChange Functions

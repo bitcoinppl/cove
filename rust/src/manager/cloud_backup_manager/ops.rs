@@ -1,5 +1,4 @@
 use cove_device::cloud_storage::CloudStorageClient;
-use cove_util::ResultExt as _;
 use tracing::info;
 
 use super::wallets::{DownloadedWalletBackup, WalletBackupLookup, WalletBackupReader};
@@ -11,7 +10,7 @@ use super::{
 mod cloud_only;
 mod disable;
 mod enable;
-mod other_backups;
+mod other_backup_operations;
 mod restore;
 mod sync;
 
@@ -52,9 +51,9 @@ where
     S: cove_cspp::CsppStore,
     S::Error: std::fmt::Display,
 {
-    let Some(master_key) = cspp
-        .load_master_key_from_store()
-        .map_err_prefix("loading master key from store", CloudBackupError::Internal)?
+    let Some(master_key) = cspp.load_master_key_from_store().map_err(|source| {
+        CloudBackupError::internal_context("loading master key from store", source)
+    })?
     else {
         return Ok(None);
     };
@@ -88,7 +87,7 @@ where
 {
     let local_master_key = cspp
         .load_master_key_from_store()
-        .map_err_prefix("load local master key", CloudBackupError::Internal)?;
+        .map_err(|source| CloudBackupError::internal_context("load local master key", source))?;
 
     match local_master_key {
         Some(master_key) if master_key.namespace_id() == namespace => return Ok(master_key),
@@ -106,7 +105,8 @@ where
     if recovered_namespace != namespace {
         return Err(CloudBackupError::Internal(format!(
             "recovered master key namespace mismatch: expected {namespace}, got {recovered_namespace}",
-        )));
+        )
+        .into()));
     }
 
     Ok(recovered)

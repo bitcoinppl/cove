@@ -5,21 +5,10 @@ use crate::database::cloud_backup::{
     PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
 };
 
-use super::DeepVerificationReport;
+use super::{DeepVerificationReport, current_timestamp};
 
-#[derive(Debug, Clone)]
-pub(crate) struct PendingVerificationCompletion {
-    pub(crate) report: DeepVerificationReport,
-    pub(crate) namespace_id: String,
-    pub(crate) uploads: Vec<PendingVerificationUpload>,
-    pub(crate) created_at: Option<u64>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum PendingVerificationUpload {
-    MasterKeyWrapper,
-    Wallet { record_id: String, expected_revision: String },
-}
+pub(crate) type PendingVerificationCompletion = PersistedPendingVerificationCompletion;
+pub(crate) type PendingVerificationUpload = PersistedPendingVerificationUpload;
 
 impl PendingVerificationCompletion {
     pub(crate) fn new(
@@ -28,15 +17,15 @@ impl PendingVerificationCompletion {
         uploads: Vec<PendingVerificationUpload>,
     ) -> Self {
         Self {
-            report,
+            report: PersistedDeepVerificationReport::from_deep_verification_report(&report),
             namespace_id,
             uploads,
-            created_at: Some(crate::manager::cloud_backup_manager::current_timestamp()),
+            created_at: Some(current_timestamp()),
         }
     }
 
-    pub(crate) fn report(&self) -> &DeepVerificationReport {
-        &self.report
+    pub(crate) fn report(&self) -> DeepVerificationReport {
+        self.report.to_deep_verification_report()
     }
 
     pub(crate) fn namespace_id(&self) -> &str {
@@ -58,33 +47,6 @@ impl PendingVerificationCompletion {
         }
 
         now.saturating_sub(created_at) >= ttl_seconds
-    }
-
-    pub(crate) fn persisted(&self) -> PersistedPendingVerificationCompletion {
-        PersistedPendingVerificationCompletion {
-            report: PersistedDeepVerificationReport::from(&self.report),
-            namespace_id: self.namespace_id.clone(),
-            created_at: self.created_at,
-            uploads: self
-                .uploads
-                .iter()
-                .cloned()
-                .map(PersistedPendingVerificationUpload::from)
-                .collect(),
-        }
-    }
-
-    pub(crate) fn from_persisted(completion: PersistedPendingVerificationCompletion) -> Self {
-        Self {
-            report: DeepVerificationReport::from(completion.report),
-            namespace_id: completion.namespace_id,
-            created_at: completion.created_at,
-            uploads: completion
-                .uploads
-                .into_iter()
-                .map(PendingVerificationUpload::from_persisted)
-                .collect(),
-        }
     }
 }
 
@@ -135,19 +97,10 @@ impl PendingVerificationUpload {
             .unwrap_or(expected_revision)
             .to_owned()
     }
-
-    fn from_persisted(upload: PersistedPendingVerificationUpload) -> Self {
-        match upload {
-            PersistedPendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
-            PersistedPendingVerificationUpload::Wallet { record_id, expected_revision } => {
-                Self::Wallet { record_id, expected_revision }
-            }
-        }
-    }
 }
 
-impl DeepVerificationReport {
-    fn from(report: PersistedDeepVerificationReport) -> Self {
+impl PersistedDeepVerificationReport {
+    fn from_deep_verification_report(report: &DeepVerificationReport) -> Self {
         Self {
             master_key_wrapper_repaired: report.master_key_wrapper_repaired,
             local_master_key_repaired: report.local_master_key_repaired,
@@ -155,31 +108,18 @@ impl DeepVerificationReport {
             wallets_verified: report.wallets_verified,
             wallets_failed: report.wallets_failed,
             wallets_unsupported: report.wallets_unsupported,
+        }
+    }
+
+    fn to_deep_verification_report(&self) -> DeepVerificationReport {
+        DeepVerificationReport {
+            master_key_wrapper_repaired: self.master_key_wrapper_repaired,
+            local_master_key_repaired: self.local_master_key_repaired,
+            credential_recovered: self.credential_recovered,
+            wallets_verified: self.wallets_verified,
+            wallets_failed: self.wallets_failed,
+            wallets_unsupported: self.wallets_unsupported,
             detail: None,
-        }
-    }
-}
-
-impl From<&DeepVerificationReport> for PersistedDeepVerificationReport {
-    fn from(report: &DeepVerificationReport) -> Self {
-        Self {
-            master_key_wrapper_repaired: report.master_key_wrapper_repaired,
-            local_master_key_repaired: report.local_master_key_repaired,
-            credential_recovered: report.credential_recovered,
-            wallets_verified: report.wallets_verified,
-            wallets_failed: report.wallets_failed,
-            wallets_unsupported: report.wallets_unsupported,
-        }
-    }
-}
-
-impl From<PendingVerificationUpload> for PersistedPendingVerificationUpload {
-    fn from(upload: PendingVerificationUpload) -> Self {
-        match upload {
-            PendingVerificationUpload::MasterKeyWrapper => Self::MasterKeyWrapper,
-            PendingVerificationUpload::Wallet { record_id, expected_revision } => {
-                Self::Wallet { record_id, expected_revision }
-            }
         }
     }
 }

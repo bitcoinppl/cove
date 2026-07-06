@@ -6,21 +6,20 @@ use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupManagerAction,
     CloudBackupPasskeyChoiceIntent, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
     CloudBackupWalletItem, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    OtherBackupsOperation, RustCloudBackupManager, SavedPasskeyConfirmationMode,
-    actors::CloudBackupOperation,
+    OtherBackupsOperation, RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecoveryAction {
+pub(crate) enum RecoveryAction {
     RecreateManifest,
     ReinitializeBackup,
     RepairPasskey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerificationState {
+pub(crate) enum VerificationState {
     Idle,
     Verifying,
     Verified(DeepVerificationReport),
@@ -70,21 +69,21 @@ pub enum CloudBackupVerificationPresentation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PendingUploadVerificationState {
+pub(crate) enum PendingUploadVerificationState {
     Idle,
     Confirming,
     BlockedOnAuthorization,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SyncState {
+pub(crate) enum SyncState {
     Idle,
     Syncing,
     Failed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecoveryState {
+pub(crate) enum RecoveryState {
     Idle,
     Recovering(RecoveryAction),
     Failed { action: RecoveryAction, error: String },
@@ -104,13 +103,6 @@ pub enum CloudOnlyOperation {
     Operating { record_id: String },
     Warning { message: String, error: String },
     Failed { error: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupSyncOutcome {
-    Started,
-    Completed,
-    Failed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,17 +139,6 @@ pub(crate) enum CloudBackupOtherBackupsOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupEnableOutcome {
-    ProgressCleared,
-    ReturnedToIdle,
-    CreatingPasskey,
-    WaitingForPasskeyAvailability,
-    UploadingBackup,
-    ConfirmingSavedPasskey,
-    AwaitingSavedPasskeyConfirmation(SavedPasskeyConfirmationMode),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupRestoreOutcome {
     ProgressCleared,
     ProgressReported(CloudBackupRestoreFlow),
@@ -167,46 +148,6 @@ pub(crate) enum CloudBackupRestoreOutcome {
 pub(crate) enum CloudBackupDetailOutcome {
     Cleared,
     Refreshed(CloudBackupDetail),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupVerificationOutcome {
-    Idle,
-    Started,
-    Verified(DeepVerificationReport),
-    PasskeyConfirmed,
-    Failed(DeepVerificationFailure),
-    Cancelled,
-}
-
-impl CloudBackupVerificationOutcome {
-    pub(crate) fn from_state(state: VerificationState) -> Self {
-        match state {
-            VerificationState::Idle => Self::Idle,
-            VerificationState::Verifying => Self::Started,
-            VerificationState::Verified(report) => Self::Verified(report),
-            VerificationState::PasskeyConfirmed => Self::PasskeyConfirmed,
-            VerificationState::Failed(failure) => Self::Failed(failure),
-            VerificationState::Cancelled => Self::Cancelled,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupRecoveryOutcome {
-    Idle,
-    Started(RecoveryAction),
-    Failed { action: RecoveryAction, error: String },
-}
-
-impl CloudBackupRecoveryOutcome {
-    pub(crate) fn from_state(state: RecoveryState) -> Self {
-        match state {
-            RecoveryState::Idle => Self::Idle,
-            RecoveryState::Recovering(action) => Self::Started(action),
-            RecoveryState::Failed { action, error } => Self::Failed { action, error },
-        }
-    }
 }
 
 #[uniffi::export]
@@ -317,31 +258,27 @@ impl RustCloudBackupManager {
     }
 
     fn spawn_recovery(self: std::sync::Arc<Self>, action: RecoveryAction) {
-        let operation = CloudBackupOperation::Recovery(action);
-        send!(self.supervisor.start_operation(operation, None));
+        send!(self.supervisor.start_recovery_operation(action));
     }
 
     fn spawn_repair_passkey(self: std::sync::Arc<Self>, no_discovery: bool) {
-        let operation = CloudBackupOperation::RepairPasskey { no_discovery };
-        send!(self.supervisor.start_operation(operation, None));
+        send!(self.supervisor.start_repair_passkey_operation(no_discovery));
     }
 
     fn spawn_sync(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::Sync, None));
+        send!(self.supervisor.start_sync_operation());
     }
 
     fn spawn_fetch_cloud_only(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.start_operation(CloudBackupOperation::FetchCloudOnly, None));
+        send!(self.supervisor.start_cloud_only_fetch_request());
     }
 
     fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
-        let operation = CloudBackupOperation::RestoreCloudWallet;
-        send!(self.supervisor.start_operation(operation, Some(record_id.into())));
+        send!(self.supervisor.start_restore_cloud_wallet_operation(record_id.into()));
     }
 
     fn spawn_delete_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
-        let operation = CloudBackupOperation::DeleteCloudWallet;
-        send!(self.supervisor.start_operation(operation, Some(record_id.into())));
+        send!(self.supervisor.start_delete_cloud_wallet_operation(record_id.into()));
     }
 
     fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
@@ -355,7 +292,7 @@ impl RustCloudBackupManager {
             return;
         }
 
-        send!(self.supervisor.start_operation(CloudBackupOperation::RecoverOtherBackups, None));
+        send!(self.supervisor.start_recover_other_backups_operation());
     }
 
     fn spawn_delete_other_backups(self: std::sync::Arc<Self>) {
@@ -369,7 +306,7 @@ impl RustCloudBackupManager {
             return;
         }
 
-        send!(self.supervisor.start_operation(CloudBackupOperation::DeleteOtherBackups, None));
+        send!(self.supervisor.start_delete_other_backups_operation());
     }
 
     fn spawn_refresh_detail(self: std::sync::Arc<Self>) {
@@ -407,24 +344,24 @@ impl RustCloudBackupManager {
                 if let Some(detail) = detail {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
                 }
-                self.apply_verification_outcome(CloudBackupVerificationOutcome::PasskeyConfirmed);
+                self.apply_verification_state(VerificationState::PasskeyConfirmed);
             }
             DeepVerificationResult::PasskeyMissing(detail) => {
                 if let Some(detail) = detail {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
                 }
-                self.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
-                self.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                self.apply_verification_state(VerificationState::Idle);
+                self.apply_recovery_state(RecoveryState::Idle);
             }
             DeepVerificationResult::UserCancelled(detail) => {
                 if let Some(detail) = detail {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
                 }
-                self.apply_verification_outcome(CloudBackupVerificationOutcome::Cancelled);
+                self.apply_verification_state(VerificationState::Cancelled);
             }
             DeepVerificationResult::NotEnabled => {
-                self.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
-                self.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
+                self.apply_verification_state(VerificationState::Idle);
+                self.apply_recovery_state(RecoveryState::Idle);
             }
             DeepVerificationResult::Failed(failure) => {
                 self.apply_failed_verification(failure);

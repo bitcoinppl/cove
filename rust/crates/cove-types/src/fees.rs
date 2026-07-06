@@ -59,6 +59,11 @@ impl FeeRate {
     pub fn sat_per_vb(&self) -> f32 {
         self.0.to_sat_per_kwu() as f32 / (1000_f32 / 4.0)
     }
+
+    #[must_use]
+    pub fn sats_per_vbyte_string(&self) -> String {
+        format!("{:.2} sats/vbyte", self.sat_per_vb())
+    }
 }
 
 // MARK: FeeRateOptions
@@ -117,6 +122,11 @@ impl FeeRateOption {
     #[must_use]
     pub fn sat_per_vb(&self) -> f32 {
         self.fee_rate.sat_per_vb()
+    }
+
+    #[must_use]
+    pub fn sats_per_vbyte_string(&self) -> String {
+        self.fee_rate.sats_per_vbyte_string()
     }
 
     #[must_use]
@@ -405,6 +415,11 @@ impl FeeRateOptionWithTotalFee {
     }
 
     #[must_use]
+    pub fn sats_per_vbyte_string(&self) -> String {
+        self.fee_rate.sats_per_vbyte_string()
+    }
+
+    #[must_use]
     pub fn duration(&self) -> String {
         self.fee_speed.duration()
     }
@@ -480,4 +495,35 @@ fn fee_rate_options_with_total_fee_is_equal(
     rhs: Arc<FeeRateOptionsWithTotalFee>,
 ) -> bool {
     lhs == rhs
+}
+
+#[cfg(test)]
+mod tests {
+    use cove_util::format::NumberFormatter as _;
+
+    use super::*;
+
+    #[test]
+    fn fee_rate_formats_with_two_decimal_places_and_units() {
+        assert_eq!(FeeRate::from_sat_per_vb(0.0).sats_per_vbyte_string(), "0.00 sats/vbyte");
+        assert_eq!(FeeRate::from_sat_per_vb(1.0).sats_per_vbyte_string(), "1.00 sats/vbyte");
+        assert_eq!(FeeRate::from_sat_per_vb(1.25).sats_per_vbyte_string(), "1.25 sats/vbyte");
+        assert_eq!(FeeRate::from_sat_per_vb(12.345).sats_per_vbyte_string(), "12.35 sats/vbyte");
+    }
+
+    #[test]
+    fn fee_rate_options_delegate_to_fee_rate_formatting() {
+        let option = FeeRateOption::new(FeeSpeed::Fast, 3.2);
+        assert_eq!(option.sats_per_vbyte_string(), "3.20 sats/vbyte");
+
+        let option_with_total = FeeRateOptionWithTotalFee::new(option, Amount::from_sat(1_000));
+        assert_eq!(option_with_total.sats_per_vbyte_string(), "3.20 sats/vbyte");
+    }
+
+    #[test]
+    fn grouped_integer_formatting_matches_platform_number_format() {
+        assert_eq!(0_u32.thousands_int(), "0");
+        assert_eq!(1_u32.thousands_int(), "1");
+        assert_eq!(1_000_000_u32.thousands_int(), "1,000,000");
+    }
 }

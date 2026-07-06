@@ -1,5 +1,6 @@
 use cove_device::cloud_storage::CloudSyncHealth;
-use tracing::error;
+
+use crate::manager::deferred_sender::SingleOrMany;
 
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
 use super::verify::coordinator::{
@@ -7,8 +8,7 @@ use super::verify::coordinator::{
 };
 use super::{
     CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupLifecycle,
-    CloudBackupRecoveryOutcome, CloudBackupSettingsRowStatus, CloudBackupStatus,
-    CloudBackupVerificationMetadata, CloudBackupVerificationOutcome,
+    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationSource,
     PendingUploadVerificationState, RustCloudBackupManager,
 };
@@ -34,9 +34,7 @@ impl RustCloudBackupManager {
     }
 
     fn send(&self, message: Message) {
-        if let Err(error) = self.reconciler.send(message) {
-            error!("unable to send cloud backup message: {error:?}");
-        }
+        self.reconciler.send_sync(message);
     }
 
     pub(crate) fn apply_model_event(&self, event: CloudBackupStateReducerEvent) -> bool {
@@ -115,13 +113,11 @@ impl RustCloudBackupManager {
         }
 
         if let Some(verification) = effect.verification {
-            self.apply_verification_outcome(CloudBackupVerificationOutcome::from_state(
-                verification,
-            ));
+            self.apply_verification_state(verification);
         }
 
         if let Some(recovery) = effect.recovery {
-            self.apply_recovery_outcome(CloudBackupRecoveryOutcome::from_state(recovery));
+            self.apply_recovery_state(recovery);
         }
 
         if effect.refresh_sync_health {
@@ -206,11 +202,12 @@ impl RustCloudBackupManager {
 #[uniffi::export]
 impl RustCloudBackupManager {
     pub fn listen_for_updates(&self, reconciler: Box<dyn CloudBackupManagerReconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                reconciler.reconcile(field);
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => {
+                for message in messages {
+                    reconciler.reconcile(message);
+                }
             }
         });
     }

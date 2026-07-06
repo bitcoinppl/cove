@@ -4,7 +4,7 @@ import SwiftUI
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
 
 @Observable
-final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @unchecked Sendable {
+final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler, @unchecked Sendable {
     static let shared = CloudBackupManager()
     private static let staleVerificationThreshold: TimeInterval = 60 * 60 * 24 * 30
 
@@ -254,25 +254,13 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         dispatch(.startVerification(source))
     }
 
-    private func apply(_ message: Message) {
+    func apply(_ message: Message) {
         switch message {
         case let .lifecycle(lifecycle, settingsRowStatus):
             state.lifecycle = lifecycle
             state.settingsRowStatus = settingsRowStatus
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
-        }
-    }
-
-    func reconcile(message: Message) {
-        DispatchQueue.main.async { [weak self] in
-            self?.apply(message)
-        }
-    }
-
-    func reconcileMany(messages: [Message]) {
-        DispatchQueue.main.async { [weak self] in
-            messages.forEach { self?.apply($0) }
         }
     }
 }

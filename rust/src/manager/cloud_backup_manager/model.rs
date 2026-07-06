@@ -5,12 +5,12 @@
 //! claims are tracked here so stale async completions cannot clear newer work
 
 use super::{
-    CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext,
-    CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupPasskeyChoiceIntent,
-    CloudBackupRootPrompt, CloudBackupSettingsRowStatus, CloudBackupStatus,
+    CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupError,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
     CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, OtherBackupsOperation,
     PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
+    is_connectivity_related_issue,
 };
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
@@ -34,6 +34,51 @@ pub use self::state_types::{
 
 const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
 const STALE_VERIFICATION_THRESHOLD: Duration = Duration::from_secs(60 * 60 * 24 * 30);
+
+/// Runtime cloud backup status projected from persisted and in-process state
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub(crate) enum CloudBackupStatus {
+    Disabled,
+    Disabling,
+    Enabling,
+    Restoring,
+    Enabled,
+    PasskeyMissing,
+    UnsupportedPasskeyProvider,
+    Error(String),
+}
+
+/// Internal enable status before projection into the public lifecycle
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub(crate) enum CloudBackupEnableState {
+    Idle,
+    CreatingPasskey,
+    WaitingForPasskeyAvailability,
+    AwaitingSavedPasskeyConfirmation(super::SavedPasskeyConfirmationMode),
+    ConfirmingSavedPasskey,
+    UploadingBackup,
+}
+
+/// Result of a disable attempt after the supervisor resolves remote and local work
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CloudBackupDisableOutcome {
+    Started,
+    ReturnedToIdle,
+    Failed { message: String, can_keep_enabled: bool },
+}
+
+/// Remote detail fetch result that keeps access errors distinguishable from failed detail state
+#[derive(Debug)]
+pub(crate) enum CloudBackupDetailResult {
+    Success(CloudBackupDetail),
+    AccessError(CloudBackupError),
+}
+
+impl CloudBackupDetailResult {
+    pub(crate) fn is_connectivity_access_error(&self) -> bool {
+        matches!(self, Self::AccessError(error) if is_connectivity_related_issue(error))
+    }
+}
 
 /// Private reducer wrapper that projects public Cloud Backup state
 #[derive(Debug, Clone, Default)]
@@ -1167,7 +1212,40 @@ impl CloudBackupStateReducer {
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
-    use crate::manager::cloud_backup_manager::test_support::CloudBackupModelSnapshot;
+    use crate::manager::cloud_backup_manager::CloudBackupProgress;
+
+    #[derive(Debug, Clone)]
+    pub(crate) struct CloudBackupModelSnapshot {
+        pub(crate) root_prompt: CloudBackupRootPrompt,
+        pub(crate) status: CloudBackupStatus,
+        pub(crate) sync_health: CloudSyncHealth,
+        pub(crate) progress: Option<CloudBackupProgress>,
+        pub(crate) restore_progress: Option<CloudBackupRestoreFlow>,
+        pub(crate) enable_state: CloudBackupEnableState,
+        pub(crate) pending_upload_verification: PendingUploadVerificationState,
+        pub(crate) verification_presentation: CloudBackupVerificationPresentation,
+        pub(crate) detail: Option<CloudBackupDetail>,
+        pub(crate) verification: VerificationState,
+    }
+
+    impl Default for CloudBackupModelSnapshot {
+        fn default() -> Self {
+            Self {
+                root_prompt: CloudBackupRootPrompt::None,
+                status: CloudBackupStatus::Disabled,
+                sync_health: CloudSyncHealth::Unknown,
+                progress: None,
+                restore_progress: None,
+                enable_state: CloudBackupEnableState::Idle,
+                pending_upload_verification: PendingUploadVerificationState::Idle,
+                verification_presentation: CloudBackupVerificationPresentation::Hidden {
+                    source: None,
+                },
+                detail: None,
+                verification: VerificationState::Idle,
+            }
+        }
+    }
 
     impl CloudBackupStateReducer {
         pub(crate) fn snapshot(&self) -> CloudBackupModelSnapshot {

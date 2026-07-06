@@ -110,6 +110,7 @@ pub(crate) enum FlowState {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum TransitionCommand {
     None,
+    StartCloudCheck,
     CreateWallet(OnboardingBranch),
     StartRestore { attempt_id: u64 },
     BeginCloudBackupEnable { discovery: CloudRestoreDiscovery },
@@ -118,7 +119,9 @@ pub(crate) enum TransitionCommand {
 
 #[derive(Debug, Clone)]
 pub(crate) enum InternalEvent {
-    CloudCheckFinished(CloudCheckOutcome),
+    CloudCheckRequested,
+    OfflineCloudCheckRetryRequested,
+    CloudCheckFinished { outcome: CloudCheckOutcome, connected: bool },
     RestoreProgress { attempt_id: u64, flow: CloudBackupRestoreFlow },
     RestoreComplete { attempt_id: u64, report: CloudBackupRestoreReport },
     RestoreNoBackupFound { attempt_id: u64 },
@@ -126,6 +129,13 @@ pub(crate) enum InternalEvent {
     WalletCreated { flow: CreatedWalletFlow },
     WalletCreationFailed { branch: OnboardingBranch, error: String },
     CompletionFailed { error: String },
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum CloudCheckState {
+    Idle,
+    InFlight,
+    InFlightWithRetryQueued,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -165,6 +175,7 @@ pub(crate) enum RestoreOrigin {
 #[derive(Debug, Clone)]
 pub(crate) struct InternalState {
     pub(crate) flow: FlowState,
+    pub(crate) cloud_check: CloudCheckState,
     pub(crate) cloud_restore_discovery: CloudRestoreDiscovery,
     pub(crate) restore_offer_allowed: bool,
     pub(crate) cloud_restore_alert_dismissed: bool,
@@ -174,6 +185,7 @@ pub(crate) struct InternalState {
 
 impl InternalState {
     pub(crate) fn new(flow: FlowState) -> Self {
+        let cloud_check = CloudCheckState::Idle;
         let cloud_restore_discovery = CloudRestoreDiscovery::Checking;
         let restore_offer_allowed = true;
         let cloud_restore_alert_dismissed = false;
@@ -181,6 +193,7 @@ impl InternalState {
         let ui = flow.ui_state(&cloud_restore_discovery, false, false);
         Self {
             flow,
+            cloud_check,
             cloud_restore_discovery,
             restore_offer_allowed,
             cloud_restore_alert_dismissed,
@@ -189,7 +202,69 @@ impl InternalState {
         }
     }
 
-    pub(crate) fn prepare_offline_cloud_check_retry(
+    pub(crate) fn apply_user_action(
+        &mut self,
+        action: OnboardingAction,
+        deferred: &mut DeferredSender<Message>,
+    ) -> TransitionCommand {
+        let restore_attempt_id =
+            if matches!(action, OnboardingAction::StartRestore | OnboardingAction::RetryRestore) {
+                let attempt_id = self.next_restore_attempt_id;
+                self.next_restore_attempt_id = self.next_restore_attempt_id.wrapping_add(1);
+                Some(attempt_id)
+            } else {
+                None
+            };
+        let command = self.flow.apply_user_action(
+            action.clone(),
+            self.cloud_restore_discovery.clone(),
+            &mut self.restore_offer_allowed,
+            restore_attempt_id,
+        );
+        if matches!(action, OnboardingAction::DismissCloudRestoreAlert)
+            && matches!(self.flow, FlowState::HardwareImport | FlowState::SoftwareImport { .. })
+        {
+            self.cloud_restore_alert_dismissed = true;
+        }
+
+        self.sync_ui(deferred);
+        command
+    }
+
+    pub(crate) fn apply_event(
+        &mut self,
+        event: InternalEvent,
+        deferred: &mut DeferredSender<Message>,
+    ) -> TransitionCommand {
+        match event {
+            InternalEvent::CloudCheckRequested => self.request_cloud_check(),
+            InternalEvent::OfflineCloudCheckRetryRequested => {
+                self.request_offline_cloud_check_retry(deferred)
+            }
+            InternalEvent::CloudCheckFinished { outcome, connected } => {
+                self.finish_cloud_check(outcome, connected, deferred)
+            }
+            event => {
+                self.flow.apply_event(
+                    event,
+                    &mut self.cloud_restore_discovery,
+                    self.restore_offer_allowed,
+                );
+                self.sync_ui(deferred);
+                TransitionCommand::None
+            }
+        }
+    }
+
+    pub(crate) fn is_restore_event_current(&self, event: &InternalEvent) -> bool {
+        self.flow.is_restore_event_current(event)
+    }
+
+    pub(crate) fn is_restore_attempt_current(&self, attempt_id: u64) -> bool {
+        self.flow.is_restore_attempt_current(attempt_id)
+    }
+
+    fn prepare_offline_cloud_check_retry(
         &mut self,
         deferred: &mut DeferredSender<Message>,
     ) -> bool {
@@ -204,6 +279,61 @@ impl InternalState {
         self.flow.prepare_for_cloud_check_retry();
         self.sync_ui(deferred);
         true
+    }
+
+    fn request_cloud_check(&mut self) -> TransitionCommand {
+        if self.cloud_check != CloudCheckState::Idle {
+            return TransitionCommand::None;
+        }
+
+        self.cloud_check = CloudCheckState::InFlight;
+        TransitionCommand::StartCloudCheck
+    }
+
+    fn request_offline_cloud_check_retry(
+        &mut self,
+        deferred: &mut DeferredSender<Message>,
+    ) -> TransitionCommand {
+        match self.cloud_check {
+            CloudCheckState::InFlight | CloudCheckState::InFlightWithRetryQueued => {
+                self.cloud_check = CloudCheckState::InFlightWithRetryQueued;
+                TransitionCommand::None
+            }
+            CloudCheckState::Idle => {
+                if !self.prepare_offline_cloud_check_retry(deferred) {
+                    return TransitionCommand::None;
+                }
+
+                self.cloud_check = CloudCheckState::InFlight;
+                TransitionCommand::StartCloudCheck
+            }
+        }
+    }
+
+    fn finish_cloud_check(
+        &mut self,
+        outcome: CloudCheckOutcome,
+        connected: bool,
+        deferred: &mut DeferredSender<Message>,
+    ) -> TransitionCommand {
+        let retry_was_requested = self.cloud_check == CloudCheckState::InFlightWithRetryQueued;
+        self.flow.apply_event(
+            InternalEvent::CloudCheckFinished { outcome: outcome.clone(), connected },
+            &mut self.cloud_restore_discovery,
+            self.restore_offer_allowed,
+        );
+        self.cloud_check = CloudCheckState::Idle;
+
+        let should_retry_offline_cloud_check = retry_was_requested
+            && outcome == CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline)
+            && connected;
+        if should_retry_offline_cloud_check && self.prepare_offline_cloud_check_retry(deferred) {
+            self.cloud_check = CloudCheckState::InFlight;
+            return TransitionCommand::StartCloudCheck;
+        }
+
+        self.sync_ui(deferred);
+        TransitionCommand::None
     }
 
     pub(crate) fn sync_ui(&mut self, deferred: &mut DeferredSender<Message>) {
@@ -501,12 +631,12 @@ impl FlowState {
                 (origin.flow_state(), TransitionCommand::None)
             }
             (Self::RestoreOffline { origin }, OnboardingAction::ContinueWithoutCloudRestore) => {
-                (origin.flow_state_after_restore_unavailable(), TransitionCommand::None)
+                (origin.flow_state(), TransitionCommand::None)
             }
             (
                 Self::RestoreUnavailable { origin },
                 OnboardingAction::ContinueWithoutCloudRestore,
-            ) => (origin.flow_state_after_restore_unavailable(), TransitionCommand::None),
+            ) => (origin.flow_state(), TransitionCommand::None),
             (Self::RestoreFailed { origin, .. }, OnboardingAction::RetryRestore) => {
                 let attempt_id =
                     restore_attempt_id.expect("restore attempt id required for RetryRestore");
@@ -583,7 +713,7 @@ impl FlowState {
         cloud_restore_discovery: &mut CloudRestoreDiscovery,
         restore_offer_allowed: bool,
     ) {
-        if let InternalEvent::CloudCheckFinished(outcome) = &event {
+        if let InternalEvent::CloudCheckFinished { outcome, .. } = &event {
             *cloud_restore_discovery = CloudRestoreDiscovery::from(outcome.clone());
         }
 
@@ -592,35 +722,53 @@ impl FlowState {
         let next = match (current, event) {
             (
                 Self::CloudCheck { origin },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(_),
+                    ..
+                },
             ) => Self::RestoreOffer { origin, error_message: None },
             (
                 Self::CloudCheck { origin },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::NoBackupConfirmed),
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::NoBackupConfirmed,
+                    ..
+                },
             ) => Self::RestoreUnavailable { origin },
             (
                 Self::CloudCheck { origin },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::Inconclusive(issue)),
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::Inconclusive(issue),
+                    ..
+                },
             ) => Self::restore_inconclusive_entry_for(issue, origin),
             (
                 Self::Welcome { .. },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(_),
+                    ..
+                },
             ) if restore_offer_allowed => {
                 Self::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None }
             }
             (
                 Self::BitcoinChoice { .. },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(_),
+                    ..
+                },
             ) if restore_offer_allowed => {
                 Self::RestoreOffer { origin: RestoreOrigin::BitcoinChoice, error_message: None }
             }
             (
                 Self::StorageChoice { .. },
-                InternalEvent::CloudCheckFinished(CloudCheckOutcome::BackupFound(_)),
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(_),
+                    ..
+                },
             ) if restore_offer_allowed => {
                 Self::RestoreOffer { origin: RestoreOrigin::StorageChoice, error_message: None }
             }
-            (state, InternalEvent::CloudCheckFinished(_)) => state,
+            (state, InternalEvent::CloudCheckFinished { .. }) => state,
             (
                 Self::Restoring { origin, attempt_id, .. },
                 InternalEvent::RestoreProgress { attempt_id: event_attempt_id, flow },
@@ -1047,8 +1195,127 @@ impl RestoreOrigin {
             Self::SoftwareImport => FlowState::SoftwareImport { error_message: None },
         }
     }
+}
 
-    fn flow_state_after_restore_unavailable(self) -> FlowState {
-        self.flow_state()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::manager::deferred_sender::{MessageSender, SingleOrMany};
+
+    #[test]
+    fn in_flight_cloud_check_retry_request_queues_single_retry() {
+        let mut state = InternalState::new(FlowState::Welcome { error_message: None });
+
+        let (command, messages) = apply_event(&mut state, InternalEvent::CloudCheckRequested);
+
+        assert_eq!(command, TransitionCommand::StartCloudCheck);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert!(messages.is_empty());
+
+        let (command, messages) = apply_event(&mut state, InternalEvent::CloudCheckRequested);
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert!(messages.is_empty());
+
+        let (command, messages) =
+            apply_event(&mut state, InternalEvent::OfflineCloudCheckRetryRequested);
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlightWithRetryQueued);
+        assert!(messages.is_empty());
+
+        let (command, messages) =
+            apply_event(&mut state, InternalEvent::OfflineCloudCheckRetryRequested);
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlightWithRetryQueued);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn queued_cloud_check_retry_is_consumed_by_offline_finish() {
+        let mut state =
+            InternalState::new(FlowState::CloudCheck { origin: RestoreOrigin::Welcome });
+
+        assert_eq!(
+            apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+            TransitionCommand::StartCloudCheck
+        );
+        assert_eq!(
+            apply_event(&mut state, InternalEvent::OfflineCloudCheckRetryRequested).0,
+            TransitionCommand::None
+        );
+        assert_eq!(state.cloud_check, CloudCheckState::InFlightWithRetryQueued);
+
+        let (command, messages) = apply_event(
+            &mut state,
+            InternalEvent::CloudCheckFinished {
+                outcome: CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                connected: true,
+            },
+        );
+
+        assert_eq!(command, TransitionCommand::StartCloudCheck);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
+        assert!(matches!(state.flow, FlowState::CloudCheck { origin: RestoreOrigin::Welcome }));
+        assert_eq!(state.ui.step, OnboardingStep::CloudCheck);
+        assert_eq!(state.ui.cloud_restore_message, None);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn idle_cloud_check_transitions_start_finish_and_retry() {
+        let mut state = InternalState::new(FlowState::Welcome { error_message: None });
+
+        let (command, messages) = apply_event(&mut state, InternalEvent::CloudCheckRequested);
+
+        assert_eq!(command, TransitionCommand::StartCloudCheck);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert!(messages.is_empty());
+
+        let (command, _) = apply_event(
+            &mut state,
+            InternalEvent::CloudCheckFinished {
+                outcome: CloudCheckOutcome::NoBackupConfirmed,
+                connected: true,
+            },
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::Idle);
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::NoBackupFound);
+        assert!(matches!(state.flow, FlowState::Welcome { error_message: None }));
+
+        state.cloud_restore_discovery =
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::Offline);
+        let (mut deferred, _) = deferred_sender();
+        state.sync_ui(&mut deferred);
+
+        let (command, _) = apply_event(&mut state, InternalEvent::OfflineCloudCheckRetryRequested);
+
+        assert_eq!(command, TransitionCommand::StartCloudCheck);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
+        assert!(matches!(state.flow, FlowState::Welcome { error_message: None }));
+        assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
+        assert_eq!(state.ui.cloud_restore_message, None);
+    }
+
+    fn apply_event(
+        state: &mut InternalState,
+        event: InternalEvent,
+    ) -> (TransitionCommand, Vec<SingleOrMany<Message>>) {
+        let (mut deferred, receiver) = deferred_sender();
+        let command = state.apply_event(event, &mut deferred);
+        drop(deferred);
+
+        (command, receiver.try_iter().collect())
+    }
+
+    fn deferred_sender() -> (DeferredSender<Message>, flume::Receiver<SingleOrMany<Message>>) {
+        let (sender, receiver) = flume::bounded(16);
+        (DeferredSender::new(MessageSender::new(sender)), receiver)
     }
 }

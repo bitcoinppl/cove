@@ -3,7 +3,6 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
-use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -18,7 +17,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupError, CloudBackupPasskeyHint,
+    CloudBackupEnableContext, CloudBackupEnableState, CloudBackupError, CloudBackupPasskeyHint,
     CloudBackupRestoreOutcome, CloudBackupStatus, CloudBackupStore, PendingEnableSession,
     PendingVerificationUpload, is_connectivity_related_issue, master_key_wrapper_revision_hash,
 };
@@ -225,8 +224,9 @@ impl RustCloudBackupManager {
         preparation: &CloudBackupEnableRecoveryPreparation,
     ) -> Result<(), CloudBackupError> {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        cspp.save_master_key(&preparation.active_master_key)
-            .map_err_prefix("save recovered master key", CloudBackupError::Internal)
+        cspp.save_master_key(&preparation.active_master_key).map_err(|source| {
+            CloudBackupError::internal_context("save recovered master key", source)
+        })
     }
 
     pub(crate) fn rollback_enable_recovery_master_key(&self) {
@@ -321,7 +321,9 @@ impl RustCloudBackupManager {
         namespaces: &[MergeNamespace],
     ) -> Result<Vec<MergedNamespaceWallets>, CloudBackupError> {
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut merged_namespaces = Vec::with_capacity(namespaces.len());
 
@@ -419,7 +421,7 @@ impl RustCloudBackupManager {
 
         let has_local_master_key = cspp
             .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
             .is_some();
 
         if has_local_master_key {
@@ -500,11 +502,11 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         let had_local_master_key = cspp
             .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
             .is_some();
         let master_key = cspp
             .get_or_create_master_key()
-            .map_err_prefix("master key", CloudBackupError::Internal)?;
+            .map_err(|source| CloudBackupError::internal_context("master key", source))?;
 
         let namespace_id = master_key.namespace_id();
         info!("Enable: namespace_id={namespace_id}, getting passkey");
@@ -556,7 +558,7 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         let has_local_master_key = cspp
             .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
             .is_some();
         let existing_namespaces = if has_local_master_key {
             Vec::new()
@@ -602,13 +604,13 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(keychain.clone());
         let had_local_master_key = cspp
             .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)?
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))?
             .is_some();
 
         info!("{log_context}: getting master key");
         let master_key = cspp
             .get_or_create_master_key()
-            .map_err_prefix("master key", CloudBackupError::Internal)?;
+            .map_err(|source| CloudBackupError::internal_context("master key", source))?;
 
         let namespace_id = master_key.namespace_id();
         info!("{log_context}: namespace_id={namespace_id}, creating passkey");
@@ -643,9 +645,9 @@ impl RustCloudBackupManager {
         let preserve_awaiting_prompt = matches!(status, CloudBackupStatus::Disabled)
             && self.state.read().is_awaiting_enable_prompt();
 
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared);
+        self.clear_enable_progress_report();
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+        self.apply_enable_state(CloudBackupEnableState::Idle);
         if preserve_awaiting_prompt {
             self.reconcile_runtime_status(CloudBackupStatus::Enabling);
         } else {
@@ -705,9 +707,9 @@ impl RustCloudBackupManager {
             ready.passkey.provider_hint.clone(),
             RemotePayloadMetadata::master_key(&namespace_id, uploaded_at),
         )
-        .map_err_str(CloudBackupError::Crypto)?;
+        .map_err(CloudBackupError::crypto)?;
         let master_json =
-            serde_json::to_vec(&encrypted_master).map_err_str(CloudBackupError::Internal)?;
+            serde_json::to_vec(&encrypted_master).map_err(CloudBackupError::internal)?;
         let master_key_wrapper_revision = master_key_wrapper_revision_hash(&master_json);
 
         info!("Enable: uploading master key");

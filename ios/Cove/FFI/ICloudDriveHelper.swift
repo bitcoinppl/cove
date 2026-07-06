@@ -1,18 +1,15 @@
 import CoveCore
 import Foundation
 
-final class ICloudDriveHelper: @unchecked Sendable {
+final class ICloudDriveHelper: Sendable {
     static let shared = ICloudDriveHelper()
 
     private let containerIdentifier = "iCloud.com.covebitcoinwallet"
-    private let dataSubdirectory = "Data"
-    private let namespacesSubdirectory = csppNamespacesSubdirectory()
-    private let walletsSubdirectory = csppWalletsDirectory()
     let defaultTimeout: TimeInterval = 60
-    private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
-    private let progressLogInterval: TimeInterval = 1
-    private static let legacyFileReadNoSuchFileError = 4
+
+    private let fileCoordinationClient = FileCoordinationClient()
+    private let stateMachine = UploadDownloadStateMachine()
 
     final class ObserverBox {
         private var observers: [NSObjectProtocol] = []
@@ -26,49 +23,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 NotificationCenter.default.removeObserver(observer)
             }
             observers.removeAll()
-        }
-    }
-
-    struct ResolvedMetadataItem {
-        let url: URL
-        let metadataPath: String?
-    }
-
-    private enum UploadState: CustomStringConvertible {
-        case uploaded
-        case uploading
-        case failed(Error)
-        case notUbiquitous
-        case unknown
-
-        var description: String {
-            switch self {
-            case .uploaded: "uploaded"
-            case .uploading: "uploading"
-            case let .failed(error): "failed: \(error.localizedDescription)"
-            case .notUbiquitous: "not ubiquitous"
-            case .unknown: "unknown"
-            }
-        }
-    }
-
-    private enum DownloadState: CustomStringConvertible {
-        case current
-        case downloading
-        case failed(Error)
-        case notUbiquitous
-        case notDownloaded
-        case unknown
-
-        var description: String {
-            switch self {
-            case .current: "current"
-            case .downloading: "downloading"
-            case let .failed(error): "failed: \(error.localizedDescription)"
-            case .notUbiquitous: "not ubiquitous"
-            case .notDownloaded: "not downloaded"
-            case .unknown: "unknown"
-            }
         }
     }
 
@@ -87,53 +41,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
-    private static func isConnectivityError(_ error: Error) -> Bool {
-        if let urlError = error as? URLError {
-            return [
-                .notConnectedToInternet,
-                .networkConnectionLost,
-                .timedOut,
-                .cannotFindHost,
-                .cannotConnectToHost,
-                .dnsLookupFailed,
-                .internationalRoamingOff,
-                .dataNotAllowed,
-            ].contains(urlError.code)
-        }
-
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            return [
-                NSURLErrorNotConnectedToInternet,
-                NSURLErrorNetworkConnectionLost,
-                NSURLErrorTimedOut,
-                NSURLErrorCannotFindHost,
-                NSURLErrorCannotConnectToHost,
-                NSURLErrorDNSLookupFailed,
-                NSURLErrorInternationalRoamingOff,
-                NSURLErrorDataNotAllowed,
-            ].contains(nsError.code)
-        }
-
-        return false
-    }
-
-    private static func uploadError(_ context: String, error: Error) -> CloudStorageError {
-        if isConnectivityError(error) {
-            return .Offline("\(context): \(error.localizedDescription)")
-        }
-
-        return .UploadFailed("\(context): \(error.localizedDescription)")
-    }
-
-    private static func downloadError(_ context: String, error: Error) -> CloudStorageError {
-        if isConnectivityError(error) {
-            return .Offline("\(context): \(error.localizedDescription)")
-        }
-
-        return .DownloadFailed("\(context): \(error.localizedDescription)")
-    }
-
     // MARK: - Path mapping
 
     func containerURL() throws -> URL {
@@ -148,68 +55,59 @@ final class ICloudDriveHelper: @unchecked Sendable {
     }
 
     func dataDirectoryURL() throws -> URL {
-        let url = try containerURL().appendingPathComponent(dataSubdirectory, isDirectory: true)
-        try coordinatedCreateDirectory(at: url)
+        let url = try paths().dataDirectoryURL()
+        try fileCoordinationClient.createDirectory(at: url)
         return url
     }
 
     func dataDirectoryReadURL() throws -> URL {
-        try containerURL().appendingPathComponent(dataSubdirectory, isDirectory: true)
+        try paths().dataDirectoryURL()
     }
 
-    /// Root directory for all namespaces: Data/cspp-namespaces/
     func namespacesRootURL() throws -> URL {
-        let url = try dataDirectoryURL()
-            .appendingPathComponent(namespacesSubdirectory, isDirectory: true)
-        try coordinatedCreateDirectory(at: url)
+        _ = try dataDirectoryURL()
+        let url = try paths().namespacesRootURL()
+        try fileCoordinationClient.createDirectory(at: url)
         return url
     }
 
     func namespacesRootReadURL() throws -> URL {
-        try dataDirectoryReadURL()
-            .appendingPathComponent(namespacesSubdirectory, isDirectory: true)
+        try paths().namespacesRootURL()
     }
 
     func validateNamespace(_ namespace: String) throws -> String {
-        guard Self.isValidNamespaceID(namespace) else {
-            throw CloudStorageError.InvalidNamespace("expected 32 lowercase hex characters")
-        }
-
-        return namespace
+        try ICloudPaths.validateNamespace(namespace)
     }
 
-    /// Directory for a specific namespace: Data/cspp-namespaces/{namespace}/
     func namespaceDirectoryURL(namespace: String) throws -> URL {
         let namespace = try validateNamespace(namespace)
         let url = try namespacesRootURL()
             .appendingPathComponent(namespace, isDirectory: true)
-        try coordinatedCreateDirectory(at: url)
+        try fileCoordinationClient.createDirectory(at: url)
         return url
     }
 
     func namespaceDirectoryReadURL(namespace: String) throws -> URL {
-        let namespace = try validateNamespace(namespace)
-        return try namespacesRootReadURL()
-            .appendingPathComponent(namespace, isDirectory: true)
+        try paths().namespaceDirectoryURL(namespace: namespace)
     }
 
     func walletsDirectoryReadURL(namespace: String) throws -> URL {
-        try namespaceDirectoryReadURL(namespace: namespace)
-            .appendingPathComponent(walletsSubdirectory, isDirectory: true)
+        try paths().walletsDirectoryURL(namespace: namespace)
     }
 
     func walletLocation(filename: String) -> String {
-        "\(walletsSubdirectory)/\(filename)"
+        ICloudPaths.walletLocation(filename: filename)
     }
 
     func backupFileURL(namespace: String, location: RemoteBackupLocation) throws -> URL {
-        let namespaceDirectory = try namespaceDirectoryURL(namespace: namespace)
-        return try appendBackupLocation(location, to: namespaceDirectory, createParentDirectories: true)
+        _ = try namespaceDirectoryURL(namespace: namespace)
+        let url = try paths().backupFileURL(namespace: namespace, location: location)
+        try fileCoordinationClient.createDirectory(at: url.deletingLastPathComponent())
+        return url
     }
 
     func backupFileReadURL(namespace: String, location: RemoteBackupLocation) throws -> URL {
-        let namespaceDirectory = try namespaceDirectoryReadURL(namespace: namespace)
-        return try appendBackupLocation(location, to: namespaceDirectory, createParentDirectories: false)
+        try paths().backupFileURL(namespace: namespace, location: location)
     }
 
     func existingBackupFileReadURL(
@@ -239,178 +137,26 @@ final class ICloudDriveHelper: @unchecked Sendable {
         throw CloudStorageError.NotFound(recordId)
     }
 
-    private func appendBackupLocation(
-        _ location: RemoteBackupLocation,
-        to namespaceDirectory: URL,
-        createParentDirectories: Bool
-    ) throws -> URL {
-        let parts = location.relativePath.split(separator: "/").map(String.init)
-        guard
-            !parts.isEmpty,
-            parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
-        else {
-            throw CloudStorageError.NotAvailable("invalid backup location")
-        }
-
-        var directory = namespaceDirectory
-        for folder in parts.dropLast() {
-            directory.appendPathComponent(folder, isDirectory: true)
-        }
-
-        if createParentDirectories {
-            try coordinatedCreateDirectory(at: directory)
-        }
-
-        return directory.appendingPathComponent(parts.last!)
+    private func paths() throws -> ICloudPaths {
+        try ICloudPaths(containerURL: containerURL())
     }
 
     // MARK: - File coordination
 
-    /// Coordinates iCloud-backed filesystem access because ubiquitous items may
-    /// be placeholders, may resolve to a different concrete URL, and can fail
-    /// if we touch them directly without asking the system to arbitrate first
-    private func coordinatedCreateDirectory(at url: URL) throws {
-        guard !FileManager.default.fileExists(atPath: url.path) else { return }
-
-        var coordinatorError: NSError?
-        var createError: Error?
-
-        let coordinator = NSFileCoordinator()
-        coordinator.coordinate(writingItemAt: url, options: [], error: &coordinatorError) {
-            newURL in
-            do {
-                try FileManager.default.createDirectory(
-                    at: newURL,
-                    withIntermediateDirectories: true
-                )
-            } catch {
-                createError = error
-            }
-        }
-
-        if let error = coordinatorError ?? createError {
-            throw Self.uploadError("create directory failed", error: error)
-        }
-    }
-
     func coordinatedWrite(data: Data, to url: URL) throws {
-        var coordinatorError: NSError?
-        var writeError: Error?
-
-        let coordinator = NSFileCoordinator()
-        coordinator.coordinate(
-            writingItemAt: url, options: .forReplacing, error: &coordinatorError
-        ) { newURL in
-            do {
-                try data.write(to: newURL, options: .atomic)
-            } catch {
-                writeError = error
-            }
-        }
-
-        if let error = coordinatorError ?? writeError {
-            throw Self.uploadError("write failed", error: error)
-        }
+        try fileCoordinationClient.write(data: data, to: url)
     }
 
     func writeForUpload(data: Data, to url: URL) throws {
-        guard !FileManager.default.fileExists(atPath: url.path) else {
-            try coordinatedWrite(data: data, to: url)
-            return
-        }
-
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "icloud-upload-\(UUID().uuidString)-\(url.lastPathComponent)"
-        )
-
-        do {
-            try data.write(to: tempURL, options: .atomic)
-        } catch {
-            throw CloudStorageError.UploadFailed(
-                "temporary write failed: \(error.localizedDescription)"
-            )
-        }
-
-        defer {
-            if FileManager.default.fileExists(atPath: tempURL.path) {
-                try? FileManager.default.removeItem(at: tempURL)
-            }
-        }
-
-        Log.info(
-            "writeForUpload: staging first upload via setUbiquitous for \(url.lastPathComponent)"
-        )
-
-        var coordinatorError: NSError?
-        var moveError: Error?
-
-        let coordinator = NSFileCoordinator()
-        coordinator.coordinate(writingItemAt: url, options: [], error: &coordinatorError) {
-            destinationURL in
-            do {
-                try FileManager.default.setUbiquitous(
-                    true,
-                    itemAt: tempURL,
-                    destinationURL: destinationURL
-                )
-            } catch {
-                moveError = error
-            }
-        }
-
-        if let error = coordinatorError ?? moveError {
-            throw Self.uploadError("setUbiquitous failed", error: error)
-        }
+        try fileCoordinationClient.writeForUpload(data: data, to: url)
     }
 
     func coordinatedDelete(at url: URL, missingItemID: String) throws {
-        var coordinatorError: NSError?
-        var deleteError: Error?
-
-        let coordinator = NSFileCoordinator()
-        coordinator.coordinate(
-            writingItemAt: url, options: .forDeleting, error: &coordinatorError
-        ) { newURL in
-            do {
-                try FileManager.default.removeItem(at: newURL)
-            } catch {
-                deleteError = error
-            }
-        }
-
-        if let error = coordinatorError ?? deleteError {
-            if Self.isNoSuchFileError(error) { throw CloudStorageError.NotFound(missingItemID) }
-            throw Self.uploadError("delete failed", error: error)
-        }
+        try fileCoordinationClient.delete(at: url, missingItemID: missingItemID)
     }
 
     func coordinatedRead(from url: URL) throws -> Data {
-        var coordinatorError: NSError?
-        var readResult: Result<Data, Error>?
-
-        let coordinator = NSFileCoordinator()
-        coordinator.coordinate(readingItemAt: url, options: [], error: &coordinatorError) {
-            newURL in
-            do {
-                readResult = try .success(Data(contentsOf: newURL))
-            } catch {
-                readResult = .failure(error)
-            }
-        }
-
-        if let error = coordinatorError {
-            throw Self.downloadError("file coordination error", error: error)
-        }
-
-        guard let readResult else {
-            throw CloudStorageError.DownloadFailed("coordinated read produced no result")
-        }
-
-        switch readResult {
-        case let .success(data): return data
-        case let .failure(error):
-            throw Self.downloadError("read failed", error: error)
-        }
+        try fileCoordinationClient.read(from: url)
     }
 
     /// Downloads a file from iCloud via coordinated read
@@ -418,235 +164,80 @@ final class ICloudDriveHelper: @unchecked Sendable {
     /// Tries startDownloadingUbiquitousItem as a hint, then uses NSFileCoordinator
     /// which forces the download through a different (more reliable) path
     func downloadFile(url: URL, recordId: String) throws -> Data {
-        try downloadData(url: url, recordId: recordId)
+        try stateMachine.downloadFile(
+            url: url,
+            recordId: recordId,
+            fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+            downloadState: { self.downloadState(for: $0) },
+            waitForMetadataItem: { name, parentDirectoryURL, deadline in
+                try self.waitForMetadataItem(
+                    named: name,
+                    parentDirectoryURL: parentDirectoryURL,
+                    deadline: deadline
+                )
+            },
+            triggerDownload: { url, recordId, filename in
+                try self.triggerDownload(url: url, recordId: recordId, filename: filename)
+            },
+            coordinatedRead: { try self.coordinatedRead(from: $0) }
+        )
     }
 
     // MARK: - Upload verification
 
-    /// Blocks until the file is visible through iCloud metadata
     func waitForMetadataVisibility(url: URL) throws {
-        let filename = url.lastPathComponent
-        let deadline = Date().addingTimeInterval(defaultTimeout)
-
-        do {
-            let resolvedItem = try waitForMetadataItem(
-                named: filename,
-                parentDirectoryURL: url.deletingLastPathComponent(),
-                deadline: deadline
-            )
-            if resolvedItem.url != url {
-                Log.info(
-                    "waitForMetadataVisibility: using metadata URL for \(filename) local=\(url.path) metadata=\(resolvedItem.url.path)"
+        try stateMachine.waitForMetadataVisibility(
+            url: url,
+            waitForMetadataItem: { name, parentDirectoryURL, deadline in
+                try self.waitForMetadataItem(
+                    named: name,
+                    parentDirectoryURL: parentDirectoryURL,
+                    deadline: deadline
                 )
             }
-        } catch {
-            throw Self.uploadError("iCloud metadata lookup failed for \(filename)", error: error)
-        }
+        )
     }
 
-    /// Blocks until the file at `url` is confirmed uploaded to iCloud, or times out
     func waitForUpload(url: URL) throws {
-        let filename = url.lastPathComponent
-        Log.info("waitForUpload: waiting for \(filename)")
-        let deadline = Date().addingTimeInterval(defaultTimeout)
-
-        if case .uploaded = uploadState(for: url) {
-            Log.info("waitForUpload: \(filename) already uploaded on local URL")
-            return
-        }
-
-        let resolvedItem: ResolvedMetadataItem
-        do {
-            resolvedItem = try waitForMetadataItem(
-                named: filename,
-                parentDirectoryURL: url.deletingLastPathComponent(),
-                deadline: deadline
-            )
-        } catch {
-            throw Self.uploadError("iCloud metadata lookup failed for \(filename)", error: error)
-        }
-
-        if resolvedItem.url != url {
-            Log.info(
-                "waitForUpload: using metadata URL for \(filename) local=\(url.path) metadata=\(resolvedItem.url.path)"
-            )
-        }
-
-        var lastProgressLog = Date.distantPast
-
-        while Date() < deadline {
-            let state = uploadState(for: resolvedItem.url)
-            let now = Date()
-
-            if now.timeIntervalSince(lastProgressLog) >= progressLogInterval {
-                Log.info(
-                    "waitForUpload: \(filename) state=\(state) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>") diagnostics=\(uploadDiagnostics(for: resolvedItem.url))"
+        try stateMachine.waitForUpload(
+            url: url,
+            waitForMetadataItem: { name, parentDirectoryURL, deadline in
+                try self.waitForMetadataItem(
+                    named: name,
+                    parentDirectoryURL: parentDirectoryURL,
+                    deadline: deadline
                 )
-                lastProgressLog = now
+            },
+            uploadState: { self.uploadState(for: $0) },
+            uploadDiagnostics: { self.fileCoordinationClient.uploadDiagnostics(for: $0) },
+            logMetadataItems: { parentDirectoryURL, reason, focusName in
+                self.logMetadataItems(
+                    under: parentDirectoryURL,
+                    reason: reason,
+                    focusName: focusName
+                )
             }
-
-            if case .uploaded = state {
-                Log.info("waitForUpload: \(filename) uploaded")
-                return
-            }
-
-            if case let .failed(error) = state {
-                throw Self.uploadError("iCloud upload failed for \(filename)", error: error)
-            }
-
-            Thread.sleep(forTimeInterval: pollInterval)
-        }
-
-        Log.info(
-            "waitForUpload: timeout diagnostics \(filename) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>") diagnostics=\(uploadDiagnostics(for: resolvedItem.url))"
-        )
-        logMetadataItems(
-            under: url.deletingLastPathComponent(),
-            reason: "waitForUpload timeout",
-            focusName: filename
-        )
-
-        throw CloudStorageError.Offline(
-            "iCloud upload timed out for \(filename) after \(defaultTimeout)s"
         )
     }
 
     // MARK: - Download
 
-    /// Ensures the file is downloaded locally, triggering a download if evicted
     func ensureDownloaded(url: URL, recordId: String) throws {
-        _ = try downloadData(url: url, recordId: recordId)
-    }
-
-    private func downloadData(url: URL, recordId: String) throws -> Data {
-        let filename = url.lastPathComponent
-
-        if FileManager.default.fileExists(atPath: url.path), case .current = downloadState(for: url) {
-            Log.info("downloadFile: \(filename) already current on local URL")
-            return try coordinatedRead(from: url)
-        }
-
-        let deadline = Date().addingTimeInterval(defaultTimeout)
-
-        let resolvedItem: ResolvedMetadataItem
-        do {
-            resolvedItem = try waitForMetadataItem(
-                named: filename,
-                parentDirectoryURL: url.deletingLastPathComponent(),
-                deadline: deadline
-            )
-        } catch {
-            throw Self.downloadError("iCloud metadata lookup failed for \(filename)", error: error)
-        }
-
-        if resolvedItem.url != url {
-            Log.info(
-                "downloadFile: using metadata URL for \(filename) local=\(url.path) metadata=\(resolvedItem.url.path)"
-            )
-        } else {
-            Log.info("downloadFile: \(filename) reading via resolved local URL")
-        }
-
-        try triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
-
-        var coordinatedReadAttempt = 1
-        var lastCoordinatedReadError: Error?
-
-        // try a coordinated read before waiting for iCloud status to catch up
-        Log.info(
-            "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=initial file=\(filename)"
-        )
-
-        do {
-            let data = try coordinatedRead(from: resolvedItem.url)
-            Log.info("downloadFile: coordinated read succeeded for \(filename)")
-            return data
-        } catch {
-            lastCoordinatedReadError = error
-            Log.warn(
-                "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
-            )
-        }
-
-        // poll with periodic re-triggers and inline coordinated reads because
-        // some restored-device placeholders never transition out of
-        // not-downloaded even though they can be materialized
-        let retriggerInterval: TimeInterval = 5
-        var lastRetrigger = Date()
-        var lastProgressLog = Date.distantPast
-
-        while Date() < deadline {
-            let now = Date()
-            let state = downloadState(for: resolvedItem.url)
-
-            if now.timeIntervalSince(lastRetrigger) >= retriggerInterval {
-                try? triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
-                lastRetrigger = now
-                coordinatedReadAttempt += 1
-
-                Log.info(
-                    "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=retry file=\(filename)"
-                )
-
-                do {
-                    let data = try coordinatedRead(from: resolvedItem.url)
-                    Log.info("downloadFile: coordinated read succeeded for \(filename)")
-                    return data
-                } catch {
-                    lastCoordinatedReadError = error
-                    Log.warn(
-                        "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
-                    )
-                }
-            }
-
-            if now.timeIntervalSince(lastProgressLog) >= progressLogInterval {
-                Log.info(
-                    "downloadFile: \(filename) state=\(state) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>")"
-                )
-                lastProgressLog = now
-            }
-
-            if case .current = state {
-                Log.info("downloadFile: poll path won for \(filename)")
-                return try coordinatedRead(from: resolvedItem.url)
-            }
-
-            if case let .failed(error) = state {
-                throw Self.downloadError("iCloud download failed", error: error)
-            }
-
-            Thread.sleep(forTimeInterval: pollInterval)
-        }
-
-        Log.info("downloadFile: polling timed out, trying final coordinated read for \(filename)")
-        do {
-            return try coordinatedRead(from: resolvedItem.url)
-        } catch {
-            let diagnosticError = lastCoordinatedReadError?.localizedDescription ?? "none"
-            throw CloudStorageError.Offline(
-                "iCloud download timed out after \(defaultTimeout)s (last coordinated read error: \(diagnosticError), final coordinated read failed: \(error.localizedDescription))"
-            )
-        }
+        _ = try downloadFile(url: url, recordId: recordId)
     }
 
     private func triggerDownload(url: URL, recordId: String, filename _: String) throws {
         do {
             try FileManager.default.startDownloadingUbiquitousItem(at: url)
         } catch {
-            let nsError = error as NSError
-            if nsError.domain == NSCocoaErrorDomain,
-               nsError.code == NSFileReadNoSuchFileError
-               // some iCloud missing-file cases surface as legacy Cocoa code 4
-               || nsError.code == Self.legacyFileReadNoSuchFileError
-            {
+            if FileCoordinationClient.isFileReadNoSuchFileError(error) {
                 throw CloudStorageError.NotFound(recordId)
             }
             Log.warn("downloadFile: startDownloading failed: \(error.localizedDescription)")
         }
     }
 
-    private func uploadState(for url: URL) -> UploadState {
+    private func uploadState(for url: URL) -> UploadDownloadStateMachine.UploadState {
         // clear cached resource values to prevent stale reads
         var freshURL = url
         freshURL.removeAllCachedResourceValues()
@@ -669,35 +260,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         return .uploading
     }
 
-    private func uploadDiagnostics(for url: URL) -> String {
-        let exists = FileManager.default.fileExists(atPath: url.path)
-        let fileSize: String =
-            if exists,
-            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-            let size = attributes[.size] as? NSNumber {
-                size.stringValue
-            } else {
-                "nil"
-            }
-
-        guard
-            let values = try? url.resourceValues(forKeys: [
-                .isUbiquitousItemKey,
-                .ubiquitousItemIsUploadingKey,
-                .ubiquitousItemIsUploadedKey,
-                .ubiquitousItemUploadingErrorKey,
-            ])
-        else {
-            return "exists=\(exists) fileSize=\(fileSize) values=<unavailable>"
-        }
-
-        let errorDescription = values.ubiquitousItemUploadingError?.localizedDescription ?? "nil"
-
-        return
-            "exists=\(exists) fileSize=\(fileSize) isUbiquitous=\(String(describing: values.isUbiquitousItem)) isUploading=\(String(describing: values.ubiquitousItemIsUploading)) isUploaded=\(String(describing: values.ubiquitousItemIsUploaded)) uploadingError=\(errorDescription)"
-    }
-
-    private func downloadState(for url: URL) -> DownloadState {
+    private func downloadState(for url: URL) -> UploadDownloadStateMachine.DownloadState {
         var freshURL = url
         freshURL.removeAllCachedResourceValues()
 
@@ -727,37 +290,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
     func listSubdirectories(parentPath: String) throws -> [String] {
         let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
 
-        if let names = try? listSubdirectoriesViaFileManager(parentURL: parentURL), !names.isEmpty {
+        if let names = try? fileCoordinationClient.listSubdirectoriesViaFileManager(
+            parentURL: parentURL
+        ), !names.isEmpty {
             return names.sorted()
         }
 
         Log.info("listSubdirectories: FileManager found nothing, falling back to metadata query")
         return try metadataSubdirectoryNames(parentDirectoryURL: parentURL)
-    }
-
-    private func listSubdirectoriesViaFileManager(parentURL: URL) throws -> [String] {
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: parentURL, includingPropertiesForKeys: [.isDirectoryKey],
-            options: []
-        )
-
-        var names = Set<String>()
-        for url in contents {
-            var name = url.lastPathComponent
-
-            // iCloud evicted entries appear as .Name.icloud
-            if name.hasPrefix("."), name.hasSuffix(".icloud") {
-                name = String(name.dropFirst().dropLast(".icloud".count))
-                names.insert(name)
-                continue
-            }
-
-            if url.hasDirectoryPath {
-                names.insert(name)
-            }
-        }
-
-        return Array(names)
     }
 
     /// Lists filenames matching a prefix within a namespace directory
@@ -767,35 +307,15 @@ final class ICloudDriveHelper: @unchecked Sendable {
     func listFiles(namespacePath: String, prefix: String) throws -> [String] {
         let dirURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
 
-        if let names = try? listFilesViaFileManager(dirURL: dirURL, prefix: prefix), !names.isEmpty {
+        if let names = try? fileCoordinationClient.listFilesViaFileManager(
+            dirURL: dirURL,
+            prefix: prefix
+        ), !names.isEmpty {
             return names.sorted()
         }
 
         Log.info("listFiles: FileManager found nothing, falling back to metadata query prefix=\(prefix)")
         return try metadataFileNames(parentDirectoryURL: dirURL, prefix: prefix)
-    }
-
-    private func listFilesViaFileManager(dirURL: URL, prefix: String) throws -> [String] {
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: dirURL, includingPropertiesForKeys: nil,
-            options: []
-        )
-
-        var names = Set<String>()
-        for url in contents {
-            var name = url.lastPathComponent
-
-            // iCloud evicted files appear as .FileName.icloud
-            if name.hasPrefix("."), name.hasSuffix(".icloud") {
-                name = String(name.dropFirst().dropLast(".icloud".count))
-            }
-
-            if name.hasPrefix(prefix) {
-                names.insert(name)
-            }
-        }
-
-        return Array(names)
     }
 
     // MARK: - Upload status for UI
@@ -913,27 +433,8 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
-    private static func isNoSuchFileError(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        guard nsError.domain == NSCocoaErrorDomain else { return false }
-        return nsError.code == NSFileNoSuchFileError
-            || nsError.code == NSFileReadNoSuchFileError
-            || nsError.code == Self.legacyFileReadNoSuchFileError
-    }
-
-    private static func isValidNamespaceID(_ namespace: String) -> Bool {
-        namespace.count == 32 && namespace.utf8.allSatisfy { byte in
-            switch byte {
-            case 48 ... 57, 97 ... 102:
-                true
-            default:
-                false
-            }
-        }
-    }
-
     static func isValidNamespaceDirectory(_ url: URL) -> Bool {
-        url.hasDirectoryPath && isValidNamespaceID(url.lastPathComponent)
+        ICloudPaths.isValidNamespaceDirectory(url)
     }
 
     /// Checks sync health of all files in namespace directories

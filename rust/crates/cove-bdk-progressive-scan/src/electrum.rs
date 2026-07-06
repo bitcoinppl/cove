@@ -14,7 +14,11 @@ use bdk_wallet::chain::{
 };
 
 use crate::{
-    Error, ProgressTracker, ProgressiveScanner, Result, ScanEvent, ScanUpdate,
+    Error, ProgressiveScanner, Result, ScanEvent,
+    core::{
+        KeychainScanResult, ScanAccumulator, SpkBatcher, StopGapTracker, TxStatusPlan,
+        insert_evicted_ats, insert_tx_status, prevout_fetch_plan, scan_update_for_keychain,
+    },
     event::{clone_full_scan_response, send_complete_unless_cancelled, send_progress, send_update},
 };
 
@@ -74,10 +78,7 @@ where
             None => None,
         };
 
-        let mut tx_update = TxUpdate::<ConfirmationBlockTime>::default();
-        let mut last_active_indices = BTreeMap::<K, u32>::default();
-        let mut inserted_txs = HashSet::<Txid>::new();
-        let mut progress = ProgressTracker::new(parts.stop_gap);
+        let mut scan = ScanAccumulator::<K>::new(parts.stop_gap);
         for keychain in request.keychains() {
             if parts.cancel_token.is_cancelled() {
                 return Err(Error::Cancelled);
@@ -86,30 +87,28 @@ where
             let spks = request
                 .iter_spks(keychain.clone())
                 .map(|(spk_i, spk)| (spk_i, SpkWithExpectedTxids::from(spk)));
-            if let Some(last_active_index) = populate_with_spks(
+            let keychain_result = populate_with_spks(
                 self.client.as_ref(),
                 start_time,
                 &parts.events,
                 tip_and_latest_blocks.as_ref(),
                 &parts.cancel_token,
-                &mut progress,
+                &mut scan,
                 keychain.clone(),
-                &mut inserted_txs,
-                &mut tx_update,
                 spks,
                 parts.last_revealed_indices.get(&keychain).copied(),
                 parts.stop_gap,
                 self.batch_size,
                 self.fetch_prev_txouts,
-            )? {
-                last_active_indices.insert(keychain, last_active_index);
-            }
+            )?;
+            scan.finish_keychain(keychain, keychain_result);
         }
 
         if parts.cancel_token.is_cancelled() {
             return Err(Error::Cancelled);
         }
 
+        let (tx_update, last_active_indices) = scan.into_response_parts();
         let chain_update = match tip_and_latest_blocks {
             Some((chain_tip, latest_blocks)) => {
                 Some(chain_update(chain_tip, &latest_blocks, tx_update.anchors.iter().cloned())?)
@@ -135,34 +134,30 @@ fn populate_with_spks<K, E>(
     events: &flume::Sender<ScanEvent<K>>,
     tip_and_latest_blocks: Option<&(CheckPoint, BTreeMap<u32, BlockHash>)>,
     cancel_token: &tokio_util::sync::CancellationToken,
-    progress: &mut ProgressTracker<K>,
+    scan: &mut ScanAccumulator<K>,
     keychain: K,
-    inserted_txs: &mut HashSet<Txid>,
-    tx_update: &mut TxUpdate<ConfirmationBlockTime>,
-    mut spks_with_expected_txids: impl Iterator<Item = Indexed<SpkWithExpectedTxids>>,
+    spks_with_expected_txids: impl Iterator<Item = Indexed<SpkWithExpectedTxids>>,
     last_revealed_index: Option<u32>,
     stop_gap: usize,
     batch_size: usize,
     fetch_prev_txouts: bool,
-) -> Result<Option<u32>>
+) -> Result<KeychainScanResult>
 where
     K: Ord + Clone,
     E: ElectrumApi,
 {
-    let mut stop_gap_unused_count = 0_usize;
-    let mut last_active_index = Option::<u32>::None;
-    let gap_limit = stop_gap.max(1);
+    let mut stop_gap = StopGapTracker::new(stop_gap, last_revealed_index);
+    let mut batcher = SpkBatcher::new(spks_with_expected_txids);
+    let mut update = TxUpdate::<ConfirmationBlockTime>::default();
 
     loop {
         if cancel_token.is_cancelled() {
             return Err(Error::Cancelled);
         }
 
-        let spks =
-            (0..batch_size).map_while(|_| spks_with_expected_txids.next()).collect::<Vec<_>>();
-
+        let spks = batcher.next_batch(batch_size);
         if spks.is_empty() {
-            return Ok(last_active_index);
+            return Ok(KeychainScanResult::new(update, stop_gap.last_active_index()));
         }
 
         let spk_histories = client
@@ -182,32 +177,29 @@ where
 
         for ((spk_index, spk), spk_history) in spks.into_iter().zip(spk_histories) {
             let used = !spk_history.is_empty();
-            let scan_progress = progress.checked(keychain.clone(), used);
+            let scan_progress = scan.checked(keychain.clone(), used);
             send_progress(events, scan_progress);
-
-            if spk_history.is_empty() {
-                if last_revealed_index.is_none_or(|last_revealed| spk_index > last_revealed) {
-                    stop_gap_unused_count = stop_gap_unused_count.saturating_add(1);
-                }
-            } else {
-                last_active_index = Some(last_active_index.unwrap_or(spk_index).max(spk_index));
-                stop_gap_unused_count = 0;
-            }
+            stop_gap.record_spk(spk_index, used);
 
             let spk_history_set = spk_history.iter().map(|res| res.tx_hash).collect::<HashSet<_>>();
-            partial_update.evicted_ats.extend(
-                spk.expected_txids.difference(&spk_history_set).map(|&txid| (txid, start_time)),
-            );
+            insert_evicted_ats(&mut partial_update, &spk, &spk_history_set, start_time);
 
             for tx_res in spk_history {
-                if inserted_txs.insert(tx_res.tx_hash) {
-                    partial_update.txs.push(client.fetch_tx(tx_res.tx_hash)?);
+                if !scan.insert_txid(tx_res.tx_hash) {
+                    continue;
                 }
+
+                partial_update.txs.push(client.fetch_tx(tx_res.tx_hash)?);
 
                 match tx_res.height.try_into() {
                     Ok(height) if height > 0 => pending_anchors.push((tx_res.tx_hash, height)),
                     _ => {
-                        partial_update.seen_ats.insert((tx_res.tx_hash, start_time));
+                        insert_tx_status(
+                            &mut partial_update,
+                            start_time,
+                            tx_res.tx_hash,
+                            TxStatusPlan::Seen,
+                        );
                     }
                 }
             }
@@ -228,7 +220,12 @@ where
         if !pending_anchors.is_empty() {
             let anchors = batch_fetch_anchors(client, &pending_anchors)?;
             for (txid, anchor) in anchors {
-                partial_update.anchors.insert((anchor, txid));
+                insert_tx_status(
+                    &mut partial_update,
+                    start_time,
+                    txid,
+                    TxStatusPlan::Confirmed(anchor),
+                );
             }
         }
 
@@ -245,20 +242,19 @@ where
                 )?),
                 None => None,
             };
-            let scan_update = ScanUpdate {
-                chain_update: partial_chain_update,
-                tx_update: partial_update.clone(),
-                last_active_indices: last_active_index
-                    .map(|index| BTreeMap::from([(keychain.clone(), index)]))
-                    .unwrap_or_default(),
-            };
+            let scan_update = scan_update_for_keychain(
+                keychain.clone(),
+                &partial_update,
+                partial_chain_update,
+                stop_gap.last_active_index(),
+            );
 
             send_update(events, scan_update)?;
-            tx_update.extend(partial_update);
+            update.extend(partial_update);
         }
 
-        if stop_gap_unused_count >= gap_limit {
-            return Ok(last_active_index);
+        if stop_gap.reached_stop_gap() {
+            return Ok(KeychainScanResult::new(update, stop_gap.last_active_index()));
         }
     }
 }
@@ -321,25 +317,16 @@ fn fetch_prev_txout<E>(
 where
     E: ElectrumApi,
 {
-    let mut no_dup = HashSet::<Txid>::new();
-    for tx in &tx_update.txs {
-        if !tx.is_coinbase() && no_dup.insert(tx.compute_txid()) {
-            for vin in &tx.input {
-                let outpoint = vin.previous_output;
-                let vout = outpoint.vout;
-                let prev_tx = client.fetch_tx(outpoint.txid)?;
-                let txout = prev_tx
-                    .output
-                    .get(vout as usize)
-                    .ok_or_else(|| {
-                        electrum_client::Error::Message(format!(
-                            "prevout {outpoint} does not exist"
-                        ))
-                    })?
-                    .clone();
-                tx_update.txouts.insert(outpoint, txout);
-            }
-        }
+    for outpoint in prevout_fetch_plan(tx_update) {
+        let prev_tx = client.fetch_tx(outpoint.txid)?;
+        let txout = prev_tx
+            .output
+            .get(outpoint.vout as usize)
+            .ok_or_else(|| {
+                electrum_client::Error::Message(format!("prevout {outpoint} does not exist"))
+            })?
+            .clone();
+        tx_update.txouts.insert(outpoint, txout);
     }
     Ok(())
 }
@@ -405,14 +392,27 @@ fn fetch_tip_and_latest_blocks(
     Ok((new_tip, new_blocks))
 }
 
+fn chain_update(
+    mut tip: CheckPoint,
+    latest_blocks: &BTreeMap<u32, BlockHash>,
+    anchors: impl Iterator<Item = (ConfirmationBlockTime, Txid)>,
+) -> std::result::Result<CheckPoint, electrum_client::Error> {
+    for (anchor, _txid) in anchors {
+        let height = anchor.block_id.height;
+        if tip.get(height).is_none() && height <= tip.height() {
+            let hash = match latest_blocks.get(&height) {
+                Some(&hash) => hash,
+                None => anchor.block_id.hash,
+            };
+            tip = tip.insert(BlockId { hash, height });
+        }
+    }
+    Ok(tip)
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{
-        borrow::Borrow,
-        collections::{BTreeMap, HashSet, VecDeque},
-        str::FromStr as _,
-        sync::{Arc, Mutex},
-    };
+    use std::{borrow::Borrow, collections::BTreeMap};
 
     use bdk_electrum::{
         BdkElectrumClient,
@@ -423,29 +423,32 @@ mod tests {
         },
     };
     use bdk_wallet::{
-        KeychainKind, Wallet,
-        bitcoin::Network,
+        KeychainKind,
         chain::{
-            BlockId, CheckPoint, ConfirmationBlockTime, TxGraph, TxUpdate,
-            bitcoin::{
-                BlockHash, Script, ScriptBuf, Transaction, Txid, absolute, block, transaction,
-            },
+            BlockId, CheckPoint, ConfirmationBlockTime, TxGraph,
+            bitcoin::{Script, ScriptBuf, Transaction, Txid, block},
             spk_client::{FullScanRequest, SpkWithExpectedTxids},
         },
-        test_utils::get_test_wpkh_and_change_desc,
     };
     use tokio_util::sync::CancellationToken;
 
-    use crate::{Error, ProgressTracker, ProgressiveScanner, ScanEvent};
+    use crate::{
+        Error, ProgressiveScanner, ScanEvent,
+        core::ScanAccumulator,
+        test_fixtures::{
+            QueuedResponse, ResponseQueue, SharedVec, block_hash, collect_events, empty_spks,
+            event_channel, external_request, revealed_external_request, test_transaction, txid,
+        },
+    };
 
     use super::{batch_fetch_anchors, chain_update, populate_with_spks};
 
     #[derive(Debug, Clone)]
     struct FakeElectrum {
         fail_history: bool,
-        histories: Arc<Mutex<VecDeque<Vec<GetHistoryRes>>>>,
+        histories: ResponseQueue<GetHistoryRes>,
         transactions: BTreeMap<Txid, Transaction>,
-        fetched_txids: Arc<Mutex<Vec<Txid>>>,
+        fetched_txids: SharedVec<Txid>,
         history_response_limit: Option<usize>,
         merkle_response_limit: Option<usize>,
     }
@@ -454,9 +457,9 @@ mod tests {
         fn empty_history() -> Self {
             Self {
                 fail_history: false,
-                histories: Arc::new(Mutex::new(VecDeque::new())),
+                histories: ResponseQueue::empty(),
                 transactions: BTreeMap::new(),
-                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
             }
@@ -465,9 +468,9 @@ mod tests {
         fn history_error() -> Self {
             Self {
                 fail_history: true,
-                histories: Arc::new(Mutex::new(VecDeque::new())),
+                histories: ResponseQueue::empty(),
                 transactions: BTreeMap::new(),
-                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
             }
@@ -477,13 +480,13 @@ mod tests {
             let txid = tx.compute_txid();
             Self {
                 fail_history: false,
-                histories: Arc::new(Mutex::new(VecDeque::from([
+                histories: ResponseQueue::with_responses([
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                     Vec::new(),
                     Vec::new(),
-                ]))),
+                ]),
                 transactions: BTreeMap::from([(txid, tx)]),
-                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
             }
@@ -493,12 +496,12 @@ mod tests {
             let txid = tx.compute_txid();
             Self {
                 fail_history: false,
-                histories: Arc::new(Mutex::new(VecDeque::from([
+                histories: ResponseQueue::with_responses([
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
-                ]))),
+                ]),
                 transactions: BTreeMap::from([(txid, tx)]),
-                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
             }
@@ -510,14 +513,14 @@ mod tests {
             let txid = tx.compute_txid();
             Self {
                 fail_history: false,
-                histories: Arc::new(Mutex::new(VecDeque::from([
+                histories: ResponseQueue::with_responses([
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                     Vec::new(),
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                     Vec::new(),
-                ]))),
+                ]),
                 transactions: BTreeMap::from([(txid, tx)]),
-                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
             }
@@ -526,13 +529,13 @@ mod tests {
         fn with_mempool_history(txid: Txid) -> Self {
             Self {
                 fail_history: false,
-                histories: Arc::new(Mutex::new(VecDeque::from([
+                histories: ResponseQueue::with_responses([
                     vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                     Vec::new(),
                     Vec::new(),
-                ]))),
+                ]),
                 transactions: BTreeMap::new(),
-                fetched_txids: Arc::new(Mutex::new(Vec::new())),
+                fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
             }
@@ -547,7 +550,7 @@ mod tests {
         }
 
         fn fetched_txids(&self) -> Vec<Txid> {
-            self.fetched_txids.lock().expect("fetched txid lock not poisoned").clone()
+            self.fetched_txids.snapshot()
         }
     }
 
@@ -660,13 +663,19 @@ mod tests {
                 return Err(electrum_client::Error::Message("history failed".to_string()));
             }
 
-            let mut histories = self.histories.lock().expect("history lock not poisoned");
+            let mut histories = Vec::new();
+            let limit = self.history_response_limit.unwrap_or(usize::MAX);
 
-            let histories = scripts
-                .into_iter()
-                .map(|_| histories.pop_front().unwrap_or_default())
-                .take(self.history_response_limit.unwrap_or(usize::MAX))
-                .collect();
+            for _ in scripts.into_iter().take(limit) {
+                let history = match self.histories.pop() {
+                    QueuedResponse::Response(history) => history,
+                    QueuedResponse::Error => {
+                        return Err(electrum_client::Error::Message("history failed".to_string()));
+                    }
+                    QueuedResponse::Exhausted => Vec::new(),
+                };
+                histories.push(history);
+            }
 
             Ok(histories)
         }
@@ -794,30 +803,13 @@ mod tests {
         }
 
         fn transaction_get(&self, txid: &Txid) -> Result<Transaction, electrum_client::Error> {
-            self.fetched_txids.lock().expect("fetched txid lock not poisoned").push(*txid);
+            self.fetched_txids.push(*txid);
 
             self.transactions
                 .get(txid)
                 .cloned()
                 .ok_or_else(|| electrum_client::Error::Message(format!("missing tx {txid}")))
         }
-    }
-
-    fn test_transaction() -> Transaction {
-        Transaction {
-            version: transaction::Version::TWO,
-            lock_time: absolute::LockTime::ZERO,
-            input: Vec::new(),
-            output: Vec::new(),
-        }
-    }
-
-    fn txid(byte: u8) -> Txid {
-        Txid::from_str(&format!("{byte:02x}{}", "00".repeat(31))).expect("valid txid")
-    }
-
-    fn block_hash(byte: u8) -> BlockHash {
-        BlockHash::from_str(&format!("{byte:02x}{}", "00".repeat(31))).expect("valid block hash")
     }
 
     #[test]
@@ -845,23 +837,19 @@ mod tests {
     #[test]
     fn empty_histories_emit_progress_without_updates_until_stop_gap() {
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
-        let mut tx_update = TxUpdate::default();
-        let spks = (0..5).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let mut scan = ScanAccumulator::new(2);
+        let spks = empty_spks(5);
 
-        let last_active_index = populate_with_spks(
+        let result = populate_with_spks(
             &client,
             0,
             &events,
             None,
             &cancel_token,
-            &mut progress,
+            &mut scan,
             "external",
-            &mut inserted_txs,
-            &mut tx_update,
             spks,
             None,
             2,
@@ -870,22 +858,17 @@ mod tests {
         )
         .expect("scan succeeds");
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
-        assert_eq!(last_active_index, None);
-        assert!(tx_update.is_empty());
+        let events = collect_events(receiver);
+        assert_eq!(result.last_active_index, None);
+        assert!(result.update.is_empty());
         assert_eq!(events.len(), 2);
         assert!(events.iter().all(|event| matches!(event, ScanEvent::Progress(_))));
     }
 
     #[test]
     fn successful_empty_scan_sends_complete_once_without_update() {
-        let request = FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(0, 5);
+        let (events, receiver) = event_channel();
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
 
         let response = ProgressiveScanner::builder()
@@ -898,7 +881,7 @@ mod tests {
             .run()
             .expect("scan succeeds");
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(response.tx_update.is_empty());
         assert!(response.last_active_indices.is_empty());
         assert_eq!(
@@ -910,20 +893,8 @@ mod tests {
 
     #[test]
     fn revealed_range_is_scanned_before_stop_gap_extension() {
-        let (external_descriptor, internal_descriptor) = get_test_wpkh_and_change_desc();
-        let mut wallet = Wallet::create(external_descriptor, internal_descriptor)
-            .network(Network::Signet)
-            .create_wallet_no_persist()
-            .expect("wallet is created");
-        let _ = wallet.reveal_addresses_to(KeychainKind::External, 3).last();
-        let last_revealed_indices = wallet.spk_index().last_revealed_indices();
-        let spks = wallet
-            .spk_index()
-            .unbounded_spk_iter(KeychainKind::External)
-            .expect("external keychain exists");
-        let request =
-            FullScanRequest::builder_at(0).spks_for_keychain(KeychainKind::External, spks).build();
-        let (events, receiver) = flume::unbounded();
+        let (request, last_revealed_indices) = revealed_external_request(3);
+        let (events, receiver) = event_channel();
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
 
         let response = ProgressiveScanner::builder()
@@ -953,13 +924,8 @@ mod tests {
 
     #[test]
     fn complete_send_failure_returns_channel_closed() {
-        let request = FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(0, 5);
+        let (events, receiver) = event_channel();
         drop(receiver);
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
 
@@ -977,13 +943,8 @@ mod tests {
 
     #[test]
     fn mempool_history_emits_update_and_final_last_active_index() {
-        let request = FullScanRequest::builder_at(7)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(7, 5);
+        let (events, receiver) = event_channel();
         let tx = test_transaction();
         let txid = tx.compute_txid();
         let client = BdkElectrumClient::new(FakeElectrum::with_mempool_transaction(tx));
@@ -998,7 +959,7 @@ mod tests {
             .run()
             .expect("scan succeeds");
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         let updates = events
             .iter()
             .filter_map(|event| match event {
@@ -1020,37 +981,33 @@ mod tests {
         let txid = tx.compute_txid();
         let fake = FakeElectrum {
             fail_history: false,
-            histories: Arc::new(Mutex::new(VecDeque::from([
+            histories: ResponseQueue::with_responses([
                 vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                 vec![GetHistoryRes { height: 0, tx_hash: txid, fee: None }],
                 Vec::new(),
                 Vec::new(),
-            ]))),
+            ]),
             transactions: BTreeMap::from([(txid, tx)]),
-            fetched_txids: Arc::new(Mutex::new(Vec::new())),
+            fetched_txids: SharedVec::default(),
             history_response_limit: None,
             merkle_response_limit: None,
         };
         let client = BdkElectrumClient::new(fake);
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
-        let mut tx_update = TxUpdate::default();
+        let mut scan = ScanAccumulator::new(2);
         let spks = [4, 1, 5, 6]
             .into_iter()
             .map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
 
-        let last_active_index = populate_with_spks(
+        let result = populate_with_spks(
             &client,
             7,
             &events,
             None,
             &cancel_token,
-            &mut progress,
+            &mut scan,
             "external",
-            &mut inserted_txs,
-            &mut tx_update,
             spks,
             None,
             2,
@@ -1066,7 +1023,7 @@ mod tests {
             })
             .expect("partial update is emitted");
 
-        assert_eq!(last_active_index, Some(4));
+        assert_eq!(result.last_active_index, Some(4));
         assert_eq!(update.last_active_indices.get("external"), Some(&4));
     }
 
@@ -1076,23 +1033,19 @@ mod tests {
         let txid = tx.compute_txid();
         let fake = FakeElectrum::with_duplicate_mempool_transaction(tx);
         let client = BdkElectrumClient::new(fake.clone());
-        let (events, receiver) = flume::unbounded();
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
-        let mut progress = ProgressTracker::new(2);
-        let mut inserted_txs = HashSet::new();
-        let mut tx_update = TxUpdate::default();
-        let spks = (0..2).map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
+        let mut scan = ScanAccumulator::new(2);
+        let spks = empty_spks(2);
 
-        let last_active_index = populate_with_spks(
+        let result = populate_with_spks(
             &client,
             7,
             &events,
             None,
             &cancel_token,
-            &mut progress,
+            &mut scan,
             "external",
-            &mut inserted_txs,
-            &mut tx_update,
             spks,
             None,
             2,
@@ -1108,12 +1061,12 @@ mod tests {
             })
             .expect("partial update is emitted");
 
-        assert_eq!(last_active_index, Some(1));
+        assert_eq!(result.last_active_index, Some(1));
         assert_eq!(fake.fetched_txids(), vec![txid]);
         assert_eq!(update.tx_update.txs.len(), 1);
-        assert_eq!(tx_update.txs.len(), 1);
+        assert_eq!(result.update.txs.len(), 1);
         assert!(update.tx_update.seen_ats.contains(&(txid, 7)));
-        assert!(tx_update.seen_ats.contains(&(txid, 7)));
+        assert!(result.update.seen_ats.contains(&(txid, 7)));
     }
 
     #[test]
@@ -1133,7 +1086,7 @@ mod tests {
                 (0..2).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
             )
             .build();
-        let (events, _receiver) = flume::unbounded();
+        let (events, _receiver) = event_channel();
 
         let response = ProgressiveScanner::builder()
             .request(request)
@@ -1154,13 +1107,8 @@ mod tests {
 
     #[test]
     fn tx_graph_populates_transaction_cache_before_scan() {
-        let request = FullScanRequest::builder_at(7)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, _receiver) = flume::unbounded();
+        let request = external_request(7, 5);
+        let (events, _receiver) = event_channel();
         let tx = test_transaction();
         let txid = tx.compute_txid();
         let mut tx_graph = TxGraph::<ConfirmationBlockTime>::default();
@@ -1201,13 +1149,8 @@ mod tests {
 
     #[test]
     fn update_send_failure_returns_channel_closed() {
-        let request = FullScanRequest::builder_at(7)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(7, 5);
+        let (events, receiver) = event_channel();
         drop(receiver);
         let client =
             BdkElectrumClient::new(FakeElectrum::with_mempool_transaction(test_transaction()));
@@ -1226,13 +1169,8 @@ mod tests {
 
     #[test]
     fn cancelled_scan_returns_cancelled_without_complete() {
-        let request = FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(0, 5);
+        let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
         cancel_token.cancel();
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
@@ -1247,20 +1185,15 @@ mod tests {
             .batch_size(1)
             .run();
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(matches!(result, Err(Error::Cancelled)));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
 
     #[test]
     fn provider_error_does_not_emit_complete() {
-        let request = FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(0, 5);
+        let (events, receiver) = event_channel();
         let client = BdkElectrumClient::new(FakeElectrum::history_error());
 
         let result = ProgressiveScanner::builder()
@@ -1272,20 +1205,15 @@ mod tests {
             .batch_size(1)
             .run();
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(matches!(result, Err(Error::Electrum(_))));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
 
     #[test]
     fn short_batch_history_response_returns_error() {
-        let request = FullScanRequest::builder_at(0)
-            .spks_for_keychain(
-                "external",
-                (0..5).map(|index| (index, ScriptBuf::new())).collect::<Vec<_>>(),
-            )
-            .build();
-        let (events, receiver) = flume::unbounded();
+        let request = external_request(0, 5);
+        let (events, receiver) = event_channel();
         let client = BdkElectrumClient::new(FakeElectrum::with_history_response_limit(1));
 
         let result = ProgressiveScanner::builder()
@@ -1297,7 +1225,7 @@ mod tests {
             .batch_size(2)
             .run();
 
-        let events = receiver.try_iter().collect::<Vec<_>>();
+        let events = collect_events(receiver);
         assert!(matches!(
             result,
             Err(Error::Electrum(electrum_client::Error::Message(message)))
@@ -1305,22 +1233,4 @@ mod tests {
         ));
         assert!(!events.iter().any(|event| matches!(event, ScanEvent::Complete(_))));
     }
-}
-
-fn chain_update(
-    mut tip: CheckPoint,
-    latest_blocks: &BTreeMap<u32, BlockHash>,
-    anchors: impl Iterator<Item = (ConfirmationBlockTime, Txid)>,
-) -> std::result::Result<CheckPoint, electrum_client::Error> {
-    for (anchor, _txid) in anchors {
-        let height = anchor.block_id.height;
-        if tip.get(height).is_none() && height <= tip.height() {
-            let hash = match latest_blocks.get(&height) {
-                Some(&hash) => hash,
-                None => anchor.block_id.hash,
-            };
-            tip = tip.insert(BlockId { hash, height });
-        }
-    }
-    Ok(tip)
 }

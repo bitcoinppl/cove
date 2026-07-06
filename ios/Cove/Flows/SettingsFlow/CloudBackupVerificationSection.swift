@@ -131,8 +131,8 @@ struct VerificationSection: View {
     private func failureSection(_ failure: DeepVerificationFailure) -> some View {
         Section {
             switch failure {
-            case let .retry(message, _, retryContext):
-                retryFailureContent(message, retryContext: retryContext)
+            case let .retry(message, _, retryAction):
+                retryFailureContent(message, retryAction: retryAction)
             case let .recreateManifest(message, warning, _):
                 recreateManifestContent(message: message, warning: warning)
             case let .reinitializeBackup(message, warning, _):
@@ -152,11 +152,11 @@ struct VerificationSection: View {
     }
 
     @ViewBuilder
-    private func retryFailureContent(_ message: String, retryContext: CloudBackupRetryContext?) -> some View {
+    private func retryFailureContent(_ message: String, retryAction: CloudBackupRetryAction?) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
-        retryButton(retryContext: retryContext)
+        retryButton(retryAction: retryAction)
         CloudBackupRepairPasskeyButton(manager: manager, isBusy: isBusy)
     }
 
@@ -229,9 +229,9 @@ struct VerificationSection: View {
         .disabled(isBusy)
     }
 
-    private func retryButton(retryContext: CloudBackupRetryContext?) -> some View {
+    private func retryButton(retryAction: CloudBackupRetryAction?) -> some View {
         Button {
-            if retryContext?.action == .verifyDiscoverable {
+            if retryAction == .verifyDiscoverable {
                 manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
             } else {
                 manager.startVerification(source: .cloudBackupDetail)

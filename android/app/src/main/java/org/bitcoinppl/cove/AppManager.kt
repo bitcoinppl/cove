@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -19,11 +18,7 @@ import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 import org.bitcoinppl.cove_core.util.GenerationToken
-import org.bitcoinppl.cove_core.util.GenerationTracker
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
-
-private class RouteUpdateDispatchException(cause: Throwable) : Exception("Unable to dispatch route update", cause)
 
 /**
  * central app state manager (singleton)
@@ -36,9 +31,6 @@ class AppManager private constructor() : FfiReconcile {
 
     // Scope for UI-bound work; reconcile() hops to Main here
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val navigationGenerations = GenerationTracker()
-    private var pendingSidebarNavigationJob: Job? = null
-    private var navigationSettleJob: Job? = null
 
     // rust bridge - not observable
     private var rust: FfiApp = FfiApp()
@@ -53,7 +45,56 @@ class AppManager private constructor() : FfiReconcile {
             Log.w(tag, it)
         }
 
-    var router: RouterManager = RouterManager(rust.state().router)
+    private val routerHost =
+        object : RouterManagerHost {
+            override fun canPopRoute(): Boolean =
+                withRustOr(false) {
+                    canGoBack()
+                }
+
+            override fun dispatchRouteUpdate(routes: List<Route>): Result<Unit> =
+                dispatchResult(AppAction.UpdateRoute(routes))
+
+            override fun resetDefaultRouteTo(route: Route) {
+                withRustOr(Unit) {
+                    resetDefaultRouteTo(route)
+                }
+            }
+
+            override fun resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: List<Route>) {
+                withRustOr(Unit) {
+                    resetNestedRoutesTo(defaultRoute, nestedRoutes)
+                }
+            }
+
+            override fun loadAndResetDefaultRoute(route: Route) {
+                withRustOr(Unit) {
+                    loadAndResetDefaultRoute(route)
+                }
+            }
+
+            override fun resetAfterLoading(routes: List<Route>) {
+                withRustOr(Unit) {
+                    resetAfterLoading(routes)
+                }
+            }
+
+            override fun onRoutesChanged() {
+                clearInactiveSendFlowManager()
+            }
+
+            override suspend fun startWalletScanIfNeeded(walletId: WalletId): Result<Unit> =
+                runCatching {
+                    getWalletManager(walletId).startWalletScanIfNeeded()
+                }.also { result ->
+                    val error = result.exceptionOrNull()
+                    if (error is CancellationException) {
+                        throw error
+                    }
+                }
+        }
+
+    var router: RouterManager = RouterManager(rust.state().router, mainScope, routerHost)
         private set
 
     var database: Database = Database()
@@ -63,11 +104,14 @@ class AppManager private constructor() : FfiReconcile {
     var wallets by mutableStateOf(emptyList<WalletMetadata>())
         private set
 
-    var isSidebarVisible by mutableStateOf(false)
-        internal set
+    var isSidebarVisible: Boolean
+        get() = router.isSidebarVisible
+        internal set(value) {
+            router.isSidebarVisible = value
+        }
 
-    var isNavigationSettled by mutableStateOf(true)
-        private set
+    val isNavigationSettled: Boolean
+        get() = router.isNavigationSettled
 
     var isLoading by mutableStateOf(false)
 
@@ -98,23 +142,24 @@ class AppManager private constructor() : FfiReconcile {
     var fees: FeeResponse? by mutableStateOf(runCatching { rust.fees() }.getOrNull())
         private set
 
-    // route id changes when route is reset, to clear lifecycle view state
-    var routeId by mutableStateOf(UUID.randomUUID().toString())
-        private set
+    val routeId: String
+        get() = router.routeId
 
     // tracks whether async runtime has been initialized
     var asyncRuntimeReady by mutableStateOf(false)
 
     // multiple screens within the same wallet (send, coin control, tx details, settings)
     // call getWalletManager, this avoids recreating the actor and reconciler each time
-    internal var walletManager: WalletManager? = null
-        private set
+    private val managerCache = AndroidManagerCache(mainScope)
 
-    internal var sendFlowManager: SendFlowManager? = null
-        private set
+    internal val walletManager: WalletManager?
+        get() = managerCache.walletManager
 
-    internal var coinControlManager: CoinControlManager? = null
-        private set
+    internal val sendFlowManager: SendFlowManager?
+        get() = managerCache.sendFlowManager
+
+    internal val coinControlManager: CoinControlManager?
+        get() = managerCache.coinControlManager
 
     val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
@@ -150,170 +195,39 @@ class AppManager private constructor() : FfiReconcile {
     /**
      * set the cached wallet manager instance
      */
-    internal fun setWalletManager(manager: WalletManager) {
-        Log.d(tag, "setting wallet manager for wallet ${manager.id}")
-        walletManager = manager
-    }
+    internal fun setWalletManager(manager: WalletManager) = managerCache.setWalletManager(manager)
 
-    fun cachedWalletManager(id: WalletId): WalletManager? {
-        val manager = walletManager ?: return null
-        if (manager.id != id) return null
+    fun cachedWalletManager(id: WalletId): WalletManager? = managerCache.cachedWalletManager(id)
 
-        return manager
-    }
-
-    fun walletMetadata(id: WalletId): WalletMetadata? {
-        cachedWalletManager(id)?.walletMetadata?.let { return it }
-        return wallets.firstOrNull { it.id == id }
-    }
+    fun walletMetadata(id: WalletId): WalletMetadata? = managerCache.walletMetadata(id, wallets)
 
     /**
      * get or create wallet manager for the given wallet id
      * caches the instance so we don't recreate unnecessarily
      */
-    fun getWalletManager(id: WalletId): WalletManager {
-        walletManager?.let {
-            if (it.id == id) {
-                Log.d(tag, "found and using wallet manager for $id")
-                return it
-            }
-
-            // selecting a different wallet is the boundary for ending in-flight scans
-            Log.d(tag, "closing old wallet manager for ${it.id}")
-            clearWalletManager()
-        }
-
-        Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
-
-        return try {
-            val manager = WalletManager(id = id)
-            walletManager = manager
-            manager
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to create wallet manager", e)
-            throw e
-        }
-    }
+    fun getWalletManager(id: WalletId): WalletManager = managerCache.getWalletManager(id)
 
     /**
      * get or create send flow manager for the given wallet manager
      * caches the instance so we don't recreate unnecessarily
      */
-    fun getSendFlowManager(wm: WalletManager, presenter: SendFlowPresenter): SendFlowManager {
-        sendFlowManager?.let {
-            if (it.id == wm.id) {
-                Log.d(tag, "found and using sendflow manager for ${wm.id}")
-                it.presenter = presenter
-                return it
-            }
-            // close old manager before replacing
-            Log.d(tag, "closing old sendflow manager for ${it.id}")
-            clearSendFlowManager()
-        }
+    fun getSendFlowManager(wm: WalletManager, presenter: SendFlowPresenter): SendFlowManager =
+        managerCache.getSendFlowManager(wm, presenter)
 
-        Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
-        val manager = SendFlowManager(wm.newSendFlowManager(wm.balance), presenter)
-        sendFlowManager = manager
-        return manager
-    }
+    fun setCoinControlManager(manager: CoinControlManager) = managerCache.setCoinControlManager(manager)
 
-    fun setCoinControlManager(manager: CoinControlManager) {
-        coinControlManager = manager
-    }
+    fun clearCoinControlManager(manager: CoinControlManager) = managerCache.clearCoinControlManager(manager)
 
-    fun clearCoinControlManager(manager: CoinControlManager) {
-        if (coinControlManager === manager) {
-            coinControlManager = null
-        }
-    }
+    fun reconcileAfterLabelImport(walletId: WalletId) = managerCache.reconcileAfterLabelImport(walletId)
 
-    fun reconcileAfterLabelImport(walletId: WalletId) {
-        mainScope.launch {
-            val refreshed =
-                try {
-                    reconcileAfterLabelImportAndWait(walletId)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(tag, "failed to reconcile after label import", e)
-                    false
-                }
-            if (!refreshed) {
-                walletManager
-                    ?.takeIf { it.id == walletId }
-                    ?.notifyLabelRefreshFailed()
-            }
-        }
-    }
+    suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean =
+        managerCache.reconcileAfterLabelImportAndWait(walletId)
 
-    suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean {
-        val refreshed =
-            walletManager
-                ?.takeIf { it.id == walletId }
-                ?.reconcileAfterLabelImportAndWait()
-                ?: false
+    fun clearWalletManager() = managerCache.clearWalletManager()
 
-        coinControlManager
-            ?.takeIf { it.id == walletId }
-            ?.reloadLabels()
+    private fun clearWalletManager(id: WalletId) = managerCache.clearWalletManager(id)
 
-        sendFlowManager
-            ?.takeIf { it.id == walletId }
-            ?.reconcileAfterLabelImport()
-
-        return refreshed
-    }
-
-    fun clearWalletManager() {
-        clearWalletScopedChildManagers()
-
-        try {
-            walletManager?.close()
-        } catch (e: Exception) {
-            Log.w(tag, "Error closing WalletManager: ${e.message}")
-        }
-        walletManager = null
-    }
-
-    private fun clearWalletManager(id: WalletId) {
-        if (walletManager?.id == id) {
-            clearWalletManager()
-        }
-
-        if (sendFlowManager?.id == id) {
-            clearSendFlowManager()
-        }
-    }
-
-    private fun clearWalletScopedChildManagers() {
-        clearSendFlowManager()
-        clearActiveCoinControlManager()
-    }
-
-    private fun clearSendFlowManager() {
-        try {
-            sendFlowManager?.close()
-        } catch (e: Exception) {
-            Log.w(tag, "Error closing SendFlowManager: ${e.message}")
-        }
-        sendFlowManager = null
-    }
-
-    private fun clearActiveCoinControlManager() {
-        try {
-            coinControlManager?.close()
-        } catch (e: Exception) {
-            Log.w(tag, "Error closing CoinControlManager: ${e.message}")
-        }
-        coinControlManager = null
-    }
-
-    private fun clearInactiveSendFlowManager() {
-        val manager = sendFlowManager ?: return
-        if (routeStackContainsSendWallet(router.default, router.routes, manager.id)) return
-
-        clearSendFlowManager()
-    }
+    private fun clearInactiveSendFlowManager() = managerCache.clearInactiveSendFlowManager(router)
 
     val fullVersionId: String
         get() {
@@ -354,13 +268,6 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
-        pendingSidebarNavigationJob?.cancel()
-        pendingSidebarNavigationJob = null
-        navigationSettleJob?.cancel()
-        navigationSettleJob = null
-        isNavigationSettled = true
-        advanceNavigationGeneration(skipSettle = true)
-
         // close managers before clearing them
         clearWalletManager()
 
@@ -369,23 +276,16 @@ class AppManager private constructor() : FfiReconcile {
             needsOnboarding()
         }
 
-        withRustOr(null) {
+        val routerState = withRustOr(null) {
             state()
-        }?.let {
-            router = RouterManager(it.router)
         }
+        router.reset(routerState?.router)
     }
 
     val currentRoute: Route
         get() = router.currentRoute
 
-    fun canGoBack(): Boolean =
-        withRustOr(false) {
-            canGoBack()
-        }
-
-    private fun isDuplicateTopRoute(route: Route): Boolean =
-        currentRoute.isSameNavigationDestination(route)
+    fun canGoBack(): Boolean = router.canGoBack()
 
     val hasWallets: Boolean
         get() = withRustOr(false) { hasWallets() }
@@ -409,7 +309,7 @@ class AppManager private constructor() : FfiReconcile {
 
     @Throws(Exception::class)
     fun selectWalletOrThrow(id: WalletId) {
-        advanceNavigationGeneration()
+        router.advanceNavigationGeneration()
         selectWalletWithoutNavigationGeneration(id)
     }
 
@@ -429,13 +329,13 @@ class AppManager private constructor() : FfiReconcile {
 
     @Throws(Exception::class)
     fun selectLatestOrNewWallet() {
-        advanceNavigationGeneration()
+        router.advanceNavigationGeneration()
         dispatchResult(AppAction.SelectLatestOrNewWallet).getOrThrow()
         isSidebarVisible = false
     }
 
     fun toggleSidebar() {
-        isSidebarVisible = !isSidebarVisible
+        router.toggleSidebar()
     }
 
     fun loadWallets() {
@@ -475,55 +375,18 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     private fun closeSidebarThenNavigate(action: suspend () -> Unit) {
-        pendingSidebarNavigationJob?.cancel()
-        val generation = advanceNavigationGeneration()
-        isSidebarVisible = false
-        pendingSidebarNavigationJob = mainScope.launch {
-            kotlinx.coroutines.delay(SIDEBAR_NAVIGATION_DELAY_MS)
-            if (!isNavigationGenerationCurrent(generation)) return@launch
-            action()
-        }
+        router.closeSidebarAndNavigate(action)
     }
 
     fun pushRoute(route: Route) {
-        if (isDuplicateTopRoute(route)) {
-            isSidebarVisible = false
-            return
-        }
-
-        if (pushRouteWithoutNavigationGeneration(route)) {
-            advanceNavigationGeneration()
-        }
+        router.pushRoute(route)
     }
 
-    private fun pushRouteWithoutNavigationGeneration(route: Route): Boolean {
-        Log.d(tag, "pushRoute: $route")
-        isSidebarVisible = false
-        if (isDuplicateTopRoute(route)) return false
-
-        val newRoutes = router.routes.toMutableList().apply { add(route) }
-        if (dispatchRouteUpdate(newRoutes).isFailure) return false
-
-        updateRoutesAndClearInactiveSendFlowManager(newRoutes)
-
-        return true
-    }
+    private fun pushRouteWithoutNavigationGeneration(route: Route): Boolean =
+        router.pushRouteWithoutNavigationGeneration(route)
 
     fun pushRoutes(routes: List<Route>) {
-        if (pushRoutesWithoutNavigationGeneration(routes)) {
-            advanceNavigationGeneration()
-        }
-    }
-
-    private fun pushRoutesWithoutNavigationGeneration(routes: List<Route>): Boolean {
-        Log.d(tag, "pushRoutes: ${routes.size} routes")
-        isSidebarVisible = false
-        val newRoutes = router.routes.toMutableList().apply { addAll(routes) }
-        if (dispatchRouteUpdate(newRoutes).isFailure) return false
-
-        updateRoutesAndClearInactiveSendFlowManager(newRoutes)
-
-        return true
+        router.pushRoutes(routes)
     }
 
     /**
@@ -532,59 +395,22 @@ class AppManager private constructor() : FfiReconcile {
      * @return `true` only when a route was removed
      */
     fun popRoute(): Boolean {
-        return popRouteForRecovery() == RoutePopResult.Popped
+        return router.popRoute()
     }
 
-    internal fun popRouteForRecovery(): RoutePopResult {
-        Log.d(tag, "popRoute")
-        if (!canGoBack()) {
-            return RoutePopResult.NoRouteToPop
-        }
-
-        val currentRoutes = router.routes
-        if (currentRoutes.isEmpty()) {
-            return RoutePopResult.NoRouteToPop
-        }
-
-        val newRoutes = currentRoutes.dropLast(1)
-        val dispatchError = dispatchRouteUpdate(newRoutes).exceptionOrNull()
-        if (dispatchError != null) {
-            return RoutePopResult.Failed(RouteUpdateDispatchException(dispatchError))
-        }
-
-        advanceNavigationGeneration()
-        updateRoutesAndClearInactiveSendFlowManager(newRoutes)
-
-        return RoutePopResult.Popped
-    }
+    internal fun popRouteForRecovery(): RoutePopResult = router.popRouteForRecovery()
 
     fun setRoute(routes: List<Route>) {
-        Log.d(tag, "setRoute: ${routes.size} routes")
-
-        if (dispatchRouteUpdate(routes).isFailure) return
-
-        advanceNavigationGeneration()
-        updateRoutesAndClearInactiveSendFlowManager(routes)
-    }
-
-    private fun dispatchRouteUpdate(routes: List<Route>): Result<Unit> {
-        if (routes == router.routes) return Result.success(Unit)
-
-        return dispatchResult(AppAction.UpdateRoute(routes))
-    }
-
-    private fun updateRoutesAndClearInactiveSendFlowManager(routes: List<Route>) {
-        router.updateRoutes(routes)
-        clearInactiveSendFlowManager()
+        router.setRoute(routes)
     }
 
     fun scanQr() {
-        advanceNavigationGeneration()
+        router.advanceNavigationGeneration()
         sheetState = TaggedItem(AppSheetState.Qr)
     }
 
     fun scanNfc() {
-        advanceNavigationGeneration()
+        router.advanceNavigationGeneration()
         scanNfcWithoutNavigationGeneration()
     }
 
@@ -593,65 +419,37 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun resetRoute(to: List<Route>) {
-        advanceNavigationGeneration()
-        resetRouteWithoutNavigationGeneration(to)
+        router.resetRoute(to)
     }
 
-    private fun resetRouteWithoutNavigationGeneration(to: List<Route>) {
-        if (to.size > 1) {
-            withRustOr(Unit) {
-                resetNestedRoutesTo(to[0], to.drop(1))
-            }
-        } else if (to.isNotEmpty()) {
-            withRustOr(Unit) {
-                resetDefaultRouteTo(to[0])
-            }
-        }
-    }
+    private fun resetRouteWithoutNavigationGeneration(to: List<Route>) =
+        router.resetRouteWithoutNavigationGeneration(to)
 
     fun resetRoute(to: Route) {
-        advanceNavigationGeneration()
-        resetRouteWithoutNavigationGeneration(to)
+        router.resetRoute(to)
     }
 
-    private fun resetRouteWithoutNavigationGeneration(to: Route) {
-        withRustOr(Unit) {
-            resetDefaultRouteTo(to)
-        }
-    }
+    private fun resetRouteWithoutNavigationGeneration(to: Route) =
+        router.resetRouteWithoutNavigationGeneration(to)
 
     fun loadAndReset(to: Route) {
-        advanceNavigationGeneration()
-        withRustOr(Unit) {
-            loadAndResetDefaultRoute(to)
-        }
+        router.loadAndReset(to)
     }
 
-    fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
+    fun captureLoadAndResetGeneration(): GenerationToken = router.captureLoadAndResetGeneration()
 
     fun startLoadAndResetTargetPrewarm(
         generation: GenerationToken,
         nextRoutes: List<Route>,
     ) {
-        mainScope.launch {
-            prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes)
-        }
+        router.startLoadAndResetTargetPrewarm(generation, nextRoutes)
     }
 
     suspend fun prewarmLoadAndResetTargetIfCurrent(
         generation: GenerationToken,
         nextRoutes: List<Route>,
     ) {
-        if (!isNavigationGenerationCurrent(generation)) return
-        val selectedWalletRoute = nextRoutes.firstOrNull() as? Route.SelectedWallet ?: return
-
-        try {
-            getWalletManager(selectedWalletRoute.v1).startWalletScanIfNeeded()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(tag, "Unable to prewarm selected wallet ${selectedWalletRoute.v1}", e)
-        }
+        router.prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes)
     }
 
     fun resetAfterLoadingIfCurrent(
@@ -659,40 +457,8 @@ class AppManager private constructor() : FfiReconcile {
         route: Route.LoadAndReset,
         nextRoutes: List<Route>,
     ) {
-        if (!isNavigationGenerationCurrent(generation)) return
-        if (router.default != route) return
-        withRustOr(Unit) {
-            resetAfterLoading(nextRoutes)
-        }
+        router.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
     }
-
-    private fun advanceNavigationGeneration(skipSettle: Boolean = false): GenerationToken {
-        val generation = navigationGenerations.advance()
-        if (!skipSettle) {
-            scheduleNavigationSettled(generation)
-        }
-        return generation
-    }
-
-    private fun scheduleNavigationSettledForCurrentGeneration() {
-        scheduleNavigationSettled(navigationGenerations.capture())
-    }
-
-    private fun scheduleNavigationSettled(generation: GenerationToken) {
-        navigationSettleJob?.cancel()
-        isNavigationSettled = false
-
-        navigationSettleJob =
-            mainScope.launch {
-                kotlinx.coroutines.delay(NAVIGATION_SETTLE_DELAY_MS)
-                if (!isNavigationGenerationCurrent(generation)) return@launch
-                isNavigationSettled = true
-                navigationSettleJob = null
-            }
-    }
-
-    private fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
-        navigationGenerations.isCurrent(generation)
 
     suspend fun initData() {
         withRustSuspend {
@@ -722,22 +488,11 @@ class AppManager private constructor() : FfiReconcile {
         mainScope.launch {
             when (message) {
                 is AppStateReconcileMessage.RouteUpdated -> {
-                    val didChangeRoute = router.routes != message.v1.toList()
-                    updateRoutesAndClearInactiveSendFlowManager(message.v1.toList())
-                    if (didChangeRoute) {
-                        scheduleNavigationSettledForCurrentGeneration()
-                    }
+                    router.reconcileRouteUpdated(message.v1.toList())
                 }
 
                 is AppStateReconcileMessage.PushedRoute -> {
-                    if (isDuplicateTopRoute(message.v1)) {
-                        isSidebarVisible = false
-                        return@launch
-                    }
-
-                    val newRoutes = (router.routes + message.v1).toList()
-                    updateRoutesAndClearInactiveSendFlowManager(newRoutes)
-                    scheduleNavigationSettledForCurrentGeneration()
+                    router.reconcilePushedRoute(message.v1)
                 }
 
                 is AppStateReconcileMessage.DatabaseUpdated -> {
@@ -759,11 +514,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.DefaultRouteChanged -> {
-                    router.default = message.v1
-                    updateRoutesAndClearInactiveSendFlowManager(message.v2.toList())
-                    routeId = UUID.randomUUID().toString()
-                    scheduleNavigationSettledForCurrentGeneration()
-                    Log.d(tag, "Route ID changed to: $routeId")
+                    router.reconcileDefaultRouteChanged(message.v1, message.v2.toList())
                 }
 
                 is AppStateReconcileMessage.FiatPricesChanged -> {
@@ -776,14 +527,7 @@ class AppManager private constructor() : FfiReconcile {
 
                 is AppStateReconcileMessage.FiatCurrencyChanged -> {
                     selectedFiatCurrency = message.v1
-
-                    // refresh fiat values in the wallet manager using IO
-                    walletManager?.let { wm ->
-                        launch(Dispatchers.IO) {
-                            wm.forceWalletScan()
-                            wm.updateWalletBalance()
-                        }
-                    }
+                    managerCache.refreshFiatValuesForCachedWallet(this)
                 }
 
                 is AppStateReconcileMessage.WalletModeChanged -> {
@@ -833,15 +577,6 @@ class AppManager private constructor() : FfiReconcile {
     companion object {
         @Volatile
         private var instance: AppManager? = null
-
-        /**
-         * delay after closing sidebar before navigation action executes
-         *
-         * allows sidebar dismiss animation to complete to avoid visual jump
-         */
-        private const val SIDEBAR_NAVIGATION_DELAY_MS = 250L
-
-        private const val NAVIGATION_SETTLE_DELAY_MS = 800L
 
         /**
          * minimum loading indicator visibility duration

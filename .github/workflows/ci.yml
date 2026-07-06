@@ -48,6 +48,8 @@ jobs:
           java-version: '17'
       - name: Run ktlint
         run: cd android && ./gradlew ktlintCheck
+      - name: Run detekt
+        run: cd android && ./gradlew detekt
 
   compile-android:
     runs-on: ubuntu-latest
@@ -101,6 +103,9 @@ jobs:
       - name: Compile Android
         run: cd android && ./gradlew assembleDevDebug
 
+      - name: Run Android unit tests
+        run: cd android && ./gradlew testDevDebugUnitTest
+
   compile-ios:
     runs-on: macos-26
     env:
@@ -144,6 +149,9 @@ jobs:
 
       - name: Compile iOS
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
+
+      - name: Run iOS unit tests
+        run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests -parallel-testing-enabled NO test
 
   test:
     strategy:

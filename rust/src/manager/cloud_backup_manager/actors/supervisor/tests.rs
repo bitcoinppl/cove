@@ -597,10 +597,12 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
     );
 
     supervisor
-        .complete_recreate_manifest_verification(
-            stale,
+        .complete_verification(
+            Some(stale),
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-            VerificationAttempt::Initial,
+            DeepVerificationContinuation::RecreateManifest {
+                attempt: VerificationAttempt::Initial,
+            },
         )
         .await
         .unwrap();
@@ -609,10 +611,12 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 
     supervisor
-        .complete_recreate_manifest_verification(
-            current,
+        .complete_verification(
+            Some(current),
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-            VerificationAttempt::Initial,
+            DeepVerificationContinuation::RecreateManifest {
+                attempt: VerificationAttempt::Initial,
+            },
         )
         .await
         .unwrap();
@@ -913,10 +917,12 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
     );
 
     supervisor
-        .complete_reinitialize_verification(
-            stale,
+        .complete_verification(
+            Some(stale),
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-            VerificationAttempt::Initial,
+            DeepVerificationContinuation::ReinitializeBackup {
+                attempt: VerificationAttempt::Initial,
+            },
         )
         .await
         .unwrap();
@@ -925,10 +931,12 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 
     supervisor
-        .complete_reinitialize_verification(
-            current,
+        .complete_verification(
+            Some(current),
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-            VerificationAttempt::Initial,
+            DeepVerificationContinuation::ReinitializeBackup {
+                attempt: VerificationAttempt::Initial,
+            },
         )
         .await
         .unwrap();

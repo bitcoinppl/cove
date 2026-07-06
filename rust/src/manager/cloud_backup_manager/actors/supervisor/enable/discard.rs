@@ -30,7 +30,7 @@ impl CloudBackupSupervisor {
     pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(pending) = self.pending_enable_session.take() else {
             if let Some(manager) = self.manager() {
-                manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+                manager.apply_enable_state(CloudBackupEnableState::Idle);
                 manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
             }
             return Produces::ok(());
@@ -58,7 +58,7 @@ impl CloudBackupSupervisor {
         }
 
         if let Some(manager) = self.manager() {
-            manager.apply_enable_outcome(CloudBackupEnableOutcome::ReturnedToIdle);
+            manager.apply_enable_state(CloudBackupEnableState::Idle);
             manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
         }
 
@@ -76,11 +76,15 @@ impl CloudBackupSupervisor {
             MASTER_KEY_RECORD_ID.to_string()
         ))
         .await
-        .map_err_prefix("start pending enable remote cleanup", CloudBackupError::Internal)?;
+        .map_err(|source| {
+            CloudBackupError::internal_context("start pending enable remote cleanup", source)
+        })?;
 
         receiver
             .await
-            .map_err_prefix("wait for pending enable remote cleanup", CloudBackupError::Internal)?
+            .map_err(|source| {
+                CloudBackupError::internal_context("wait for pending enable remote cleanup", source)
+            })?
             .into_result()
             .or_else(|error| match error {
                 CloudBackupError::CloudStorage(CloudStorageError::NotFound(_)) => Ok(()),

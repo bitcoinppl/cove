@@ -7,5 +7,6 @@ pub mod deferred_sender;
 pub mod import_wallet_manager;
 pub mod onboarding_manager;
 pub mod pending_wallet_manager;
+pub mod reconcile_channel;
 pub mod send_flow_manager;
 pub mod wallet_manager;

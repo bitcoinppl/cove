@@ -15,5 +15,6 @@ tokio-util = "0.7.17"
 
 [dev-dependencies]
 bdk_wallet = { workspace = true, features = ["test-utils"] }
+parking_lot = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

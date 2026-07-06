@@ -4,7 +4,6 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::PasskeyAccess;
 use cove_tokio::unblock;
-use cove_util::ResultExt as _;
 use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
@@ -40,7 +39,7 @@ impl From<WrapperRepairError> for CloudBackupError {
         let msg = error.to_string();
 
         match error {
-            WrapperRepairError::WrongKey => CloudBackupError::Crypto(msg),
+            WrapperRepairError::WrongKey => CloudBackupError::Crypto(msg.into()),
             WrapperRepairError::Inconclusive => CloudBackupError::Cloud(msg),
             WrapperRepairError::Operation(error) => error,
         }
@@ -239,10 +238,10 @@ impl WrapperRepairOperation {
             credentials.provider_hint.clone(),
             RemotePayloadMetadata::master_key(&self.namespace, uploaded_at),
         )
-        .map_err_str(CloudBackupError::Crypto)?;
+        .map_err(CloudBackupError::crypto)?;
 
         let backup_json =
-            serde_json::to_vec(&encrypted_backup).map_err_str(CloudBackupError::Internal)?;
+            serde_json::to_vec(&encrypted_backup).map_err(CloudBackupError::internal)?;
         let master_key_wrapper_revision = master_key_wrapper_revision_hash(&backup_json);
 
         Ok(CloudBackupPreparedPasskeyWrapperRepair {
@@ -320,7 +319,7 @@ impl WrapperRepairOperation {
                     )
                 })
                 .await
-                .map_err_str(CloudBackupError::Passkey)?;
+                .map_err(CloudBackupError::passkey)?;
 
                 let prf_key: [u8; 32] = prf_output
                     .try_into()

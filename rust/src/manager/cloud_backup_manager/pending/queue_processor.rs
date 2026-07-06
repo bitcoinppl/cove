@@ -10,11 +10,11 @@ use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use super::{MASTER_KEY_UPLOAD_CONFIRMATION_GRACE, PendingUploadVerificationStatus};
+use super::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
-    CloudBlobFailureIssue, CloudBlobUploadedPendingConfirmationState, PersistedCloudBlobState,
+    CloudBlobUploadedPendingConfirmationState, CloudStorageIssue, PersistedCloudBlobState,
     PersistedCloudBlobSyncState,
 };
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
@@ -28,7 +28,7 @@ enum BlobCheckResult {
     NotYetUploaded,
     Stale(String),
     AuthorizationRequired { error: String },
-    Failed { error: String, retryable: bool, issue: Option<CloudBlobFailureIssue> },
+    Failed { error: String, retryable: bool, issue: Option<CloudStorageIssue> },
 }
 
 impl BlobCheckResult {
@@ -48,7 +48,7 @@ impl BlobCheckResult {
                 | CloudStorageError::DownloadFailed(_)
         );
 
-        let issue = RustCloudBackupManager::cloud_blob_failure_issue(error.clone().into());
+        let issue = RustCloudBackupManager::persistable_cloud_storage_issue(error.clone().into());
 
         Self::Failed { error: error.to_string(), retryable, issue }
     }
@@ -70,13 +70,13 @@ const MAX_PENDING_WALLET_UPLOAD_CONFIRMATION_ATTEMPTS: u32 = 3;
 pub(crate) struct PendingUploadVerifier(pub(crate) RustCloudBackupManager);
 
 impl PendingUploadVerifier {
-    pub(crate) async fn run_once(&self) -> PendingUploadVerificationStatus {
+    pub(crate) async fn run_once(&self) -> PendingUploadVerificationState {
         let table = &Database::global().cloud_blob_sync_states;
         let states = match table.list() {
             Ok(states) => states,
             Err(error) => {
                 error!("Pending upload verification: failed to read sync states: {error}");
-                return PendingUploadVerificationStatus::Pending;
+                return PendingUploadVerificationState::Confirming;
             }
         };
 
@@ -107,7 +107,7 @@ impl PendingUploadVerifier {
                 Ok(persisted) => persisted,
                 Err(error) => {
                     error!("Pending upload verification: failed to persist state: {error}");
-                    return PendingUploadVerificationStatus::Pending;
+                    return PendingUploadVerificationState::Confirming;
                 }
             };
 
@@ -151,12 +151,12 @@ impl PendingUploadVerifier {
 
         match outcome {
             PendingUploadRunOutcome::BlockedOnAuthorization => {
-                PendingUploadVerificationStatus::BlockedOnAuthorization
+                PendingUploadVerificationState::BlockedOnAuthorization
             }
-            PendingUploadRunOutcome::StillPending => PendingUploadVerificationStatus::Pending,
+            PendingUploadRunOutcome::StillPending => PendingUploadVerificationState::Confirming,
             PendingUploadRunOutcome::Idle
             | PendingUploadRunOutcome::Confirmed
-            | PendingUploadRunOutcome::Failed => PendingUploadVerificationStatus::Idle,
+            | PendingUploadRunOutcome::Failed => PendingUploadVerificationState::Idle,
         }
     }
 

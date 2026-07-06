@@ -97,7 +97,9 @@ impl CloudBackupSupervisor {
 
         CloudBackupKeychain::new(Keychain::global().clone())
             .save_passkey_and_namespace(&credential_id, prf_salt, &namespace_id)
-            .map_err_prefix("save cspp credentials", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("save cspp credentials", source)
+            })?;
 
         self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
             namespace_id: namespace_id.clone(),
@@ -158,7 +160,7 @@ impl CloudBackupSupervisor {
                     sources: cleanup_sources,
                 }))
                 .await
-                .map_err_str(CloudBackupError::Internal)?;
+                .map_err(CloudBackupError::internal)?;
 
                 let should_finalize_now = pending_uploads.is_empty();
                 let report = DeepVerificationReport {
@@ -174,7 +176,7 @@ impl CloudBackupSupervisor {
                     PendingVerificationCompletion::new(report, namespace_id, pending_uploads),
                     context.verification_source,
                 );
-                manager.apply_verification_outcome(CloudBackupVerificationOutcome::Idle);
+                manager.apply_verification_state(VerificationState::Idle);
                 self.pending_enable_session = None;
                 manager.clear_enable_progress(CloudBackupStatus::Enabled);
                 manager.refresh_persisted_flags();

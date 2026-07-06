@@ -20,9 +20,9 @@ use crate::{
 };
 
 use super::{
-    DeferredSender, Error, Message, MessageSender, RustWalletManager, SingleOrMany, WalletActor,
-    WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletScanStatus, WalletSnapshot,
-    downgrade_and_notify_if_needed,
+    Error, Message, ReconcileChannel, RustWalletManager, SingleOrMany, WalletActor,
+    WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletManagerDatabaseCorruptionError,
+    WalletScanStatus, WalletSnapshot, downgrade_and_notify_if_needed,
 };
 
 fn start_discovery_scanner(
@@ -50,13 +50,12 @@ fn start_discovery_scanner(
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
-        let (sender, receiver) = flume::bounded(10);
+        let channel = ReconcileChannel::new(10);
 
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let reconciler = MessageSender::new(sender.clone());
-        let mut deferred = DeferredSender::new(reconciler.clone());
+        let mut deferred = channel.deferred_sender();
 
         let mut wallet = Wallet::try_load_persisted(id.clone())?;
         wallet.metadata = downgrade_and_notify_if_needed(wallet.metadata, &mut deferred)?;
@@ -90,12 +89,16 @@ impl RustWalletManager {
             transactions: cached_transactions,
         }));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
-        let wallet_actor =
-            WalletActor::new(wallet, sender.clone(), scan_status.clone(), wallet_snapshot.clone())
-                .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let wallet_actor = WalletActor::new(
+            wallet,
+            channel.raw_sender(),
+            scan_status.clone(),
+            wallet_snapshot.clone(),
+        )
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
 
-        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender);
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), channel.raw_sender());
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -103,8 +106,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler,
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: channel,
             scan_status,
             wallet_snapshot,
             unsigned_transactions,
@@ -115,7 +117,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor]
     pub fn try_new_from_xpub(xpub: String) -> Result<Self, Error> {
-        let (sender, receiver) = flume::bounded(100);
+        let channel = ReconcileChannel::new(100);
 
         let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
         let id = wallet.id.clone();
@@ -124,19 +126,22 @@ impl RustWalletManager {
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor =
-            WalletActor::new(wallet, sender.clone(), scan_status.clone(), wallet_snapshot.clone())
-                .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let wallet_actor = WalletActor::new(
+            wallet,
+            channel.raw_sender(),
+            scan_status.clone(),
+            wallet_snapshot.clone(),
+        )
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
-        let discovery_scanner = start_discovery_scanner(metadata.clone(), sender.clone());
+        let discovery_scanner = start_discovery_scanner(metadata.clone(), channel.raw_sender());
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: channel,
             scan_status,
             wallet_snapshot,
             unsigned_transactions,
@@ -152,7 +157,7 @@ impl RustWalletManager {
         backup: Option<Vec<u8>>,
         birthday: Option<WalletBirthday>,
     ) -> Result<Self, Error> {
-        let (sender, receiver) = flume::bounded(100);
+        let channel = ReconcileChannel::new(100);
 
         let wallet = Wallet::try_new_persisted_from_tap_signer(
             tap_signer.clone(),
@@ -166,9 +171,13 @@ impl RustWalletManager {
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor =
-            WalletActor::new(wallet, sender.clone(), scan_status.clone(), wallet_snapshot.clone())
-                .map_err(|e| Error::DatabaseCorruption { id: id.clone(), error: e.to_string() })?;
+        let wallet_actor = WalletActor::new(
+            wallet,
+            channel.raw_sender(),
+            scan_status.clone(),
+            wallet_snapshot.clone(),
+        )
+        .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -176,8 +185,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: channel,
             scan_status,
             wallet_snapshot,
             unsigned_transactions,

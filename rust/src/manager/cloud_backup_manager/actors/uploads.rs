@@ -8,14 +8,13 @@ use tokio::sync::Notify;
 use tracing::{error, info, warn};
 
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudBlobFailedState, CloudBlobFailureIssue, PersistedCloudBlobState,
+    CloudBackupRecordKey, CloudBlobFailedState, CloudStorageIssue, PersistedCloudBlobState,
 };
 use crate::manager::cloud_backup_manager::pending::{
-    MAX_PENDING_UPLOAD_VERIFICATION_DELAY, PendingUploadVerificationStatus,
-    build_pending_upload_backoff,
+    MAX_PENDING_UPLOAD_VERIFICATION_DELAY, build_pending_upload_backoff,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupError, CloudBackupSyncOutcome, RustCloudBackupManager, WalletId,
+    CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager, SyncState, WalletId,
     live_upload_retry_delay_for_attempt,
 };
 
@@ -79,12 +78,12 @@ impl CloudBackupUploadWorker {
                 }
 
                 match manager.verify_pending_uploads_once().await {
-                    PendingUploadVerificationStatus::Idle => break,
-                    PendingUploadVerificationStatus::BlockedOnAuthorization => {
+                    PendingUploadVerificationState::Idle => break,
+                    PendingUploadVerificationState::BlockedOnAuthorization => {
                         blocked_on_authorization = true;
                         break;
                     }
-                    PendingUploadVerificationStatus::Pending => {}
+                    PendingUploadVerificationState::Confirming => {}
                 }
 
                 let delay = backoff.next_delay();
@@ -296,9 +295,9 @@ impl CloudBackupUploadWorker {
                 let message = format!("failed to load cloud blob sync states on startup: {error}");
                 error!("{message}");
                 if let Some(manager) = self.manager() {
-                    manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(message.clone()));
+                    manager.apply_sync_state(SyncState::Failed(message.clone()));
                 }
-                return Err(CloudBackupError::Internal(message).into());
+                return Err(CloudBackupError::Internal(message.into()).into());
             }
         };
 
@@ -404,7 +403,7 @@ impl CloudBackupUploadWorker {
 }
 
 fn is_authorization_failed_blob(failed_state: &CloudBlobFailedState) -> bool {
-    failed_state.issue == Some(CloudBlobFailureIssue::AuthorizationRequired)
+    failed_state.issue == Some(CloudStorageIssue::AuthorizationRequired)
 }
 
 fn should_retry_failed_blob(failed_state: &CloudBlobFailedState) -> bool {

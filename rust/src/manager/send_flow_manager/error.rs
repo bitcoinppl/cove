@@ -70,6 +70,22 @@ impl SendFlowError {
             _ => Self::InvalidAddress(address),
         }
     }
+
+    pub(crate) fn unable_to_build_txn(error: impl std::fmt::Display) -> Self {
+        Self::UnableToBuildTxn(error.to_string())
+    }
+
+    pub(crate) fn unable_to_get_fee_details(error: impl std::fmt::Display) -> Self {
+        Self::UnableToGetFeeDetails(error.to_string())
+    }
+
+    pub(crate) fn unable_to_get_max_send(error: impl std::fmt::Display) -> Self {
+        Self::UnableToGetMaxSend(error.to_string())
+    }
+
+    pub(crate) fn unable_to_save_unsigned_transaction(error: impl std::fmt::Display) -> Self {
+        Self::UnableToSaveUnsignedTransaction(error.to_string())
+    }
 }
 
 #[cfg(test)]

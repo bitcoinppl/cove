@@ -224,7 +224,7 @@ fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudB
         PasskeyError::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
         PasskeyError::NoCredentialFound => Ok(PasskeyAuthOutcome::NoCredentialFound),
         PasskeyError::PrfUnsupportedProvider => Err(CloudBackupError::UnsupportedPasskeyProvider),
-        other => Err(CloudBackupError::Passkey(other.to_string())),
+        other => Err(CloudBackupError::passkey(other)),
     }
 }
 

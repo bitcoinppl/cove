@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
-use cove_util::result_ext::ResultExt as _;
 use tracing::debug;
 
 use crate::{fee_client::FEE_CLIENT, transaction::FeeRate, wallet::Address};
@@ -13,7 +12,7 @@ use cove_types::{
 };
 
 use super::{
-    DeferredSender, Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
+    Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
     state::FeeSelection,
 };
 
@@ -47,7 +46,7 @@ impl RustSendFlowManager {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
-        let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
+        let total_fee = psbt.fee().map_err(Error::unable_to_get_fee_details)?;
 
         let fee_rate_option =
             FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
@@ -92,7 +91,7 @@ impl RustSendFlowManager {
     pub(crate) async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
         debug!("get_or_update_fee_rate_options");
 
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
 
         let (address, amount_sats) = {
             let state = self.state.lock();
@@ -228,15 +227,16 @@ impl RustSendFlowManager {
                     return None;
                 }
                 Err(error) => {
-                    let error = SendFlowError::UnableToGetMaxSend(error.to_string());
+                    let error = Error::unable_to_get_max_send(error);
                     self.reconciler.send_async(Message::SetAlert(error.into())).await;
                     return None;
                 }
             };
 
-        let total_fee = match psbt.fee().map_err_str(Error::UnableToGetFeeDetails) {
+        let total_fee = match psbt.fee().map_err(Error::unable_to_get_fee_details) {
             Ok(total_fee) => total_fee,
             Err(error) => {
+                let error = Error::unable_to_get_max_send(error);
                 self.reconciler.send_async(Message::SetAlert(error.into())).await;
                 return None;
             }

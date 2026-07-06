@@ -1,8 +1,5 @@
 use std::sync::{Arc, LazyLock};
 
-use cove_macros::impl_default_for;
-use flume::{Receiver, Sender};
-use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
@@ -12,6 +9,7 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
     auth::{AuthPin, AuthType},
     database::{self, Database},
+    manager::{deferred_sender::SingleOrMany, reconcile_channel::ReconcileChannel},
     wallet::metadata::WalletMode,
 };
 
@@ -104,14 +102,8 @@ pub enum SecuritySettingsResult {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustAuthManager {
-    #[allow(dead_code)]
-    pub state: Arc<RwLock<AuthManagerState>>,
-    pub reconciler: Sender<AuthManagerReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<AuthManagerReconcileMessage>>,
+    pub reconciler: ReconcileChannel<AuthManagerReconcileMessage>,
 }
-
-#[derive(Clone, Debug, uniffi::Record)]
-pub struct AuthManagerState {}
 
 type Action = AuthManagerAction;
 
@@ -152,14 +144,7 @@ pub enum TrickPinError {
 
 impl RustAuthManager {
     fn init() -> Arc<Self> {
-        let (sender, receiver) = flume::bounded(1000);
-
-        Self {
-            state: Arc::new(RwLock::new(AuthManagerState::new())),
-            reconciler: sender,
-            reconcile_receiver: Arc::new(receiver),
-        }
-        .into()
+        Self { reconciler: ReconcileChannel::new(1000) }.into()
     }
 }
 
@@ -171,12 +156,12 @@ impl RustAuthManager {
     }
 
     pub fn listen_for_updates(&self, reconciler: Box<dyn AuthManagerReconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        std::thread::spawn(move || {
-            while let Ok(field) = reconcile_receiver.recv() {
-                // call the reconcile method on the frontend
-                reconciler.reconcile(field);
+        self.reconciler.listen(move |field| match field {
+            SingleOrMany::Single(message) => reconciler.reconcile(message),
+            SingleOrMany::Many(messages) => {
+                for message in messages {
+                    reconciler.reconcile(message);
+                }
             }
         });
     }
@@ -345,9 +330,7 @@ impl RustAuthManager {
     }
 
     fn send(&self, message: Message) {
-        if let Err(error) = self.reconciler.send(message) {
-            error!("unable to send message: {error:?}");
-        }
+        self.reconciler.send_sync(message);
     }
 
     /// Action from the frontend to change the state of the view model
@@ -551,13 +534,6 @@ impl RustAuthManager {
         let decoy_pin = Database::global().global_config.decoy_pin().unwrap_or_default();
 
         pin == decoy_pin
-    }
-}
-
-impl_default_for!(AuthManagerState);
-impl AuthManagerState {
-    pub const fn new() -> Self {
-        Self {}
     }
 }
 

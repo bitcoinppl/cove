@@ -3,7 +3,6 @@ use cove_cspp::master_key::MasterKey;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
-use cove_util::ResultExt as _;
 use futures::stream::{self, StreamExt as _};
 use tracing::{info, warn};
 use zeroize::Zeroizing;
@@ -16,10 +15,10 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupEnableOutcome, CloudBackupError,
-    CloudBackupRestoreFlow, CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus,
-    CloudBackupStore, CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error,
-    is_connectivity_related_issue, offline_error_for_step,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupRestoreFlow,
+    CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus, CloudBackupStore,
+    CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error, is_connectivity_related_issue,
+    offline_error_for_step,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -140,11 +139,8 @@ impl RestoreOperation {
         Ok(())
     }
 
-    pub(crate) async fn apply_enable_outcome(
-        &self,
-        outcome: CloudBackupEnableOutcome,
-    ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.apply_restore_enable_outcome(self.operation_claim, outcome))
+    pub(crate) async fn clear_enable_progress(&self) -> Result<(), CloudBackupError> {
+        call!(self.supervisor.clear_restore_enable_progress(self.operation_claim))
             .await
             .map_err(|_| CloudBackupError::Cancelled)?
     }
@@ -198,7 +194,7 @@ impl RestoreOperation {
         manager: &RustCloudBackupManager,
     ) -> Result<CloudBackupRestoreReport, CloudBackupError> {
         manager.ensure_cloud_connectivity(BlockingCloudStep::Restore)?;
-        self.apply_enable_outcome(CloudBackupEnableOutcome::ProgressCleared).await?;
+        self.clear_enable_progress().await?;
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
         self.apply_status(CloudBackupStatus::Restoring).await?;
         self.send_restore_progress(CloudBackupRestoreFlow::Finding).await?;
@@ -264,7 +260,9 @@ impl RestoreOperation {
         };
 
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err_prefix("collect wallet identities", CloudBackupError::Internal)?;
+            .map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
 
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let mut downloaded_wallets = Vec::new();
@@ -580,22 +578,22 @@ pub(crate) fn save_restore_keychain_entries(
 
     if let Err((context, error)) = metadata_save_result {
         if let Err(rollback) = cloud_keychain.clear_local_state() {
-            return Err(CloudBackupError::Internal(format!(
-                "{context}: {error}; rollback failed: {rollback}"
-            )));
+            return Err(CloudBackupError::Internal(
+                format!("{context}: {error}; rollback failed: {rollback}").into(),
+            ));
         }
 
-        return Err(CloudBackupError::Internal(format!("{context}: {error}")));
+        return Err(CloudBackupError::Internal(format!("{context}: {error}").into()));
     }
 
     if let Err(error) = cspp.save_master_key(&master_key) {
         if let Err(rollback) = cloud_keychain.clear_local_state() {
-            return Err(CloudBackupError::Internal(format!(
-                "save master key: {error}; rollback failed: {rollback}"
-            )));
+            return Err(CloudBackupError::Internal(
+                format!("save master key: {error}; rollback failed: {rollback}").into(),
+            ));
         }
 
-        return Err(CloudBackupError::Internal(format!("save master key: {error}")));
+        return Err(CloudBackupError::Internal(format!("save master key: {error}").into()));
     }
 
     Ok(())

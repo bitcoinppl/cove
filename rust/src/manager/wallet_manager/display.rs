@@ -153,8 +153,29 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn display_confirmation_count(&self, confirmations: u32) -> String {
+        format_confirmation_count(confirmations)
+    }
+
+    #[uniffi::method]
     pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
         let number_of_confirmations = self.number_of_confirmations(block_height).await?;
-        Ok(number_of_confirmations.thousands_int())
+        Ok(format_confirmation_count(number_of_confirmations))
+    }
+}
+
+fn format_confirmation_count(confirmations: u32) -> String {
+    confirmations.thousands_int()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_confirmation_count;
+
+    #[test]
+    fn confirmation_count_formats_with_grouping() {
+        assert_eq!(format_confirmation_count(0), "0");
+        assert_eq!(format_confirmation_count(1), "1");
+        assert_eq!(format_confirmation_count(1_000_000), "1,000,000");
     }
 }

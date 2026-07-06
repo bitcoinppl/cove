@@ -33,6 +33,16 @@ use crate::{
 
 const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT: Duration = Duration::from_millis(400);
 
+enum OpenReceiveAddressDecision {
+    Complete(Result<ReceiveAddressState, Error>),
+    CheckCachedActivity {
+        cache: ReceiveAddressCache,
+        request_id: u64,
+        now: u64,
+        derivation_index: u32,
+    },
+}
+
 impl WalletActor {
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
         let address = self.wallet.bdk.peek_address(KeychainKind::External, index);
@@ -42,49 +52,155 @@ impl WalletActor {
     pub async fn open_receive_address_intent(&mut self) -> ActorResult<()> {
         self.set_receive_address_loading(true);
 
-        match self.do_open_receive_address().await {
-            Ok(_) => self.set_receive_address_loading(false),
-            Err(error) => {
-                self.set_receive_address_loading(false);
-                self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
+        match self.open_receive_address_decision() {
+            OpenReceiveAddressDecision::Complete(result) => {
+                self.finish_open_receive_address(result);
+                Produces::ok(())
+            }
+            OpenReceiveAddressDecision::CheckCachedActivity {
+                cache,
+                request_id,
+                now,
+                derivation_index,
+            } => {
+                self.deferred_open_cached_receive_address(cache, request_id, now, derivation_index)
             }
         }
-
-        Produces::ok(())
     }
 
-    async fn do_open_receive_address(&mut self) -> Result<ReceiveAddressState, Error> {
+    fn open_receive_address_decision(&mut self) -> OpenReceiveAddressDecision {
         let now = current_epoch_secs();
 
-        let Some(cache) = self.receive_address_cache()? else {
+        let cache = match self.receive_address_cache() {
+            Ok(cache) => cache,
+            Err(error) => return OpenReceiveAddressDecision::Complete(Err(error)),
+        };
+
+        let Some(cache) = cache else {
             let request_id = self.receive_address.next_request_id();
-            return self.open_fresh_receive_address(request_id, now);
+            return OpenReceiveAddressDecision::Complete(
+                self.open_fresh_receive_address(request_id, now),
+            );
         };
 
         if !self.receive_address_cache_is_available(&cache, now) {
             let request_id = self.receive_address.next_request_id();
-            return self.open_fresh_receive_address(request_id, now);
+            return OpenReceiveAddressDecision::Complete(
+                self.open_fresh_receive_address(request_id, now),
+            );
         }
 
         let derivation_index = cache.derivation_index;
         let request_id = self.receive_address.next_request_id();
 
-        if !matches!(
-            self.cached_receive_address_has_activity(derivation_index).await,
-            Ok(Some(true))
-        ) {
-            return self.open_cached_receive_address(cache, request_id, now).await;
+        OpenReceiveAddressDecision::CheckCachedActivity { cache, request_id, now, derivation_index }
+    }
+
+    fn deferred_open_cached_receive_address(
+        &mut self,
+        cache: ReceiveAddressCache,
+        request_id: u64,
+        now: u64,
+        derivation_index: u32,
+    ) -> ActorResult<()> {
+        let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
+        let address =
+            self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
+        let (reply, receiver) = futures::channel::oneshot::channel();
+
+        self.addr.send_fut_with(|addr| async move {
+            let sync_result = match NodeClient::new(&node).await {
+                Ok(node_client) => {
+                    match node_client
+                        .check_address_for_txn(address)
+                        .with_timeout(RECEIVE_ADDRESS_FRESHNESS_TIMEOUT)
+                        .await
+                    {
+                        Ok(Ok(true)) => Some(
+                            node_client
+                                .sync(&graph, sync_request)
+                                .await
+                                .map_err_str(Error::ReceiveAddressError),
+                        ),
+                        Ok(Ok(false)) | Ok(Err(_)) | Err(_) => None,
+                    }
+                }
+                Err(_) => None,
+            };
+
+            let _ = call!(addr.finish_open_receive_address_after_activity_check(
+                cache,
+                request_id,
+                now,
+                derivation_index,
+                sync_result
+            ))
+            .await;
+            let _ = reply.send(Produces::Value(()));
+        });
+
+        Ok(Produces::Deferred(receiver))
+    }
+
+    async fn finish_open_receive_address_after_activity_check(
+        &mut self,
+        cache: ReceiveAddressCache,
+        request_id: u64,
+        now: u64,
+        derivation_index: u32,
+        sync_result: Option<Result<SyncResponse, Error>>,
+    ) -> ActorResult<()> {
+        if !self.receive_address.is_current(request_id) {
+            return Produces::ok(());
         }
 
-        if let Err(error) = self.sync_receive_address_now(derivation_index).await {
-            warn!("Failed to sync used receive address index={derivation_index}: {error}");
-            self.wallet.mark_receive_address_used(derivation_index)?;
-            self.notify_wallet_balance_and_transactions().await;
+        let result = if let Some(sync_result) = sync_result {
+            self.open_fresh_after_receive_address_sync(
+                request_id,
+                now,
+                derivation_index,
+                sync_result,
+            )
+            .await
+        } else {
+            self.open_cached_receive_address(cache, request_id, now)
+        };
 
-            self.start_targeted_receive_address_sync(request_id, derivation_index);
-        }
+        self.finish_open_receive_address(result);
+
+        Produces::ok(())
+    }
+
+    async fn open_fresh_after_receive_address_sync(
+        &mut self,
+        request_id: u64,
+        now: u64,
+        derivation_index: u32,
+        sync_result: Result<SyncResponse, Error>,
+    ) -> Result<ReceiveAddressState, Error> {
+        let sync_result = match sync_result {
+            Ok(sync_result) => sync_result,
+            Err(error) => {
+                warn!("Failed to sync used receive address index={derivation_index}: {error}");
+                self.wallet.mark_receive_address_used(derivation_index)?;
+                self.notify_wallet_balance_and_transactions().await;
+
+                self.start_targeted_receive_address_sync(request_id, derivation_index);
+                return self.open_fresh_receive_address(request_id, now);
+            }
+        };
+
+        self.apply_receive_address_now_sync_result(derivation_index, sync_result).await?;
 
         self.open_fresh_receive_address(request_id, now)
+    }
+
+    fn finish_open_receive_address(&self, result: Result<ReceiveAddressState, Error>) {
+        self.set_receive_address_loading(false);
+
+        if let Err(error) = result {
+            self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
+        }
     }
 
     fn receive_address_cache_is_available(
@@ -123,7 +239,7 @@ impl WalletActor {
         Ok(state)
     }
 
-    async fn open_cached_receive_address(
+    fn open_cached_receive_address(
         &mut self,
         cache: ReceiveAddressCache,
         request_id: u64,
@@ -283,25 +399,6 @@ impl WalletActor {
         self.receive_address_refresh_timer = None;
     }
 
-    async fn cached_receive_address_has_activity(
-        &mut self,
-        derivation_index: u32,
-    ) -> Result<Option<bool>, Error> {
-        let node_client = self.node_client().await?.clone();
-        let address =
-            self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
-
-        match node_client
-            .check_address_for_txn(address)
-            .with_timeout(RECEIVE_ADDRESS_FRESHNESS_TIMEOUT)
-            .await
-        {
-            Ok(Ok(has_activity)) => Ok(Some(has_activity)),
-            Ok(Err(error)) => Err(Error::NodeConnectionFailed(error.to_string())),
-            Err(_) => Ok(None),
-        }
-    }
-
     fn start_delayed_receive_address_activity_check(
         &mut self,
         request_id: u64,
@@ -427,14 +524,11 @@ impl WalletActor {
         });
     }
 
-    async fn sync_receive_address_now(&mut self, derivation_index: u32) -> Result<(), Error> {
-        let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
-        let node_client = NodeClient::new(&node)
-            .await
-            .map_err_prefix("failed to create node client", Error::NodeConnectionFailed)?;
-
-        let sync_result =
-            node_client.sync(&graph, sync_request).await.map_err_str(Error::ReceiveAddressError)?;
+    async fn apply_receive_address_now_sync_result(
+        &mut self,
+        derivation_index: u32,
+        sync_result: SyncResponse,
+    ) -> Result<(), Error> {
         self.wallet.bdk.apply_update(sync_result).map_err_str(Error::ReceiveAddressError)?;
 
         if self.wallet.receive_address_is_unused(derivation_index) {

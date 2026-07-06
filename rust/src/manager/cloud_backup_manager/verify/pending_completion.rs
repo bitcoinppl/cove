@@ -1,7 +1,6 @@
 use ahash::HashMap;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
-use cove_util::ResultExt as _;
 use tracing::{error, warn};
 use zeroize::Zeroizing;
 
@@ -169,7 +168,7 @@ impl RustCloudBackupManager {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = cspp
             .load_master_key_from_store()
-            .map_err_prefix("load local master key", CloudBackupError::Internal)
+            .map_err(|source| CloudBackupError::internal_context("load local master key", source))
             .map_err(|error| {
                 Box::new(self.pending_verification_failure(&completion, error.to_string()))
             })?
@@ -180,7 +179,7 @@ impl RustCloudBackupManager {
             })?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
-        let mut report = completion.report().clone();
+        let mut report = completion.report();
         let sync_states_by_record_id: HashMap<_, _> = Database::global()
             .cloud_blob_sync_states
             .list()

@@ -42,13 +42,13 @@ use cove_types::{
 };
 use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
-use flume::Receiver;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
 use tracing::{debug, error, trace};
 
 use super::{
-    deferred_sender::{self, MessageSender},
+    deferred_sender,
+    reconcile_channel::ReconcileChannel,
     wallet_manager::{RustWalletManager, actor::WalletActor},
 };
 
@@ -85,8 +85,7 @@ pub struct RustSendFlowManager {
     wallet_manager: Arc<RustWalletManager>,
     pub state: Arc<Mutex<SendFlowManagerState>>,
 
-    reconciler: MessageSender<Message>,
-    reconcile_receiver: Arc<Receiver<SingleOrMany>>,
+    reconciler: ReconcileChannel<Message>,
 
     fee_check_task: DebouncedTask<()>,
 }
@@ -165,9 +164,7 @@ impl RustSendFlowManager {
         balance: Arc<Balance>,
         wallet_manager: Arc<RustWalletManager>,
     ) -> Arc<Self> {
-        let (sender, receiver) = flume::bounded(50);
         let state = State::new(metadata, balance);
-        let message_sender = MessageSender::new(sender);
 
         // immediately populate cached values if available
         let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
@@ -195,8 +192,7 @@ impl RustSendFlowManager {
             app: App::global().clone(),
             state: state.into_inner(),
             wallet_manager,
-            reconciler: message_sender,
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: ReconcileChannel::new(50),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
         }
         .into();
@@ -215,15 +211,11 @@ impl RustSendFlowManager {
 impl RustSendFlowManager {
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        let reconcile_receiver = self.reconcile_receiver.clone();
-
-        cove_tokio::task::spawn(async move {
-            while let Ok(field) = reconcile_receiver.recv_async().await {
-                trace!("reconcile_receiver: {field:?}");
-                match field {
-                    SingleOrMany::Single(message) => reconciler.reconcile(message),
-                    SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-                }
+        self.reconciler.listen_async(move |field| {
+            trace!("reconcile_receiver: {field:?}");
+            match field {
+                SingleOrMany::Single(message) => reconciler.reconcile(message),
+                SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
             }
         });
     }
@@ -256,7 +248,7 @@ impl RustSendFlowManager {
     }
 
     pub(crate) fn validate_amount_internal(self: &Arc<Self>, display_alert: bool) -> bool {
-        let mut sender = DeferredSender::new(self.reconciler.clone());
+        let mut sender = self.reconciler.deferred_sender();
         let Some(amount) = self.state.lock().amount_sats else {
             let msg = Message::SetAlert(SendFlowError::InvalidNumber.into());
             if display_alert {
@@ -720,7 +712,6 @@ mod tests {
         crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
 
-        let (sender, receiver) = flume::bounded(50);
         let balance = Arc::new(Balance::default());
         let state = super::State::new(WalletMetadata::preview_new(), balance);
         let wallet_manager = Arc::new(RustWalletManager::preview_new_wallet());
@@ -729,8 +720,7 @@ mod tests {
             app: super::App::global().clone(),
             wallet_manager,
             state: state.into_inner(),
-            reconciler: super::MessageSender::new(sender),
-            reconcile_receiver: Arc::new(receiver),
+            reconciler: super::ReconcileChannel::new(50),
             fee_check_task: super::DebouncedTask::new(
                 "fee_check",
                 super::Duration::from_millis(200),
@@ -802,7 +792,7 @@ mod tests {
     }
 
     fn next_reconcile_message(manager: &super::RustSendFlowManager) -> super::Message {
-        let message = manager.reconcile_receiver.try_recv().expect("message is reconciled");
+        let message = manager.reconciler.receiver().try_recv().expect("message is reconciled");
         let SingleOrMany::Single(message) = message else {
             panic!("expected a single reconcile message");
         };
@@ -812,8 +802,9 @@ mod tests {
 
     fn drain_reconcile_messages(manager: &super::RustSendFlowManager) -> Vec<super::Message> {
         let mut messages = Vec::new();
+        let receiver = manager.reconciler.receiver();
 
-        while let Ok(message) = manager.reconcile_receiver.try_recv() {
+        while let Ok(message) = receiver.try_recv() {
             match message {
                 SingleOrMany::Single(message) => messages.push(message),
                 SingleOrMany::Many(batch) => messages.extend(batch),
@@ -1244,7 +1235,7 @@ mod tests {
 
         manager.finalize_and_go_to_next_screen();
 
-        assert!(manager.reconcile_receiver.try_recv().is_err());
+        assert!(manager.reconciler.receiver().try_recv().is_err());
     }
 
     #[test]
@@ -1256,7 +1247,8 @@ mod tests {
         manager.finalize_and_go_to_next_screen();
 
         let message = manager
-            .reconcile_receiver
+            .reconciler
+            .receiver()
             .recv_timeout(Duration::from_secs(2))
             .expect("dust alert is reconciled");
 

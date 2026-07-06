@@ -10,7 +10,7 @@ import SwiftUI
 
 extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlowManager {}
 
-@Observable final class SendFlowManager: AnyReconciler, SendFlowManagerReconciler {
+@Observable final class SendFlowManager: ReconcilingManager, SendFlowManagerReconciler {
     typealias Message = SendFlowManagerReconcileMessage
     typealias Action = SendFlowManagerAction
 
@@ -121,7 +121,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         )
     }
 
-    private func apply(_ message: Message) {
+    func apply(_ message: Message) {
         switch message {
         case let .updateAmountFiat(fiat):
             self.fiatAmount = fiat
@@ -182,20 +182,12 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     private let rustBridge = DispatchQueue(
         label: "cove.SendFlowManager.rustbridge", qos: .userInitiated
     )
-    func reconcile(message: Message) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            logger.debug("reconcile: \(message)")
-            apply(message)
-        }
+    func logReconcile(message: Message) {
+        logger.debug("reconcile: \(message)")
     }
 
-    func reconcileMany(messages: [Message]) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            logger.debug("reconcile_messages: \(messages)")
-            messages.forEach { self.apply($0) }
-        }
+    func logReconcileMany(messages: [Message]) {
+        logger.debug("reconcile_messages: \(messages)")
     }
 
     public func dispatch(action: Action) {

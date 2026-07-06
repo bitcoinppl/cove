@@ -10,13 +10,10 @@ import SwiftUI
 struct MoreInfoPopover: View {
     @Environment(AppManager.self) private var app
 
-    // args
     let manager: WalletManager
-    @Binding var isImportingLabels: Bool
-
-    // bindings
-    @Binding var showExportLabelsConfirmation: Bool
-    @Binding var showExportXpubConfirmation: Bool
+    let importLabels: () -> Void
+    let exportLabels: () -> Void
+    let exportXpub: () -> Void
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -28,18 +25,6 @@ struct MoreInfoPopover: View {
 
     var metadata: WalletMetadata {
         manager.walletMetadata
-    }
-
-    func importLabels() {
-        isImportingLabels = true
-    }
-
-    func exportLabels() {
-        showExportLabelsConfirmation = true
-    }
-
-    func exportXpub() {
-        showExportXpubConfirmation = true
     }
 
     func exportTransactions() {
@@ -162,9 +147,9 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
-            isImportingLabels: Binding.constant(false),
-            showExportLabelsConfirmation: Binding.constant(false),
-            showExportXpubConfirmation: Binding.constant(false)
+            importLabels: {},
+            exportLabels: {},
+            exportXpub: {}
         )
         .environment(AppManager.shared)
     }

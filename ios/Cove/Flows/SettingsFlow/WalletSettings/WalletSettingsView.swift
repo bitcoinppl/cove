@@ -255,8 +255,8 @@ struct WalletSettingsView: View {
 private extension WalletBirthday {
     var displayValue: String {
         switch self {
-        case let .blockHeight(height):
-            "Block \(height.formatted(.number.grouping(.automatic)))"
+        case .blockHeight:
+            "Block \(blockHeightFmt() ?? "")"
         case let .timestamp(timestamp):
             Date(timeIntervalSince1970: TimeInterval(timestamp))
                 .formatted(date: .abbreviated, time: .omitted)

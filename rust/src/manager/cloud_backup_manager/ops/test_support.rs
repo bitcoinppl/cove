@@ -24,14 +24,14 @@ use strum::IntoEnumIterator as _;
 use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue, CloudBlobUploadingState,
+    CloudBlobDirtyState, CloudBlobFailedState, CloudBlobUploadingState, CloudStorageIssue,
     PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
     PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupStore, PendingEnableSession, actors::restore::RestoreOperation,
-    pending::PendingUploadVerificationStatus,
+    CloudBackupKeychain, CloudBackupStore, PendingEnableSession, PendingUploadVerificationState,
+    actors::restore::RestoreOperation,
 };
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
@@ -909,7 +909,7 @@ pub(crate) fn persist_failed_blob_state(wallet_id: WalletId, retryable: bool) {
 pub(crate) fn persist_failed_blob_state_with_issue(
     wallet_id: WalletId,
     retryable: bool,
-    issue: Option<CloudBlobFailureIssue>,
+    issue: Option<CloudStorageIssue>,
 ) {
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
@@ -1291,7 +1291,7 @@ pub(crate) async fn resume_wallet_uploads_from_persisted_state_for_test_async(
 pub(crate) async fn verify_pending_uploads_once_for_test_async(
     manager: &RustCloudBackupManager,
 ) -> bool {
-    !matches!(manager.verify_pending_uploads_once().await, PendingUploadVerificationStatus::Idle)
+    !matches!(manager.verify_pending_uploads_once().await, PendingUploadVerificationState::Idle)
 }
 
 pub(crate) async fn run_wallet_upload_for_test_async(

@@ -26,7 +26,6 @@ import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed
 import org.bitcoinppl.cove_core.types.feeSpeedToCircleColor
-import java.util.Locale
 
 /** fee rate selector sheet - displays fast/medium/slow fee options */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -244,7 +243,7 @@ private fun FeeOptionCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${String.format(Locale.US, "%.2f", feeOption.satPerVb())} sat/vB",
+                    text = feeOption.satsPerVbyteString(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = contentColor,
                 )
