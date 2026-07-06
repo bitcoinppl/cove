@@ -16,7 +16,7 @@ use bitcoin::{
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
-    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+    fees::{FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     utxo::{UtxoList, UtxoType},
 };
 use cove_util::result_ext::ResultExt as _;
@@ -51,6 +51,46 @@ impl BroadcastTransactionError {
 }
 
 impl WalletActor {
+    fn fee_from_insufficient_funds_needed(amount: Amount, needed: Amount) -> Result<Amount, Error> {
+        needed.checked_sub(amount).ok_or_else(|| {
+            WalletManagerError::FeesError(format!(
+                "coin selection needed amount below send amount: needed_sats={}, amount_sats={}",
+                needed.to_sat(),
+                amount.to_sat()
+            ))
+        })
+    }
+
+    fn fee_option_with_total_fee(
+        &mut self,
+        option: FeeRateOption,
+        amount: Amount,
+        address: Address,
+    ) -> Result<FeeRateOptionWithTotalFee, Error> {
+        let coin_selection = CoveDefaultCoinSelection::new(self.seed);
+        let locked_outpoints = self.locked_output_outpoints()?;
+        let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
+
+        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        tx_builder.ordering(TxOrdering::Untouched);
+        tx_builder.add_recipient(address.script_pubkey(), amount);
+        tx_builder.fee_rate(*option.fee_rate);
+
+        let psbt = tx_builder.finish();
+        let total_fee = match psbt {
+            Ok(psbt) => {
+                self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
+                psbt.fee().map_err(WalletManagerFeesError::from)?
+            }
+            Err(CreateTxError::CoinSelection(insufficient_funds)) => {
+                Self::fee_from_insufficient_funds_needed(amount, insufficient_funds.needed)?
+            }
+            Err(error) => return Err(error.into()),
+        };
+
+        Ok(FeeRateOptionWithTotalFee::new(option, total_fee))
+    }
+
     // Build a transaction but don't advance the change address index
     #[into_actor_result]
     pub async fn build_ephemeral_drain_tx(
@@ -201,30 +241,14 @@ impl WalletActor {
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
         self.ensure_ledger_ready_for_spend()?;
 
-        let fast_fee_rate = fee_rate_options.fast.fee_rate;
-        let medium_fee_rate = fee_rate_options.medium.fee_rate;
-        let slow_fee_rate = fee_rate_options.slow.fee_rate;
-
-        let fast_psbt = self.do_build_ephemeral_tx(amount, address.clone(), fast_fee_rate).await?;
-
-        let medium_psbt =
-            self.do_build_ephemeral_tx(amount, address.clone(), medium_fee_rate).await?;
-
-        let slow_psbt = self.do_build_ephemeral_tx(amount, address.clone(), slow_fee_rate).await?;
-
         let options = FeeRateOptionsWithTotalFee {
-            fast: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.fast,
-                fast_psbt.fee().map_err(WalletManagerFeesError::from)?,
-            ),
-            medium: FeeRateOptionWithTotalFee::new(
+            fast: self.fee_option_with_total_fee(fee_rate_options.fast, amount, address.clone())?,
+            medium: self.fee_option_with_total_fee(
                 fee_rate_options.medium,
-                medium_psbt.fee().map_err(WalletManagerFeesError::from)?,
-            ),
-            slow: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.slow,
-                slow_psbt.fee().map_err(WalletManagerFeesError::from)?,
-            ),
+                amount,
+                address.clone(),
+            )?,
+            slow: self.fee_option_with_total_fee(fee_rate_options.slow, amount, address.clone())?,
             custom: None,
         };
 
@@ -932,4 +956,37 @@ async fn broadcast_transaction_with_connection(
         .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::Amount;
+
+    use super::{WalletActor, WalletManagerError};
+
+    #[test]
+    fn insufficient_funds_needed_amount_derives_fee() {
+        let fee = WalletActor::fee_from_insufficient_funds_needed(
+            Amount::from_sat(5_000),
+            Amount::from_sat(5_156),
+        )
+        .expect("fee is derived");
+
+        assert_eq!(fee, Amount::from_sat(156));
+    }
+
+    #[test]
+    fn insufficient_funds_needed_below_amount_returns_error() {
+        let error = WalletActor::fee_from_insufficient_funds_needed(
+            Amount::from_sat(5_000),
+            Amount::from_sat(4_999),
+        )
+        .expect_err("invalid needed amount is rejected");
+
+        assert!(matches!(
+            error,
+            WalletManagerError::FeesError(message)
+                if message.contains("needed amount below send amount")
+        ));
+    }
 }

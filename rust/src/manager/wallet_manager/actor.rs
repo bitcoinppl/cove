@@ -1160,7 +1160,10 @@ mod tests {
     };
     use cove_bdk_progressive_scan::ScanUpdate;
     use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
-    use cove_types::network::Network as CoveNetwork;
+    use cove_types::{
+        fees::{FeeRateOption, FeeRateOptions, FeeSpeed},
+        network::Network as CoveNetwork,
+    };
     use parking_lot::RwLock;
     use std::{
         collections::{BTreeMap, HashMap, HashSet},
@@ -1701,6 +1704,14 @@ mod tests {
         bitcoin::FeeRate::from_sat_per_vb(100).expect("fee rate")
     }
 
+    fn one_sat_fee_options() -> FeeRateOptions {
+        FeeRateOptions {
+            fast: FeeRateOption::new(FeeSpeed::Fast, 1.0),
+            medium: FeeRateOption::new(FeeSpeed::Medium, 1.0),
+            slow: FeeRateOption::new(FeeSpeed::Slow, 1.0),
+        }
+    }
+
     #[test]
     fn progressive_scan_update_response_preserves_last_active_indices() {
         let scan_update = ScanUpdate {
@@ -1986,6 +1997,26 @@ mod tests {
 
         assert!(!spent_outpoints.contains(&fixture.locked));
         assert!(spent_outpoints.contains(&fixture.unlocked));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn actor_fee_options_include_fee_when_amount_exceeds_available_with_fee() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        let fixture = locked_actor_fixture();
+        let mut actor = fixture.actor;
+
+        let result = actor
+            .fee_rate_options_with_total_fee(
+                one_sat_fee_options(),
+                Amount::from_sat(79_950),
+                Address::preview_new(),
+            )
+            .await;
+        let options = actor_value(result).await.expect("fee totals are estimated");
+        let medium_fee = options.medium.total_fee.expect("medium fee total exists");
+
+        assert!(medium_fee.as_sats() > 50);
     }
 
     #[tokio::test(flavor = "current_thread")]
