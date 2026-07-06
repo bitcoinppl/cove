@@ -19,6 +19,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
+import org.bitcoinppl.cove.flows.KeyTeleportFlow.KeyTeleportContainer
 import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.SelectedWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails.TransactionDetailsContainer
@@ -166,6 +167,13 @@ private fun RouteContent(app: AppManager, route: Route) {
 
         is Route.CoinControl -> {
             CoinControlContainer(
+                app = app,
+                route = route.v1,
+            )
+        }
+
+        is Route.KeyTeleport -> {
+            KeyTeleportContainer(
                 app = app,
                 route = route.v1,
             )

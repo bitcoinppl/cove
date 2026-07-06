@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.flows.KeyTeleportFlow.KeyTeleportManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
@@ -84,7 +85,7 @@ class AppManager private constructor() : FfiReconcile {
             }
 
             override fun onRoutesChanged() {
-                clearInactiveSendFlowManager()
+                clearInactiveRouteManagers()
             }
         }
 
@@ -155,6 +156,9 @@ class AppManager private constructor() : FfiReconcile {
     internal val coinControlManager: CoinControlManager?
         get() = managerCache.coinControlManager
 
+    internal val keyTeleportManager: KeyTeleportManager?
+        get() = managerCache.keyTeleportManager
+
     val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
     init {
@@ -217,6 +221,14 @@ class AppManager private constructor() : FfiReconcile {
 
     fun clearCoinControlManager(manager: CoinControlManager) = managerCache.clearCoinControlManager(manager)
 
+    fun getKeyTeleportManager(): KeyTeleportManager =
+        managerCache.getKeyTeleportManager(rust)
+
+    fun clearKeyTeleportManager() = managerCache.clearKeyTeleportManager()
+
+    fun canKeyTeleportSend(walletId: WalletId): Boolean =
+        getKeyTeleportManager().isSendEligible(walletId)
+
     fun reconcileAfterLabelImport(walletId: WalletId) = managerCache.reconcileAfterLabelImport(walletId)
 
     suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean =
@@ -226,7 +238,7 @@ class AppManager private constructor() : FfiReconcile {
 
     private fun clearWalletManager(id: WalletId) = managerCache.clearWalletManager(id)
 
-    private fun clearInactiveSendFlowManager() = managerCache.clearInactiveSendFlowManager(router)
+    private fun clearInactiveRouteManagers() = managerCache.clearInactiveRouteManagers(router)
 
     val fullVersionId: String
         get() {
@@ -269,6 +281,7 @@ class AppManager private constructor() : FfiReconcile {
     fun reset() {
         // close managers before clearing them
         clearWalletManager()
+        clearKeyTeleportManager()
 
         database = Database()
         needsOnboarding =
