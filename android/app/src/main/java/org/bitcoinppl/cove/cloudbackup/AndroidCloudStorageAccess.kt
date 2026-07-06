@@ -170,6 +170,7 @@ class AndroidCloudStorageAccess internal constructor(
                 }
             }
 
+            // report partial failures after best-effort cleanup so callers can retry remaining files
             if (failures.isNotEmpty()) {
                 throw aggregateDeleteFailures(failures)
             }

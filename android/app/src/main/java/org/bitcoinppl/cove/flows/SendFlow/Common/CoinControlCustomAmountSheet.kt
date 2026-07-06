@@ -72,7 +72,12 @@ fun CoinControlCustomAmountSheet(
     // min/max calculations
     val conservativeDustLimitSatsU = remember { ffiConservativeDustLimitSats() }
     val conservativeDustLimitSats = conservativeDustLimitSatsU.toLong()
-    val minSend = if (isSats) conservativeDustLimitSats.toDouble() else conservativeDustLimitSats.toDouble() / 100_000_000.0
+    val minSend =
+        if (isSats) {
+            conservativeDustLimitSats.toDouble()
+        } else {
+            conservativeDustLimitSats.toDouble() / 100_000_000.0
+        }
 
     val step = if (isSats) 10.0 else 0.0000001
 

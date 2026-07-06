@@ -61,6 +61,53 @@ internal fun isTooHighCustomFeeError(error: SendFlowException): Boolean =
         else -> false
     }
 
+private fun estimatedCustomFeeOption(
+    feeRate: Float,
+    feeSpeed: FeeSpeed,
+    selectedOption: FeeRateOptionWithTotalFee,
+): FeeRateOptionWithTotalFee? {
+    val selectedFee = selectedOption.totalFee()?.asSats()?.toDouble()
+    val selectedRate = selectedOption.satPerVb().toDouble()
+    val estimatedFee =
+        if (selectedFee != null && selectedRate > 0) {
+            (feeRate.toDouble() / selectedRate) * selectedFee
+        } else {
+            null
+        }
+
+    return estimatedFee?.let {
+        FeeRateOptionWithTotalFee(
+            feeSpeed = feeSpeed,
+            feeRate = FeeRate.fromSatPerVb(feeRate),
+            totalFee = Amount.fromSat(it.toULong()),
+        )
+    }
+}
+
+private fun customFeeTooHighAlert(): TaggedItem<SendFlowAlertState> =
+    TaggedItem(
+        SendFlowAlertState.General(
+            title = "Fee too high!",
+            message = "The fee rate you entered is too high, we automatically selected a lower fee",
+        ),
+    )
+
+private suspend fun handleTooHighCustomFee(
+    feeRate: Float,
+    presenter: SendFlowPresenter,
+    onDismiss: () -> Unit,
+) {
+    withContext(Dispatchers.Main) {
+        presenter.erroredFeeRate = feeRate
+
+        if (presenter.lastWorkingFeeRate != null) {
+            onDismiss()
+            delay(CustomFeeRateConstants.ALERT_DELAY_MS)
+            presenter.alertState = customFeeTooHighAlert()
+        }
+    }
+}
+
 /** custom fee rate sheet - allows user to set custom sats/vbyte with slider */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,7 +146,10 @@ fun CustomFeeRateSheet(
     val maxFeeRate =
         remember(updatedFeeOptions, presenter.erroredFeeRate) {
             val fast3 = updatedFeeOptions.fast().satPerVb() * 3
-            val computed = presenter.erroredFeeRate?.let { minOf(it + CustomFeeRateConstants.FEE_RATE_EPSILON, fast3) } ?: fast3
+            val computed =
+                presenter.erroredFeeRate
+                    ?.let { minOf(it + CustomFeeRateConstants.FEE_RATE_EPSILON, fast3) }
+                    ?: fast3
             max(1f, computed)
         }
 
@@ -110,21 +160,15 @@ fun CustomFeeRateSheet(
 
         // if address is not validated yet, estimate fee based on selected option's fee
         if (sendFlowManager.address == null) {
-            val selectedFee = selectedOption.totalFee()?.asSats()?.toDouble() ?: return
-            val selectedRate = selectedOption.satPerVb().toDouble()
-            if (selectedRate > 0) {
-                val estimatedFee = (feeRate.toDouble() / selectedRate) * selectedFee
-                totalSats = estimatedFee.toLong()
+            val estimatedFeeOption =
+                estimatedCustomFeeOption(
+                    feeRate = feeRate,
+                    feeSpeed = feeSpeed,
+                    selectedOption = selectedOption,
+                ) ?: return
 
-                // create estimated custom fee option so it shows up when Done is pressed
-                val estimatedFeeOption =
-                    FeeRateOptionWithTotalFee(
-                        feeSpeed = feeSpeed,
-                        feeRate = FeeRate.fromSatPerVb(feeRate),
-                        totalFee = Amount.fromSat(estimatedFee.toULong()),
-                    )
-                updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(estimatedFeeOption)
-            }
+            totalSats = estimatedFeeOption.totalFee()?.asSats()?.toLong()
+            updatedFeeOptions = updatedFeeOptions.addCustomFeeRate(estimatedFeeOption)
             return
         }
 
@@ -159,24 +203,18 @@ fun CustomFeeRateSheet(
                             return@withContext
                         }
 
-                        withContext(Dispatchers.Main) {
-                            presenter.erroredFeeRate = feeRate
-
-                            if (presenter.lastWorkingFeeRate != null) {
-                                onDismiss()
-                                delay(CustomFeeRateConstants.ALERT_DELAY_MS)
-                                presenter.alertState =
-                                    TaggedItem(
-                                        SendFlowAlertState.General(
-                                            title = "Fee too high!",
-                                            message = "The fee rate you entered is too high, we automatically selected a lower fee",
-                                        ),
-                                    )
-                            }
-                        }
+                        handleTooHighCustomFee(
+                            feeRate = feeRate,
+                            presenter = presenter,
+                            onDismiss = onDismiss,
+                        )
                     } catch (e: Exception) {
                         // unexpected error during fee calculation
-                        android.util.Log.e("CustomFeeRateSheet", "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}", e)
+                        android.util.Log.e(
+                            "CustomFeeRateSheet",
+                            "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}",
+                            e,
+                        )
                         withContext(Dispatchers.Main) {
                             // keep previous total sats value, don't crash
                         }
