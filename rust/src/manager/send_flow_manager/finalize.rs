@@ -313,11 +313,8 @@ mod tests {
     }
 
     fn selected_fee_without_total() -> FeeRateOptionWithTotalFee {
-        FeeRateOptionWithTotalFee {
-            fee_speed: FeeSpeed::Custom { duration_mins: 10 },
-            fee_rate: FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0).fee_rate,
-            total_fee: None,
-        }
+        let fee_option = FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0);
+        FeeRateOptionWithTotalFee::without_total(fee_option)
     }
 
     fn finalize_snapshot(
@@ -387,11 +384,8 @@ mod tests {
         let snapshot = finalize_snapshot(address.clone(), selected_fee_rate.clone());
         set_finalize_snapshot_state(&manager, address, selected_fee_rate);
 
-        let selected = Arc::new(FeeRateOptionWithTotalFee {
-            fee_speed: FeeSpeed::Custom { duration_mins: 20 },
-            fee_rate: FeeRateOption::new(FeeSpeed::Custom { duration_mins: 20 }, 2.0).fee_rate,
-            total_fee: None,
-        });
+        let fee_option = FeeRateOption::new(FeeSpeed::Custom { duration_mins: 20 }, 2.0);
+        let selected = Arc::new(FeeRateOptionWithTotalFee::without_total(fee_option));
         let options =
             FeeRateOptionsWithTotalFee::without_totals(FeeRateOptions::_ffi_preview_new());
         manager.state.lock().fee_selection = Some(FeeSelection::new(Arc::new(options), selected));

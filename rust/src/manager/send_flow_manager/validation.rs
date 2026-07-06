@@ -1,5 +1,12 @@
 use super::{EnterMode, SendFlowAlertState};
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum SpendableBalanceCheck {
+    WithinBalance,
+    ExceedsBalance,
+    MissingFeeTotal,
+}
+
 pub(crate) fn amount_exceeds_spendable_balance(
     amount: Option<u64>,
     total_fee_sats: Option<u64>,
@@ -14,11 +21,35 @@ pub(crate) fn amount_exceeds_spendable_balance(
         return false;
     };
 
-    total_spend_sats(amount, total_fee_sats) > spendable
+    match spendable_balance_check(amount, total_fee_sats, spendable) {
+        SpendableBalanceCheck::WithinBalance => false,
+        SpendableBalanceCheck::ExceedsBalance => true,
+        SpendableBalanceCheck::MissingFeeTotal => amount >= spendable,
+    }
 }
 
-pub(crate) fn total_spend_sats(amount: u64, total_fee_sats: Option<u64>) -> u64 {
-    amount.saturating_add(total_fee_sats.unwrap_or(0))
+pub(crate) fn spendable_balance_check(
+    amount: u64,
+    total_fee_sats: Option<u64>,
+    spendable_balance: u64,
+) -> SpendableBalanceCheck {
+    if amount > spendable_balance {
+        return SpendableBalanceCheck::ExceedsBalance;
+    }
+
+    let Some(total_fee_sats) = total_fee_sats else {
+        return SpendableBalanceCheck::MissingFeeTotal;
+    };
+
+    if total_spend_sats(amount, total_fee_sats) > spendable_balance {
+        return SpendableBalanceCheck::ExceedsBalance;
+    }
+
+    SpendableBalanceCheck::WithinBalance
+}
+
+pub(crate) fn total_spend_sats(amount: u64, total_fee_sats: u64) -> u64 {
+    amount.saturating_add(total_fee_sats)
 }
 
 pub(crate) fn spendable_balance_limit(
@@ -63,12 +94,21 @@ pub(crate) fn unavailable_spendable_balance_alert(
     None
 }
 
+pub(crate) fn missing_fee_total_alert() -> SendFlowAlertState {
+    SendFlowAlertState::General {
+        title: "Fee Estimate Still Loading".to_string(),
+        message:
+            "Cove is still calculating the network fee for this send. Please try again shortly."
+                .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn amount_exceeds_spendable_balance_uses_unlocked_balance() {
-        assert!(super::amount_exceeds_spendable_balance(Some(6_000), None, Some(5_000)));
-        assert!(!super::amount_exceeds_spendable_balance(Some(5_000), None, Some(5_000)));
+        assert!(super::amount_exceeds_spendable_balance(Some(6_000), Some(1), Some(5_000)));
+        assert!(!super::amount_exceeds_spendable_balance(Some(5_000), Some(0), Some(5_000)));
         assert!(!super::amount_exceeds_spendable_balance(Some(0), None, Some(0)));
         assert!(!super::amount_exceeds_spendable_balance(Some(1), None, None));
         assert!(!super::amount_exceeds_spendable_balance(Some(0), None, None));
@@ -81,13 +121,30 @@ mod tests {
     }
 
     #[test]
-    fn amount_exceeds_spendable_balance_falls_back_to_amount_without_fee() {
-        assert!(!super::amount_exceeds_spendable_balance(Some(5_000), None, Some(5_001)));
+    fn amount_exceeds_spendable_balance_treats_missing_fee_as_exceeding_at_limit() {
+        assert!(super::amount_exceeds_spendable_balance(Some(5_000), None, Some(5_000)));
+        assert!(!super::amount_exceeds_spendable_balance(Some(4_999), None, Some(5_000)));
     }
 
     #[test]
     fn zero_amount_does_not_exceed_spendable_balance_even_with_fee() {
         assert!(!super::amount_exceeds_spendable_balance(Some(0), Some(1), Some(0)));
+    }
+
+    #[test]
+    fn spendable_balance_check_tracks_missing_fee_total() {
+        assert_eq!(
+            super::spendable_balance_check(5_000, None, 5_001),
+            super::SpendableBalanceCheck::MissingFeeTotal
+        );
+        assert_eq!(
+            super::spendable_balance_check(5_002, None, 5_001),
+            super::SpendableBalanceCheck::ExceedsBalance
+        );
+        assert_eq!(
+            super::spendable_balance_check(5_000, Some(1), 5_001),
+            super::SpendableBalanceCheck::WithinBalance
+        );
     }
 
     #[test]

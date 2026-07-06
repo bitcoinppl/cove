@@ -242,16 +242,10 @@ impl FeeRateOptionsWithTotalFee {
     /// Used when we have fee rates but haven't built PSBTs to calculate actual fees yet
     #[must_use]
     pub fn without_totals(base: FeeRateOptions) -> Self {
-        let from = |opt: FeeRateOption| FeeRateOptionWithTotalFee {
-            fee_speed: opt.fee_speed,
-            fee_rate: opt.fee_rate,
-            total_fee: None,
-        };
-
         Self {
-            fast: from(base.fast),
-            medium: from(base.medium),
-            slow: from(base.slow),
+            fast: FeeRateOptionWithTotalFee::without_total(base.fast),
+            medium: FeeRateOptionWithTotalFee::without_total(base.medium),
+            slow: FeeRateOptionWithTotalFee::without_total(base.slow),
             custom: None,
         }
     }
@@ -265,6 +259,12 @@ pub struct FeeRateOptionWithTotalFee {
 }
 
 impl FeeRateOptionWithTotalFee {
+    #[must_use]
+    pub fn without_total(option: FeeRateOption) -> Self {
+        Self { fee_speed: option.fee_speed, fee_rate: option.fee_rate, total_fee: None }
+    }
+
+    #[must_use]
     pub fn new(option: FeeRateOption, total_fee: impl Into<Amount>) -> Self {
         Self {
             fee_speed: option.fee_speed,
@@ -518,6 +518,22 @@ mod tests {
 
         let option_with_total = FeeRateOptionWithTotalFee::new(option, Amount::from_sat(1_000));
         assert_eq!(option_with_total.sats_per_vbyte_string(), "3.20 sats/vbyte");
+    }
+
+    #[test]
+    fn fee_rate_options_without_totals_use_no_total_constructor() {
+        let base = FeeRateOptions {
+            fast: FeeRateOption::new(FeeSpeed::Fast, 3.2),
+            medium: FeeRateOption::new(FeeSpeed::Medium, 2.1),
+            slow: FeeRateOption::new(FeeSpeed::Slow, 1.0),
+        };
+
+        let options = FeeRateOptionsWithTotalFee::without_totals(base);
+
+        assert_eq!(options.fast, FeeRateOptionWithTotalFee::without_total(base.fast));
+        assert_eq!(options.medium, FeeRateOptionWithTotalFee::without_total(base.medium));
+        assert_eq!(options.slow, FeeRateOptionWithTotalFee::without_total(base.slow));
+        assert_eq!(options.custom, None);
     }
 
     #[test]

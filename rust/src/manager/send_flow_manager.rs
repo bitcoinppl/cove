@@ -307,41 +307,55 @@ impl RustSendFlowManager {
             )
         };
 
-        let total_spend_sats = validation::total_spend_sats(amount, total_fee_sats);
+        match validation::spendable_balance_check(amount, total_fee_sats, spendable_balance) {
+            validation::SpendableBalanceCheck::WithinBalance => true,
+            validation::SpendableBalanceCheck::ExceedsBalance => {
+                // fee-only coin-control failures are handled by finalization so users get the fee-specific alert
+                if fee_consumes_coin_control_balance {
+                    return true;
+                }
 
-        if spendable_balance < total_spend_sats {
-            // fee-only coin-control failures are handled by finalization so users get the fee-specific alert
-            if fee_consumes_coin_control_balance {
-                return true;
-            }
+                if let Some(alert) = unavailable_balance_alert {
+                    let msg = Message::SetAlert(alert);
 
-            if let Some(alert) = unavailable_balance_alert {
-                let msg = Message::SetAlert(alert);
+                    if display_alert {
+                        sender.queue(msg);
+                    } else {
+                        debug!("validate_amount_failed: {msg:?}");
+                    }
+
+                    return false;
+                }
+
+                if is_max_selected {
+                    let me = self.clone();
+                    cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
+                    return false;
+                }
+
+                let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
                 if display_alert {
                     sender.queue(msg);
                 } else {
                     debug!("validate_amount_failed: {msg:?}");
                 }
 
-                return false;
+                false
             }
 
-            if is_max_selected {
-                let me = self.clone();
-                cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
-                return false;
-            }
+            validation::SpendableBalanceCheck::MissingFeeTotal => {
+                self.schedule_fee_rate_update();
 
-            let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
-            if display_alert {
-                sender.queue(msg);
-            } else {
-                debug!("validate_amount_failed: {msg:?}");
+                let msg = Message::SetAlert(validation::missing_fee_total_alert());
+                if display_alert {
+                    sender.queue(msg);
+                } else {
+                    debug!("validate_amount_failed: {msg:?}");
+                }
+
+                false
             }
-            return false;
         }
-
-        true
     }
 
     fn pending_send_warning(&self) -> Option<SendFlowAlertState> {
@@ -728,7 +742,7 @@ impl RustSendFlowManager {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     use cove_types::{
         fees::{FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed},
@@ -790,11 +804,8 @@ mod tests {
 
     fn set_selected_fee_without_total(manager: &super::RustSendFlowManager) {
         let base_options = super::FeeRateOptions::_ffi_preview_new();
-        let selected = FeeRateOptionWithTotalFee {
-            fee_speed: FeeSpeed::Custom { duration_mins: 10 },
-            fee_rate: FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0).fee_rate,
-            total_fee: None,
-        };
+        let fee_option = FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0);
+        let selected = FeeRateOptionWithTotalFee::without_total(fee_option);
         let options = FeeRateOptionsWithTotalFee::without_totals(base_options);
 
         let mut state = manager.state.lock();
@@ -1260,37 +1271,35 @@ mod tests {
     }
 
     #[test]
-    fn finalize_refreshes_missing_total_fee_before_warning_detection() {
+    fn finalize_blocks_when_selected_fee_total_is_missing() {
         let manager = manager_for_validation();
         set_valid_amount_and_address(&manager, 1_000);
         set_selected_fee_without_total(&manager);
 
         manager.finalize_and_go_to_next_screen();
 
-        assert!(manager.reconciler.receiver().try_recv().is_err());
+        assert!(matches!(
+            next_reconcile_message(&manager),
+            super::Message::SetAlert(super::SendFlowAlertState::General { title, .. })
+                if title == "Fee Estimate Still Loading"
+        ));
     }
 
     #[test]
-    fn finalize_reports_dust_when_missing_total_fee_refresh_cannot_build_fee_totals() {
+    fn finalize_reports_missing_fee_before_dust_when_fee_total_is_unavailable() {
         let manager = manager_for_validation();
         set_valid_amount_and_address(&manager, 1);
         set_selected_fee_without_total(&manager);
 
         manager.finalize_and_go_to_next_screen();
 
-        let message = manager
-            .reconciler
-            .receiver()
-            .recv_timeout(Duration::from_secs(2))
-            .expect("dust alert is reconciled");
-
         assert!(matches!(
-            message,
-            SingleOrMany::Single(super::Message::SetAlert(super::SendFlowAlertState::Error(
-                super::SendFlowError::SendBelowDustLimit
-            )))
+            next_reconcile_message(&manager),
+            super::Message::SetAlert(super::SendFlowAlertState::General { title, .. })
+                if title == "Fee Estimate Still Loading"
         ));
     }
+
     #[test]
     fn validate_amount_blocks_send_when_lock_state_load_failed() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
@@ -1334,6 +1343,31 @@ mod tests {
         assert!(matches!(
             alert,
             super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
+        ));
+    }
+
+    #[test]
+    fn validate_amount_blocks_send_when_selected_fee_total_is_missing() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(5_000);
+            state.unlocked_spendable_sats = Some(5_001);
+            state.address = Some(Arc::new(Address::preview_new()));
+        }
+        set_selected_fee_without_total(&manager);
+
+        assert!(!manager.validate_amount(true));
+
+        let super::Message::SetAlert(alert) = next_reconcile_message(&manager) else {
+            panic!("expected a single missing fee alert");
+        };
+
+        assert!(matches!(
+            alert,
+            super::SendFlowAlertState::General { title, .. }
+                if title == "Fee Estimate Still Loading"
         ));
     }
 
@@ -1401,6 +1435,20 @@ mod tests {
             state.unlocked_spendable_sats = Some(50_000);
         }
         set_selected_fee_total(&manager, 156);
+
+        assert!(manager.amount_exceeds_balance());
+    }
+
+    #[test]
+    fn amount_exceeds_balance_treats_missing_fee_as_exceeding_at_spendable_limit() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(5_000);
+            state.unlocked_spendable_sats = Some(5_000);
+        }
+        set_selected_fee_without_total(&manager);
 
         assert!(manager.amount_exceeds_balance());
     }

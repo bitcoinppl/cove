@@ -51,6 +51,16 @@ impl BroadcastTransactionError {
 }
 
 impl WalletActor {
+    fn fee_from_insufficient_funds_needed(amount: Amount, needed: Amount) -> Result<Amount, Error> {
+        needed.checked_sub(amount).ok_or_else(|| {
+            WalletManagerError::FeesError(format!(
+                "coin selection needed amount below send amount: needed_sats={}, amount_sats={}",
+                needed.to_sat(),
+                amount.to_sat()
+            ))
+        })
+    }
+
     fn fee_option_with_total_fee(
         &mut self,
         option: FeeRateOption,
@@ -73,7 +83,7 @@ impl WalletActor {
                 psbt.fee().map_err(WalletManagerFeesError::from)?
             }
             Err(CreateTxError::CoinSelection(insufficient_funds)) => {
-                insufficient_funds.needed.checked_sub(amount).unwrap_or(Amount::ZERO)
+                Self::fee_from_insufficient_funds_needed(amount, insufficient_funds.needed)?
             }
             Err(error) => return Err(error.into()),
         };
@@ -946,4 +956,37 @@ async fn broadcast_transaction_with_connection(
         .map_err(BroadcastTransactionError::PostBroadcastFailed)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::Amount;
+
+    use super::{WalletActor, WalletManagerError};
+
+    #[test]
+    fn insufficient_funds_needed_amount_derives_fee() {
+        let fee = WalletActor::fee_from_insufficient_funds_needed(
+            Amount::from_sat(5_000),
+            Amount::from_sat(5_156),
+        )
+        .expect("fee is derived");
+
+        assert_eq!(fee, Amount::from_sat(156));
+    }
+
+    #[test]
+    fn insufficient_funds_needed_below_amount_returns_error() {
+        let error = WalletActor::fee_from_insufficient_funds_needed(
+            Amount::from_sat(5_000),
+            Amount::from_sat(4_999),
+        )
+        .expect_err("invalid needed amount is rejected");
+
+        assert!(matches!(
+            error,
+            WalletManagerError::FeesError(message)
+                if message.contains("needed amount below send amount")
+        ));
+    }
 }
