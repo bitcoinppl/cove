@@ -285,10 +285,10 @@ impl RustSendFlowManager {
             let spendable_balance_for_validation =
                 validation::spendable_balance_for_validation(spendable_balance);
 
-            let total_fee_sats = state
-                .fee_selection
-                .as_ref()
-                .and_then(|selection| selection.selected.total_fee.map(|fee| fee.as_sats()));
+            let total_fee_sats = match state.fee_selection.as_ref() {
+                Some(selection) => selection.selected.total_fee.map(|fee| fee.as_sats()),
+                None => Some(0),
+            };
 
             let fee_consumes_coin_control_balance = state.mode.is_coin_control()
                 && spendable_balance_for_validation > 0
