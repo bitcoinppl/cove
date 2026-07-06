@@ -1,4 +1,4 @@
-use super::SendFlowAlertState;
+use super::{EnterMode, SendFlowAlertState};
 
 pub(crate) fn amount_exceeds_spendable_balance(
     amount: Option<u64>,
@@ -21,15 +21,30 @@ pub(crate) fn total_spend_sats(amount: u64, total_fee_sats: Option<u64>) -> u64 
     amount.saturating_add(total_fee_sats.unwrap_or(0))
 }
 
-pub(crate) fn spendable_balance_for_validation(unlocked_spendable_sats: Option<u64>) -> u64 {
+pub(crate) fn spendable_balance_limit(
+    unlocked_spendable_sats: Option<u64>,
+    mode: &EnterMode,
+) -> Option<u64> {
+    match mode {
+        EnterMode::SetAmount => unlocked_spendable_sats,
+        EnterMode::CoinControl(coin_control) => Some(coin_control.max_send().as_sats()),
+    }
+}
+
+pub(crate) fn spendable_balance_for_validation(spendable_balance: Option<u64>) -> u64 {
     // fail closed so amount validation cannot overspend locked or unknown UTXOs
-    unlocked_spendable_sats.unwrap_or(0)
+    spendable_balance.unwrap_or(0)
 }
 
 pub(crate) fn unavailable_spendable_balance_alert(
     unlocked_spendable_sats: Option<u64>,
     lock_state_load_failed: bool,
+    mode: &EnterMode,
 ) -> Option<SendFlowAlertState> {
+    if mode.is_coin_control() {
+        return None;
+    }
+
     if lock_state_load_failed {
         return Some(SendFlowAlertState::General {
             title: "Unable to Read Locked Coins".to_string(),
@@ -77,13 +92,17 @@ mod tests {
 
     #[test]
     fn validation_spendable_balance_uses_zero_when_unlocked_balance_is_unknown() {
-        assert_eq!(super::spendable_balance_for_validation(Some(5_000)), 5_000);
-        assert_eq!(super::spendable_balance_for_validation(None), 0);
+        let spendable = super::spendable_balance_limit(Some(5_000), &super::EnterMode::SetAmount);
+        assert_eq!(super::spendable_balance_for_validation(spendable), 5_000);
+
+        let spendable = super::spendable_balance_limit(None, &super::EnterMode::SetAmount);
+        assert_eq!(super::spendable_balance_for_validation(spendable), 0);
     }
 
     #[test]
     fn unavailable_balance_alert_distinguishes_lock_state_failures() {
-        let alert = super::unavailable_spendable_balance_alert(None, true);
+        let alert =
+            super::unavailable_spendable_balance_alert(None, true, &super::EnterMode::SetAmount);
 
         assert!(matches!(
             alert,
@@ -93,12 +112,20 @@ mod tests {
 
     #[test]
     fn unavailable_balance_alert_distinguishes_loading_state() {
-        let alert = super::unavailable_spendable_balance_alert(None, false);
+        let alert =
+            super::unavailable_spendable_balance_alert(None, false, &super::EnterMode::SetAmount);
 
         assert!(matches!(
             alert,
             Some(super::SendFlowAlertState::General { title, .. }) if title.contains("Loading")
         ));
-        assert_eq!(super::unavailable_spendable_balance_alert(Some(5_000), false), None);
+        assert_eq!(
+            super::unavailable_spendable_balance_alert(
+                Some(5_000),
+                false,
+                &super::EnterMode::SetAmount
+            ),
+            None
+        );
     }
 }

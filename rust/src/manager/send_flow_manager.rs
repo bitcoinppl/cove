@@ -270,24 +270,51 @@ impl RustSendFlowManager {
             return false;
         }
 
-        let (spendable_balance, unavailable_balance_alert, is_max_selected, total_fee_sats) = {
+        let (
+            spendable_balance,
+            unavailable_balance_alert,
+            is_max_selected,
+            total_fee_sats,
+            fee_consumes_coin_control_balance,
+        ) = {
             let state = self.state.lock();
+
+            let spendable_balance =
+                validation::spendable_balance_limit(state.unlocked_spendable_sats, &state.mode);
+
+            let spendable_balance_for_validation =
+                validation::spendable_balance_for_validation(spendable_balance);
+
+            let total_fee_sats = state
+                .fee_selection
+                .as_ref()
+                .and_then(|selection| selection.selected.total_fee.map(|fee| fee.as_sats()));
+
+            let fee_consumes_coin_control_balance = state.mode.is_coin_control()
+                && spendable_balance_for_validation > 0
+                && total_fee_sats.is_some_and(|fee| fee >= spendable_balance_for_validation);
+
             (
-                validation::spendable_balance_for_validation(state.unlocked_spendable_sats),
+                spendable_balance_for_validation,
                 validation::unavailable_spendable_balance_alert(
                     state.unlocked_spendable_sats,
                     state.lock_state_load_failed,
+                    &state.mode,
                 ),
                 state.max_selected.is_some(),
-                state
-                    .fee_selection
-                    .as_ref()
-                    .and_then(|selection| selection.selected.total_fee.map(|fee| fee.as_sats())),
+                total_fee_sats,
+                fee_consumes_coin_control_balance,
             )
         };
+
         let total_spend_sats = validation::total_spend_sats(amount, total_fee_sats);
 
         if spendable_balance < total_spend_sats {
+            // fee-only coin-control failures are handled by finalization so users get the fee-specific alert
+            if fee_consumes_coin_control_balance {
+                return true;
+            }
+
             if let Some(alert) = unavailable_balance_alert {
                 let msg = Message::SetAlert(alert);
                 if display_alert {
@@ -1311,6 +1338,30 @@ mod tests {
     }
 
     #[test]
+    fn validate_amount_blocks_coin_control_send_when_amount_plus_fee_exceeds_selected_total() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 10_000);
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(9_900);
+            state.unlocked_spendable_sats = Some(50_000);
+        }
+        set_selected_fee_total(&manager, 156);
+
+        assert!(!manager.validate_amount(true));
+
+        let super::Message::SetAlert(alert) = next_reconcile_message(&manager) else {
+            panic!("expected a single insufficient funds alert");
+        };
+
+        assert!(matches!(
+            alert,
+            super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
+        ));
+    }
+
+    #[test]
     fn validate_amount_allows_total_equal_to_spendable_balance() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = manager_for_validation();
@@ -1333,6 +1384,21 @@ mod tests {
             let mut state = manager.state.lock();
             state.amount_sats = Some(5_000);
             state.unlocked_spendable_sats = Some(5_001);
+        }
+        set_selected_fee_total(&manager, 156);
+
+        assert!(manager.amount_exceeds_balance());
+    }
+
+    #[test]
+    fn amount_exceeds_balance_uses_coin_control_selected_total() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 10_000);
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(9_900);
+            state.unlocked_spendable_sats = Some(50_000);
         }
         set_selected_fee_total(&manager, 156);
 
