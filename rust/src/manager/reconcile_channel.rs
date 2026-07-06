@@ -83,3 +83,43 @@ impl<M: DebugSend> ReconcileChannel<M> {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::manager::deferred_sender::SingleOrMany;
+
+    use super::ReconcileChannel;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum TestMessage {
+        One,
+        Two,
+        Three,
+    }
+
+    #[test]
+    fn send_sync_forwards_single_message() {
+        let channel = ReconcileChannel::new(1);
+
+        channel.send_sync(TestMessage::One);
+
+        assert_eq!(channel.receiver().recv().unwrap(), SingleOrMany::Single(TestMessage::One));
+    }
+
+    #[test]
+    fn deferred_sender_flushes_many_messages_on_drop() {
+        let channel = ReconcileChannel::new(1);
+
+        {
+            let mut sender = channel.deferred_sender();
+            sender.queue(TestMessage::One);
+            sender.queue(TestMessage::Two);
+            sender.queue(TestMessage::Three);
+        }
+
+        assert_eq!(
+            channel.receiver().recv().unwrap(),
+            SingleOrMany::Many(vec![TestMessage::One, TestMessage::Two, TestMessage::Three])
+        );
+    }
+}

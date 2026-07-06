@@ -168,6 +168,118 @@ final class ICloudDriveHelperDecompositionTests: XCTestCase {
         XCTAssertEqual(loggedMetadataReason, "waitForUpload timeout")
         XCTAssertEqual(loggedMetadataFocus, "file.json")
     }
+
+    func testDownloadReturnsInitialCoordinatedReadBeforeStatusCatchesUp() throws {
+        let clock = TestClock(start: Date(timeIntervalSince1970: 400))
+        let machine = UploadDownloadStateMachine(
+            defaultTimeout: 1,
+            pollInterval: 0.1,
+            clock: clock.makeClock()
+        )
+        let fileURL = URL(fileURLWithPath: "/tmp/file.json")
+        let resolvedItem = ResolvedMetadataItem(
+            url: URL(fileURLWithPath: "/tmp/metadata/file.json"),
+            metadataPath: "/tmp/metadata/file.json"
+        )
+        var metadataLookupCount = 0
+        var triggerDownloadCount = 0
+        var coordinatedReadURLs: [URL] = []
+
+        let data = try machine.downloadFile(
+            url: fileURL,
+            recordId: "record-1",
+            fileExists: { _ in false },
+            downloadState: { _ in .notDownloaded },
+            waitForMetadataItem: { name, parentDirectoryURL, deadline in
+                metadataLookupCount += 1
+                XCTAssertEqual(name, "file.json")
+                XCTAssertEqual(parentDirectoryURL.path, "/tmp")
+                XCTAssertEqual(deadline, Date(timeIntervalSince1970: 401))
+                return resolvedItem
+            },
+            triggerDownload: { url, recordId, filename in
+                triggerDownloadCount += 1
+                XCTAssertEqual(url, resolvedItem.url)
+                XCTAssertEqual(recordId, "record-1")
+                XCTAssertEqual(filename, "file.json")
+            },
+            coordinatedRead: { url in
+                coordinatedReadURLs.append(url)
+                return Data("downloaded".utf8)
+            }
+        )
+
+        XCTAssertEqual(data, Data("downloaded".utf8))
+        XCTAssertEqual(metadataLookupCount, 1)
+        XCTAssertEqual(triggerDownloadCount, 1)
+        XCTAssertEqual(coordinatedReadURLs, [resolvedItem.url])
+        XCTAssertTrue(clock.sleepIntervals.isEmpty)
+    }
+
+    func testDownloadFinalCoordinatedReadCanWinAfterStatusTimeout() throws {
+        let clock = TestClock(start: Date(timeIntervalSince1970: 500))
+        let machine = UploadDownloadStateMachine(
+            defaultTimeout: 0.25,
+            pollInterval: 0.1,
+            progressLogInterval: 10,
+            clock: clock.makeClock()
+        )
+        let fileURL = URL(fileURLWithPath: "/tmp/file.json")
+        let resolvedItem = ResolvedMetadataItem(url: fileURL, metadataPath: "/tmp/file.json")
+        var coordinatedReadCount = 0
+
+        let data = try machine.downloadFile(
+            url: fileURL,
+            recordId: "record-1",
+            fileExists: { _ in false },
+            downloadState: { _ in .notDownloaded },
+            waitForMetadataItem: { _, _, _ in resolvedItem },
+            triggerDownload: { _, _, _ in },
+            coordinatedRead: { _ in
+                coordinatedReadCount += 1
+                if coordinatedReadCount == 1 {
+                    throw CocoaError(.fileReadNoSuchFile)
+                }
+
+                return Data("materialized".utf8)
+            }
+        )
+
+        XCTAssertEqual(data, Data("materialized".utf8))
+        XCTAssertEqual(coordinatedReadCount, 2)
+        XCTAssertEqual(clock.sleepIntervals, [0.1, 0.1, 0.1])
+    }
+
+    func testDownloadFailedStateMapsToDownloadFailed() {
+        let clock = TestClock(start: Date(timeIntervalSince1970: 600))
+        let machine = UploadDownloadStateMachine(
+            defaultTimeout: 1,
+            pollInterval: 0.1,
+            progressLogInterval: 10,
+            clock: clock.makeClock()
+        )
+        let fileURL = URL(fileURLWithPath: "/tmp/file.json")
+        let resolvedItem = ResolvedMetadataItem(url: fileURL, metadataPath: "/tmp/file.json")
+
+        XCTAssertThrowsError(
+            try machine.downloadFile(
+                url: fileURL,
+                recordId: "record-1",
+                fileExists: { _ in false },
+                downloadState: { _ in .failed(CocoaError(.fileReadCorruptFile)) },
+                waitForMetadataItem: { _, _, _ in resolvedItem },
+                triggerDownload: { _, _, _ in },
+                coordinatedRead: { _ in throw CocoaError(.fileReadNoSuchFile) }
+            )
+        ) { error in
+            guard case let CloudStorageError.DownloadFailed(message) = error else {
+                XCTFail("expected DownloadFailed, got \(error)")
+                return
+            }
+
+            XCTAssertTrue(message.contains("iCloud download failed"))
+        }
+    }
 }
 
 private final class TestClock: @unchecked Sendable {
