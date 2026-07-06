@@ -51,6 +51,7 @@ rand = "0.10.1"
 
 # compression
 ruzstd = "0.8.3"
+flate2 = "1.1.9"
 
 # bdk / bitcoin
 bitcoin = { version = "0.32.9" }
@@ -242,6 +243,7 @@ hmac = { workspace = true }
 
 # compression
 ruzstd = { workspace = true }
+flate2 = { workspace = true }
 
 # fast hashmap
 ahash = { workspace = true }

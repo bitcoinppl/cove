@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use flume::{Sender, TrySendError};
-use tracing::{debug, error, warn};
+use tracing::{error, trace, warn};
 
 use cove_tokio::task;
 
@@ -60,7 +60,7 @@ impl<T: DebugSend> MessageSender<T> {
 
     pub fn send(&self, message: impl Into<SingleOrMany<T>>) {
         let message = message.into();
-        debug!("send: {message:?}");
+        trace!("send: {message:?}");
         match self.sender.try_send(message) {
             Ok(()) => {}
             Err(TrySendError::Full(message)) => {
@@ -77,7 +77,7 @@ impl<T: DebugSend> MessageSender<T> {
 
     pub async fn send_async(&self, message: impl Into<SingleOrMany<T>>) {
         let message = message.into();
-        debug!("send_async: {message:?}");
+        trace!("send_async: {message:?}");
         if let Err(err) = self.sender.send_async(message).await {
             error!("unable to send message to send flow manager: {err}");
         }

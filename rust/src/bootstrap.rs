@@ -259,6 +259,10 @@ fn ensure_storage_bootstrapped_internal(track_progress: bool) -> Result<u32, App
     }
 
     let bdk_count = do_bootstrap(track_progress)?;
+    if let Err(error) = cove_common::logging::capture::attach_to_default_logs_dir() {
+        warn!("Failed to attach persistent Rust diagnostics logging: {error}");
+    }
+
     STORAGE_BOOTSTRAPPED.store(true, Ordering::Release);
     Ok(bdk_count)
 }

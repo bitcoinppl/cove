@@ -108,8 +108,6 @@ impl_default_for!(App);
 impl App {
     /// Create a new instance of the app
     fn new() -> Self {
-        set_env();
-
         crate::logging::init();
 
         // storage must be bootstrapped before any database access
@@ -774,23 +772,6 @@ mod tests {
 #[uniffi::export]
 pub fn initialize_app() {
     App::global();
-}
-
-fn set_env() {
-    //TODO: set manually in code for now
-    #[cfg(debug_assertions)]
-    {
-        if std::env::var("RUST_LOG").is_err() {
-            unsafe { std::env::set_var("RUST_LOG", "cove=debug") }
-        }
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        if std::env::var("RUST_LOG").is_err() {
-            unsafe { std::env::set_var("RUST_LOG", "cove=info") }
-        }
-    }
 }
 
 impl Dispatchable for AppAction {

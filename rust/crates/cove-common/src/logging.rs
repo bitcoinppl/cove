@@ -2,6 +2,8 @@ use std::sync::Once;
 
 use tracing_subscriber::EnvFilter;
 
+pub mod capture;
+
 static INIT: Once = Once::new();
 
 pub fn init() {
@@ -14,6 +16,7 @@ pub fn init() {
 
         tracing_subscriber::registry()
             .with(fmt::layer().with_writer(std::io::stdout).with_ansi(false))
+            .with(capture::layer())
             .with(EnvFilter::from_default_env())
             .init();
     });

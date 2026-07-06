@@ -482,7 +482,7 @@ impl RustSendFlowManager {
     /// action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
-        debug!("dispatch: {action:?}");
+        trace!("dispatch: {action:?}");
 
         match action {
             Action::NotifyEnteringBtcAmountChanged(string) => {
