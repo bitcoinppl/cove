@@ -7,10 +7,11 @@ use crate::{
     keychain::{Keychain, KeychainError},
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     mnemonic::MnemonicExt as _,
+    network::Network,
     wallet::{
         Wallet,
         fingerprint::Fingerprint,
-        metadata::{WalletId, WalletMetadata, WalletType},
+        metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
     },
 };
 
@@ -64,74 +65,154 @@ impl RustImportWalletManager {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
+        import_mnemonic_with_target(mnemonic, network, mode)
+    }
+}
 
-        // check if the wallet already exists using the fingerprint
-        let existing_wallet = Database::global()
-            .wallets
-            .get_all(network, mode)
-            .unwrap_or_default()
-            .into_iter()
-            .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
+pub(crate) fn import_mnemonic_with_target(
+    mnemonic: Mnemonic,
+    network: Network,
+    mode: WalletMode,
+) -> Result<WalletMetadata, Error> {
+    let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
 
-        // new wallet, create it and return
-        if existing_wallet.is_none() {
-            // get current number of wallets and add one;
-            let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
+    // check if the wallet already exists using the fingerprint
+    let existing_wallet = Database::global()
+        .wallets
+        .get_all(network, mode)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
 
-            let name = format!("Wallet {}", number_of_wallets + 1);
-            let wallet_metadata =
-                WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
+    // new wallet, create it and return
+    if existing_wallet.is_none() {
+        // get current number of wallets and add one;
+        let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
 
-            Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
-                .map_err_str(ImportWalletError::WalletImportError)?;
-            CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
+        let name = format!("Wallet {}", number_of_wallets + 1);
+        let mut wallet_metadata =
+            WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
+        wallet_metadata.wallet_mode = mode;
 
-            return Ok(wallet_metadata);
-        }
+        Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
+            .map_err_str(ImportWalletError::WalletImportError)?;
+        CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
 
-        // existing wallet
-        let mut metadata = existing_wallet.expect("wallet exists, just checked above");
-        let id = metadata.id.clone();
-        let keychain = Keychain::global();
+        return Ok(wallet_metadata);
+    }
 
-        // hot wallets with private key already in keychain, don't do anything else
-        if metadata.wallet_type == WalletType::Hot && keychain.get_wallet_key(&id)?.is_some() {
-            warn!(
-                "attempted to import words for existing hot wallet {id}, showing duplicate alert"
-            );
+    // existing wallet
+    let mut metadata = existing_wallet.expect("wallet exists, just checked above");
+    let id = metadata.id.clone();
+    let keychain = Keychain::global();
 
-            Database::global().global_config.select_wallet(id.clone())?;
-            return Err(ImportWalletError::WalletAlreadyExists(id));
-        }
+    // hot wallets with private key already in keychain, don't do anything else
+    if metadata.wallet_type == WalletType::Hot && keychain.get_wallet_key(&id)?.is_some() {
+        warn!("attempted to import words for existing hot wallet {id}, showing duplicate alert");
 
-        info!("adding mnemonic to existing wallet {id}");
-
-        // save the private key material for an existing wallet.
-        keychain.save_wallet_key(&id, mnemonic.clone())?;
-
-        // save xpub/descriptors in keychain too
-        let xpub = mnemonic.xpub(network.into());
-        keychain.save_wallet_xpub(&id, xpub)?;
-
-        // save public descriptors in keychain too
-        let descriptors = mnemonic.clone().into_descriptors(None, network, metadata.address_type);
-        keychain.save_public_descriptor(
-            &id,
-            descriptors.external.extended_descriptor,
-            descriptors.internal.extended_descriptor,
-        )?;
-
-        // imported mnemonic means this wallet can now sign locally.
-        metadata.wallet_type = WalletType::Hot;
-        metadata.hardware_metadata = None;
-        metadata.verified = true;
-
-        metadata = Database::global().wallets.update_wallet_metadata(metadata)?;
         Database::global().global_config.select_wallet(id.clone())?;
-        Updater::send_update(Update::ClearCachedWalletManager(id));
-        CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());
+        return Err(ImportWalletError::WalletAlreadyExists(id));
+    }
 
-        Ok(metadata)
+    info!("adding mnemonic to existing wallet {id}");
+
+    // save the private key material for an existing wallet.
+    keychain.save_wallet_key(&id, mnemonic.clone())?;
+
+    // save xpub/descriptors in keychain too
+    let xpub = mnemonic.xpub(network.into());
+    keychain.save_wallet_xpub(&id, xpub)?;
+
+    // save public descriptors in keychain too
+    let descriptors = mnemonic.clone().into_descriptors(None, network, metadata.address_type);
+    keychain.save_public_descriptor(
+        &id,
+        descriptors.external.extended_descriptor,
+        descriptors.internal.extended_descriptor,
+    )?;
+
+    // imported mnemonic means this wallet can now sign locally.
+    metadata.wallet_type = WalletType::Hot;
+    metadata.hardware_metadata = None;
+    metadata.verified = true;
+
+    metadata = Database::global().wallets.update_wallet_metadata(metadata)?;
+    Database::global().global_config.select_wallet(id.clone())?;
+    Updater::send_update(Update::ClearCachedWalletManager(id));
+    CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());
+
+    Ok(metadata)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashMap,
+        str::FromStr as _,
+        sync::{Mutex, Once},
+    };
+
+    use super::*;
+    use crate::keychain::KeychainAccess;
+
+    #[derive(Debug, Default)]
+    struct TestKeychain(Mutex<HashMap<String, String>>);
+
+    impl KeychainAccess for TestKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            self.0.lock().unwrap().insert(key, value);
+
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.0.lock().unwrap().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.0.lock().unwrap().remove(&key).is_some()
+        }
+    }
+
+    fn init_globals() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            crate::test_support::ensure_tokio_runtime();
+            crate::database::test_support::init_test_database();
+            let _ = Keychain::new(Box::<TestKeychain>::default());
+        });
+    }
+
+    #[test]
+    fn import_mnemonic_uses_explicit_target_scope() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let mnemonic = Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+
+        let metadata =
+            import_mnemonic_with_target(mnemonic, Network::Signet, WalletMode::Decoy).unwrap();
+
+        assert_eq!(metadata.network, Network::Signet);
+        assert_eq!(metadata.wallet_mode, WalletMode::Decoy);
+        assert!(
+            Database::global()
+                .wallets
+                .get(&metadata.id, Network::Signet, WalletMode::Decoy)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            Database::global()
+                .wallets
+                .get(&metadata.id, Network::Bitcoin, WalletMode::Main)
+                .unwrap()
+                .is_none()
+        );
     }
 }

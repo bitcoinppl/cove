@@ -36,7 +36,7 @@ unicode-normalization = "0.1.25"
 url = "2.5.8"
 
 # qr
-bbqr = { version = "0.3.5", default-features = false }
+bbqr = { git = "file:///Users/praveen/code/bull/bbqr-rust", rev = "da62607abe6a8d9f58ea5422140c86a5af60919f", default-features = false }
 foundation-ur = { version = "0.4.0", default-features = false, features = ["std"] }
 
 # cbor
@@ -45,9 +45,12 @@ minicbor-serde = { version = "0.6.2", features = ["std"] }
 
 # encryption / hashing
 age = { version = "0.12.1", default-features = false }
+aes = "0.9.1"
 chacha20poly1305 = "0.10.1"
+ctr = "0.10.1"
 hmac = "0.13.0"
 hkdf = "0.13.0"
+pbkdf2 = "0.13.0"
 sha2 = "0.11.0"
 zeroize = "1.8.2"
 rand = "0.10.1"
@@ -129,6 +132,7 @@ cove-common = { path = "./crates/cove-common" }
 cove-bip39 = { path = "./crates/cove-bip39" }
 cove-cspp = { path = "./crates/cove-cspp" }
 cove-device = { path = "./crates/cove-device" }
+cove-keyteleport = { path = "./crates/cove-keyteleport" }
 cove-bdk = { path = "./crates/cove-bdk" }
 cove-bdk-progressive-scan = { path = "./crates/cove-bdk-progressive-scan" }
 cove-tokio = { path = "./crates/cove-tokio" }

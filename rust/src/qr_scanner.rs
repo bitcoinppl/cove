@@ -271,6 +271,26 @@ fn parse_bbqr_data(
 
         FileType::Cbor => Err(MultiQrError::BbqrCborNotSupported),
 
+        FileType::KeyTeleportReceiver | FileType::KeyTeleportSender | FileType::KeyTeleportPsbt => {
+            match crate::key_teleport::parse_key_teleport_bbqr_payload(data, file_type) {
+                Ok(crate::key_teleport::ParsedKeyTeleport::Receiver(packet)) => {
+                    Ok(MultiFormat::KeyTeleportReceiver(packet))
+                }
+                Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
+                    Ok(MultiFormat::KeyTeleportSender(packet))
+                }
+                Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt)
+                | Err(crate::key_teleport::KeyTeleportParseError::UnsupportedPsbt) => {
+                    Err(MultiQrError::ParseError(
+                        "Key Teleport PSBT packets are not supported yet".into(),
+                    ))
+                }
+                Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {
+                    Err(MultiQrError::ParseError("Invalid Key Teleport packet".into()))
+                }
+            }
+        }
+
         FileType::UnicodeText | FileType::Json => {
             let data_string = String::from_utf8(data).map_err(|_| MultiQrError::InvalidUtf8)?;
             MultiFormat::try_from_string(&data_string).map_err_str(MultiQrError::ParseError)
@@ -1224,5 +1244,23 @@ mod tests {
         }
 
         assert!(completed, "Should complete after scanning all parts in reverse order");
+    }
+
+    #[test]
+    fn test_qr_scanner_single_part_keyteleport_receiver() {
+        let receiver = cove_keyteleport::ReceiverSession::from_private_key_bytes([1; 32]).unwrap();
+        let request = receiver.request().unwrap();
+        let packet = crate::key_teleport::KeyTeleportReceiverPacket::new(request.packet);
+        let scanner = QrScannerFFI::new();
+
+        let result = scanner.scan(StringOrData::String(packet.bbqr_part())).unwrap();
+
+        match result {
+            ScanResult::Complete {
+                data: crate::multi_format::MultiFormat::KeyTeleportReceiver(_),
+                haptic: HapticFeedback::Success,
+            } => {}
+            _ => panic!("expected KeyTeleportReceiver scan result"),
+        }
     }
 }

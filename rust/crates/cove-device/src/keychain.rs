@@ -17,6 +17,8 @@ use rand::RngExt as _;
 
 const LOCAL_DB_KEY_NAME: &str = "local::v1::db_encryption_key";
 const LOCAL_DB_KEY_CRYPTOR: &str = "local::v1::db_encryption_key_cryptor";
+const KEY_TELEPORT_RECEIVE_SESSION: &str = "key_teleport::v1::receive_session";
+const KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR: &str = "key_teleport::v1::receive_session_cryptor";
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -145,6 +147,63 @@ impl Keychain {
     pub fn purge_local_encryption_key(&self) {
         self.0.delete(LOCAL_DB_KEY_CRYPTOR.into());
         self.0.delete(LOCAL_DB_KEY_NAME.into());
+    }
+
+    pub fn save_key_teleport_receive_session(&self, plaintext: &str) -> Result<(), KeychainError> {
+        self.save_with_fresh_cryptor(
+            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into(),
+            KEY_TELEPORT_RECEIVE_SESSION.into(),
+            plaintext,
+            true,
+        )
+    }
+
+    pub fn get_key_teleport_receive_session(&self) -> Result<Option<String>, KeychainError> {
+        let has_cryptor = self.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into());
+        let has_session = self.0.get(KEY_TELEPORT_RECEIVE_SESSION.into());
+
+        let (cryptor_str, encrypted) = match (has_cryptor, has_session) {
+            (None, None) => return Ok(None),
+            (Some(cryptor), Some(session)) => (cryptor, session),
+            (Some(_), None) => {
+                return Err(KeychainError::Decrypt(
+                    "key teleport receive session cryptor found but encrypted session is missing"
+                        .into(),
+                ));
+            }
+            (None, Some(_)) => {
+                return Err(KeychainError::Decrypt(
+                    "encrypted key teleport receive session found but cryptor is missing".into(),
+                ));
+            }
+        };
+
+        let cryptor = Cryptor::try_from_string(&cryptor_str)
+            .map_err_prefix("key teleport receive session cryptor", KeychainError::Decrypt)?;
+
+        cryptor
+            .decrypt_from_string(&encrypted)
+            .map_err_prefix("key teleport receive session", KeychainError::Decrypt)
+            .map(Some)
+    }
+
+    pub fn delete_key_teleport_receive_session(&self) -> bool {
+        let has_session = self.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_some();
+        let has_cryptor = self.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_some();
+
+        if !has_session && !has_cryptor {
+            return true;
+        }
+
+        let session_ok =
+            if has_session { self.0.delete(KEY_TELEPORT_RECEIVE_SESSION.into()) } else { true };
+        let cryptor_ok = if has_cryptor {
+            self.0.delete(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into())
+        } else {
+            true
+        };
+
+        session_ok && cryptor_ok
     }
 
     fn save_with_fresh_cryptor(
@@ -595,5 +654,85 @@ mod tests {
 
         assert!(kc.0.get(LOCAL_DB_KEY_CRYPTOR.into()).is_none());
         assert!(kc.0.get(LOCAL_DB_KEY_NAME.into()).is_none());
+    }
+
+    #[test]
+    fn key_teleport_receive_session_roundtrip() {
+        let kc = make_keychain(MockKeychain::new());
+
+        kc.save_key_teleport_receive_session("{\"private_key\":\"redacted\"}").unwrap();
+
+        assert_eq!(
+            kc.get_key_teleport_receive_session().unwrap().as_deref(),
+            Some("{\"private_key\":\"redacted\"}")
+        );
+    }
+
+    #[test]
+    fn key_teleport_receive_session_errors_on_cryptor_without_session() {
+        let kc = make_keychain(MockKeychain::with_entries(vec![(
+            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR,
+            "some_cryptor_data",
+        )]));
+        let err = kc.get_key_teleport_receive_session().unwrap_err();
+
+        assert!(matches!(err, KeychainError::Decrypt(_)));
+    }
+
+    #[test]
+    fn key_teleport_receive_session_errors_on_session_without_cryptor() {
+        let kc = make_keychain(MockKeychain::with_entries(vec![(
+            KEY_TELEPORT_RECEIVE_SESSION,
+            "some_encrypted_data",
+        )]));
+        let err = kc.get_key_teleport_receive_session().unwrap_err();
+
+        assert!(matches!(err, KeychainError::Decrypt(_)));
+    }
+
+    #[test]
+    fn key_teleport_receive_session_delete_removes_both_entries() {
+        let kc = make_keychain(MockKeychain::new());
+        kc.save_key_teleport_receive_session("session").unwrap();
+
+        assert!(kc.delete_key_teleport_receive_session());
+
+        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_none());
+        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_none());
+    }
+
+    #[test]
+    fn key_teleport_receive_session_cleans_up_on_second_save_failure() {
+        #[derive(Debug)]
+        struct FailSecondSave(Mutex<(HashMap<String, String>, u32)>);
+
+        impl KeychainAccess for FailSecondSave {
+            fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+                let mut guard = self.0.lock().unwrap();
+                guard.1 += 1;
+                if guard.1 == 2 {
+                    return Err(KeychainError::Save);
+                }
+                guard.0.insert(key, value);
+                Ok(())
+            }
+
+            fn get(&self, key: String) -> Option<String> {
+                self.0.lock().unwrap().0.get(&key).cloned()
+            }
+
+            fn delete(&self, key: String) -> bool {
+                self.0.lock().unwrap().0.remove(&key).is_some()
+            }
+        }
+
+        let mock = FailSecondSave(Mutex::new((HashMap::new(), 0)));
+        let kc = Keychain(Arc::new(Box::new(mock)));
+
+        let err = kc.save_key_teleport_receive_session("session").unwrap_err();
+        assert!(matches!(err, KeychainError::Save));
+
+        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_none());
+        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_none());
     }
 }
