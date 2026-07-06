@@ -3376,6 +3376,8 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
 
     func network()  -> Network
 
+    func newKeyTeleportManager()  -> RustKeyTeleportManager
+
     /**
      * Number of wallets
      */
@@ -3720,6 +3722,15 @@ open func network() -> Network  {
     return try!  FfiConverterTypeNetwork_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_ffiapp_network(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func newKeyTeleportManager() -> RustKeyTeleportManager  {
+    return try!  FfiConverterTypeRustKeyTeleportManager_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_ffiapp_new_key_teleport_manager(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -5513,6 +5524,390 @@ public func FfiConverterTypeHistoricalPricesResponse_lower(_ value: HistoricalPr
 
 
 
+public protocol KeyTeleportPasswordProtocol: AnyObject, Sendable {
+
+    func displayText()  -> String
+
+    func groupedText()  -> String
+
+}
+open class KeyTeleportPassword: KeyTeleportPasswordProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_keyteleportpassword(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_keyteleportpassword(handle, $0) }
+    }
+
+
+
+
+open func displayText() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportpassword_display_text(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func groupedText() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportpassword_grouped_text(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportPassword: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = KeyTeleportPassword
+
+    public static func lift(_ handle: UInt64) throws -> KeyTeleportPassword {
+        return KeyTeleportPassword(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: KeyTeleportPassword) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportPassword {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: KeyTeleportPassword, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportPassword_lift(_ handle: UInt64) throws -> KeyTeleportPassword {
+    return try FfiConverterTypeKeyTeleportPassword.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportPassword_lower(_ value: KeyTeleportPassword) -> UInt64 {
+    return FfiConverterTypeKeyTeleportPassword.lower(value)
+}
+
+
+
+
+
+
+public protocol KeyTeleportReceiverPacketProtocol: AnyObject, Sendable {
+
+    func bbqrPart()  -> String
+
+    func url()  -> String
+
+}
+open class KeyTeleportReceiverPacket: KeyTeleportReceiverPacketProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_keyteleportreceiverpacket(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_keyteleportreceiverpacket(handle, $0) }
+    }
+
+
+
+
+open func bbqrPart() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportreceiverpacket_bbqr_part(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func url() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportreceiverpacket_url(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportReceiverPacket: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = KeyTeleportReceiverPacket
+
+    public static func lift(_ handle: UInt64) throws -> KeyTeleportReceiverPacket {
+        return KeyTeleportReceiverPacket(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: KeyTeleportReceiverPacket) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportReceiverPacket {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: KeyTeleportReceiverPacket, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportReceiverPacket_lift(_ handle: UInt64) throws -> KeyTeleportReceiverPacket {
+    return try FfiConverterTypeKeyTeleportReceiverPacket.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportReceiverPacket_lower(_ value: KeyTeleportReceiverPacket) -> UInt64 {
+    return FfiConverterTypeKeyTeleportReceiverPacket.lower(value)
+}
+
+
+
+
+
+
+public protocol KeyTeleportSenderPacketProtocol: AnyObject, Sendable {
+
+    func bbqrPart()  -> String
+
+    func url()  -> String
+
+}
+open class KeyTeleportSenderPacket: KeyTeleportSenderPacketProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_keyteleportsenderpacket(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_keyteleportsenderpacket(handle, $0) }
+    }
+
+
+
+
+open func bbqrPart() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportsenderpacket_bbqr_part(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func url() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportsenderpacket_url(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportSenderPacket: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = KeyTeleportSenderPacket
+
+    public static func lift(_ handle: UInt64) throws -> KeyTeleportSenderPacket {
+        return KeyTeleportSenderPacket(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: KeyTeleportSenderPacket) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSenderPacket {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: KeyTeleportSenderPacket, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSenderPacket_lift(_ handle: UInt64) throws -> KeyTeleportSenderPacket {
+    return try FfiConverterTypeKeyTeleportSenderPacket.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSenderPacket_lower(_ value: KeyTeleportSenderPacket) -> UInt64 {
+    return FfiConverterTypeKeyTeleportSenderPacket.lower(value)
+}
+
+
+
+
+
+
 public protocol LabelManagerProtocol: AnyObject, Sendable {
 
     func deleteLabelsForTxn(txId: TxId) throws
@@ -6896,6 +7291,10 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
 
     func isSameParentRoute(route: Route, routeToCheck: Route)  -> Bool
 
+    func keyTeleportReceive()  -> Route
+
+    func keyTeleportSend()  -> Route
+
     func loadAndResetNestedTo(defaultRoute: Route, nestedRoutes: [Route])  -> Route
 
     func loadAndResetTo(resetTo: Route)  -> Route
@@ -7039,6 +7438,24 @@ open func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool  {
             self.uniffiCloneHandle(),
         FfiConverterTypeRoute_lower(route),
         FfiConverterTypeRoute_lower(routeToCheck),uniffiCallStatus
+    )
+})
+}
+
+open func keyTeleportReceive() -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_routefactory_key_teleport_receive(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func keyTeleportSend() -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_routefactory_key_teleport_send(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -8733,6 +9150,187 @@ public func FfiConverterTypeRustImportWalletManager_lift(_ handle: UInt64) throw
 #endif
 public func FfiConverterTypeRustImportWalletManager_lower(_ value: RustImportWalletManager) -> UInt64 {
     return FfiConverterTypeRustImportWalletManager.lower(value)
+}
+
+
+
+
+
+
+public protocol RustKeyTeleportManagerProtocol: AnyObject, Sendable {
+
+    func dispatch(action: KeyTeleportManagerAction)
+
+    func isSendEligible(walletId: WalletId)  -> Bool
+
+    func listenForUpdates(reconciler: KeyTeleportManagerReconciler)
+
+    func revealMnemonicWords()  -> [String]
+
+    func revealXprv()  -> String?
+
+    func state()  -> KeyTeleportManagerState
+
+}
+open class RustKeyTeleportManager: RustKeyTeleportManagerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_rustkeyteleportmanager(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_rustkeyteleportmanager_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustkeyteleportmanager(handle, $0) }
+    }
+
+
+
+
+open func dispatch(action: KeyTeleportManagerAction)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustkeyteleportmanager_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeKeyTeleportManagerAction_lower(action),uniffiCallStatus
+    )
+}
+}
+
+open func isSendEligible(walletId: WalletId) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustkeyteleportmanager_is_send_eligible(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletId_lower(walletId),uniffiCallStatus
+    )
+})
+}
+
+open func listenForUpdates(reconciler: KeyTeleportManagerReconciler)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustkeyteleportmanager_listen_for_updates(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceKeyTeleportManagerReconciler_lower(reconciler),uniffiCallStatus
+    )
+}
+}
+
+open func revealMnemonicWords() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustkeyteleportmanager_reveal_mnemonic_words(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func revealXprv() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustkeyteleportmanager_reveal_xprv(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func state() -> KeyTeleportManagerState  {
+    return try!  FfiConverterTypeKeyTeleportManagerState_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustkeyteleportmanager_state(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustKeyTeleportManager: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RustKeyTeleportManager
+
+    public static func lift(_ handle: UInt64) throws -> RustKeyTeleportManager {
+        return RustKeyTeleportManager(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RustKeyTeleportManager) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustKeyTeleportManager {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RustKeyTeleportManager, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustKeyTeleportManager_lift(_ handle: UInt64) throws -> RustKeyTeleportManager {
+    return try FfiConverterTypeRustKeyTeleportManager.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustKeyTeleportManager_lower(_ value: RustKeyTeleportManager) -> UInt64 {
+    return FfiConverterTypeRustKeyTeleportManager.lower(value)
 }
 
 
@@ -16280,6 +16878,392 @@ public func FfiConverterTypeInternalOnlyMetadata_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeInternalOnlyMetadata_lower(_ value: InternalOnlyMetadata) -> RustBuffer {
     return FfiConverterTypeInternalOnlyMetadata.lower(value)
+}
+
+
+public struct KeyTeleportMnemonicReview {
+    public var wordCount: UInt32
+    public var importedWallet: WalletMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(wordCount: UInt32, importedWallet: WalletMetadata?) {
+        self.wordCount = wordCount
+        self.importedWallet = importedWallet
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportMnemonicReview: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportMnemonicReview: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportMnemonicReview {
+        return
+            try KeyTeleportMnemonicReview(
+                wordCount: FfiConverterUInt32.read(from: &buf),
+                importedWallet: FfiConverterOptionTypeWalletMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportMnemonicReview, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.wordCount, into: &buf)
+        FfiConverterOptionTypeWalletMetadata.write(value.importedWallet, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportMnemonicReview_lift(_ buf: RustBuffer) throws -> KeyTeleportMnemonicReview {
+    return try FfiConverterTypeKeyTeleportMnemonicReview.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportMnemonicReview_lower(_ value: KeyTeleportMnemonicReview) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportMnemonicReview.lower(value)
+}
+
+
+public struct KeyTeleportReceiveState {
+    public var packet: KeyTeleportReceiverPacket
+    public var numericCode: String
+    public var groupedNumericCode: String
+    public var createdAtSecs: UInt64
+    public var network: Network
+    public var walletMode: WalletMode
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(packet: KeyTeleportReceiverPacket, numericCode: String, groupedNumericCode: String, createdAtSecs: UInt64, network: Network, walletMode: WalletMode) {
+        self.packet = packet
+        self.numericCode = numericCode
+        self.groupedNumericCode = groupedNumericCode
+        self.createdAtSecs = createdAtSecs
+        self.network = network
+        self.walletMode = walletMode
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportReceiveState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportReceiveState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportReceiveState {
+        return
+            try KeyTeleportReceiveState(
+                packet: FfiConverterTypeKeyTeleportReceiverPacket.read(from: &buf),
+                numericCode: FfiConverterString.read(from: &buf),
+                groupedNumericCode: FfiConverterString.read(from: &buf),
+                createdAtSecs: FfiConverterUInt64.read(from: &buf),
+                network: FfiConverterTypeNetwork.read(from: &buf),
+                walletMode: FfiConverterTypeWalletMode.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportReceiveState, into buf: inout [UInt8]) {
+        FfiConverterTypeKeyTeleportReceiverPacket.write(value.packet, into: &buf)
+        FfiConverterString.write(value.numericCode, into: &buf)
+        FfiConverterString.write(value.groupedNumericCode, into: &buf)
+        FfiConverterUInt64.write(value.createdAtSecs, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterTypeWalletMode.write(value.walletMode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportReceiveState_lift(_ buf: RustBuffer) throws -> KeyTeleportReceiveState {
+    return try FfiConverterTypeKeyTeleportReceiveState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportReceiveState_lower(_ value: KeyTeleportReceiveState) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportReceiveState.lower(value)
+}
+
+
+public struct KeyTeleportSendChooseWallet {
+    public var eligibleWallets: [WalletMetadata]
+    public var selectedWallet: WalletId?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eligibleWallets: [WalletMetadata], selectedWallet: WalletId?) {
+        self.eligibleWallets = eligibleWallets
+        self.selectedWallet = selectedWallet
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportSendChooseWallet: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportSendChooseWallet: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendChooseWallet {
+        return
+            try KeyTeleportSendChooseWallet(
+                eligibleWallets: FfiConverterSequenceTypeWalletMetadata.read(from: &buf),
+                selectedWallet: FfiConverterOptionTypeWalletId.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportSendChooseWallet, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeWalletMetadata.write(value.eligibleWallets, into: &buf)
+        FfiConverterOptionTypeWalletId.write(value.selectedWallet, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendChooseWallet_lift(_ buf: RustBuffer) throws -> KeyTeleportSendChooseWallet {
+    return try FfiConverterTypeKeyTeleportSendChooseWallet.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendChooseWallet_lower(_ value: KeyTeleportSendChooseWallet) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportSendChooseWallet.lower(value)
+}
+
+
+public struct KeyTeleportSendConfirm {
+    public var selectedWallet: WalletMetadata
+    public var warnsPassphraseNotIncluded: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selectedWallet: WalletMetadata, warnsPassphraseNotIncluded: Bool) {
+        self.selectedWallet = selectedWallet
+        self.warnsPassphraseNotIncluded = warnsPassphraseNotIncluded
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportSendConfirm: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportSendConfirm: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendConfirm {
+        return
+            try KeyTeleportSendConfirm(
+                selectedWallet: FfiConverterTypeWalletMetadata.read(from: &buf),
+                warnsPassphraseNotIncluded: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportSendConfirm, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletMetadata.write(value.selectedWallet, into: &buf)
+        FfiConverterBool.write(value.warnsPassphraseNotIncluded, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendConfirm_lift(_ buf: RustBuffer) throws -> KeyTeleportSendConfirm {
+    return try FfiConverterTypeKeyTeleportSendConfirm.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendConfirm_lower(_ value: KeyTeleportSendConfirm) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportSendConfirm.lower(value)
+}
+
+
+public struct KeyTeleportSendEnterCode {
+    public var selectedWallet: WalletMetadata
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selectedWallet: WalletMetadata) {
+        self.selectedWallet = selectedWallet
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportSendEnterCode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportSendEnterCode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendEnterCode {
+        return
+            try KeyTeleportSendEnterCode(
+                selectedWallet: FfiConverterTypeWalletMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportSendEnterCode, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletMetadata.write(value.selectedWallet, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendEnterCode_lift(_ buf: RustBuffer) throws -> KeyTeleportSendEnterCode {
+    return try FfiConverterTypeKeyTeleportSendEnterCode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendEnterCode_lower(_ value: KeyTeleportSendEnterCode) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportSendEnterCode.lower(value)
+}
+
+
+public struct KeyTeleportSendReady {
+    public var packet: KeyTeleportSenderPacket
+    public var password: KeyTeleportPassword
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(packet: KeyTeleportSenderPacket, password: KeyTeleportPassword) {
+        self.packet = packet
+        self.password = password
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportSendReady: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportSendReady: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendReady {
+        return
+            try KeyTeleportSendReady(
+                packet: FfiConverterTypeKeyTeleportSenderPacket.read(from: &buf),
+                password: FfiConverterTypeKeyTeleportPassword.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportSendReady, into buf: inout [UInt8]) {
+        FfiConverterTypeKeyTeleportSenderPacket.write(value.packet, into: &buf)
+        FfiConverterTypeKeyTeleportPassword.write(value.password, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendReady_lift(_ buf: RustBuffer) throws -> KeyTeleportSendReady {
+    return try FfiConverterTypeKeyTeleportSendReady.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportSendReady_lower(_ value: KeyTeleportSendReady) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportSendReady.lower(value)
+}
+
+
+public struct KeyTeleportXprvReview: Equatable, Hashable {
+    public var revealed: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(revealed: Bool) {
+        self.revealed = revealed
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportXprvReview: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportXprvReview: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportXprvReview {
+        return
+            try KeyTeleportXprvReview(
+                revealed: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyTeleportXprvReview, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.revealed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportXprvReview_lift(_ buf: RustBuffer) throws -> KeyTeleportXprvReview {
+    return try FfiConverterTypeKeyTeleportXprvReview.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportXprvReview_lower(_ value: KeyTeleportXprvReview) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportXprvReview.lower(value)
 }
 
 
@@ -27773,6 +28757,726 @@ public func FfiConverterTypeInsertOrUpdate_lower(_ value: InsertOrUpdate) -> Rus
 
 
 public
+enum KeyTeleportAlert: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case NoActiveReceiveSession
+    case ReceiveSessionExpired
+    case ParseFailed
+    case UnsupportedPsbt
+    case WrongReceiverCode
+    case WrongTeleportPassword
+    case NoEligibleWallets
+    case IneligibleWallet
+    case NoPendingSend
+    case NoPendingReceiveSecret
+    case ImportFailed(String
+    )
+    case Keychain(String
+    )
+    case Protocol(String
+    )
+    case Database(String
+    )
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportalert_uniffi_trait_display(
+            FfiConverterTypeKeyTeleportAlert_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportAlert: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportAlert: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportAlert
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportAlert {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .NoActiveReceiveSession
+        case 2: return .ReceiveSessionExpired
+        case 3: return .ParseFailed
+        case 4: return .UnsupportedPsbt
+        case 5: return .WrongReceiverCode
+        case 6: return .WrongTeleportPassword
+        case 7: return .NoEligibleWallets
+        case 8: return .IneligibleWallet
+        case 9: return .NoPendingSend
+        case 10: return .NoPendingReceiveSecret
+        case 11: return .ImportFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 12: return .Keychain(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 13: return .Protocol(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 14: return .Database(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportAlert, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case .NoActiveReceiveSession:
+            writeInt(&buf, Int32(1))
+
+
+        case .ReceiveSessionExpired:
+            writeInt(&buf, Int32(2))
+
+
+        case .ParseFailed:
+            writeInt(&buf, Int32(3))
+
+
+        case .UnsupportedPsbt:
+            writeInt(&buf, Int32(4))
+
+
+        case .WrongReceiverCode:
+            writeInt(&buf, Int32(5))
+
+
+        case .WrongTeleportPassword:
+            writeInt(&buf, Int32(6))
+
+
+        case .NoEligibleWallets:
+            writeInt(&buf, Int32(7))
+
+
+        case .IneligibleWallet:
+            writeInt(&buf, Int32(8))
+
+
+        case .NoPendingSend:
+            writeInt(&buf, Int32(9))
+
+
+        case .NoPendingReceiveSecret:
+            writeInt(&buf, Int32(10))
+
+
+        case let .ImportFailed(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Keychain(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Protocol(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Database(v1):
+            writeInt(&buf, Int32(14))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportAlert_lift(_ buf: RustBuffer) throws -> KeyTeleportAlert {
+    return try FfiConverterTypeKeyTeleportAlert.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportAlert_lower(_ value: KeyTeleportAlert) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportAlert.lower(value)
+}
+
+
+
+public enum KeyTeleportManagerAction {
+
+    case startReceive
+    case confirmReplaceReceive
+    case cancelReceive
+    case ingest(StringOrData
+    )
+    case startSendFromWallet(WalletId
+    )
+    case selectSendWallet(WalletId
+    )
+    case enterReceiverCode(String
+    )
+    case confirmSendMnemonic
+    case enterSenderPassword(String
+    )
+    case importReceivedMnemonic
+    case revealXprv
+    case hideXprv
+    case finishReview
+    case clear
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportManagerAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportManagerAction: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportManagerAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportManagerAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .startReceive
+
+        case 2: return .confirmReplaceReceive
+
+        case 3: return .cancelReceive
+
+        case 4: return .ingest(try FfiConverterTypeStringOrData.read(from: &buf)
+        )
+
+        case 5: return .startSendFromWallet(try FfiConverterTypeWalletId.read(from: &buf)
+        )
+
+        case 6: return .selectSendWallet(try FfiConverterTypeWalletId.read(from: &buf)
+        )
+
+        case 7: return .enterReceiverCode(try FfiConverterString.read(from: &buf)
+        )
+
+        case 8: return .confirmSendMnemonic
+
+        case 9: return .enterSenderPassword(try FfiConverterString.read(from: &buf)
+        )
+
+        case 10: return .importReceivedMnemonic
+
+        case 11: return .revealXprv
+
+        case 12: return .hideXprv
+
+        case 13: return .finishReview
+
+        case 14: return .clear
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportManagerAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .startReceive:
+            writeInt(&buf, Int32(1))
+
+
+        case .confirmReplaceReceive:
+            writeInt(&buf, Int32(2))
+
+
+        case .cancelReceive:
+            writeInt(&buf, Int32(3))
+
+
+        case let .ingest(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeStringOrData.write(v1, into: &buf)
+
+
+        case let .startSendFromWallet(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+
+
+        case let .selectSendWallet(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+
+
+        case let .enterReceiverCode(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .confirmSendMnemonic:
+            writeInt(&buf, Int32(8))
+
+
+        case let .enterSenderPassword(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .importReceivedMnemonic:
+            writeInt(&buf, Int32(10))
+
+
+        case .revealXprv:
+            writeInt(&buf, Int32(11))
+
+
+        case .hideXprv:
+            writeInt(&buf, Int32(12))
+
+
+        case .finishReview:
+            writeInt(&buf, Int32(13))
+
+
+        case .clear:
+            writeInt(&buf, Int32(14))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportManagerAction_lift(_ buf: RustBuffer) throws -> KeyTeleportManagerAction {
+    return try FfiConverterTypeKeyTeleportManagerAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportManagerAction_lower(_ value: KeyTeleportManagerAction) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportManagerAction.lower(value)
+}
+
+
+
+
+public enum KeyTeleportManagerReconcileMessage {
+
+    case updateState(KeyTeleportManagerState
+    )
+    case setAlert(KeyTeleportAlert
+    )
+    case clearAlert
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportManagerReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportManagerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportManagerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .updateState(try FfiConverterTypeKeyTeleportManagerState.read(from: &buf)
+        )
+
+        case 2: return .setAlert(try FfiConverterTypeKeyTeleportAlert.read(from: &buf)
+        )
+
+        case 3: return .clearAlert
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportManagerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .updateState(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeKeyTeleportManagerState.write(v1, into: &buf)
+
+
+        case let .setAlert(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeKeyTeleportAlert.write(v1, into: &buf)
+
+
+        case .clearAlert:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> KeyTeleportManagerReconcileMessage {
+    return try FfiConverterTypeKeyTeleportManagerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportManagerReconcileMessage_lower(_ value: KeyTeleportManagerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportManagerReconcileMessage.lower(value)
+}
+
+
+
+
+public enum KeyTeleportManagerState {
+
+    case idle
+    case receiveReplacementRequired(KeyTeleportReceiveState
+    )
+    case receiveReady(KeyTeleportReceiveState
+    )
+    case receiveEnterPassword
+    case receiveMnemonicReview(KeyTeleportMnemonicReview
+    )
+    case receiveXprvReview(KeyTeleportXprvReview
+    )
+    case sendChooseWallet(KeyTeleportSendChooseWallet
+    )
+    case sendEnterCode(KeyTeleportSendEnterCode
+    )
+    case sendConfirm(KeyTeleportSendConfirm
+    )
+    case sendReady(KeyTeleportSendReady
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportManagerState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportManagerState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportManagerState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .receiveReplacementRequired(try FfiConverterTypeKeyTeleportReceiveState.read(from: &buf)
+        )
+
+        case 3: return .receiveReady(try FfiConverterTypeKeyTeleportReceiveState.read(from: &buf)
+        )
+
+        case 4: return .receiveEnterPassword
+
+        case 5: return .receiveMnemonicReview(try FfiConverterTypeKeyTeleportMnemonicReview.read(from: &buf)
+        )
+
+        case 6: return .receiveXprvReview(try FfiConverterTypeKeyTeleportXprvReview.read(from: &buf)
+        )
+
+        case 7: return .sendChooseWallet(try FfiConverterTypeKeyTeleportSendChooseWallet.read(from: &buf)
+        )
+
+        case 8: return .sendEnterCode(try FfiConverterTypeKeyTeleportSendEnterCode.read(from: &buf)
+        )
+
+        case 9: return .sendConfirm(try FfiConverterTypeKeyTeleportSendConfirm.read(from: &buf)
+        )
+
+        case 10: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportManagerState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case let .receiveReplacementRequired(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeKeyTeleportReceiveState.write(v1, into: &buf)
+
+
+        case let .receiveReady(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeKeyTeleportReceiveState.write(v1, into: &buf)
+
+
+        case .receiveEnterPassword:
+            writeInt(&buf, Int32(4))
+
+
+        case let .receiveMnemonicReview(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeKeyTeleportMnemonicReview.write(v1, into: &buf)
+
+
+        case let .receiveXprvReview(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeKeyTeleportXprvReview.write(v1, into: &buf)
+
+
+        case let .sendChooseWallet(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeKeyTeleportSendChooseWallet.write(v1, into: &buf)
+
+
+        case let .sendEnterCode(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeKeyTeleportSendEnterCode.write(v1, into: &buf)
+
+
+        case let .sendConfirm(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeKeyTeleportSendConfirm.write(v1, into: &buf)
+
+
+        case let .sendReady(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterTypeKeyTeleportSendReady.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportManagerState_lift(_ buf: RustBuffer) throws -> KeyTeleportManagerState {
+    return try FfiConverterTypeKeyTeleportManagerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportManagerState_lower(_ value: KeyTeleportManagerState) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportManagerState.lower(value)
+}
+
+
+
+public
+enum KeyTeleportParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case UnsupportedPsbt
+    case Unrecognized
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportparseerror_uniffi_trait_display(
+            FfiConverterTypeKeyTeleportParseError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportParseError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportParseError: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportParseError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportParseError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .UnsupportedPsbt
+        case 2: return .Unrecognized
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportParseError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case .UnsupportedPsbt:
+            writeInt(&buf, Int32(1))
+
+
+        case .Unrecognized:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportParseError_lift(_ buf: RustBuffer) throws -> KeyTeleportParseError {
+    return try FfiConverterTypeKeyTeleportParseError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportParseError_lower(_ value: KeyTeleportParseError) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportParseError.lower(value)
+}
+
+
+
+public enum KeyTeleportRoute: Equatable, Hashable {
+
+    case receive
+    case send
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportRoute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportRoute: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .receive
+
+        case 2: return .send
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportRoute, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .receive:
+            writeInt(&buf, Int32(1))
+
+
+        case .send:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportRoute_lift(_ buf: RustBuffer) throws -> KeyTeleportRoute {
+    return try FfiConverterTypeKeyTeleportRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportRoute_lower(_ value: KeyTeleportRoute) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportRoute.lower(value)
+}
+
+
+
+public
 enum LabelDbError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
@@ -28338,6 +30042,10 @@ public enum MultiFormat: Equatable {
      */
     case signedPsbt(Psbt
     )
+    case keyTeleportReceiver(KeyTeleportReceiverPacket
+    )
+    case keyTeleportSender(KeyTeleportSenderPacket
+    )
 
 
 
@@ -28395,6 +30103,12 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 8: return .signedPsbt(try FfiConverterTypePsbt.read(from: &buf)
         )
 
+        case 9: return .keyTeleportReceiver(try FfiConverterTypeKeyTeleportReceiverPacket.read(from: &buf)
+        )
+
+        case 10: return .keyTeleportSender(try FfiConverterTypeKeyTeleportSenderPacket.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -28442,6 +30156,16 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             writeInt(&buf, Int32(8))
             FfiConverterTypePsbt.write(v1, into: &buf)
 
+
+        case let .keyTeleportReceiver(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeKeyTeleportReceiverPacket.write(v1, into: &buf)
+
+
+        case let .keyTeleportSender(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterTypeKeyTeleportSenderPacket.write(v1, into: &buf)
+
         }
     }
 }
@@ -28476,6 +30200,7 @@ enum MultiFormatError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     )
     case TaprootNotSupported
     case PsbtNotSigned
+    case KeyTeleportPsbtNotSupported
 
 
 
@@ -28526,6 +30251,7 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             )
         case 5: return .TaprootNotSupported
         case 6: return .PsbtNotSigned
+        case 7: return .KeyTeleportPsbtNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -28562,6 +30288,10 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
 
         case .PsbtNotSigned:
             writeInt(&buf, Int32(6))
+
+
+        case .KeyTeleportPsbtNotSupported:
+            writeInt(&buf, Int32(7))
 
         }
     }
@@ -30612,6 +32342,8 @@ public enum Route {
     )
     case coinControl(CoinControlRoute
     )
+    case keyTeleport(KeyTeleportRoute
+    )
 
 
 
@@ -30686,6 +32418,9 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 8: return .coinControl(try FfiConverterTypeCoinControlRoute.read(from: &buf)
         )
 
+        case 9: return .keyTeleport(try FfiConverterTypeKeyTeleportRoute.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -30734,6 +32469,11 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case let .coinControl(v1):
             writeInt(&buf, Int32(8))
             FfiConverterTypeCoinControlRoute.write(v1, into: &buf)
+
+
+        case let .keyTeleport(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeKeyTeleportRoute.write(v1, into: &buf)
 
         }
     }
@@ -38656,6 +40396,163 @@ public func FfiConverterCallbackInterfaceFfiReconcile_lower(_ v: FfiReconcile) -
 
 
 
+public protocol KeyTeleportManagerReconciler: AnyObject, Sendable {
+
+    func reconcile(message: KeyTeleportManagerReconcileMessage)
+
+    func reconcileMany(messages: [KeyTeleportManagerReconcileMessage])
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceKeyTeleportManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler = UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceKeyTeleportManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface KeyTeleportManagerReconciler: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceKeyTeleportManagerReconciler.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface KeyTeleportManagerReconciler: handle missing in uniffiClone")
+            }
+        },
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceKeyTeleportManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeKeyTeleportManagerReconcileMessage_lift(message)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceKeyTeleportManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeKeyTeleportManagerReconcileMessage.lift(messages)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitKeyTeleportManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_keyteleportmanagerreconciler(UniffiCallbackInterfaceKeyTeleportManagerReconciler.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceKeyTeleportManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<KeyTeleportManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceKeyTeleportManagerReconciler : FfiConverter {
+    typealias SwiftType = KeyTeleportManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceKeyTeleportManagerReconciler_lift(_ handle: UInt64) throws -> KeyTeleportManagerReconciler {
+    return try FfiConverterCallbackInterfaceKeyTeleportManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceKeyTeleportManagerReconciler_lower(_ v: KeyTeleportManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceKeyTeleportManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol OnboardingManagerReconciler: AnyObject, Sendable {
 
     func reconcile(message: OnboardingReconcileMessage)
@@ -40897,6 +42794,31 @@ fileprivate struct FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeKeyTeleportManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [KeyTeleportManagerReconcileMessage]
+
+    public static func write(_ value: [KeyTeleportManagerReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKeyTeleportManagerReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KeyTeleportManagerReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KeyTeleportManagerReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKeyTeleportManagerReconcileMessage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNodeSelection: FfiConverterRustBuffer {
     typealias SwiftType = [NodeSelection]
 
@@ -42227,6 +44149,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_network() != 44430) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_new_key_teleport_manager() != 19902) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_num_wallets() != 1649) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42506,6 +44431,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_filehandler_read() != 12343) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part() != 31966) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_keyteleportreceiverpacket_url() != 30148) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part() != 12397) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_keyteleportsenderpacket_url() != 48299) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42699,6 +44636,30 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_keyteleportpassword_display_text() != 62935) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_keyteleportpassword_grouped_text() != 59764) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustkeyteleportmanager_dispatch() != 32250) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustkeyteleportmanager_is_send_eligible() != 52659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustkeyteleportmanager_listen_for_updates() != 16752) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustkeyteleportmanager_reveal_mnemonic_words() != 47268) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustkeyteleportmanager_reveal_xprv() != 13239) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustkeyteleportmanager_state() != 37488) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633) {
@@ -43058,6 +45019,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 17637) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_routefactory_key_teleport_receive() != 8004) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_key_teleport_send() != 23216) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to() != 57827) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -43412,6 +45379,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 12433) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rustkeyteleportmanager_new() != 10345) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -43547,6 +45517,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile() != 42843) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile_many() != 45107) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -43580,6 +45556,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitCloudBackupManagerReconciler()
     uniffiCallbackInitCoinControlManagerReconciler()
     uniffiCallbackInitFfiReconcile()
+    uniffiCallbackInitKeyTeleportManagerReconciler()
     uniffiCallbackInitOnboardingManagerReconciler()
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitSendFlowManagerReconciler()

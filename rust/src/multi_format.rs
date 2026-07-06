@@ -15,6 +15,7 @@ use tracing::{debug, warn};
 
 use crate::{
     hardware_export::HardwareExport,
+    key_teleport::{KeyTeleportReceiverPacket, KeyTeleportSenderPacket, parse_key_teleport_string},
     mnemonic::ParseMnemonic as _,
     signed_import::SignedImportError,
     transaction::ffi::BitcoinTransaction,
@@ -22,7 +23,7 @@ use crate::{
 };
 
 /// A string or data, could be a string or data (bytes)
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum StringOrData {
     String(String),
     Data(Vec<u8>),
@@ -42,6 +43,8 @@ pub enum MultiFormat {
     TapSignerUnused(Arc<cove_tap_card::TapSigner>),
     /// A signed but un-finalized PSBT
     SignedPsbt(Arc<Psbt>),
+    KeyTeleportReceiver(Arc<KeyTeleportReceiverPacket>),
+    KeyTeleportSender(Arc<KeyTeleportSenderPacket>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -66,6 +69,9 @@ pub enum MultiFormatError {
 
     #[error("PSBT has no signatures — sign it with your hardware wallet before importing")]
     PsbtNotSigned,
+
+    #[error("Key Teleport PSBT packets are not supported yet")]
+    KeyTeleportPsbtNotSupported,
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
@@ -111,6 +117,20 @@ impl MultiFormat {
         // try to parse UR format (single-part URs only)
         if string.to_ascii_lowercase().starts_with("ur:") {
             return Self::try_from_ur_string(string);
+        }
+
+        match parse_key_teleport_string(string) {
+            Ok(crate::key_teleport::ParsedKeyTeleport::Receiver(packet)) => {
+                return Ok(Self::KeyTeleportReceiver(packet));
+            }
+            Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
+                return Ok(Self::KeyTeleportSender(packet));
+            }
+            Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt)
+            | Err(crate::key_teleport::KeyTeleportParseError::UnsupportedPsbt) => {
+                return Err(MultiFormatError::KeyTeleportPsbtNotSupported);
+            }
+            Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {}
         }
 
         // try to parse address

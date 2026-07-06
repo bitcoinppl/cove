@@ -52,6 +52,7 @@ mod fiat;
 mod file_handler;
 mod hardware_export;
 mod historical_price_service;
+mod key_teleport;
 mod keys;
 mod label_manager;
 mod loading_popup;
