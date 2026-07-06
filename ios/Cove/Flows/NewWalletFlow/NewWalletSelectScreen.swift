@@ -40,6 +40,7 @@ struct NewWalletSelectScreen: View {
             showSelectDialog: $showSelectDialog,
             nfcCalled: nfcCalled,
             hotWalletRoute: routeFactory.newHotWallet(),
+            keyTeleportRoute: routeFactory.keyTeleportReceive(),
             qrRoute: routeFactory.qrImport(),
             importFile: startFileImport,
             scanNfc: scanNfc,
@@ -141,6 +142,7 @@ private struct NewWalletSelectionLayout: View {
     @Binding var showSelectDialog: Bool
     let nfcCalled: Bool
     let hotWalletRoute: Route
+    let keyTeleportRoute: Route
     let qrRoute: Route
     let importFile: () -> Void
     let scanNfc: () -> Void
@@ -161,6 +163,7 @@ private struct NewWalletSelectionLayout: View {
                             showSelectDialog: $showSelectDialog,
                             nfcCalled: nfcCalled,
                             hotWalletRoute: hotWalletRoute,
+                            keyTeleportRoute: keyTeleportRoute,
                             qrRoute: qrRoute,
                             importFile: importFile,
                             scanNfc: scanNfc,
@@ -175,6 +178,7 @@ private struct NewWalletSelectionLayout: View {
                         showSelectDialog: $showSelectDialog,
                         nfcCalled: nfcCalled,
                         hotWalletRoute: hotWalletRoute,
+                        keyTeleportRoute: keyTeleportRoute,
                         qrRoute: qrRoute,
                         importFile: importFile,
                         scanNfc: scanNfc,
@@ -192,6 +196,7 @@ private struct NewWalletSelectionMainContent: View {
     @Binding var showSelectDialog: Bool
     let nfcCalled: Bool
     let hotWalletRoute: Route
+    let keyTeleportRoute: Route
     let qrRoute: Route
     let importFile: () -> Void
     let scanNfc: () -> Void
@@ -209,6 +214,7 @@ private struct NewWalletSelectionMainContent: View {
                 showSelectDialog: $showSelectDialog,
                 nfcCalled: nfcCalled,
                 hotWalletRoute: hotWalletRoute,
+                keyTeleportRoute: keyTeleportRoute,
                 qrRoute: qrRoute,
                 importFile: importFile,
                 scanNfc: scanNfc,
@@ -225,6 +231,7 @@ private struct NewWalletSelectionBottomLayout: View {
     @Binding var showSelectDialog: Bool
     let nfcCalled: Bool
     let hotWalletRoute: Route
+    let keyTeleportRoute: Route
     let qrRoute: Route
     let importFile: () -> Void
     let scanNfc: () -> Void
@@ -247,6 +254,7 @@ private struct NewWalletSelectionBottomLayout: View {
                     showSelectDialog: $showSelectDialog,
                     nfcCalled: nfcCalled,
                     hotWalletRoute: hotWalletRoute,
+                    keyTeleportRoute: keyTeleportRoute,
                     qrRoute: qrRoute,
                     importFile: importFile,
                     scanNfc: scanNfc,
@@ -285,6 +293,7 @@ private struct NewWalletTypeActions: View {
     @Binding var showSelectDialog: Bool
     let nfcCalled: Bool
     let hotWalletRoute: Route
+    let keyTeleportRoute: Route
     let qrRoute: Route
     let importFile: () -> Void
     let scanNfc: () -> Void
@@ -309,6 +318,23 @@ private struct NewWalletTypeActions: View {
                     pasteWallet: pasteWallet
                 )
             }
+
+            NavigationLink(value: keyTeleportRoute) {
+                HStack {
+                    Image(systemName: "arrow.down.left.and.arrow.up.right")
+                        .font(.subheadline)
+
+                    Text("Key Teleport")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.btnPrimary.opacity(0.9))
+                .foregroundColor(.midnightBlue)
+                .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
 
             if nfcCalled {
                 Button(action: showNfcHelp) {

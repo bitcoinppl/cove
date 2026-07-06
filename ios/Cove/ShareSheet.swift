@@ -34,6 +34,51 @@ private class ShareableFile: NSObject, UIActivityItemSource {
 }
 
 enum ShareSheet {
+    /// Shows share sheet for plain text without creating a temporary file
+    @MainActor
+    static func present(text: String, completion: @escaping (Bool) -> Void = { _ in }) {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first,
+            let rootViewController = windowScene.windows
+            .first(where: { $0.isKeyWindow })?.rootViewController
+        else {
+            completion(false)
+            return
+        }
+
+        let activityViewController = UIActivityViewController(
+            activityItems: [text],
+            applicationActivities: nil
+        )
+
+        if let popover = activityViewController.popoverPresentationController {
+            popover.sourceView = rootViewController.view
+            popover.sourceRect = CGRect(
+                x: rootViewController.view.bounds.midX,
+                y: rootViewController.view.bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
+
+        activityViewController.completionWithItemsHandler = { _, completed, _, error in
+            if let error {
+                Log.error("Share sheet error: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                completion(completed)
+            }
+        }
+
+        var presenter = rootViewController
+        while let presented = presenter.presentedViewController {
+            presenter = presented
+        }
+        presenter.present(activityViewController, animated: true)
+    }
+
     /// Shows share sheet for the given file URL
     @MainActor
     static func present(for url: URL) {
