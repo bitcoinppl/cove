@@ -21,6 +21,11 @@ private fun Route.sendWalletId(): WalletId? =
         else -> null
     }
 
+internal fun routeStackContainsKeyTeleport(
+    default: Route,
+    routes: List<Route>,
+): Boolean = default is Route.KeyTeleport || routes.any { it is Route.KeyTeleport }
+
 private fun SendRoute.walletId(): WalletId =
     when (this) {
         is SendRoute.SetAmount -> id

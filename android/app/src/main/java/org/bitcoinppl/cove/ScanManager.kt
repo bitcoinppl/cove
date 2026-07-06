@@ -53,6 +53,14 @@ class ScanManager private constructor() {
                 is MultiFormat.Bip329Labels -> {
                     importLabels(multiFormat.v1)
                 }
+
+                is MultiFormat.KeyTeleportReceiver -> {
+                    handleKeyTeleportReceiver(multiFormat.v1)
+                }
+
+                is MultiFormat.KeyTeleportSender -> {
+                    handleKeyTeleportSender(multiFormat.v1)
+                }
             }
         } catch (e: Exception) {
             Log.e(tag, "Unable to handle scanned code", e)
@@ -61,6 +69,44 @@ class ScanManager private constructor() {
                     AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
                 )
         }
+    }
+
+    fun handleKeyTeleportText(input: String): Boolean {
+        val text = input.trim()
+        if (text.isEmpty()) return false
+
+        val multiFormat =
+            try {
+                StringOrData.String(text).tryIntoMultiFormat()
+            } catch (_: Exception) {
+                return false
+            }
+
+        return when (multiFormat) {
+            is MultiFormat.KeyTeleportReceiver -> {
+                handleKeyTeleportReceiver(multiFormat.v1)
+                true
+            }
+
+            is MultiFormat.KeyTeleportSender -> {
+                handleKeyTeleportSender(multiFormat.v1)
+                true
+            }
+
+            else -> false
+        }
+    }
+
+    private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket) {
+        val manager = app.getKeyTeleportManager()
+        manager.ingest(StringOrData.String(packet.bbqrPart()))
+        app.pushRoute(RouteFactory().keyTeleportSend())
+    }
+
+    private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket) {
+        val manager = app.getKeyTeleportManager()
+        manager.ingest(StringOrData.String(packet.bbqrPart()))
+        app.pushRoute(RouteFactory().keyTeleportReceive())
     }
 
     private fun importLabels(labels: Bip329Labels) {

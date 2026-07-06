@@ -59,7 +59,9 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletBirthday
 import org.bitcoinppl.cove_core.WalletColor
@@ -285,6 +287,22 @@ fun WalletSettingsScreen(
                                 },
                             )
                             dangerItemCount++
+
+                            if (app.canKeyTeleportSend(metadata.id)) {
+                                MaterialDivider()
+                                MaterialSettingsItem(
+                                    title = "Send with Key Teleport",
+                                    titleColor = CoveColor.WarningOrange,
+                                    onClick = {
+                                        val keyTeleportManager = app.getKeyTeleportManager()
+                                        keyTeleportManager.dispatch(
+                                            KeyTeleportManagerAction.StartSendFromWallet(metadata.id),
+                                        )
+                                        app.pushRoute(RouteFactory().keyTeleportSend())
+                                    },
+                                )
+                                dangerItemCount++
+                            }
                         }
                         if (dangerItemCount > 0) MaterialDivider()
                         MaterialSettingsItem(

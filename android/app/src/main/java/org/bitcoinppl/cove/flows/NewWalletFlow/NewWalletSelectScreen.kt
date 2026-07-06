@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
@@ -66,6 +67,7 @@ import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException
 
@@ -111,6 +113,10 @@ fun NewWalletSelectScreen(
     }
 
     fun importWallet(content: String) {
+        if (Scanner.handleKeyTeleportText(content)) {
+            return
+        }
+
         try {
             Wallet.newFromXpub(xpub = content.trim()).use { wallet ->
                 val id = wallet.id()
@@ -301,6 +307,20 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f).testTag("newWalletSelect.onThisDevice"),
                         )
                     }
+
+                    ImageButton(
+                        text = "Receive with Key Teleport",
+                        leadingIcon = painterResource(R.drawable.icon_qr_code),
+                        onClick = {
+                            app.pushRoute(RouteFactory().keyTeleportReceive())
+                        },
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = CoveColor.btnPrimary,
+                                contentColor = CoveColor.midnightBlue,
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
 
                     // NFC Help button - appears after NFC is called (matching iOS behavior)
                     if (nfcCalled) {
