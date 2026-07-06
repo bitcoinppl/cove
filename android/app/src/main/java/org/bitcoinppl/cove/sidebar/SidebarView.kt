@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,12 +50,25 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletMetadata
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
 fun SidebarView(
     app: AppManager,
     modifier: Modifier = Modifier,
 ) {
+    var localWallets by remember { mutableStateOf(app.wallets) }
+    val lazyListState = rememberLazyListState()
+    val reorderableLazyListState =
+        rememberReorderableLazyListState(lazyListState) { from, to ->
+            localWallets = localWallets.moved(from.index, to.index)
+        }
+
+    LaunchedEffect(app.wallets) {
+        localWallets = app.wallets
+    }
+
     Column(
         modifier =
             modifier
@@ -111,15 +130,25 @@ fun SidebarView(
         // wallet list
         LazyColumn(
             modifier = Modifier.weight(1f),
+            state = lazyListState,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(app.wallets) { wallet ->
-                WalletItem(
-                    wallet = wallet,
-                    onClick = {
-                        app.closeSidebarAndSelectWallet(wallet.id)
-                    },
-                )
+            items(localWallets, key = { it.id }) { wallet ->
+                ReorderableItem(reorderableLazyListState, key = wallet.id) {
+                    WalletItem(
+                        wallet = wallet,
+                        onClick = {
+                            app.closeSidebarAndSelectWallet(wallet.id)
+                        },
+                        modifier =
+                            Modifier.longPressDraggableHandle(
+                                enabled = localWallets.size > 1,
+                                onDragStopped = {
+                                    app.reorderWallets(localWallets.map { it.id })
+                                },
+                            ),
+                    )
+                }
             }
         }
 
@@ -188,10 +217,11 @@ fun SidebarView(
 private fun WalletItem(
     wallet: WalletMetadata,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
                 .background(CoveColor.coveLightGray.copy(alpha = 0.06f))
@@ -211,7 +241,7 @@ private fun WalletItem(
 
         // wallet name
         AutoSizeText(
-            text = wallet.name ?: "Wallet",
+            text = wallet.name,
             color = Color.White,
             maxFontSize = 13.sp,
             minimumScaleFactor = 0.80f,
@@ -242,4 +272,12 @@ private fun WalletColor.toComposeColor(): Color =
         is WalletColor.WAlmostGray -> CoveColor.almostGray
         is WalletColor.WAlmostWhite -> CoveColor.almostWhite
         is WalletColor.Custom -> Color.Gray
+    }
+
+private fun <T> List<T>.moved(
+    fromIndex: Int,
+    toIndex: Int,
+): List<T> =
+    toMutableList().apply {
+        add(toIndex, removeAt(fromIndex))
     }

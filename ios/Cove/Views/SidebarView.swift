@@ -37,14 +37,21 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             SidebarHeader(scanNfc: app.closeSidebarAndScanNfc)
 
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 12) {
-                    ForEach(app.wallets, id: \.id) { wallet in
-                        walletButton(wallet)
-                    }
+            List {
+                ForEach(app.wallets, id: \.id) { wallet in
+                    walletButton(wallet)
+                        .padding(.bottom, 12)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
                 }
+                .onMove(perform: app.moveWallets)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .scrollIndicators(.hidden)
+            .background(Color.clear)
+            .environment(\.editMode, .constant(.active))
 
             SidebarFooter(
                 addWallet: app.closeSidebarAndOpenNewWallet,

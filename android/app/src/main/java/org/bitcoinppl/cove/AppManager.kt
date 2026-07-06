@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
@@ -340,6 +341,30 @@ class AppManager private constructor() : FfiReconcile {
 
     fun loadWallets() {
         wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+    }
+
+    fun reorderWallets(ids: List<WalletId>) {
+        val currentWalletsById = wallets.associateBy { it.id }
+        val currentIds = currentWalletsById.keys
+        if (ids.size == wallets.size && ids.toSet() == currentIds) {
+            wallets = ids.mapNotNull(currentWalletsById::get)
+        }
+
+        mainScope.launch {
+            try {
+                val canonicalWallets =
+                    withContext(Dispatchers.IO) {
+                        database.wallets().reorderWallets(ids)
+                    }
+
+                wallets = canonicalWallets
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "Unable to reorder wallets", e)
+                loadWallets()
+            }
+        }
     }
 
     fun closeSidebarAndSelectWallet(id: WalletId) {

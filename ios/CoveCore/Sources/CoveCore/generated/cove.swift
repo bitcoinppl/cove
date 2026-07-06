@@ -12604,8 +12604,14 @@ public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UInt64 {
 
 public protocol WalletsTableProtocol: AnyObject, Sendable {
 
+    /**
+     * Returns wallets in persisted user-facing display order
+     */
     func all() throws  -> [WalletMetadata]
 
+    /**
+     * Returns wallets sorted by recent scan activity for launch selection
+     */
     func allSortedActive() throws  -> [WalletMetadata]
 
     /**
@@ -12616,6 +12622,13 @@ public protocol WalletsTableProtocol: AnyObject, Sendable {
     func isEmpty() throws  -> Bool
 
     func len(network: Network, mode: WalletMode) throws  -> UInt16
+
+    /**
+     * Persists user-facing display order for the current network and mode
+     *
+     * Cloud restore can only preserve the restored Vec order; reorder is local database state
+     */
+    func reorderWallets(walletIds: [WalletId]) throws  -> [WalletMetadata]
 
 }
 open class WalletsTable: WalletsTableProtocol, @unchecked Sendable {
@@ -12671,6 +12684,9 @@ open class WalletsTable: WalletsTableProtocol, @unchecked Sendable {
 
 
 
+    /**
+     * Returns wallets in persisted user-facing display order
+     */
 open func all()throws  -> [WalletMetadata]  {
     return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
@@ -12680,6 +12696,9 @@ open func all()throws  -> [WalletMetadata]  {
 })
 }
 
+    /**
+     * Returns wallets sorted by recent scan activity for launch selection
+     */
 open func allSortedActive()throws  -> [WalletMetadata]  {
     return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
@@ -12717,6 +12736,21 @@ open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
             self.uniffiCloneHandle(),
         FfiConverterTypeNetwork_lower(network),
         FfiConverterTypeWalletMode_lower(mode),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Persists user-facing display order for the current network and mode
+     *
+     * Cloud restore can only preserve the restored Vec order; reorder is local database state
+     */
+open func reorderWallets(walletIds: [WalletId])throws  -> [WalletMetadata]  {
+    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_walletstable_reorder_wallets(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeWalletId.lower(walletIds),uniffiCallStatus
     )
 })
 }
@@ -40432,10 +40466,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_unsignedtransactionstable_gettxthrow() != 38612) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletstable_all() != 1090) {
+    if (uniffi_cove_checksum_method_walletstable_all() != 27691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletstable_all_sorted_active() != 25765) {
+    if (uniffi_cove_checksum_method_walletstable_all_sorted_active() != 14506) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_has_any_wallets() != 24799) {
@@ -40445,6 +40479,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_len() != 56374) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 40391) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_priceresponse_get() != 6552) {

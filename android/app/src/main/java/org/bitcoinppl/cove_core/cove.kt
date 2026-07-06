@@ -1375,6 +1375,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_walletstable_len(
     ): Short
+    external fun uniffi_cove_checksum_method_walletstable_reorder_wallets(
+    ): Short
     external fun uniffi_cove_checksum_method_priceresponse_get(
     ): Short
     external fun uniffi_cove_checksum_method_priceresponse_get_for_currency(
@@ -2384,6 +2386,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_walletstable_len(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`mode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Short
+    external fun uniffi_cove_fn_method_walletstable_reorder_wallets(`ptr`: Long,`walletIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_walletdatadb(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4138,10 +4142,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_unsignedtransactionstable_gettxthrow() != 38612.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_walletstable_all() != 1090.toShort()) {
+    if (lib.uniffi_cove_checksum_method_walletstable_all() != 27691.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_walletstable_all_sorted_active() != 25765.toShort()) {
+    if (lib.uniffi_cove_checksum_method_walletstable_all_sorted_active() != 14506.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_walletstable_has_any_wallets() != 24799.toShort()) {
@@ -4151,6 +4155,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_walletstable_len() != 56374.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_walletstable_reorder_wallets() != 40391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_priceresponse_get() != 6552.toShort()) {
@@ -27154,8 +27161,14 @@ public object FfiConverterTypeWalletKey: FfiConverter<WalletKey, Long> {
 
 public interface WalletsTableInterface {
 
+    /**
+     * Returns wallets in persisted user-facing display order
+     */
     fun `all`(): List<WalletMetadata>
 
+    /**
+     * Returns wallets sorted by recent scan activity for launch selection
+     */
     fun `allSortedActive`(): List<WalletMetadata>
 
     /**
@@ -27166,6 +27179,13 @@ public interface WalletsTableInterface {
     fun `isEmpty`(): kotlin.Boolean
 
     fun `len`(`network`: Network, `mode`: WalletMode): kotlin.UShort
+
+    /**
+     * Persists user-facing display order for the current network and mode
+     *
+     * Cloud restore can only preserve the restored Vec order; reorder is local database state
+     */
+    fun `reorderWallets`(`walletIds`: List<WalletId>): List<WalletMetadata>
 
     companion object
 }
@@ -27272,6 +27292,9 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
     }
 
 
+    /**
+     * Returns wallets in persisted user-facing display order
+     */
     @Throws(DatabaseException::class)override fun `all`(): List<WalletMetadata> {
             return FfiConverterSequenceTypeWalletMetadata.lift(
     callWithHandle {
@@ -27286,6 +27309,9 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
 
 
 
+    /**
+     * Returns wallets sorted by recent scan activity for launch selection
+     */
     @Throws(DatabaseException::class)override fun `allSortedActive`(): List<WalletMetadata> {
             return FfiConverterSequenceTypeWalletMetadata.lift(
     callWithHandle {
@@ -27340,6 +27366,26 @@ open class WalletsTable: Disposable, AutoCloseable, WalletsTableInterface
 
         FfiConverterTypeNetwork.lower(`network`),
         FfiConverterTypeWalletMode.lower(`mode`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Persists user-facing display order for the current network and mode
+     *
+     * Cloud restore can only preserve the restored Vec order; reorder is local database state
+     */
+    @Throws(DatabaseException::class)override fun `reorderWallets`(`walletIds`: List<WalletId>): List<WalletMetadata> {
+            return FfiConverterSequenceTypeWalletMetadata.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletstable_reorder_wallets(
+        it,
+
+        FfiConverterSequenceTypeWalletId.lower(`walletIds`),_status)
 }
     }
     )

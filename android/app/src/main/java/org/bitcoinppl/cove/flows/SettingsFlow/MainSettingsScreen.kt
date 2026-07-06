@@ -79,7 +79,6 @@ import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
-import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 
 internal fun shouldShowCloudBackupSettings(
@@ -395,12 +394,7 @@ private fun FullScreenSettingsModal(
 
 @Composable
 private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
-    var wallets by remember { mutableStateOf<List<WalletMetadata>>(emptyList()) }
-
-    // fetch all wallets on screen appear
-    LaunchedEffect(Unit) {
-        wallets = Database().wallets().allSortedActive()
-    }
+    val wallets = app.wallets
 
     // don't show section if there are no wallets
     if (wallets.isEmpty()) {

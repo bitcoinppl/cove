@@ -252,6 +252,21 @@ private let walletModeChangeDelayMs = 250
         wallets = (try? database.wallets().all()) ?? []
     }
 
+    func moveWallets(from source: IndexSet, to destination: Int) {
+        var reordered = wallets
+        reordered.move(fromOffsets: source, toOffset: destination)
+        wallets = reordered
+
+        do {
+            wallets = try database.wallets().reorderWallets(
+                walletIds: reordered.map(\.id)
+            )
+        } catch {
+            logger.error("Unable to reorder wallets: \(error)")
+            loadWallets()
+        }
+    }
+
     func pushRoute(_ route: Route) {
         navigationCoordinator.pushRoute(
             route,
