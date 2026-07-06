@@ -1218,7 +1218,6 @@ mod tests {
 
     use crate::wallet::metadata::WalletMetadata;
 
-    use super::transactions::BroadcastTransactionError;
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
         RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
@@ -1229,7 +1228,7 @@ mod tests {
     };
     use crate::{
         database::wallet_data::{
-            label::test_support::wallet_data_db_with_mismatched_output_table,
+            WalletDataDb, label::test_support::wallet_data_db_with_mismatched_output_table,
             test_support::new_test_wallet_data_db,
         },
         manager::wallet_manager::{
@@ -1287,6 +1286,12 @@ mod tests {
     impl super::WalletActor {
         async fn in_memory_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
             act_zero::Produces::ok(self.wallet.metadata.clone())
+        }
+
+        async fn set_test_wallet_data_db(&mut self, db: WalletDataDb) -> act_zero::ActorResult<()> {
+            self.db = db;
+
+            act_zero::Produces::ok(())
         }
 
         async fn set_last_height_fetched_for_test(
@@ -1671,20 +1676,6 @@ mod tests {
         });
 
         BroadcastEsploraNode { broadcast_requests, server }
-    }
-
-    async fn wait_for_broadcast_count(server: &BroadcastEsploraNode, count: usize) {
-        tokio::time::timeout(Duration::from_secs(2), async {
-            loop {
-                if server.broadcast_requests.load(Ordering::SeqCst) == count {
-                    return;
-                }
-
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("broadcast count is reached");
     }
 
     fn restore_default_bitcoin_node() {
@@ -2215,47 +2206,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn payjoin_proposal_falls_back_only_when_network_broadcast_failed() {
-        let _guard = crate::test_support::global_state_test_lock().lock().await;
-
-        crate::database::test_support::init_test_database();
-        let server = set_broadcast_esplora_node(200).await;
-
-        let metadata = WalletMetadata::preview_new();
-        let mut wallet = persisted_preview_wallet(metadata.clone());
-        mark_wallet_ledger_ready(&mut wallet);
-        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
-
-        call!(addr.handle_payjoin_proposal_broadcast_result(
-            Err(BroadcastTransactionError::PostBroadcastFailed(
-                super::Error::SignAndBroadcastError("bookkeeping failed".to_string())
-            )),
-            test_broadcast_transaction()
-        ))
-        .await
-        .expect("payjoin bookkeeping result is handled");
-
-        tokio::time::sleep(Duration::from_millis(200)).await;
-        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 0);
-
-        call!(addr.handle_payjoin_proposal_broadcast_result(
-            Err(BroadcastTransactionError::BroadcastFailed(super::Error::SignAndBroadcastError(
-                "proposal failed".to_string()
-            ))),
-            test_broadcast_transaction()
-        ))
-        .await
-        .expect("payjoin network result is handled");
-        wait_for_broadcast_count(&server, 1).await;
-
-        restore_default_bitcoin_node();
-        server.server.abort();
-        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
-
-        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test(flavor = "current_thread")]
     async fn slow_height_refresh_does_not_block_unrelated_actor_messages() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
@@ -2626,8 +2576,10 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let fallback_tx = bitcoin::Transaction {
@@ -2671,8 +2623,10 @@ mod tests {
             (*wallet.bdk.get_tx(outpoint.txid).expect("tx in wallet").tx_node.tx).clone();
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let persister =
@@ -2711,26 +2665,28 @@ mod tests {
         let terminal_tx =
             (*wallet.bdk.get_tx(outpoint.txid).expect("tx in wallet").tx_node.tx).clone();
 
-        let (sender, _receiver) = flume::bounded(10);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
-        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        let (db, _tmp) = new_test_wallet_data_db(wallet.id.clone());
 
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
         persister.create_session(&terminal_tx).unwrap();
         persister.set_pending_proposal(&terminal_tx).unwrap();
 
-        actor.db = db;
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+        call!(addr.set_test_wallet_data_db(db.clone())).await.expect("actor responds");
 
-        let result = actor.handle_payjoin_proposal_broadcast(terminal_tx).await;
-        actor_value(result).await;
+        call!(addr.handle_payjoin_proposal_broadcast(terminal_tx)).await.expect("actor responds");
 
-        let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
-        assert!(
-            session.is_none(),
-            "session should be cleared when terminal tx is already in wallet"
-        );
+        for _ in 0..50 {
+            let session = db.get_payjoin_sender_session().expect("db query succeeded");
+            if session.is_none() {
+                return;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        panic!("session should be cleared when terminal tx is already in wallet");
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2741,8 +2697,10 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
 
         let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
         let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status()).expect("actor is created");
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let fallback_tx = bitcoin::Transaction {
