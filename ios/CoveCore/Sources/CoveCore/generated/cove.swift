@@ -2953,6 +2953,153 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UInt64 {
 
 
 
+public protocol DiagnosticsReportProtocol: AnyObject, Sendable {
+
+    func previewText()  -> String
+
+    func sizeBytes()  -> UInt64
+
+    func submit(description: String?) async throws  -> String
+
+}
+open class DiagnosticsReport: DiagnosticsReportProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_diagnosticsreport(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_diagnosticsreport(handle, $0) }
+    }
+
+
+
+
+open func previewText() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreport_preview_text(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func sizeBytes() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreport_size_bytes(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func submit(description: String?)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_diagnosticsreport_submit(
+                    self.uniffiCloneHandle(),
+                    FfiConverterOptionString.lower(description)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeDiagnosticsError_lift
+        )
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsReport: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = DiagnosticsReport
+
+    public static func lift(_ handle: UInt64) throws -> DiagnosticsReport {
+        return DiagnosticsReport(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: DiagnosticsReport) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsReport {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: DiagnosticsReport, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReport_lift(_ handle: UInt64) throws -> DiagnosticsReport {
+    return try FfiConverterTypeDiagnosticsReport.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReport_lower(_ value: DiagnosticsReport) -> UInt64 {
+    return FfiConverterTypeDiagnosticsReport.lower(value)
+}
+
+
+
+
+
+
 /**
  * Representation of our app over FFI. Essenially a wrapper of [`App`].
  */
@@ -14893,6 +15040,68 @@ public func FfiConverterTypeDeriveInfo_lower(_ value: DeriveInfo) -> RustBuffer 
 }
 
 
+public struct DiagnosticsPlatformInfo: Equatable, Hashable {
+    public var platform: String
+    public var buildNumber: String
+    public var osVersion: String
+    public var deviceModel: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(platform: String, buildNumber: String, osVersion: String, deviceModel: String) {
+        self.platform = platform
+        self.buildNumber = buildNumber
+        self.osVersion = osVersion
+        self.deviceModel = deviceModel
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DiagnosticsPlatformInfo: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsPlatformInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsPlatformInfo {
+        return
+            try DiagnosticsPlatformInfo(
+                platform: FfiConverterString.read(from: &buf),
+                buildNumber: FfiConverterString.read(from: &buf),
+                osVersion: FfiConverterString.read(from: &buf),
+                deviceModel: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiagnosticsPlatformInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.platform, into: &buf)
+        FfiConverterString.write(value.buildNumber, into: &buf)
+        FfiConverterString.write(value.osVersion, into: &buf)
+        FfiConverterString.write(value.deviceModel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsPlatformInfo_lift(_ buf: RustBuffer) throws -> DiagnosticsPlatformInfo {
+    return try FfiConverterTypeDiagnosticsPlatformInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsPlatformInfo_lower(_ value: DiagnosticsPlatformInfo) -> RustBuffer {
+    return FfiConverterTypeDiagnosticsPlatformInfo.lower(value)
+}
+
+
 public struct FeeResponse: Equatable, Hashable {
     public var fastestFee: Float
     public var halfHourFee: Float
@@ -23865,6 +24074,97 @@ public func FfiConverterTypeDescriptorError_lift(_ buf: RustBuffer) throws -> De
 #endif
 public func FfiConverterTypeDescriptorError_lower(_ value: DescriptorError) -> RustBuffer {
     return FfiConverterTypeDescriptorError.lower(value)
+}
+
+
+public
+enum DiagnosticsError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case Build(message: String)
+
+    case ClearLogs(message: String)
+
+    case Submit(message: String)
+
+
+
+
+
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension DiagnosticsError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsError: FfiConverterRustBuffer {
+    typealias SwiftType = DiagnosticsError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .Build(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .ClearLogs(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .Submit(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DiagnosticsError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+        case .Build(_ /* message is ignored*/):
+            writeInt(&buf, Int32(1))
+        case .ClearLogs(_ /* message is ignored*/):
+            writeInt(&buf, Int32(2))
+        case .Submit(_ /* message is ignored*/):
+            writeInt(&buf, Int32(3))
+
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsError_lift(_ buf: RustBuffer) throws -> DiagnosticsError {
+    return try FfiConverterTypeDiagnosticsError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsError_lower(_ value: DiagnosticsError) -> RustBuffer {
+    return FfiConverterTypeDiagnosticsError.lower(value)
 }
 
 
@@ -39510,6 +39810,26 @@ public func allBlockExplorerOptions() -> [BlockExplorerOption]  {
     )
 })
 }
+public func buildDiagnosticsReport(platform: DiagnosticsPlatformInfo, platformLogs: String)async throws  -> DiagnosticsReport  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_build_diagnostics_report(FfiConverterTypeDiagnosticsPlatformInfo_lower(platform),FfiConverterString.lower(platformLogs)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeDiagnosticsReport_lift,
+            errorHandler: FfiConverterTypeDiagnosticsError_lift
+        )
+}
+public func clearDiagnosticsLogs()throws   {try rustCallWithError(FfiConverterTypeDiagnosticsError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_clear_diagnostics_logs(uniffiCallStatus
+    )
+}
+}
 public func allFiatCurrencies() -> [FiatCurrency]  {
     return try!  FfiConverterSequenceTypeFiatCurrency.lift(try! rustCall() {
         uniffiCallStatus in
@@ -40019,6 +40339,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_all_block_explorer_options() != 40123) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_build_diagnostics_report() != 50442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_clear_diagnostics_logs() != 12380) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 53482) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40482,6 +40808,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 40391) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreport_preview_text() != 51487) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreport_size_bytes() != 10840) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreport_submit() != 1462) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_priceresponse_get() != 6552) {
