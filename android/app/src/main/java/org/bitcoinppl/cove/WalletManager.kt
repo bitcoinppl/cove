@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -179,9 +180,12 @@ class WalletManager :
             return WalletManager(initialState.metadata.id, rust, initialState)
         }
 
-        suspend fun load(id: WalletId): WalletManager {
+        suspend fun load(
+            id: WalletId,
+            rustDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        ): WalletManager {
             val bootstrap =
-                withContext(Dispatchers.IO) {
+                withContext(rustDispatcher) {
                     val rust = RustWalletManager(id)
                     val initialState = rust.initialState()
                     android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
