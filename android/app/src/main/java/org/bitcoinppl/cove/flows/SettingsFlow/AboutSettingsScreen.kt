@@ -40,6 +40,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
@@ -73,7 +74,9 @@ fun AboutSettingsScreen(
     var wipeCloudResult by remember { mutableStateOf<WipeCloudResult?>(null) }
     var showResetLocalStateDialog by remember { mutableStateOf(false) }
     var showSendDiagnostics by remember { mutableStateOf(false) }
+    var sendDiagnosticsSubmitting by remember { mutableStateOf(false) }
     var resetLocalStateMessage by remember { mutableStateOf<String?>(null) }
+    val isInDecoyMode = Auth.isInDecoyMode()
     var isBetaEnabled by remember {
         mutableStateOf(
             Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
@@ -108,7 +111,10 @@ fun AboutSettingsScreen(
             }
             context.startActivity(intent)
         },
-        onSendDiagnosticsClick = { showSendDiagnostics = true },
+        showSendDiagnostics = !isInDecoyMode,
+        onSendDiagnosticsClick = {
+            if (!isInDecoyMode) showSendDiagnostics = true
+        },
         onWipeCloudBackupClick = { showWipeCloudDialog = true },
         onResetLocalBackupStateClick = { showResetLocalStateDialog = true },
         modifier = modifier,
@@ -256,9 +262,21 @@ fun AboutSettingsScreen(
         )
     }
 
-    if (showSendDiagnostics) {
-        FullScreenSettingsModal(onDismiss = { showSendDiagnostics = false }) {
-            SendDiagnosticsSheet(onDismiss = { showSendDiagnostics = false })
+    val dismissSendDiagnostics = {
+        if (!sendDiagnosticsSubmitting) {
+            showSendDiagnostics = false
+        }
+    }
+
+    if (showSendDiagnostics && !isInDecoyMode) {
+        FullScreenSettingsModal(
+            onDismiss = dismissSendDiagnostics,
+            dismissEnabled = !sendDiagnosticsSubmitting,
+        ) {
+            SendDiagnosticsSheet(
+                onDismiss = dismissSendDiagnostics,
+                onSubmittingChange = { sendDiagnosticsSubmitting = it },
+            )
         }
     }
 }
@@ -274,6 +292,7 @@ internal fun AboutSettingsContent(
     onBack: () -> Unit,
     onBuildNumberClick: () -> Unit,
     onFeedbackClick: () -> Unit,
+    showSendDiagnostics: Boolean,
     onSendDiagnosticsClick: () -> Unit,
     onWipeCloudBackupClick: () -> Unit,
     onResetLocalBackupStateClick: () -> Unit,
@@ -335,13 +354,15 @@ internal fun AboutSettingsContent(
                             valueStyle = MaterialTheme.typography.bodySmall,
                             onClick = onFeedbackClick,
                         )
-                        MaterialDivider()
-                        AboutRow(
-                            label = "Send Diagnostics",
-                            value = "Review before upload",
-                            valueStyle = MaterialTheme.typography.bodySmall,
-                            onClick = onSendDiagnosticsClick,
-                        )
+                        if (showSendDiagnostics) {
+                            MaterialDivider()
+                            AboutRow(
+                                label = "Send Diagnostics",
+                                value = "Review before upload",
+                                valueStyle = MaterialTheme.typography.bodySmall,
+                                onClick = onSendDiagnosticsClick,
+                            )
+                        }
                     }
                 }
 
@@ -404,6 +425,7 @@ internal fun AboutSettingsPreviewContent() {
             onBack = { },
             onBuildNumberClick = { },
             onFeedbackClick = { },
+            showSendDiagnostics = true,
             onSendDiagnosticsClick = { },
             onWipeCloudBackupClick = { },
             onResetLocalBackupStateClick = { },

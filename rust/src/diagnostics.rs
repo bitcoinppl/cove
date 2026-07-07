@@ -32,6 +32,7 @@ pub struct DiagnosticsReport {
     metadata: DiagnosticsMetadata,
     sections: Vec<DiagnosticsSection>,
     preview_text: String,
+    redactor: redact::Redactor,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,12 +80,20 @@ impl DiagnosticsReport {
         self.preview_text.clone()
     }
 
+    pub fn preview_text_for_description(&self, description: Option<String>) -> String {
+        self.preview_text_with_description(description)
+    }
+
     pub fn size_bytes(&self) -> u64 {
         self.preview_text.len() as u64
     }
 
+    pub fn size_bytes_for_description(&self, description: Option<String>) -> u64 {
+        self.preview_text_for_description(description).len() as u64
+    }
+
     pub async fn submit(&self, description: Option<String>) -> Result<String, DiagnosticsError> {
-        let description = user_description_for_upload(description);
+        let description = self.redacted_user_description(description);
         let report = self.upload_report(description);
 
         upload::submit_report(&report)
@@ -94,7 +103,9 @@ impl DiagnosticsReport {
 }
 
 fn user_description_for_upload(description: Option<String>) -> Option<String> {
-    description.filter(|description| !description.trim().is_empty())
+    description
+        .map(|description| description.trim().to_string())
+        .filter(|description| !description.is_empty())
 }
 
 impl DiagnosticsReport {
@@ -132,7 +143,7 @@ impl DiagnosticsReport {
             .collect::<Vec<_>>();
         let preview_text = render_preview(&generated_at, &metadata, &sections);
 
-        Ok(Self { generated_at, metadata, sections, preview_text })
+        Ok(Self { generated_at, metadata, sections, preview_text, redactor })
     }
 
     fn upload_report(&self, user_description: Option<String>) -> DiagnosticsUploadReport {
@@ -143,6 +154,21 @@ impl DiagnosticsReport {
             user_description,
             sections: self.sections.clone(),
         }
+    }
+
+    fn redacted_user_description(&self, description: Option<String>) -> Option<String> {
+        let description = user_description_for_upload(description)?;
+        let mut redactor = self.redactor.clone();
+
+        Some(redactor.redact(&description))
+    }
+
+    fn preview_text_with_description(&self, description: Option<String>) -> String {
+        let Some(description) = self.redacted_user_description(description) else {
+            return self.preview_text.clone();
+        };
+
+        render_preview_with_user_description(&self.preview_text, &description)
     }
 }
 
@@ -192,7 +218,7 @@ fn raw_sections_from(
     vec![
         DiagnosticsSection::new(
             "Privacy notice",
-            "Cove redacts bitcoin addresses, extended public/private keys, transaction IDs, and known local app data paths. Amounts remain visible. Review the report before submitting.",
+            "Cove redacts bitcoin addresses, extended public/private keys, WIF private keys, BIP39 seed phrases, transaction IDs, and known local app data paths. Amounts remain visible. Review the report before submitting.",
         ),
         DiagnosticsSection::new("Startup diagnostics", startup),
         DiagnosticsSection::new("Platform logs", platform_logs),
@@ -226,6 +252,21 @@ fn render_preview(
         if !section.body.ends_with('\n') {
             text.push('\n');
         }
+    }
+
+    text
+}
+
+fn render_preview_with_user_description(preview_text: &str, user_description: &str) -> String {
+    let mut text = preview_text.to_string();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+
+    text.push_str("\n## User description\n");
+    text.push_str(user_description);
+    if !user_description.ends_with('\n') {
+        text.push('\n');
     }
 
     text
@@ -279,7 +320,8 @@ mod tests {
             String::new(),
         )
         .unwrap();
-        let upload = report.upload_report(Some("description".to_string()));
+        let upload =
+            report.upload_report(report.redacted_user_description(Some("description".to_string())));
         let json = serde_json::to_string(&upload).unwrap();
 
         assert!(json.contains("\"user_description\":\"description\""));
@@ -287,13 +329,55 @@ mod tests {
     }
 
     #[test]
-    fn user_description_is_not_automatically_redacted() {
-        let description =
-            "saw bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq under /tmp/cove-test/.data";
+    fn user_description_is_redacted_for_preview_and_upload() {
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            "platform saw bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let wif = "5JYkZjmN7PVMjJUfJWfRFwtuXTGB439XV6faajeHPAM9Z2PT2R3";
+        let description = format!(
+            "  same address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq seed {mnemonic} key {wif} under /tmp/cove-test/.data  "
+        );
 
-        let upload_description = user_description_for_upload(Some(description.to_string()))
-            .expect("non-empty description");
+        let preview = report.preview_text_for_description(Some(description.clone()));
+        let upload =
+            report.upload_report(report.redacted_user_description(Some(description.clone())));
+        let json = serde_json::to_string(&upload).unwrap();
 
-        assert_eq!(upload_description, description);
+        assert!(preview.contains("## User description"));
+        assert!(preview.contains("<redacted-bitcoin-address-1>"));
+        assert!(preview.contains("<redacted-seed-phrase-1>"));
+        assert!(preview.contains("<redacted-wif-private-key-1>"));
+        assert!(json.contains("<redacted-bitcoin-address-1>"));
+        assert!(json.contains("<redacted-seed-phrase-1>"));
+        assert!(json.contains("<redacted-wif-private-key-1>"));
+        assert!(!preview.contains("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"));
+        assert!(!preview.contains(mnemonic));
+        assert!(!preview.contains(wif));
+        assert!(!json.contains("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"));
+        assert!(!json.contains(mnemonic));
+        assert!(!json.contains(wif));
+    }
+
+    #[test]
+    fn empty_user_description_is_omitted() {
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let preview = report.preview_text_for_description(Some(" \n\t ".to_string()));
+        let upload =
+            report.upload_report(report.redacted_user_description(Some(" \n\t ".to_string())));
+
+        assert_eq!(preview, report.preview_text());
+        assert!(upload.user_description.is_none());
     }
 }

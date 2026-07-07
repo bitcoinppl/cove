@@ -72,12 +72,14 @@ private const val MAX_PLATFORM_LOG_CHARS = 256 * 1024
 @Composable
 fun SendDiagnosticsSheet(
     onDismiss: () -> Unit,
+    onSubmittingChange: (Boolean) -> Unit = { },
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var report by remember { mutableStateOf<DiagnosticsReport?>(null) }
     val currentReport by rememberUpdatedState(report)
+    val currentOnSubmittingChange by rememberUpdatedState(onSubmittingChange)
     var previewText by remember { mutableStateOf("") }
     var previewChunks by remember { mutableStateOf<List<String>>(emptyList()) }
     var description by remember { mutableStateOf("") }
@@ -92,6 +94,17 @@ fun SendDiagnosticsSheet(
     fun replaceReport(nextReport: DiagnosticsReport?) {
         report?.close()
         report = nextReport
+    }
+
+    fun refreshPreview(
+        nextReport: DiagnosticsReport,
+        nextDescription: String,
+    ) {
+        val nextPreviewText = nextReport.previewTextForDescription(nextDescription)
+
+        previewText = nextPreviewText
+        previewChunks = nextPreviewText.chunked(PREVIEW_CHUNK_SIZE)
+        reportSize = "${nextReport.sizeBytesForDescription(nextDescription)} bytes"
     }
 
     suspend fun rebuildReport(clearStoredLogs: Boolean) {
@@ -115,12 +128,9 @@ fun SendDiagnosticsSheet(
                     platform = androidDiagnosticsPlatformInfo(),
                     platformLogs = platformLogs,
                 )
-            val nextPreviewText = nextReport.previewText()
 
             replaceReport(nextReport)
-            previewText = nextPreviewText
-            previewChunks = nextPreviewText.chunked(PREVIEW_CHUNK_SIZE)
-            reportSize = "${nextReport.sizeBytes()} bytes"
+            refreshPreview(nextReport, description)
         } catch (error: Exception) {
             loadError = error.message ?: error.javaClass.simpleName
         } finally {
@@ -132,8 +142,13 @@ fun SendDiagnosticsSheet(
         rebuildReport(clearStoredLogs = false)
     }
 
+    LaunchedEffect(submitting) {
+        onSubmittingChange(submitting)
+    }
+
     DisposableEffect(Unit) {
         onDispose {
+            currentOnSubmittingChange(false)
             currentReport?.close()
         }
     }
@@ -154,7 +169,14 @@ fun SendDiagnosticsSheet(
                     )
                 },
                 navigationIcon = {
-                    androidx.compose.material3.IconButton(onClick = onDismiss) {
+                    androidx.compose.material3.IconButton(
+                        onClick = {
+                            if (!submitting) {
+                                onDismiss()
+                            }
+                        },
+                        enabled = !submitting,
+                    ) {
                         androidx.compose.material3.Icon(
                             Icons.AutoMirrored.Default.ArrowBack,
                             contentDescription = "Back",
@@ -206,7 +228,12 @@ fun SendDiagnosticsSheet(
             else -> {
                 SendDiagnosticsContent(
                     description = description,
-                    onDescriptionChange = { description = it },
+                    onDescriptionChange = { nextDescription ->
+                        description = nextDescription
+                        report?.let { currentReport ->
+                            refreshPreview(currentReport, nextDescription)
+                        }
+                    },
                     previewChunks = previewChunks,
                     reportSize = reportSize,
                     actionError = actionError,
@@ -217,7 +244,9 @@ fun SendDiagnosticsSheet(
                             runCatching {
                                 shareDiagnosticsFile(
                                     context = context,
-                                    content = exportText(previewText, description),
+                                    content =
+                                        report?.previewTextForDescription(description)
+                                            ?: previewText,
                                 )
                             }.onFailure { error ->
                                 actionError = error.message ?: error.javaClass.simpleName
@@ -232,7 +261,7 @@ fun SendDiagnosticsSheet(
                             actionError = null
 
                             runCatching {
-                                current.submit(trimmedDescription(description))
+                                current.submit(description)
                             }.onSuccess { nextReportId ->
                                 reportId = nextReportId
                             }.onFailure { error ->
@@ -524,27 +553,8 @@ private suspend fun collectAndroidPlatformLogs(context: Context): String =
                 "logcat unavailable: ${error.message ?: error.javaClass.simpleName}"
             }
 
-        "$header\n${logcat.takeLast(MAX_PLATFORM_LOG_CHARS)}"
+        "$header\n${logcat.takeLastAtRedactionBoundary(MAX_PLATFORM_LOG_CHARS)}"
     }
-
-private fun trimmedDescription(description: String): String? {
-    val trimmed = description.trim()
-    return trimmed.ifEmpty { null }
-}
-
-private fun exportText(
-    previewText: String,
-    description: String,
-): String {
-    val trimmed = trimmedDescription(description) ?: return previewText
-
-    return listOf(
-        previewText,
-        "",
-        "User description",
-        trimmed,
-    ).joinToString("\n")
-}
 
 private suspend fun shareDiagnosticsFile(
     context: Context,
@@ -583,6 +593,19 @@ private fun copyReportId(
         Toast.makeText(context, "Report ID copied", Toast.LENGTH_SHORT).show()
     }
 }
+
+internal fun String.takeLastAtRedactionBoundary(maxChars: Int): String {
+    if (length <= maxChars) return this
+
+    var start = length - maxChars
+    while (start < length && this[start].isRedactionTokenCharacter()) {
+        start++
+    }
+
+    return substring(start)
+}
+
+private fun Char.isRedactionTokenCharacter(): Boolean = isLetterOrDigit() && code <= 0x7f
 
 @Preview(
     name = "Send Diagnostics",

@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     collections::VecDeque,
     fmt,
     fs::{File, OpenOptions},
@@ -21,6 +22,10 @@ const ARCHIVE_FILE_COUNT: usize = (MAX_TOTAL_FILE_BYTES / LOG_FILE_BYTES) - 1;
 const CURRENT_LOG_FILE: &str = "cove-rust.log";
 
 static CAPTURE: LazyLock<Capture> = LazyLock::new(Capture::default);
+
+thread_local! {
+    static FORMATTING_EVENT: Cell<bool> = const { Cell::new(false) };
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum CaptureError {
@@ -94,7 +99,36 @@ where
     S: Subscriber,
 {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
-        CAPTURE.state.lock().record_line(format_event(event));
+        let Some(_guard) = ReentrancyGuard::enter() else {
+            return;
+        };
+        let line = format_event(event);
+
+        CAPTURE.state.lock().record_line(line);
+    }
+}
+
+struct ReentrancyGuard;
+
+impl ReentrancyGuard {
+    fn enter() -> Option<Self> {
+        let already_formatting = FORMATTING_EVENT.with(|formatting| {
+            let already_formatting = formatting.get();
+            formatting.set(true);
+            already_formatting
+        });
+
+        if already_formatting {
+            return None;
+        }
+
+        Some(Self)
+    }
+}
+
+impl Drop for ReentrancyGuard {
+    fn drop(&mut self) {
+        FORMATTING_EVENT.with(|formatting| formatting.set(false));
     }
 }
 
@@ -161,7 +195,7 @@ impl RingBuffer {
 
     fn push(&mut self, mut line: String) {
         if line.len() > self.cap_bytes {
-            line = last_bytes_at_char_boundary(&line, self.cap_bytes);
+            line = last_bytes_at_token_boundary(&line, self.cap_bytes);
         }
 
         self.bytes += line.len();
@@ -204,7 +238,7 @@ impl RollingLogFile {
 
     fn write_entry(&mut self, entry: &str) -> Result<(), CaptureError> {
         let entry = if entry.len() > LOG_FILE_BYTES {
-            last_bytes_at_char_boundary(entry, LOG_FILE_BYTES)
+            last_bytes_at_token_boundary(entry, LOG_FILE_BYTES)
         } else {
             entry.to_string()
         };
@@ -346,17 +380,32 @@ fn remove_file_if_exists(path: &Path) -> Result<(), CaptureError> {
     }
 }
 
-fn last_bytes_at_char_boundary(value: &str, max_bytes: usize) -> String {
-    if value.len() <= max_bytes {
-        return value.to_string();
-    }
-
-    let mut start = value.len() - max_bytes;
+fn last_bytes_at_token_boundary(value: &str, max_bytes: usize) -> String {
+    let mut start = value.len().saturating_sub(max_bytes);
     while !value.is_char_boundary(start) {
         start += 1;
     }
 
+    if start == 0 {
+        return value.to_string();
+    }
+
+    while start < value.len() {
+        let Some(character) = value[start..].chars().next() else {
+            break;
+        };
+        if !is_redaction_token_character(character) {
+            break;
+        }
+
+        start += character.len_utf8();
+    }
+
     value[start..].to_string()
+}
+
+fn is_redaction_token_character(character: char) -> bool {
+    character.is_ascii_alphanumeric()
 }
 
 fn timestamp() -> String {
@@ -377,6 +426,24 @@ mod tests {
         ring.push("third\n".to_string());
 
         assert_eq!(ring.text(), "second\nthird\n");
+    }
+
+    #[test]
+    fn oversized_line_drops_partial_leading_token() {
+        let mut ring = RingBuffer::new(10);
+
+        ring.push("prefix xprvSECRET\n".to_string());
+
+        assert_eq!(ring.text(), "\n");
+    }
+
+    #[test]
+    fn oversized_line_keeps_tail_from_token_boundary() {
+        let mut ring = RingBuffer::new(17);
+
+        ring.push("prefix xprvSECRET suffix\n".to_string());
+
+        assert_eq!(ring.text(), " suffix\n");
     }
 
     #[test]

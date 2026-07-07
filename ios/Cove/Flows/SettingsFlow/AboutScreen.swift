@@ -18,6 +18,7 @@ struct WipeCloudResult: Equatable {
 
 struct AboutScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
     @State private var buildTapCount = 0
@@ -107,16 +108,18 @@ struct AboutScreen: View {
                     }
                 }
 
-                Button {
-                    isSendDiagnosticsPresented = true
-                } label: {
-                    HStack {
-                        Text("Send Diagnostics")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Text("Review before upload")
-                            .foregroundStyle(.secondary)
-                            .font(.footnote)
+                if !auth.isInDecoyMode() {
+                    Button {
+                        isSendDiagnosticsPresented = true
+                    } label: {
+                        HStack {
+                            Text("Send Diagnostics")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text("Review before upload")
+                                .foregroundStyle(.secondary)
+                                .font(.footnote)
+                        }
                     }
                 }
             }
@@ -169,5 +172,6 @@ struct AboutScreen: View {
     NavigationStack {
         AboutScreen()
             .environment(AppManager.shared)
+            .environment(AuthManager.shared)
     }
 }

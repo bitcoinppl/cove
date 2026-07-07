@@ -9,6 +9,8 @@ use super::DiagnosticsUploadReport;
 const PRODUCTION_UPLOAD_URL: &str = "https://diagnostics.covebitcoinwallet.com/reports";
 const APP_TOKEN: &str = "v1.cove-mobile-2026-07";
 const GZIP_CONTENT_TYPE: &str = "application/gzip";
+const MAX_SUCCESS_RESPONSE_BYTES: usize = 16 * 1024;
+const MAX_STATUS_BODY_BYTES: usize = 2 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum UploadError {
@@ -24,6 +26,9 @@ pub(crate) enum UploadError {
     #[error("collector request failed: {0}")]
     Request(reqwest::Error),
 
+    #[error("collector response exceeded {limit} bytes")]
+    ResponseTooLarge { limit: usize },
+
     #[error("collector returned status {status}: {body}")]
     Status { status: reqwest::StatusCode, body: String },
 }
@@ -36,7 +41,7 @@ struct UploadResponse {
 pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<String, UploadError> {
     let client = cove_http::new_client().map_err(UploadError::Client)?;
     let body = gzipped_json(report)?;
-    let response = client
+    let mut response = client
         .post(upload_url())
         .timeout(Duration::from_secs(60))
         .bearer_auth(APP_TOKEN)
@@ -46,15 +51,14 @@ pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<St
         .await
         .map_err(UploadError::Request)?;
     let status = response.status();
-    let bytes = response.bytes().await.map_err(UploadError::Request)?;
 
     if !status.is_success() {
-        return Err(UploadError::Status {
-            status,
-            body: String::from_utf8_lossy(&bytes).to_string(),
-        });
+        let body = read_status_body_snippet(&mut response).await?;
+
+        return Err(UploadError::Status { status, body });
     }
 
+    let bytes = read_success_body(&mut response).await?;
     let response: UploadResponse = serde_json::from_slice(&bytes).map_err(UploadError::Json)?;
     Ok(response.id)
 }
@@ -75,6 +79,48 @@ fn upload_url() -> String {
     }
 
     PRODUCTION_UPLOAD_URL.to_string()
+}
+
+async fn read_success_body(response: &mut reqwest::Response) -> Result<Vec<u8>, UploadError> {
+    let mut body = Vec::new();
+
+    while let Some(chunk) = response.chunk().await.map_err(UploadError::Request)? {
+        if body.len() + chunk.len() > MAX_SUCCESS_RESPONSE_BYTES {
+            return Err(UploadError::ResponseTooLarge { limit: MAX_SUCCESS_RESPONSE_BYTES });
+        }
+
+        body.extend_from_slice(&chunk);
+    }
+
+    Ok(body)
+}
+
+async fn read_status_body_snippet(response: &mut reqwest::Response) -> Result<String, UploadError> {
+    let mut body = Vec::new();
+    let mut truncated = false;
+
+    while let Some(chunk) = response.chunk().await.map_err(UploadError::Request)? {
+        let remaining = MAX_STATUS_BODY_BYTES.saturating_sub(body.len());
+        if remaining == 0 {
+            truncated = true;
+            break;
+        }
+
+        if chunk.len() > remaining {
+            body.extend_from_slice(&chunk[..remaining]);
+            truncated = true;
+            break;
+        }
+
+        body.extend_from_slice(&chunk);
+    }
+
+    let mut snippet = String::from_utf8_lossy(&body).to_string();
+    if truncated {
+        snippet.push_str("... [truncated]");
+    }
+
+    Ok(snippet)
 }
 
 #[cfg(test)]

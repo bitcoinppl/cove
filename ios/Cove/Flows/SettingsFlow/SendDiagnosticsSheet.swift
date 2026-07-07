@@ -54,20 +54,8 @@ struct SendDiagnosticsSheet: View {
         }
     }
 
-    private var trimmedDescription: String? {
-        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     private var exportText: String {
-        guard let trimmedDescription else { return previewText }
-
-        return [
-            previewText,
-            "",
-            "User description",
-            trimmedDescription,
-        ].joined(separator: "\n")
+        report?.previewTextForDescription(description: description) ?? previewText
     }
 
     var body: some View {
@@ -104,7 +92,12 @@ struct SendDiagnosticsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        guard !isSubmitting else { return }
+
+                        dismiss()
+                    }
+                    .disabled(isSubmitting)
                 }
             }
         }
@@ -112,6 +105,9 @@ struct SendDiagnosticsSheet: View {
             if report == nil {
                 await rebuildReport(clearStoredLogs: false)
             }
+        }
+        .onChange(of: description) { _, _ in
+            refreshPreviewForCurrentDescription()
         }
         .alert(item: $alertState) { alert in
             switch alert {
@@ -145,6 +141,7 @@ struct SendDiagnosticsSheet: View {
                 )
             }
         }
+        .interactiveDismissDisabled(isSubmitting)
     }
 
     private var readyContent: some View {
@@ -264,12 +261,9 @@ struct SendDiagnosticsSheet: View {
                 platform: IOSDiagnostics.platformInfo(),
                 platformLogs: IOSDiagnostics.platformLogs()
             )
-            let nextPreviewText = nextReport.previewText()
 
             report = nextReport
-            previewText = nextPreviewText
-            previewChunks = Self.chunks(for: nextPreviewText)
-            reportSize = ByteCountFormatter.string(fromByteCount: Int64(nextReport.sizeBytes()), countStyle: .file)
+            refreshPreview(report: nextReport)
             loadState = .ready
         } catch {
             loadState = .failed(error.localizedDescription)
@@ -284,7 +278,7 @@ struct SendDiagnosticsSheet: View {
         defer { isSubmitting = false }
 
         do {
-            let nextReportId = try await report.submit(description: trimmedDescription)
+            let nextReportId = try await report.submit(description: description)
             reportId = nextReportId
             alertState = .submitted(nextReportId)
         } catch {
@@ -297,6 +291,25 @@ struct SendDiagnosticsSheet: View {
         ShareSheet.present(data: exportText, filename: diagnosticsFilename) { success in
             if !success { Log.warn("Diagnostics share cancelled or failed") }
         }
+    }
+
+    @MainActor
+    private func refreshPreviewForCurrentDescription() {
+        guard let report else { return }
+
+        refreshPreview(report: report)
+    }
+
+    @MainActor
+    private func refreshPreview(report: DiagnosticsReport) {
+        let nextPreviewText = report.previewTextForDescription(description: description)
+
+        previewText = nextPreviewText
+        previewChunks = Self.chunks(for: nextPreviewText)
+        reportSize = ByteCountFormatter.string(
+            fromByteCount: Int64(report.sizeBytesForDescription(description: description)),
+            countStyle: .file
+        )
     }
 
     private static func chunks(for text: String) -> [DiagnosticsPreviewChunk] {

@@ -2957,7 +2957,11 @@ public protocol DiagnosticsReportProtocol: AnyObject, Sendable {
 
     func previewText()  -> String
 
+    func previewTextForDescription(description: String?)  -> String
+
     func sizeBytes()  -> UInt64
+
+    func sizeBytesForDescription(description: String?)  -> UInt64
 
     func submit(description: String?) async throws  -> String
 
@@ -3024,11 +3028,31 @@ open func previewText() -> String  {
 })
 }
 
+open func previewTextForDescription(description: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreport_preview_text_for_description(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(description),uniffiCallStatus
+    )
+})
+}
+
 open func sizeBytes() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_diagnosticsreport_size_bytes(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func sizeBytesForDescription(description: String?) -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreport_size_bytes_for_description(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(description),uniffiCallStatus
     )
 })
 }
@@ -40813,7 +40837,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_diagnosticsreport_preview_text() != 51487) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_diagnosticsreport_preview_text_for_description() != 51859) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_diagnosticsreport_size_bytes() != 10840) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreport_size_bytes_for_description() != 25891) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_diagnosticsreport_submit() != 1462) {
