@@ -70,6 +70,7 @@ struct WalletSettingsSection: View {
         reorderedTopWallets.move(fromOffsets: source, toOffset: destination)
 
         let reorderedWallets = reorderedTopWallets + Array(wallets.dropFirst(topAmount))
+        AppHaptics.selectionChanged()
         app.reorderWallets(walletIds: reorderedWallets.map(\.id))
     }
 }

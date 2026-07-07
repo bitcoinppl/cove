@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +68,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
 import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
+import org.bitcoinppl.cove.performWalletReorderHaptic
 import org.bitcoinppl.cove.utils.movedWithinPrefix
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
@@ -400,6 +402,7 @@ private fun FullScreenSettingsModal(
 @Composable
 private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
     val wallets = app.wallets
+    val hapticFeedback = LocalHapticFeedback.current
 
     // don't show section if there are no wallets
     if (wallets.isEmpty()) {
@@ -423,6 +426,7 @@ private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
                         )
 
                     if (reorderedWallets != wallets) {
+                        hapticFeedback.performWalletReorderHaptic()
                         app.reorderWallets(reorderedWallets.map { it.id })
                     }
                 },

@@ -42,9 +42,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.performWalletReorderHaptic
 import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.utils.moved
 import org.bitcoinppl.cove.views.RoundRectImage
@@ -64,11 +66,13 @@ fun SettingsListAllWalletsScreen(
     var allWallets by remember { mutableStateOf<List<WalletMetadata>>(emptyList()) }
     var searchText by remember { mutableStateOf("") }
     val reorderEnabled = searchText.isEmpty()
+    val hapticFeedback = LocalHapticFeedback.current
     val lazyListState = rememberLazyListState()
     val reorderableLazyListState =
         rememberReorderableLazyListState(lazyListState) { from, to ->
             if (reorderEnabled) {
                 allWallets = allWallets.moved(from.index, to.index)
+                hapticFeedback.performWalletReorderHaptic()
             }
         }
 

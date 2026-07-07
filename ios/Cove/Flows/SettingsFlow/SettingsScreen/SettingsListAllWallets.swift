@@ -56,6 +56,7 @@ struct SettingsListAllWallets: View {
         guard !isFiltering else { return }
 
         allWallets.move(fromOffsets: source, toOffset: destination)
+        AppHaptics.selectionChanged()
         app.moveWallets(from: source, to: destination)
     }
 

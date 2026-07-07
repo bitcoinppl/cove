@@ -40,12 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.performWalletReorderHaptic
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.utils.moved
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -60,10 +62,12 @@ fun SidebarView(
     modifier: Modifier = Modifier,
 ) {
     var localWallets by remember { mutableStateOf(app.wallets) }
+    val hapticFeedback = LocalHapticFeedback.current
     val lazyListState = rememberLazyListState()
     val reorderableLazyListState =
         rememberReorderableLazyListState(lazyListState) { from, to ->
             localWallets = localWallets.moved(from.index, to.index)
+            hapticFeedback.performWalletReorderHaptic()
         }
 
     LaunchedEffect(app.wallets) {

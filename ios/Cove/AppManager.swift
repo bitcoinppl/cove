@@ -263,8 +263,11 @@ private let walletModeChangeDelayMs = 250
 
     func reorderWallets(walletIds: [WalletId]) {
         let walletsById = Dictionary(uniqueKeysWithValues: wallets.map { ($0.id, $0) })
+        let currentWalletIds = Set(wallets.map(\.id))
+        let requestedWalletIds = Set(walletIds)
         let reordered = walletIds.compactMap { walletsById[$0] }
-        if reordered.count == wallets.count {
+
+        if walletIds.count == wallets.count, requestedWalletIds == currentWalletIds {
             wallets = reordered
         }
 

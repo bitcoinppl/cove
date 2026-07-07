@@ -75,6 +75,15 @@ struct SidebarView: View {
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(.midnightBlue)
+        .onDrop(
+            of: [.text],
+            delegate: SidebarWalletBoundaryDropDelegate(
+                wallets: $localWallets,
+                draggedWalletId: $draggedWalletId,
+                persistOrder: persistWalletOrder,
+                cancelDrag: cancelWalletDrag
+            )
+        )
     }
 
     @ViewBuilder
@@ -130,6 +139,39 @@ struct SidebarView: View {
     private func persistWalletOrder(_ wallets: [WalletMetadata]) {
         app.reorderWallets(walletIds: wallets.map(\.id))
     }
+
+    private func cancelWalletDrag() {
+        guard draggedWalletId != nil else { return }
+
+        draggedWalletId = nil
+        localWallets = app.wallets
+    }
+}
+
+private struct SidebarWalletBoundaryDropDelegate: DropDelegate {
+    @Binding var wallets: [WalletMetadata]
+    @Binding var draggedWalletId: WalletId?
+    let persistOrder: ([WalletMetadata]) -> Void
+    let cancelDrag: () -> Void
+
+    func validateDrop(info _: DropInfo) -> Bool {
+        draggedWalletId != nil
+    }
+
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropExited(info _: DropInfo) {
+        cancelDrag()
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        persistOrder(wallets)
+        draggedWalletId = nil
+
+        return true
+    }
 }
 
 private struct SidebarWalletDropDelegate: DropDelegate {
@@ -156,6 +198,8 @@ private struct SidebarWalletDropDelegate: DropDelegate {
             let movedWallet = wallets.remove(at: sourceIndex)
             wallets.insert(movedWallet, at: destinationIndex)
         }
+
+        AppHaptics.selectionChanged()
     }
 
     func dropUpdated(info _: DropInfo) -> DropProposal? {
