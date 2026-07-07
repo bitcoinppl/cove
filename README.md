@@ -33,28 +33,30 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and build instructions.
 
 ![features list](images/features.png)
 
-- Import hardware wallet (xpub / public descriptor) using NFC, File & QR
-- Create hot wallet, and verify hot wallet backup
-- Send Bitcoin using a hot wallet
-- Send Bitcoin using a hardware wallet, using NFC, File or QR for transferring PSBTs
-- View transaction details
-- Create and use multiple wallets
-- Create and use BIP329 labels
-- Import and Export BIP329 labels
-- Select your preferred fiat currency
-- Connect your own node
-- Create Trick Pins (Wipe Data & Decoy PIN)
-- Use FaceID or PIN to lock your wallets
-- UTXO list and Coin Control (select individual UTXOs to spend)
+- Create and import hot wallets, verify recovery words, and use SeedQR backup and restore
+- Import watch-only and hardware wallets from xpubs, public descriptors, and key expressions using NFC, files, or QR codes
+- Use Coldcard, TAPSIGNER, Krux, Jade, SeedSigner, Foundation Passport, and other PSBT-compatible hardware wallets
+- Set up, import, back up, change PIN, and sign with TAPSIGNER over NFC
+- Send Bitcoin with hot wallets or hardware wallets using QR (BBQr and UR), NFC, or files for PSBT transfer
+- Choose custom fee rates and review fee warnings before sending
+- Create and manage multiple wallets across Bitcoin, Signet, Testnet, and Testnet4
+- Use Native Segwit, Wrapped Segwit, and Legacy address types
+- View receive addresses, transaction details, UTXOs used, and block explorer links
+- Search, sort, filter, lock, unlock, label, and select individual UTXOs for coin control
+- Create, import, and export BIP329 labels for wallets, transactions, and UTXOs
+- Export transaction CSVs with historical fiat prices for tax reporting
+- Select your preferred fiat currency and Bitcoin unit
+- Connect to your own Electrum or Esplora node
+- Enable end-to-end encrypted Cloud Backup and restore protected by passkeys, using iCloud Drive on iOS and Google Drive on Android
+- Use PIN or biometric app lock, plus Wipe Data and Decoy trick PINs
 
 ## Demo Video
 
 https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 
-## Coming Soon...
+## Coming Soon
 
-- Lock and Unlock individual UTXOs
-- Support for SATSCARD
+- Full SATSCARD support
 
 ## Acknowledgements
 
