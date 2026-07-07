@@ -106,18 +106,22 @@ internal class AndroidManagerCache(
     }
 
     private fun installWalletManager(manager: WalletManager): WalletManager {
-        walletManager?.let {
-            if (it === manager) return manager
-            if (it.id == manager.id) {
-                manager.close()
-                return it
+        val currentManager = walletManager
+        val installedManager =
+            when {
+                currentManager === manager -> manager
+                currentManager?.id == manager.id -> {
+                    manager.close()
+                    currentManager
+                }
+                else -> {
+                    clearWalletManager()
+                    walletManager = manager
+                    manager
+                }
             }
-        }
 
-        clearWalletManager()
-        walletManager = manager
-
-        return manager
+        return installedManager
     }
 
     internal fun getSendFlowManager(

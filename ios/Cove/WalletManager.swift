@@ -41,7 +41,7 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     let notify: () -> Void
 }
 
-private struct WalletManagerBootstrap: Sendable {
+private struct WalletManagerBootstrap {
     let rust: RustWalletManager
     let initialState: WalletInitialState
 }
