@@ -83,9 +83,17 @@ class AppManager private constructor() : FfiReconcile {
                 clearInactiveSendFlowManager()
             }
 
-            override suspend fun startWalletScanIfNeeded(walletId: WalletId): Result<Unit> =
+            override suspend fun startWalletScanIfNeeded(
+                walletId: WalletId,
+                isCurrent: () -> Boolean,
+            ): Result<Unit> =
                 runCatching {
-                    getWalletManagerLoaded(walletId).startWalletScanIfNeeded()
+                    val manager = getWalletManagerLoaded(walletId, isCurrent)
+                    if (!isCurrent()) {
+                        throw CancellationException("wallet manager load for $walletId was superseded")
+                    }
+
+                    manager.startWalletScanIfNeeded()
                 }.also { result ->
                     val error = result.exceptionOrNull()
                     if (error is CancellationException) {
@@ -207,7 +215,10 @@ class AppManager private constructor() : FfiReconcile {
      */
     fun getWalletManager(id: WalletId): WalletManager = managerCache.getWalletManager(id)
 
-    suspend fun getWalletManagerLoaded(id: WalletId): WalletManager = managerCache.getWalletManagerLoaded(id)
+    suspend fun getWalletManagerLoaded(
+        id: WalletId,
+        isCurrent: () -> Boolean = { true },
+    ): WalletManager = managerCache.getWalletManagerLoaded(id, isCurrent)
 
     /**
      * get or create send flow manager for the given wallet manager

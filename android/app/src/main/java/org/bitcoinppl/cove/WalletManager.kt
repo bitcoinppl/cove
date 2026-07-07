@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -21,6 +23,7 @@ import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.cancellation.CancellationException
 
 private val WalletScanStatus.isActive: Boolean
     get() =
@@ -192,6 +195,17 @@ class WalletManager :
 
                     WalletManagerBootstrap(rust, initialState)
                 }
+
+            try {
+                currentCoroutineContext().ensureActive()
+            } catch (e: CancellationException) {
+                try {
+                    bootstrap.rust.shutdown()
+                } finally {
+                    bootstrap.rust.close()
+                }
+                throw e
+            }
 
             return withContext(Dispatchers.Main.immediate) {
                 WalletManager(

@@ -68,21 +68,35 @@ internal class AndroidManagerCache(
         }
     }
 
-    internal suspend fun getWalletManagerLoaded(id: WalletId): WalletManager {
+    internal suspend fun getWalletManagerLoaded(
+        id: WalletId,
+        isCurrent: () -> Boolean = { true },
+    ): WalletManager {
         val previousManager =
             withContext(Dispatchers.Main.immediate) {
-                walletManager?.let {
-                    if (it.id == id) {
-                        Log.d(tag, "found and using wallet manager for $id")
-                        return@withContext it
-                    }
-
-                    Log.d(tag, "will replace old wallet manager for ${it.id}")
+                if (!isCurrent()) {
+                    throw CancellationException("wallet manager load for $id was superseded")
                 }
 
-                null
+                val current = walletManager
+                if (current != null) {
+                    if (current.id == id) {
+                        Log.d(tag, "found and using wallet manager for $id")
+                        return@withContext current
+                    }
+
+                    Log.d(tag, "will replace old wallet manager for ${current.id}")
+                }
+
+                current
             }
-        if (previousManager?.id == id) return previousManager
+        if (previousManager?.id == id) {
+            if (!isCurrent()) {
+                throw CancellationException("wallet manager load for $id was superseded")
+            }
+
+            return previousManager
+        }
 
         Log.d(tag, "did not find wallet manager for $id, creating new: ${previousManager?.id}")
 
@@ -95,6 +109,11 @@ internal class AndroidManagerCache(
             }
 
         return withContext(Dispatchers.Main.immediate) {
+            if (!isCurrent()) {
+                manager.close()
+                throw CancellationException("wallet manager load for $id was superseded")
+            }
+
             val currentManager = walletManager
             if (currentManager != null && currentManager !== previousManager && currentManager.id != id) {
                 manager.close()

@@ -48,8 +48,11 @@ import Observation
     @MainActor
     func ensureWalletManagerLoaded(
         id: WalletId,
-        delegate: WalletManagerDelegate
+        delegate: WalletManagerDelegate,
+        isCurrent: @MainActor () -> Bool = { true }
     ) async throws -> WalletManager {
+        guard isCurrent() else { throw CancellationError() }
+
         if let walletManager = cachedWalletManager(id: id) {
             logger.debug("found and using vm for \(id)")
             return walletManager
@@ -66,6 +69,11 @@ import Observation
         } catch {
             loadedWalletManager.close()
             throw error
+        }
+
+        guard isCurrent() else {
+            loadedWalletManager.close()
+            throw CancellationError()
         }
 
         if let walletManager, walletManager !== previousManager, walletManager.id != id {
