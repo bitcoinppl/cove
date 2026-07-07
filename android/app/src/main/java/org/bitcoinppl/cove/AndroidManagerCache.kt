@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.WalletMetadata
@@ -30,7 +31,7 @@ internal class AndroidManagerCache(
 
     internal fun setWalletManager(manager: WalletManager) {
         Log.d(tag, "setting wallet manager for wallet ${manager.id}")
-        walletManager = manager
+        installWalletManager(manager)
     }
 
     internal fun cachedWalletManager(id: WalletId): WalletManager? =
@@ -52,20 +53,64 @@ internal class AndroidManagerCache(
             }
 
             // selecting a different wallet is the boundary for ending in-flight scans
-            Log.d(tag, "closing old wallet manager for ${it.id}")
-            clearWalletManager()
+            Log.d(tag, "will replace old wallet manager for ${it.id}")
         }
 
         Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
 
         return try {
             val manager = WalletManager(id = id)
-            walletManager = manager
-            manager
+            installWalletManager(manager)
         } catch (e: Exception) {
             Log.e(tag, "Failed to create wallet manager", e)
             throw e
         }
+    }
+
+    internal suspend fun getWalletManagerLoaded(id: WalletId): WalletManager {
+        val cachedManager =
+            withContext(Dispatchers.Main.immediate) {
+                walletManager?.let {
+                    if (it.id == id) {
+                        Log.d(tag, "found and using wallet manager for $id")
+                        return@withContext it
+                    }
+
+                    Log.d(tag, "will replace old wallet manager for ${it.id}")
+                }
+
+                null
+            }
+        if (cachedManager != null) return cachedManager
+
+        Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
+
+        val manager =
+            try {
+                WalletManager.load(id)
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to create wallet manager", e)
+                throw e
+            }
+
+        return withContext(Dispatchers.Main.immediate) {
+            installWalletManager(manager)
+        }
+    }
+
+    private fun installWalletManager(manager: WalletManager): WalletManager {
+        walletManager?.let {
+            if (it === manager) return manager
+            if (it.id == manager.id) {
+                manager.close()
+                return it
+            }
+        }
+
+        clearWalletManager()
+        walletManager = manager
+
+        return manager
     }
 
     internal fun getSendFlowManager(
