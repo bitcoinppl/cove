@@ -6,9 +6,12 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @Environment(AppManager.self) private var app
+    @State private var localWallets: [WalletMetadata] = []
+    @State private var draggedWalletId: WalletId?
 
     let currentRoute: Route
 
@@ -37,21 +40,32 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             SidebarHeader(scanNfc: app.closeSidebarAndScanNfc)
 
-            List {
-                ForEach(app.wallets, id: \.id) { wallet in
-                    walletButton(wallet)
-                        .padding(.bottom, 12)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(localWallets, id: \.id) { wallet in
+                        walletRow(wallet)
+                    }
                 }
-                .onMove(perform: app.moveWallets)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
             .scrollIndicators(.hidden)
-            .background(Color.clear)
-            .environment(\.editMode, .constant(.active))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .onDrop(
+                of: [.text],
+                delegate: SidebarWalletListDropDelegate(
+                    wallets: $localWallets,
+                    draggedWalletId: $draggedWalletId,
+                    persistOrder: persistWalletOrder
+                )
+            )
+            .onAppear {
+                localWallets = app.wallets
+            }
+            .onChange(of: app.wallets) { _, wallets in
+                guard draggedWalletId == nil else { return }
+
+                localWallets = wallets
+            }
 
             SidebarFooter(
                 addWallet: app.closeSidebarAndOpenNewWallet,
@@ -61,6 +75,30 @@ struct SidebarView: View {
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(.midnightBlue)
+    }
+
+    @ViewBuilder
+    private func walletRow(_ wallet: WalletMetadata) -> some View {
+        if localWallets.count > 1 {
+            walletButton(wallet)
+                .opacity(draggedWalletId == wallet.id ? 0.72 : 1)
+                .onDrag {
+                    draggedWalletId = wallet.id
+
+                    return NSItemProvider(object: wallet.id as NSString)
+                }
+                .onDrop(
+                    of: [.text],
+                    delegate: SidebarWalletDropDelegate(
+                        wallet: wallet,
+                        wallets: $localWallets,
+                        draggedWalletId: $draggedWalletId,
+                        persistOrder: persistWalletOrder
+                    )
+                )
+        } else {
+            walletButton(wallet)
+        }
     }
 
     private func walletButton(_ wallet: WalletMetadata) -> some View {
@@ -80,20 +118,78 @@ struct SidebarView: View {
                     .minimumScaleFactor(0.80)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.coveLightGray.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
         }
-        .padding()
-        .background(Color.coveLightGray.opacity(0.06))
-        .cornerRadius(10)
-        .contentShape(
-            .contextMenuPreview,
-            RoundedRectangle(cornerRadius: 10)
-        )
-        .contextMenu {
-            Button("Settings") {
-                app.closeSidebarAndOpenWalletSettings(wallet.id)
-            }
+        .buttonStyle(.plain)
+    }
+
+    private func persistWalletOrder(_ wallets: [WalletMetadata]) {
+        app.reorderWallets(walletIds: wallets.map(\.id))
+    }
+}
+
+private struct SidebarWalletDropDelegate: DropDelegate {
+    let wallet: WalletMetadata
+    @Binding var wallets: [WalletMetadata]
+    @Binding var draggedWalletId: WalletId?
+    let persistOrder: ([WalletMetadata]) -> Void
+
+    func validateDrop(info _: DropInfo) -> Bool {
+        draggedWalletId != nil
+    }
+
+    func dropEntered(info _: DropInfo) {
+        guard
+            let draggedWalletId,
+            draggedWalletId != wallet.id,
+            let sourceIndex = wallets.firstIndex(where: { $0.id == draggedWalletId }),
+            let destinationIndex = wallets.firstIndex(where: { $0.id == wallet.id })
+        else {
+            return
         }
+
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.82)) {
+            let movedWallet = wallets.remove(at: sourceIndex)
+            wallets.insert(movedWallet, at: destinationIndex)
+        }
+
+        persistOrder(wallets)
+    }
+
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        persistOrder(wallets)
+        draggedWalletId = nil
+
+        return true
+    }
+}
+
+private struct SidebarWalletListDropDelegate: DropDelegate {
+    @Binding var wallets: [WalletMetadata]
+    @Binding var draggedWalletId: WalletId?
+    let persistOrder: ([WalletMetadata]) -> Void
+
+    func validateDrop(info _: DropInfo) -> Bool {
+        draggedWalletId != nil
+    }
+
+    func dropUpdated(info _: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info _: DropInfo) -> Bool {
+        persistOrder(wallets)
+        draggedWalletId = nil
+
+        return true
     }
 }
 

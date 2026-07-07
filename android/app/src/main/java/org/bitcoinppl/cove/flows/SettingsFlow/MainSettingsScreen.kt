@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,6 +67,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
 import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
+import org.bitcoinppl.cove.utils.movedWithinPrefix
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -80,6 +82,9 @@ import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import sh.calvin.reorderable.ReorderableColumn
+
+private const val WALLET_SETTINGS_VISIBLE_LIMIT = 5
 
 internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
@@ -401,32 +406,54 @@ private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
         return
     }
 
-    val topAmount = 5
-    val top5Wallets = wallets.take(topAmount)
-    val hasMore = wallets.size > topAmount
+    val visibleWallets = wallets.take(WALLET_SETTINGS_VISIBLE_LIMIT)
+    val hasMore = wallets.size > WALLET_SETTINGS_VISIBLE_LIMIT
 
     SectionHeader("Wallet Settings")
     MaterialSection {
         Column {
-            top5Wallets.forEachIndexed { index, wallet ->
-                MaterialSettingsItem(
-                    title = wallet.name,
-                    leadingContent = {
-                        WalletIcon(wallet = wallet, size = 28.dp, cornerRadius = 6.dp)
-                    },
-                    onClick = {
-                        app.pushRoute(
-                            Route.Settings(
-                                SettingsRoute.Wallet(
-                                    id = wallet.id,
-                                    route = WalletSettingsRoute.MAIN,
-                                ),
-                            ),
+            ReorderableColumn(
+                list = visibleWallets,
+                onSettle = { fromIndex, toIndex ->
+                    val reorderedWallets =
+                        wallets.movedWithinPrefix(
+                            prefixSize = WALLET_SETTINGS_VISIBLE_LIMIT,
+                            fromIndex = fromIndex,
+                            toIndex = toIndex,
                         )
-                    },
-                )
-                if (index < top5Wallets.size - 1 || hasMore) {
-                    MaterialDivider()
+
+                    if (reorderedWallets != wallets) {
+                        app.reorderWallets(reorderedWallets.map { it.id })
+                    }
+                },
+            ) { index, wallet, _ ->
+                key(wallet.id) {
+                    ReorderableItem {
+                        MaterialSettingsItem(
+                            title = wallet.name,
+                            leadingContent = {
+                                WalletIcon(wallet = wallet, size = 28.dp, cornerRadius = 6.dp)
+                            },
+                            onClick = {
+                                app.pushRoute(
+                                    Route.Settings(
+                                        SettingsRoute.Wallet(
+                                            id = wallet.id,
+                                            route = WalletSettingsRoute.MAIN,
+                                        ),
+                                    ),
+                                )
+                            },
+                            modifier =
+                                Modifier.longPressDraggableHandle(
+                                    enabled = visibleWallets.size > 1,
+                                ),
+                        )
+                    }
+
+                    if (index < visibleWallets.size - 1 || hasMore) {
+                        MaterialDivider()
+                    }
                 }
             }
 

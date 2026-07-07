@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.utils.moved
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletMetadata
@@ -272,12 +273,4 @@ private fun WalletColor.toComposeColor(): Color =
         is WalletColor.WAlmostGray -> CoveColor.almostGray
         is WalletColor.WAlmostWhite -> CoveColor.almostWhite
         is WalletColor.Custom -> Color.Gray
-    }
-
-private fun <T> List<T>.moved(
-    fromIndex: Int,
-    toIndex: Int,
-): List<T> =
-    toMutableList().apply {
-        add(toIndex, removeAt(fromIndex))
     }

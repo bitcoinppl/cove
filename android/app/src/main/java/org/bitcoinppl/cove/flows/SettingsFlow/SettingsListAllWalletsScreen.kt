@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.utils.toComposeColor
+import org.bitcoinppl.cove.utils.moved
 import org.bitcoinppl.cove.views.RoundRectImage
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -161,19 +161,18 @@ fun SettingsListAllWalletsScreen(
                                                 ),
                                             )
                                         },
+                                        modifier =
+                                            Modifier.longPressDraggableHandle(
+                                                enabled = allWallets.size > 1,
+                                                onDragStopped = {
+                                                    app.reorderWallets(allWallets.map { it.id })
+                                                },
+                                            ),
                                         trailingContent = {
                                             Icon(
-                                                modifier =
-                                                    Modifier
-                                                        .size(40.dp)
-                                                        .draggableHandle(
-                                                            enabled = allWallets.size > 1,
-                                                            onDragStopped = {
-                                                                app.reorderWallets(allWallets.map { it.id })
-                                                            },
-                                                        ),
-                                                imageVector = Icons.Default.DragHandle,
-                                                contentDescription = "Reorder",
+                                                modifier = Modifier.size(40.dp),
+                                                imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
+                                                contentDescription = "Go",
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         },
@@ -261,10 +260,11 @@ private fun WalletRow(
     wallet: WalletMetadata,
     onClick: () -> Unit,
     trailingContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
                 .padding(vertical = 12.dp, horizontal = 8.dp),
@@ -295,11 +295,3 @@ private fun WalletRow(
         trailingContent()
     }
 }
-
-private fun <T> List<T>.moved(
-    fromIndex: Int,
-    toIndex: Int,
-): List<T> =
-    toMutableList().apply {
-        add(toIndex, removeAt(fromIndex))
-    }

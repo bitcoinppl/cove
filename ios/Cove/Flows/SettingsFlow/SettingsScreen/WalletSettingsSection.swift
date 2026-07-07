@@ -44,6 +44,7 @@ struct WalletSettingsSection: View {
                     icon: WalletIcon(wallet)
                 )
             }
+            .onMove(perform: wallets.count > 1 ? app.moveWallets : nil)
 
             if wallets.count > topAmount {
                 SettingsRow(

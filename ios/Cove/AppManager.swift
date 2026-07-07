@@ -78,7 +78,9 @@ private let walletModeChangeDelayMs = 250
     }
 
     private static func requireBootstrapComplete() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return }
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return
+        }
 
         let step = bootstrapProgress()
         guard step == .complete else {
@@ -255,12 +257,19 @@ private let walletModeChangeDelayMs = 250
     func moveWallets(from source: IndexSet, to destination: Int) {
         var reordered = wallets
         reordered.move(fromOffsets: source, toOffset: destination)
-        wallets = reordered
+
+        reorderWallets(walletIds: reordered.map(\.id))
+    }
+
+    func reorderWallets(walletIds: [WalletId]) {
+        let walletsById = Dictionary(uniqueKeysWithValues: wallets.map { ($0.id, $0) })
+        let reordered = walletIds.compactMap { walletsById[$0] }
+        if reordered.count == wallets.count {
+            wallets = reordered
+        }
 
         do {
-            wallets = try database.wallets().reorderWallets(
-                walletIds: reordered.map(\.id)
-            )
+            wallets = try database.wallets().reorderWallets(walletIds: walletIds)
         } catch {
             logger.error("Unable to reorder wallets: \(error)")
             loadWallets()

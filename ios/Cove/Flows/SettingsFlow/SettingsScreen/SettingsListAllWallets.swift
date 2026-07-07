@@ -9,7 +9,6 @@ import SwiftUI
 
 struct SettingsListAllWallets: View {
     @Environment(AppManager.self) private var app
-    @Environment(\.editMode) private var editMode
 
     @State private var allWallets: [WalletMetadata] = []
     @State private var searchText = ""
@@ -38,13 +37,6 @@ struct SettingsListAllWallets: View {
         }
         .navigationTitle("All Wallets")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if !isFiltering, allWallets.count > 1 {
-                    EditButton()
-                }
-            }
-        }
         .searchable(text: $searchText, prompt: "Search Wallets")
         .scrollContentBackground(.hidden)
         .onAppear {
@@ -56,7 +48,6 @@ struct SettingsListAllWallets: View {
         .onChange(of: searchText) { _, searchText in
             guard !searchText.isEmpty else { return }
 
-            editMode?.wrappedValue = .inactive
             syncWalletsFromApp()
         }
     }
