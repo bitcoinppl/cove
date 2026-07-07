@@ -4,4 +4,9 @@
 --disable redundantSelf
 --disable redundantPublic
 --disable redundantNilInit
+--disable wrapFunctionBodies
+--disable wrapIfExpressionBodies
+--disable wrapIfStatementBodies
+--disable wrapLoopBodies
+--disable wrapPropertyBodies
 --swiftversion 6.0

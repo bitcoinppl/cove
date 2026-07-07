@@ -212,15 +212,14 @@ private struct WalletBalanceLoadingHeaderView: View {
         metadata.sensitiveVisible ? "eye" : "eye.slash"
     }
 
+    @ViewBuilder
     private func balanceLoadingView(size: ControlSize = .regular, scale: CGFloat = 1) -> some View {
-        Group {
-            if metadata.sensitiveVisible {
-                ProgressView()
-                    .controlSize(size)
-                    .scaleEffect(scale)
-            } else {
-                Text("••••••")
-            }
+        if metadata.sensitiveVisible {
+            ProgressView()
+                .controlSize(size)
+                .scaleEffect(scale)
+        } else {
+            Text("••••••")
         }
     }
 

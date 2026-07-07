@@ -45,25 +45,8 @@ struct WordsView: View {
     }
 
     var body: some View {
-        Group {
-            if sizeCategory >= .extraExtraLarge || isMiniDevice {
-                ScrollView {
-                    RecoveryWordsContent(
-                        groupedWords: groupedWords,
-                        tabIndex: $tabIndex,
-                        lastIndex: lastIndex,
-                        showConfirmationAlert: $showConfirmationAlert,
-                        saveWallet: saveWallet,
-                        dismiss: { dismiss() }
-                    )
-                    .frame(minHeight: screenHeight, maxHeight: .infinity)
-                }
-                .background(
-                    Color.midnightBlue
-                        .ignoresSafeArea(.all)
-                )
-
-            } else {
+        if sizeCategory >= .extraExtraLarge || isMiniDevice {
+            ScrollView {
                 RecoveryWordsContent(
                     groupedWords: groupedWords,
                     tabIndex: $tabIndex,
@@ -72,7 +55,22 @@ struct WordsView: View {
                     saveWallet: saveWallet,
                     dismiss: { dismiss() }
                 )
+                .frame(minHeight: screenHeight, maxHeight: .infinity)
             }
+            .background(
+                Color.midnightBlue
+                    .ignoresSafeArea(.all)
+            )
+
+        } else {
+            RecoveryWordsContent(
+                groupedWords: groupedWords,
+                tabIndex: $tabIndex,
+                lastIndex: lastIndex,
+                showConfirmationAlert: $showConfirmationAlert,
+                saveWallet: saveWallet,
+                dismiss: { dismiss() }
+            )
         }
     }
 

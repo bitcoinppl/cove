@@ -551,35 +551,33 @@ struct VerifyReminder: View {
     let isVerified: Bool
 
     var body: some View {
-        Group {
-            if !isVerified {
-                Button(action: {
-                    navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
-                }) {
-                    HStack(spacing: 20) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.red.opacity(0.85))
-                            .fontWeight(.semibold)
+        if !isVerified {
+            Button(action: {
+                navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
+            }) {
+                HStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.red.opacity(0.85))
+                        .fontWeight(.semibold)
 
-                        Text("backup your wallet")
-                            .fontWeight(.semibold)
-                            .font(.caption)
+                    Text("backup your wallet")
+                        .fontWeight(.semibold)
+                        .font(.caption)
 
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.red.opacity(0.85))
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        LinearGradient(
-                            colors: [.orange.opacity(0.67), .yellow.opacity(0.96)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .foregroundStyle(.black.opacity(0.66))
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.red.opacity(0.85))
+                        .fontWeight(.semibold)
                 }
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(
+                        colors: [.orange.opacity(0.67), .yellow.opacity(0.96)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .foregroundStyle(.black.opacity(0.66))
             }
         }
     }

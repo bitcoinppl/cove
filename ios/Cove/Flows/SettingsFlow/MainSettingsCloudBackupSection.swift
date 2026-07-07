@@ -31,22 +31,21 @@ struct MainSettingsCloudBackupSection: View {
         }
     }
 
+    @ViewBuilder
     private func cloudBackupErrorContent(message: String) -> some View {
-        Group {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "exclamationmark.icloud")
-                        .foregroundStyle(Color.statusError)
-                    Text("Cloud Backup Error")
-                }
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "exclamationmark.icloud")
+                    .foregroundStyle(Color.statusError)
+                Text("Cloud Backup Error")
             }
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
 
-            SettingsRow(title: "Review", symbol: "arrow.right") {
-                onOpenDetail()
-            }
+        SettingsRow(title: "Review", symbol: "arrow.right") {
+            onOpenDetail()
         }
     }
 }

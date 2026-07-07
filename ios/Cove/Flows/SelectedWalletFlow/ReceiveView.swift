@@ -217,30 +217,28 @@ private struct AddressView: View {
     }
 
     var body: some View {
-        Group {
-            if let addressInfo {
-                Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(8)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 16)
-                    .aspectRatio(1, contentMode: .fit)
-            } else {
-                ProgressView(label: {
-                    Text("Loading")
-                        .font(.caption)
-                        .foregroundColor(.white)
-                })
-                .tint(.white)
-                .progressViewStyle(.circular)
-            }
+        if let addressInfo {
+            Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+                .padding(8)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                )
+                .padding(.horizontal, 16)
+                .aspectRatio(1, contentMode: .fit)
+        } else {
+            ProgressView(label: {
+                Text("Loading")
+                    .font(.caption)
+                    .foregroundColor(.white)
+            })
+            .tint(.white)
+            .progressViewStyle(.circular)
         }
     }
 }

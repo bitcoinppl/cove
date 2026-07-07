@@ -21,29 +21,27 @@ struct DecoyPinView: View {
     @State private var pinState: PinState = .new
 
     var body: some View {
-        Group {
-            switch pinState {
-            case .new:
-                NumberPadPinView(
-                    title: "Enter Decoy PIN",
-                    isPinCorrect: { _ in true },
-                    showPin: false,
-                    backAction: backAction,
-                    onUnlock: { enteredPin in
-                        withAnimation {
-                            pinState = .confirm(enteredPin)
-                        }
+        switch pinState {
+        case .new:
+            NumberPadPinView(
+                title: "Enter Decoy PIN",
+                isPinCorrect: { _ in true },
+                showPin: false,
+                backAction: backAction,
+                onUnlock: { enteredPin in
+                    withAnimation {
+                        pinState = .confirm(enteredPin)
                     }
-                )
-            case let .confirm(pinToConfirm):
-                NumberPadPinView(
-                    title: "Confirm Decoy PIN",
-                    isPinCorrect: { $0 == pinToConfirm },
-                    showPin: false,
-                    backAction: backAction,
-                    onUnlock: onComplete
-                )
-            }
+                }
+            )
+        case let .confirm(pinToConfirm):
+            NumberPadPinView(
+                title: "Confirm Decoy PIN",
+                isPinCorrect: { $0 == pinToConfirm },
+                showPin: false,
+                backAction: backAction,
+                onUnlock: onComplete
+            )
         }
     }
 }

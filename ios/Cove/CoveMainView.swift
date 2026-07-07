@@ -37,55 +37,53 @@ struct CoveMainView: View {
     }
 
     var BodyView: some View {
-        Group {
-            LockView(
-                lockType: auth.type,
-                isPinCorrect: { pin in
-                    auth.handleAndReturnUnlockMode(pin) != .locked
-                },
-                showPin: false,
-                lockState: $auth.lockState,
-                onUnlock: { _ in
-                    withAnimation { showCover = false }
-                }
-            ) {
-                SidebarContainer {
-                    NavigationStack(path: $app.router.routes) {
-                        RouteView(app: app)
-                            .navigationDestination(
-                                for: Route.self,
-                                destination: { route in
-                                    RouteView(app: app, route: route)
-                                }
-                            )
-                            .toolbar {
-                                ToolbarItem(placement: .navigationBarLeading) {
-                                    Button(action: {
-                                        withAnimation {
-                                            app.toggleSidebar()
-                                        }
-                                    }) {
-                                        Image(systemName: "line.horizontal.3")
-                                            .modifier(
-                                                NavBarColorModifier(
-                                                    route: app.currentRoute,
-                                                    isPastHeader: app.isPastHeader
-                                                )
-                                            )
-                                    }
-                                    .contentShape(Rectangle())
-                                }
+        LockView(
+            lockType: auth.type,
+            isPinCorrect: { pin in
+                auth.handleAndReturnUnlockMode(pin) != .locked
+            },
+            showPin: false,
+            lockState: $auth.lockState,
+            onUnlock: { _ in
+                withAnimation { showCover = false }
+            }
+        ) {
+            SidebarContainer {
+                NavigationStack(path: $app.router.routes) {
+                    RouteView(app: app)
+                        .navigationDestination(
+                            for: Route.self,
+                            destination: { route in
+                                RouteView(app: app, route: route)
                             }
-                    }
-                    .modifier(ConditionalRouteTintModifier(route: app.router.routes.last))
+                        )
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button(action: {
+                                    withAnimation {
+                                        app.toggleSidebar()
+                                    }
+                                }) {
+                                    Image(systemName: "line.horizontal.3")
+                                        .modifier(
+                                            NavBarColorModifier(
+                                                route: app.currentRoute,
+                                                isPastHeader: app.isPastHeader
+                                            )
+                                        )
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
                 }
+                .modifier(ConditionalRouteTintModifier(route: app.router.routes.last))
             }
-            .fullScreenCover(isPresented: $app.isLoading) {
-                FullPageLoadingView().interactiveDismissDisabled(true)
-            }
-            .fullScreenCover(isPresented: $showCover) {
-                CoverView().interactiveDismissDisabled(true)
-            }
+        }
+        .fullScreenCover(isPresented: $app.isLoading) {
+            FullPageLoadingView().interactiveDismissDisabled(true)
+        }
+        .fullScreenCover(isPresented: $showCover) {
+            CoverView().interactiveDismissDisabled(true)
         }
         .onChange(of: auth.lockState) { old, new in
             Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
