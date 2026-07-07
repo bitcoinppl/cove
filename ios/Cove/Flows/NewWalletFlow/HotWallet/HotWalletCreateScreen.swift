@@ -31,6 +31,7 @@ struct WordsView: View {
     @State private var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
+    @State private var isSaving = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
@@ -52,6 +53,7 @@ struct WordsView: View {
                     tabIndex: $tabIndex,
                     lastIndex: lastIndex,
                     showConfirmationAlert: $showConfirmationAlert,
+                    isSaving: $isSaving,
                     saveWallet: saveWallet,
                     dismiss: { dismiss() }
                 )
@@ -68,6 +70,7 @@ struct WordsView: View {
                 tabIndex: $tabIndex,
                 lastIndex: lastIndex,
                 showConfirmationAlert: $showConfirmationAlert,
+                isSaving: $isSaving,
                 saveWallet: saveWallet,
                 dismiss: { dismiss() }
             )
@@ -75,10 +78,14 @@ struct WordsView: View {
     }
 
     private func saveWallet() {
+        guard !isSaving else { return }
+        isSaving = true
+
         do {
             let result = try manager.rust.saveWallet()
             app.resetRoute(to: result.routes)
         } catch {
+            isSaving = false
             Log.error("Error \(error)")
         }
     }
@@ -89,6 +96,7 @@ struct RecoveryWordsContent: View {
     @Binding var tabIndex: Int
     let lastIndex: Int
     @Binding var showConfirmationAlert: Bool
+    @Binding var isSaving: Bool
     let saveWallet: () -> Void
     let dismiss: () -> Void
 
@@ -158,6 +166,8 @@ struct RecoveryWordsContent: View {
                                 .foregroundColor(.midnightBlue)
                                 .cornerRadius(10)
                         }
+                        .disabled(isSaving)
+                        .opacity(isSaving ? 0.7 : 1)
                     } else {
                         Button(action: {
                             withAnimation { tabIndex += 1 }
