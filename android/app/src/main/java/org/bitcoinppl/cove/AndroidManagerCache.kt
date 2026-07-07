@@ -12,6 +12,7 @@ import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.WalletId
+import kotlin.coroutines.cancellation.CancellationException
 
 @Stable
 @Suppress("InjectDispatcher", "TooGenericExceptionCaught", "TooManyFunctions")
@@ -68,7 +69,7 @@ internal class AndroidManagerCache(
     }
 
     internal suspend fun getWalletManagerLoaded(id: WalletId): WalletManager {
-        val cachedManager =
+        val previousManager =
             withContext(Dispatchers.Main.immediate) {
                 walletManager?.let {
                     if (it.id == id) {
@@ -81,9 +82,9 @@ internal class AndroidManagerCache(
 
                 null
             }
-        if (cachedManager != null) return cachedManager
+        if (previousManager?.id == id) return previousManager
 
-        Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
+        Log.d(tag, "did not find wallet manager for $id, creating new: ${previousManager?.id}")
 
         val manager =
             try {
@@ -94,6 +95,12 @@ internal class AndroidManagerCache(
             }
 
         return withContext(Dispatchers.Main.immediate) {
+            val currentManager = walletManager
+            if (currentManager != null && currentManager !== previousManager && currentManager.id != id) {
+                manager.close()
+                throw CancellationException("wallet manager load for $id was superseded")
+            }
+
             installWalletManager(manager)
         }
     }

@@ -40,13 +40,60 @@ import Observation
         logger.debug(
             "did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")"
         )
-        clearWalletManager()
 
         let walletManager = try WalletManager(id: id, delegate: delegate)
+        return installWalletManager(walletManager)
+    }
+
+    @MainActor
+    func ensureWalletManagerLoaded(
+        id: WalletId,
+        delegate: WalletManagerDelegate
+    ) async throws -> WalletManager {
+        if let walletManager = cachedWalletManager(id: id) {
+            logger.debug("found and using vm for \(id)")
+            return walletManager
+        }
+
+        let previousManager = walletManager
+        logger.debug(
+            "did not find vm for \(id), loading new vm: \(walletManager?.id ?? "none")"
+        )
+
+        let loadedWalletManager = try await WalletManager.load(id: id, delegate: delegate)
+        do {
+            try Task.checkCancellation()
+        } catch {
+            loadedWalletManager.close()
+            throw error
+        }
+
+        if let walletManager, walletManager !== previousManager, walletManager.id != id {
+            loadedWalletManager.close()
+            throw CancellationError()
+        }
+
+        return installWalletManager(loadedWalletManager)
+    }
+
+    private func installWalletManager(_ walletManager: WalletManager) -> WalletManager {
+        if let existing = self.walletManager {
+            if existing === walletManager {
+                return walletManager
+            }
+            if existing.id == walletManager.id {
+                walletManager.close()
+                return existing
+            }
+        }
+
+        clearWalletManager()
+
         backgroundScanTaskHandler.observeInitialScanLifecycle(for: walletManager) { [weak self] in
             self?.walletManager
         }
         self.walletManager = walletManager
+
         return walletManager
     }
 
@@ -157,7 +204,9 @@ extension Router {
 
 private extension Route {
     var isCoinControlRoute: Bool {
-        if case .coinControl = self { return true }
+        if case .coinControl = self {
+            return true
+        }
         return false
     }
 }

@@ -78,7 +78,9 @@ private let walletModeChangeDelayMs = 250
     }
 
     private static func requireBootstrapComplete() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return }
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return
+        }
 
         let step = bootstrapProgress()
         guard step == .complete else {
@@ -124,6 +126,11 @@ private let walletModeChangeDelayMs = 250
 
     func ensureWalletManager(id: WalletId) throws -> WalletManager {
         try managerCache.ensureWalletManager(id: id, delegate: self)
+    }
+
+    @MainActor
+    func ensureWalletManagerLoaded(id: WalletId) async throws -> WalletManager {
+        try await managerCache.ensureWalletManagerLoaded(id: id, delegate: self)
     }
 
     func beginInitialScanBackgroundTaskIfNeeded() {
@@ -399,7 +406,7 @@ private let walletModeChangeDelayMs = 250
             guard let self else { return }
 
             do {
-                let manager = try self.ensureWalletManager(id: id)
+                let manager = try await self.ensureWalletManagerLoaded(id: id)
                 try await manager.startWalletScanIfNeeded()
             } catch {
                 self.logger.error("Unable to prewarm selected wallet \(id): \(error)")
