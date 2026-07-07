@@ -460,6 +460,20 @@ run-android profile="debug":
 
 alias ra := run-android
 
+# Rebuild Android bindings, then install and run the Android app
+[group('util')]
+build-run-android:
+    just ba && just ra
+
+alias bra := build-run-android
+
+# Rebuild, install, and run iOS and Android apps
+[group('util')]
+build-run-all:
+    just bri && just bra
+
+alias brall := build-run-all
+
 # Launch installed Android app
 [group('util')]
 launch-android:
