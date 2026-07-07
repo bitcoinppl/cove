@@ -85,7 +85,7 @@ class AppManager private constructor() : FfiReconcile {
 
             override suspend fun startWalletScanIfNeeded(walletId: WalletId): Result<Unit> =
                 runCatching {
-                    getWalletManager(walletId).startWalletScanIfNeeded()
+                    getWalletManagerLoaded(walletId).startWalletScanIfNeeded()
                 }.also { result ->
                     val error = result.exceptionOrNull()
                     if (error is CancellationException) {
@@ -206,6 +206,8 @@ class AppManager private constructor() : FfiReconcile {
      * caches the instance so we don't recreate unnecessarily
      */
     fun getWalletManager(id: WalletId): WalletManager = managerCache.getWalletManager(id)
+
+    suspend fun getWalletManagerLoaded(id: WalletId): WalletManager = managerCache.getWalletManagerLoaded(id)
 
     /**
      * get or create send flow manager for the given wallet manager

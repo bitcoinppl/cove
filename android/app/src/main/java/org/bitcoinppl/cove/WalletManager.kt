@@ -37,6 +37,11 @@ val WalletLedgerState.initialScanIncomplete: Boolean
 val WalletLedgerState.initialScanActive: Boolean
     get() = this is WalletLedgerState.InitialScanIncomplete && v1 == InitialScanActivity.ACTIVE
 
+private data class WalletManagerBootstrap(
+    val rust: RustWalletManager,
+    val initialState: WalletInitialState,
+)
+
 /**
  * wallet manager - manages wallet state, balance, transactions
  * ported from iOS WalletManager.swift
@@ -172,6 +177,25 @@ class WalletManager :
             val initialState = rust.initialState()
             android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
             return WalletManager(initialState.metadata.id, rust, initialState)
+        }
+
+        suspend fun load(id: WalletId): WalletManager {
+            val bootstrap =
+                withContext(Dispatchers.IO) {
+                    val rust = RustWalletManager(id)
+                    val initialState = rust.initialState()
+                    android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
+
+                    WalletManagerBootstrap(rust, initialState)
+                }
+
+            return withContext(Dispatchers.Main.immediate) {
+                WalletManager(
+                    bootstrap.initialState.metadata.id,
+                    bootstrap.rust,
+                    bootstrap.initialState,
+                )
+            }
         }
 
         // create from xpub
