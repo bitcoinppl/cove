@@ -44,7 +44,7 @@ struct WalletSettingsSection: View {
                     icon: WalletIcon(wallet)
                 )
             }
-            .onMove(perform: wallets.count > 1 ? app.moveWallets : nil)
+            .onMove(perform: top5Wallets.count > 1 ? moveTopWallets : nil)
 
             if wallets.count > topAmount {
                 SettingsRow(
@@ -58,6 +58,19 @@ struct WalletSettingsSection: View {
                 )
             }
         }
+    }
+
+    private func moveTopWallets(from source: IndexSet, to destination: Int) {
+        var reorderedTopWallets = top5Wallets
+        guard !source.isEmpty, source.allSatisfy({ $0 < reorderedTopWallets.count }) else {
+            return
+        }
+
+        let destination = min(destination, reorderedTopWallets.count)
+        reorderedTopWallets.move(fromOffsets: source, toOffset: destination)
+
+        let reorderedWallets = reorderedTopWallets + Array(wallets.dropFirst(topAmount))
+        app.reorderWallets(walletIds: reorderedWallets.map(\.id))
     }
 }
 

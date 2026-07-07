@@ -156,8 +156,6 @@ private struct SidebarWalletDropDelegate: DropDelegate {
             let movedWallet = wallets.remove(at: sourceIndex)
             wallets.insert(movedWallet, at: destinationIndex)
         }
-
-        persistOrder(wallets)
     }
 
     func dropUpdated(info _: DropInfo) -> DropProposal? {
