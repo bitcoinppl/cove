@@ -52,8 +52,11 @@ struct WalletManagerHost<Loading: View, Content: View>: View {
         guard manager == nil else { return }
 
         do {
-            _ = try app.ensureWalletManager(id: walletId)
+            _ = try await app.ensureWalletManagerLoaded(id: walletId)
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             onError(error)
         }
     }
