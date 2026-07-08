@@ -29,6 +29,8 @@ private struct KeyTeleportLoadedView: View {
     @State private var pastedText = ""
     @State private var receiverCode = ""
     @State private var senderPassword = ""
+    @State private var mnemonicWords: [String]?
+    @State private var loadedMnemonicReviewID: KeyTeleportMnemonicReviewID?
     @State private var xprv: String?
 
     var body: some View {
@@ -37,7 +39,9 @@ private struct KeyTeleportLoadedView: View {
                 header
 
                 if let alert = manager.alert {
-                    KeyTeleportAlertBanner(alert: alert)
+                    KeyTeleportAlertBanner(alert: alert) {
+                        manager.alert = nil
+                    }
                 }
 
                 stateContent
@@ -63,11 +67,16 @@ private struct KeyTeleportLoadedView: View {
     private var stateContent: some View {
         switch manager.state {
         case .idle:
-            KeyTeleportScanPasteSection(
-                pastedText: $pastedText,
-                scan: { showScanner = true },
-                paste: paste
-            )
+            switch route {
+            case .receive:
+                KeyTeleportLoadingView()
+            case .send:
+                KeyTeleportScanPasteSection(
+                    pastedText: $pastedText,
+                    scan: { showScanner = true },
+                    paste: paste
+                )
+            }
         case let .receiveReplacementRequired(state):
             KeyTeleportReceiveReadyView(state: state, replacementRequired: true) {
                 manager.dispatch(.confirmReplaceReceive)
@@ -89,11 +98,17 @@ private struct KeyTeleportLoadedView: View {
                 manager.dispatch(.enterSenderPassword(senderPassword))
             }
         case let .receiveMnemonicReview(review):
-            KeyTeleportMnemonicReviewView(review: review, words: manager.revealMnemonicWords()) {
+            KeyTeleportMnemonicReviewView(review: review, words: mnemonicWords) {
                 manager.dispatch(.importReceivedMnemonic)
             } finish: {
+                mnemonicWords = nil
+                loadedMnemonicReviewID = nil
                 manager.dispatch(.finishReview)
                 app.popRoute()
+            }
+            .protectedFromScreenCapture()
+            .task(id: KeyTeleportMnemonicReviewID(review: review)) {
+                loadMnemonicWords(for: review)
             }
         case let .receiveXprvReview(review):
             KeyTeleportXprvReviewView(review: review, xprv: $xprv) {
@@ -106,6 +121,7 @@ private struct KeyTeleportLoadedView: View {
                 manager.dispatch(.finishReview)
                 app.popRoute()
             }
+            .protectedFromScreenCapture()
         case let .sendChooseWallet(state):
             KeyTeleportSendChooseWalletView(state: state) { walletId in
                 manager.dispatch(.selectSendWallet(walletId))
@@ -184,6 +200,21 @@ private struct KeyTeleportLoadedView: View {
         manager.ingest(text)
     }
 
+    private func loadMnemonicWords(for review: KeyTeleportMnemonicReview) {
+        let reviewID = KeyTeleportMnemonicReviewID(review: review)
+        guard loadedMnemonicReviewID != reviewID else { return }
+
+        guard review.importedWallet == nil else {
+            mnemonicWords = nil
+            loadedMnemonicReviewID = reviewID
+            return
+        }
+
+        mnemonicWords = nil
+        mnemonicWords = manager.revealMnemonicWords()
+        loadedMnemonicReviewID = reviewID
+    }
+
     private func ingest(_ multiFormat: MultiFormat) {
         switch multiFormat {
         case let .keyTeleportReceiver(packet):
@@ -196,17 +227,39 @@ private struct KeyTeleportLoadedView: View {
     }
 }
 
+private struct KeyTeleportMnemonicReviewID: Equatable {
+    let wordCount: UInt32
+    let importedWalletID: String?
+
+    init(review: KeyTeleportMnemonicReview) {
+        wordCount = review.wordCount
+        importedWalletID = review.importedWallet.map { "\($0.id)" }
+    }
+}
+
 private struct KeyTeleportAlertBanner: View {
     let alert: KeyTeleportAlert
+    let dismiss: () -> Void
 
     var body: some View {
-        Text(message)
-            .font(.subheadline)
+        HStack(alignment: .top, spacing: 12) {
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .imageScale(.medium)
+            }
+            .buttonStyle(.plain)
             .foregroundStyle(.red)
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel("Dismiss")
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var message: String {
@@ -237,6 +290,20 @@ private struct KeyTeleportAlertBanner: View {
              let .Database(message):
             message
         }
+    }
+}
+
+private struct KeyTeleportLoadingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+
+            Text("Preparing receive request...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 36)
     }
 }
 
@@ -347,7 +414,7 @@ private struct KeyTeleportPasswordEntryView: View {
 
 private struct KeyTeleportMnemonicReviewView: View {
     let review: KeyTeleportMnemonicReview
-    let words: [String]
+    let words: [String]?
     let importWords: () -> Void
     let finish: () -> Void
 
@@ -362,30 +429,148 @@ private struct KeyTeleportMnemonicReviewView: View {
                 Text("\(review.wordCount)-word wallet")
                     .font(.headline)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
-                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                        HStack {
-                            Text("\(index + 1)")
-                                .foregroundStyle(.secondary)
-                            Text(word)
-                            Spacer()
+                if let words {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
+                        ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                            HStack {
+                                Text("\(index + 1)")
+                                    .foregroundStyle(.secondary)
+                                Text(word)
+                                Spacer()
+                            }
+                            .font(.system(.subheadline, design: .monospaced))
+                            .padding(8)
+                            .background(Color.secondary.opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-                        .font(.system(.subheadline, design: .monospaced))
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .accessibilityLabel("Loading recovery words")
                 }
 
-                Button(action: importWords) {
-                    Text("Import Wallet")
-                        .frame(maxWidth: .infinity)
+                if words != nil {
+                    Button(action: importWords) {
+                        Text("Import Wallet")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
 
                 Button("Finish Without Importing", role: .destructive, action: finish)
                     .buttonStyle(.bordered)
             }
+        }
+    }
+}
+
+private extension View {
+    func protectedFromScreenCapture() -> some View {
+        ScreenCaptureProtectedView {
+            self
+        }
+    }
+}
+
+private struct ScreenCaptureProtectedView<Content: View>: UIViewControllerRepresentable {
+    @ViewBuilder let content: Content
+
+    func makeUIViewController(context _: Context) -> ScreenCaptureProtectedHostingController<Content> {
+        ScreenCaptureProtectedHostingController(rootView: content)
+    }
+
+    func updateUIViewController(
+        _ uiViewController: ScreenCaptureProtectedHostingController<Content>,
+        context _: Context
+    ) {
+        uiViewController.rootView = content
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiViewController: ScreenCaptureProtectedHostingController<Content>,
+        context _: Context
+    ) -> CGSize? {
+        uiViewController.sizeThatFits(proposal)
+    }
+}
+
+private final class ScreenCaptureProtectedHostingController<Content: View>: UIViewController {
+    private let secureTextField = UITextField()
+    private let hostingController: UIHostingController<Content>
+
+    var rootView: Content {
+        get { hostingController.rootView }
+        set { hostingController.rootView = newValue }
+    }
+
+    init(rootView: Content) {
+        hostingController = UIHostingController(rootView: rootView)
+
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        view.backgroundColor = .clear
+        configureSecureContainer()
+    }
+
+    private func configureSecureContainer() {
+        secureTextField.isSecureTextEntry = true
+        secureTextField.backgroundColor = .clear
+        secureTextField.borderStyle = .none
+        secureTextField.tintColor = .clear
+        secureTextField.translatesAutoresizingMaskIntoConstraints = false
+
+        view.addSubview(secureTextField)
+
+        NSLayoutConstraint.activate([
+            secureTextField.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            secureTextField.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            secureTextField.topAnchor.constraint(equalTo: view.topAnchor),
+            secureTextField.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        secureTextField.layoutIfNeeded()
+
+        let secureContainer = secureTextField.secureContentContainer ?? secureTextField
+        addChild(hostingController)
+        hostingController.view.backgroundColor = .clear
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        secureContainer.addSubview(hostingController.view)
+
+        NSLayoutConstraint.activate([
+            hostingController.view.leadingAnchor.constraint(equalTo: secureContainer.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: secureContainer.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: secureContainer.topAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: secureContainer.bottomAnchor),
+        ])
+
+        hostingController.didMove(toParent: self)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize) -> CGSize {
+        let fallbackWidth = view.bounds.width > 0 ? view.bounds.width : UIScreen.main.bounds.width
+        let width = proposal.width ?? fallbackWidth
+        let height = proposal.height ?? 10000
+
+        return hostingController.sizeThatFits(in: CGSize(width: width, height: height))
+    }
+}
+
+private extension UITextField {
+    var secureContentContainer: UIView? {
+        subviews.first { view in
+            String(describing: type(of: view)).contains("Canvas")
         }
     }
 }
