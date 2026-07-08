@@ -1,3 +1,5 @@
+@file:Suppress("PackageNaming")
+
 package org.bitcoinppl.cove.flows.SettingsFlow
 
 import org.junit.Assert.assertEquals

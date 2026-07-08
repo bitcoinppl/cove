@@ -368,6 +368,7 @@ fun MainSettingsScreen(
 }
 
 @Composable
+@Suppress("FunctionNaming")
 internal fun FullScreenSettingsModal(
     onDismiss: () -> Unit,
     dismissEnabled: Boolean = true,

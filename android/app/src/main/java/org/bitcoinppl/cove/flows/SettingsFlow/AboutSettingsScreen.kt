@@ -358,8 +358,6 @@ internal fun AboutSettingsContent(
                             MaterialDivider()
                             AboutRow(
                                 label = "Send Diagnostics",
-                                value = "Review before upload",
-                                valueStyle = MaterialTheme.typography.bodySmall,
                                 onClick = onSendDiagnosticsClick,
                             )
                         }
@@ -473,7 +471,7 @@ private suspend fun debugWipeCloudBackup(context: Context): WipeCloudResult {
 @Composable
 private fun AboutRow(
     label: String,
-    value: String,
+    value: String? = null,
     onClick: (() -> Unit)? = null,
     valueStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
 ) {
@@ -491,10 +489,12 @@ private fun AboutRow(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
         )
-        Text(
-            text = value,
-            style = valueStyle,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        value?.let {
+            Text(
+                text = it,
+                style = valueStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
