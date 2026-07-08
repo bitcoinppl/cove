@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -41,16 +42,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.performWalletReorderHaptic
 import org.bitcoinppl.cove.utils.toComposeColor
+import org.bitcoinppl.cove.utils.moved
 import org.bitcoinppl.cove.views.RoundRectImage
-import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,10 +65,19 @@ fun SettingsListAllWalletsScreen(
 ) {
     var allWallets by remember { mutableStateOf<List<WalletMetadata>>(emptyList()) }
     var searchText by remember { mutableStateOf("") }
+    val reorderEnabled = searchText.isEmpty()
+    val hapticFeedback = LocalHapticFeedback.current
+    val lazyListState = rememberLazyListState()
+    val reorderableLazyListState =
+        rememberReorderableLazyListState(lazyListState) { from, to ->
+            if (reorderEnabled) {
+                allWallets = allWallets.moved(from.index, to.index)
+                hapticFeedback.performWalletReorderHaptic()
+            }
+        }
 
-    // fetch all wallets on screen appear
-    LaunchedEffect(Unit) {
-        allWallets = Database().wallets().allSortedActive()
+    LaunchedEffect(app.wallets) {
+        allWallets = app.wallets
     }
 
     // filter wallets based on search text
@@ -134,21 +148,63 @@ fun SettingsListAllWalletsScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
+                        state = lazyListState,
                     ) {
-                        items(filteredWallets, key = { it.id.toString() }) { wallet ->
-                            WalletRow(
-                                wallet = wallet,
-                                onClick = {
-                                    app.pushRoute(
-                                        Route.Settings(
-                                            SettingsRoute.Wallet(
-                                                id = wallet.id,
-                                                route = WalletSettingsRoute.MAIN,
+                        items(filteredWallets, key = { it.id }) { wallet ->
+                            if (reorderEnabled) {
+                                ReorderableItem(reorderableLazyListState, key = wallet.id) {
+                                    WalletRow(
+                                        wallet = wallet,
+                                        onClick = {
+                                            app.pushRoute(
+                                                Route.Settings(
+                                                    SettingsRoute.Wallet(
+                                                        id = wallet.id,
+                                                        route = WalletSettingsRoute.MAIN,
+                                                    ),
+                                                ),
+                                            )
+                                        },
+                                        modifier =
+                                            Modifier.longPressDraggableHandle(
+                                                enabled = allWallets.size > 1,
+                                                onDragStopped = {
+                                                    app.reorderWallets(allWallets.map { it.id })
+                                                },
                                             ),
-                                        ),
+                                        trailingContent = {
+                                            Icon(
+                                                modifier = Modifier.size(40.dp),
+                                                imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
+                                                contentDescription = "Go",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
                                     )
-                                },
-                            )
+                                }
+                            } else {
+                                WalletRow(
+                                    wallet = wallet,
+                                    onClick = {
+                                        app.pushRoute(
+                                            Route.Settings(
+                                                SettingsRoute.Wallet(
+                                                    id = wallet.id,
+                                                    route = WalletSettingsRoute.MAIN,
+                                                ),
+                                            ),
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Icon(
+                                            modifier = Modifier.size(40.dp),
+                                            imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
+                                            contentDescription = "Go",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -207,10 +263,12 @@ private fun SearchBar(
 private fun WalletRow(
     wallet: WalletMetadata,
     onClick: () -> Unit,
+    trailingContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
                 .padding(vertical = 12.dp, horizontal = 8.dp),
@@ -238,12 +296,6 @@ private fun WalletRow(
                     .padding(horizontal = 12.dp),
         )
 
-        // chevron arrow
-        Icon(
-            modifier = Modifier.size(40.dp),
-            imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
-            contentDescription = "Go",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        trailingContent()
     }
 }

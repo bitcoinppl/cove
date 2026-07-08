@@ -25,6 +25,10 @@ struct SidebarContainer<Content: View>: View {
         return max(min(translation, 0), -sideBarWidth)
     }
 
+    private func isVerticalDominantDrag(_ value: DragGesture.Value) -> Bool {
+        abs(value.translation.height) > abs(value.translation.width)
+    }
+
     private func syncSidebarState(isVisible: Bool) {
         offset = isVisible ? sideBarWidth : 0
         dragTranslation = 0
@@ -47,6 +51,8 @@ struct SidebarContainer<Content: View>: View {
     }
 
     private func onDragEnded(value: DragGesture.Value) {
+        guard isDragging else { return }
+
         // if sidebar was closed programmatically during this gesture
         // (onChange already reset offset and dragTranslation to 0),
         // don't let stale gesture data reopen it
@@ -122,6 +128,11 @@ struct SidebarContainer<Content: View>: View {
                     .gesture(
                         DragGesture(minimumDistance: 5)
                             .onChanged { value in
+                                if isVerticalDominantDrag(value) {
+                                    dragTranslation = 0
+                                    return
+                                }
+
                                 isDragging = true
                                 dragStartedWithSidebarOpen = true
 
@@ -144,6 +155,11 @@ struct SidebarContainer<Content: View>: View {
                         .onChanged { value in
                             guard app.isSidebarVisible else { return }
 
+                            if isVerticalDominantDrag(value) {
+                                dragTranslation = 0
+                                return
+                            }
+
                             isDragging = true
                             dragStartedWithSidebarOpen = true
 
@@ -162,9 +178,6 @@ struct SidebarContainer<Content: View>: View {
                     .gesture(
                         DragGesture(minimumDistance: 5)
                             .onChanged { value in
-                                isDragging = true
-                                dragStartedWithSidebarOpen = false
-
                                 let translation = value.translation.width
                                 let translationHeight = value.translation.height
 
@@ -173,6 +186,9 @@ struct SidebarContainer<Content: View>: View {
                                     dragTranslation = 0
                                     return
                                 }
+
+                                isDragging = true
+                                dragStartedWithSidebarOpen = false
 
                                 // only allow opening (positive translation)
                                 if translation < 0 {

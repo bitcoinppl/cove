@@ -8,18 +8,12 @@
 import SwiftUI
 
 struct WalletSettingsSection: View {
-    @State var wallets: [WalletMetadata]
+    @Environment(AppManager.self) private var app
+
+    private let overrideWallets: [WalletMetadata]?
 
     init(wallets: [WalletMetadata]? = nil) {
-        if let wallets { self.wallets = wallets; return }
-
-        do {
-            self.wallets = try Database().wallets().allSortedActive()
-            Log.debug("Wallets: \(self.wallets)")
-        } catch {
-            Log.error("Failed to get wallets \(error)")
-            self.wallets = []
-        }
+        overrideWallets = wallets
     }
 
     func WalletIcon(_ wallet: WalletMetadata) -> SettingsIcon {
@@ -32,9 +26,13 @@ struct WalletSettingsSection: View {
         return SettingsIcon(symbol: "wallet.bifold", foregroundColor: foregroundColor, backgroundColor: wallet.swiftColor)
     }
 
-    private var topAmount = 5
+    private let topAmount = 5
+    private var wallets: [WalletMetadata] {
+        overrideWallets ?? app.wallets
+    }
+
     private var top5Wallets: [WalletMetadata] {
-        wallets.count > topAmount ? Array(wallets[0 ... topAmount - 1]) : wallets
+        Array(wallets.prefix(topAmount))
     }
 
     var body: some View {
@@ -46,6 +44,7 @@ struct WalletSettingsSection: View {
                     icon: WalletIcon(wallet)
                 )
             }
+            .onMove(perform: top5Wallets.count > 1 ? moveTopWallets : nil)
 
             if wallets.count > topAmount {
                 SettingsRow(
@@ -59,11 +58,20 @@ struct WalletSettingsSection: View {
                 )
             }
         }
-        .onAppear {
-            if let wallets = try? Database().wallets().allSortedActive() {
-                self.wallets = wallets
-            }
+    }
+
+    private func moveTopWallets(from source: IndexSet, to destination: Int) {
+        var reorderedTopWallets = top5Wallets
+        guard !source.isEmpty, source.allSatisfy({ $0 < reorderedTopWallets.count }) else {
+            return
         }
+
+        let destination = min(destination, reorderedTopWallets.count)
+        reorderedTopWallets.move(fromOffsets: source, toOffset: destination)
+
+        let reorderedWallets = reorderedTopWallets + Array(wallets.dropFirst(topAmount))
+        AppHaptics.selectionChanged()
+        app.reorderWallets(walletIds: reorderedWallets.map(\.id))
     }
 }
 

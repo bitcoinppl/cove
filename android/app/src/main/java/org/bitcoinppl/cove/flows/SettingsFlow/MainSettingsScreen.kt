@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,12 +62,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
+import org.bitcoinppl.cove.performWalletReorderHaptic
+import org.bitcoinppl.cove.ui.theme.MaterialSpacing
+import org.bitcoinppl.cove.utils.movedWithinPrefix
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
@@ -73,7 +79,6 @@ import org.bitcoinppl.cove.views.NumberPadPinView
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.WalletIcon
 import org.bitcoinppl.cove_core.AuthType
-import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
@@ -81,6 +86,9 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import sh.calvin.reorderable.ReorderableColumn
+
+private const val WALLET_SETTINGS_VISIBLE_LIMIT = 5
 
 internal fun shouldShowCloudBackupSettings(
     isInDecoyMode: Boolean,
@@ -113,7 +121,7 @@ private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainSettingsScreen(
-    app: org.bitcoinppl.cove.AppManager,
+    app: AppManager,
     modifier: Modifier = Modifier,
 ) {
     val cloudBackupManager = remember { app.cloudBackupManager }
@@ -394,61 +402,115 @@ private fun FullScreenSettingsModal(
 }
 
 @Composable
-private fun WalletSettingsSection(app: org.bitcoinppl.cove.AppManager) {
-    var wallets by remember { mutableStateOf<List<WalletMetadata>>(emptyList()) }
-
-    // fetch all wallets on screen appear
-    LaunchedEffect(Unit) {
-        wallets = Database().wallets().allSortedActive()
-    }
+private fun WalletSettingsSection(app: AppManager) {
+    val wallets = app.wallets
+    val hapticFeedback = LocalHapticFeedback.current
 
     // don't show section if there are no wallets
     if (wallets.isEmpty()) {
         return
     }
 
-    val topAmount = 5
-    val top5Wallets = wallets.take(topAmount)
-    val hasMore = wallets.size > topAmount
+    val visibleWallets = wallets.take(WALLET_SETTINGS_VISIBLE_LIMIT)
+    val hasMore = wallets.size > WALLET_SETTINGS_VISIBLE_LIMIT
 
     SectionHeader("Wallet Settings")
     MaterialSection {
         Column {
-            top5Wallets.forEachIndexed { index, wallet ->
-                MaterialSettingsItem(
-                    title = wallet.name,
-                    leadingContent = {
-                        WalletIcon(wallet = wallet, size = 28.dp, cornerRadius = 6.dp)
-                    },
-                    onClick = {
-                        app.pushRoute(
-                            Route.Settings(
-                                SettingsRoute.Wallet(
-                                    id = wallet.id,
-                                    route = WalletSettingsRoute.MAIN,
-                                ),
-                            ),
-                        )
-                    },
-                )
-                if (index < top5Wallets.size - 1 || hasMore) {
-                    MaterialDivider()
-                }
-            }
+            walletSettingsWalletRows(
+                app = app,
+                wallets = wallets,
+                visibleWallets = visibleWallets,
+                hasMore = hasMore,
+                onMove = { hapticFeedback.performWalletReorderHaptic() },
+            )
 
             if (hasMore) {
-                MaterialSettingsItem(
-                    title = "More",
-                    icon = Icons.Default.MoreHoriz,
-                    onClick = {
-                        app.pushRoute(
-                            Route.Settings(SettingsRoute.AllWallets),
-                        )
-                    },
-                )
+                walletSettingsMoreItem(app = app)
             }
         }
     }
+}
+
+@Composable
+private fun walletSettingsWalletRows(
+    app: AppManager,
+    wallets: List<WalletMetadata>,
+    visibleWallets: List<WalletMetadata>,
+    hasMore: Boolean,
+    onMove: () -> Unit,
+) {
+    ReorderableColumn(
+        list = visibleWallets,
+        onMove = onMove,
+        onSettle = { fromIndex, toIndex ->
+            val reorderedWallets =
+                wallets.movedWithinPrefix(
+                    prefixSize = WALLET_SETTINGS_VISIBLE_LIMIT,
+                    fromIndex = fromIndex,
+                    toIndex = toIndex,
+                )
+
+            if (reorderedWallets != wallets) {
+                app.reorderWallets(reorderedWallets.map { it.id })
+            }
+        },
+    ) { index, wallet, _ ->
+        key(wallet.id) {
+            ReorderableItem {
+                walletSettingsWalletItem(
+                    app = app,
+                    wallet = wallet,
+                    modifier =
+                        Modifier.longPressDraggableHandle(
+                            enabled = visibleWallets.size > 1,
+                        ),
+                )
+            }
+
+            if (index < visibleWallets.size - 1 || hasMore) {
+                MaterialDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun walletSettingsWalletItem(
+    app: AppManager,
+    wallet: WalletMetadata,
+    modifier: Modifier,
+) {
+    MaterialSettingsItem(
+        title = wallet.name,
+        leadingContent = {
+            WalletIcon(wallet = wallet, size = 28.dp, cornerRadius = 6.dp)
+        },
+        onClick = {
+            app.pushRoute(
+                Route.Settings(
+                    SettingsRoute.Wallet(
+                        id = wallet.id,
+                        route = WalletSettingsRoute.MAIN,
+                    ),
+                ),
+            )
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun walletSettingsMoreItem(app: AppManager) {
+    MaterialSettingsItem(
+        title = "More",
+        icon = Icons.Default.MoreHoriz,
+        onClick = {
+            app.pushRoute(
+                Route.Settings(SettingsRoute.AllWallets),
+            )
+        },
+    )
 }
 
 @Composable

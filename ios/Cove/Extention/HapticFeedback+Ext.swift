@@ -7,6 +7,13 @@
 
 import UIKit
 
+enum AppHaptics {
+    static func selectionChanged() {
+        let generator = UISelectionFeedbackGenerator()
+        generator.selectionChanged()
+    }
+}
+
 extension HapticFeedback {
     func trigger() {
         switch self {
