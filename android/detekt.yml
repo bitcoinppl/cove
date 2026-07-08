@@ -12,6 +12,14 @@ exceptions:
   TooGenericExceptionCaught:
     active: true
 
+naming:
+  FunctionNaming:
+    active: false
+
 potential-bugs:
   UnsafeCallOnNullableType:
     active: true
+
+style:
+  UnusedPrivateFunction:
+    allowedNames: '.*Preview.*'
