@@ -227,7 +227,9 @@ class AppManager private constructor() : FfiReconcile {
     fun clearKeyTeleportManager() = managerCache.clearKeyTeleportManager()
 
     fun canKeyTeleportSend(walletId: WalletId): Boolean =
-        getKeyTeleportManager().isSendEligible(walletId)
+        withRustOr(false) {
+            canKeyTeleportSend(walletId)
+        }
 
     fun reconcileAfterLabelImport(walletId: WalletId) = managerCache.reconcileAfterLabelImport(walletId)
 

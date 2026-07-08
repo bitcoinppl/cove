@@ -1211,6 +1211,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_can_go_back(
     ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_can_key_teleport_send(
+    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_debug_or_release(
@@ -2226,6 +2228,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_ffiapp_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_can_go_back(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_ffiapp_can_key_teleport_send(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -4094,6 +4098,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_can_go_back() != 19459.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_can_key_teleport_send() != 8307.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 40843.toShort()) {
@@ -11209,6 +11216,8 @@ public interface FfiAppInterface {
      */
     fun `canGoBack`(): kotlin.Boolean
 
+    fun `canKeyTeleportSend`(`walletId`: WalletId): kotlin.Boolean
+
     /**
      * DANGER: This will wipe all wallet data on this device
      */
@@ -11467,6 +11476,20 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     UniffiLib.uniffi_cove_fn_method_ffiapp_can_go_back(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+    override fun `canKeyTeleportSend`(`walletId`: WalletId): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_can_key_teleport_send(
+        it,
+
+        FfiConverterTypeWalletId.lower(`walletId`),_status)
 }
     }
     )
