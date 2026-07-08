@@ -4,5 +4,5 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback as ComposeHapticFeedbac
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
 fun ComposeHapticFeedback.performWalletReorderHaptic() {
-    performHapticFeedback(HapticFeedbackType.SegmentTick)
+    performHapticFeedback(HapticFeedbackType.Confirm)
 }
