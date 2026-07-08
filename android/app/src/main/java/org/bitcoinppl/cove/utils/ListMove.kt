@@ -14,14 +14,12 @@ internal fun <T> List<T>.movedWithinPrefix(
     toIndex: Int,
 ): List<T> {
     val itemCount = minOf(size, prefixSize)
-    if (itemCount <= 1 || fromIndex !in 0 until itemCount) {
-        return this
-    }
+    val canMove = itemCount > 1 && fromIndex in 0 until itemCount
+    val boundedToIndex = if (canMove) toIndex.coerceIn(0, itemCount - 1) else fromIndex
 
-    val boundedToIndex = toIndex.coerceIn(0, itemCount - 1)
-    if (fromIndex == boundedToIndex) {
-        return this
+    return if (canMove && fromIndex != boundedToIndex) {
+        take(itemCount).moved(fromIndex, boundedToIndex) + drop(itemCount)
+    } else {
+        this
     }
-
-    return take(itemCount).moved(fromIndex, boundedToIndex) + drop(itemCount)
 }
