@@ -1381,6 +1381,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_walletstable_reorder_wallets(
     ): Short
+    external fun uniffi_cove_checksum_method_diagnosticsreport_formatted_size(
+    ): Short
+    external fun uniffi_cove_checksum_method_diagnosticsreport_formatted_size_for_description(
+    ): Short
     external fun uniffi_cove_checksum_method_diagnosticsreport_preview_text(
     ): Short
     external fun uniffi_cove_checksum_method_diagnosticsreport_preview_text_for_description(
@@ -2414,6 +2418,10 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_diagnosticsreport(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_diagnosticsreport_formatted_size(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_diagnosticsreport_formatted_size_for_description(`ptr`: Long,`description`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_diagnosticsreport_preview_text(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_diagnosticsreport_preview_text_for_description(`ptr`: Long,`description`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4196,6 +4204,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_walletstable_reorder_wallets() != 40391.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_diagnosticsreport_formatted_size() != 23149.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_diagnosticsreport_formatted_size_for_description() != 52799.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_diagnosticsreport_preview_text() != 51487.toShort()) {
@@ -10256,6 +10270,10 @@ public object FfiConverterTypeDatabase: FfiConverter<Database, Long> {
 
 public interface DiagnosticsReportInterface {
 
+    fun `formattedSize`(): kotlin.String
+
+    fun `formattedSizeForDescription`(`description`: kotlin.String?): kotlin.String
+
     fun `previewText`(): kotlin.String
 
     fun `previewTextForDescription`(`description`: kotlin.String?): kotlin.String
@@ -10369,6 +10387,33 @@ open class DiagnosticsReport: Disposable, AutoCloseable, DiagnosticsReportInterf
             UniffiLib.uniffi_cove_fn_clone_diagnosticsreport(handle, status)
         }
     }
+
+    override fun `formattedSize`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_diagnosticsreport_formatted_size(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `formattedSizeForDescription`(`description`: kotlin.String?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_diagnosticsreport_formatted_size_for_description(
+        it,
+
+        FfiConverterOptionalString.lower(`description`),_status)
+}
+    }
+    )
+    }
+
 
     override fun `previewText`(): kotlin.String {
             return FfiConverterString.lift(

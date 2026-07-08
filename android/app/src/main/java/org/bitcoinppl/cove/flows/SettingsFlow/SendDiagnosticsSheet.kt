@@ -349,7 +349,7 @@ private class SendDiagnosticsSheetState(
 
         previewText = nextPreviewText
         previewChunks = nextPreviewText.chunked(PREVIEW_CHUNK_SIZE)
-        reportSize = "${nextReport.sizeBytesForDescription(description)} bytes"
+        reportSize = nextReport.formattedSizeForDescription(description)
     }
 
     private fun feedback(): DiagnosticsContentFeedback =

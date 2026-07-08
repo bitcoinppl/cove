@@ -306,10 +306,7 @@ struct SendDiagnosticsSheet: View {
 
         previewText = nextPreviewText
         previewChunks = Self.chunks(for: nextPreviewText)
-        reportSize = ByteCountFormatter.string(
-            fromByteCount: Int64(report.sizeBytesForDescription(description: description)),
-            countStyle: .file
-        )
+        reportSize = report.formattedSizeForDescription(description: description)
     }
 
     private static func chunks(for text: String) -> [DiagnosticsPreviewChunk] {

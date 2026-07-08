@@ -2955,6 +2955,10 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UInt64 {
 
 public protocol DiagnosticsReportProtocol: AnyObject, Sendable {
 
+    func formattedSize()  -> String
+
+    func formattedSizeForDescription(description: String?)  -> String
+
     func previewText()  -> String
 
     func previewTextForDescription(description: String?)  -> String
@@ -3018,6 +3022,25 @@ open class DiagnosticsReport: DiagnosticsReportProtocol, @unchecked Sendable {
 
 
 
+
+open func formattedSize() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreport_formatted_size(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func formattedSizeForDescription(description: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreport_formatted_size_for_description(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(description),uniffiCallStatus
+    )
+})
+}
 
 open func previewText() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -40832,6 +40855,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_reorder_wallets() != 40391) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreport_formatted_size() != 23149) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreport_formatted_size_for_description() != 52799) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_diagnosticsreport_preview_text() != 51487) {

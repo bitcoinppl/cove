@@ -5,6 +5,11 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
+const DIAGNOSTICS_REPORT_SIZE_UNIT_BYTES: u64 = 1_000;
+const DIAGNOSTICS_REPORT_SIZE_UNIT_SCALE: f64 = DIAGNOSTICS_REPORT_SIZE_UNIT_BYTES as f64;
+const DIAGNOSTICS_REPORT_SIZE_FRACTIONAL_LIMIT: f64 = 10.0;
+const DIAGNOSTICS_REPORT_SIZE_UNITS: [&str; 6] = ["KB", "MB", "GB", "TB", "PB", "EB"];
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct DiagnosticsPlatformInfo {
     pub platform: String,
@@ -92,6 +97,14 @@ impl DiagnosticsReport {
         self.preview_text_for_description(description).len() as u64
     }
 
+    pub fn formatted_size(&self) -> String {
+        format_diagnostics_report_size(self.size_bytes())
+    }
+
+    pub fn formatted_size_for_description(&self, description: Option<String>) -> String {
+        format_diagnostics_report_size(self.size_bytes_for_description(description))
+    }
+
     pub async fn submit(&self, description: Option<String>) -> Result<String, DiagnosticsError> {
         let description = self.redacted_user_description(description);
         let report = self.upload_report(description);
@@ -106,6 +119,36 @@ fn user_description_for_upload(description: Option<String>) -> Option<String> {
     description
         .map(|description| description.trim().to_string())
         .filter(|description| !description.is_empty())
+}
+
+fn format_diagnostics_report_size(size_bytes: u64) -> String {
+    if size_bytes < DIAGNOSTICS_REPORT_SIZE_UNIT_BYTES {
+        let unit = if size_bytes == 1 { "byte" } else { "bytes" };
+
+        return format!("{size_bytes} {unit}");
+    }
+
+    let mut size = size_bytes as f64;
+    let mut unit = DIAGNOSTICS_REPORT_SIZE_UNITS[0];
+    for next_unit in DIAGNOSTICS_REPORT_SIZE_UNITS {
+        size /= DIAGNOSTICS_REPORT_SIZE_UNIT_SCALE;
+        unit = next_unit;
+        if size < DIAGNOSTICS_REPORT_SIZE_UNIT_SCALE {
+            break;
+        }
+    }
+
+    format!("{} {unit}", format_diagnostics_report_size_value(size))
+}
+
+fn format_diagnostics_report_size_value(size: f64) -> String {
+    let formatted = if size < DIAGNOSTICS_REPORT_SIZE_FRACTIONAL_LIMIT {
+        format!("{size:.1}")
+    } else {
+        format!("{size:.0}")
+    };
+
+    formatted.strip_suffix(".0").unwrap_or(&formatted).to_string()
 }
 
 impl DiagnosticsReport {
@@ -379,5 +422,26 @@ mod tests {
 
         assert_eq!(preview, report.preview_text());
         assert!(upload.user_description.is_none());
+    }
+
+    #[test]
+    fn report_size_format_uses_bytes_below_kilobyte() {
+        assert_eq!(format_diagnostics_report_size(0), "0 bytes");
+        assert_eq!(format_diagnostics_report_size(1), "1 byte");
+        assert_eq!(format_diagnostics_report_size(999), "999 bytes");
+    }
+
+    #[test]
+    fn report_size_format_uses_kilobytes_at_kilobyte() {
+        assert_eq!(format_diagnostics_report_size(1_000), "1 KB");
+        assert_eq!(format_diagnostics_report_size(1_500), "1.5 KB");
+        assert_eq!(format_diagnostics_report_size(12_000), "12 KB");
+    }
+
+    #[test]
+    fn report_size_format_uses_larger_units() {
+        assert_eq!(format_diagnostics_report_size(1_000_000), "1 MB");
+        assert_eq!(format_diagnostics_report_size(1_500_000), "1.5 MB");
+        assert_eq!(format_diagnostics_report_size(1_000_000_000), "1 GB");
     }
 }
