@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
@@ -51,12 +52,14 @@ class KeyTeleportManager internal constructor(
     fun dispatch(action: KeyTeleportManagerAction) {
         if (isClosed.get()) return
 
-        runCatching {
-            rustGuard.withHandle(rust) {
-                dispatch(action)
+        mainScope.launch(Dispatchers.Default) {
+            runCatching {
+                rustGuard.withHandle(rust) {
+                    dispatch(action)
+                }
+            }.onFailure {
+                Log.e(tag, "Unable to dispatch Key Teleport action", it)
             }
-        }.onFailure {
-            Log.e(tag, "Unable to dispatch Key Teleport action", it)
         }
     }
 
@@ -118,6 +121,7 @@ class KeyTeleportManager internal constructor(
             }.onFailure {
                 Log.w(tag, "Error clearing Key Teleport manager: ${it.message}")
             }
+            mainScope.cancel()
             rust.close()
         }
     }
