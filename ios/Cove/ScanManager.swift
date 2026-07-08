@@ -152,7 +152,7 @@ import SwiftUI
 extension ScanManager {
     @MainActor
     private func handleKeyTeleportUrl(_ url: URL) -> Bool {
-        guard url.host?.lowercased().contains("keyteleport.com") == true else {
+        guard isKeyTeleportHost(url.host) else {
             return false
         }
 
@@ -166,6 +166,15 @@ extension ScanManager {
             )
             return true
         }
+    }
+
+    private func isKeyTeleportHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        else {
+            return false
+        }
+
+        return host == "keyteleport.com" || host.hasSuffix(".keyteleport.com")
     }
 
     @MainActor
@@ -218,7 +227,9 @@ extension ScanManager {
             Log.debug("Imported Wallet: \(id)")
             app.alertState = TaggedItem(.importedSuccessfully)
 
-            if app.walletManager?.id != id { try app.selectWalletOrThrow(id) }
+            if app.walletManager?.id != id {
+                try app.selectWalletOrThrow(id)
+            }
 
             if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
                 try app.walletManager?.rust.setWalletType(walletType: .cold)
