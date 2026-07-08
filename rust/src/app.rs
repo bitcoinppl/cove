@@ -535,6 +535,10 @@ impl FfiApp {
         RustKeyTeleportManager::new()
     }
 
+    pub fn can_key_teleport_send(&self, wallet_id: WalletId) -> bool {
+        crate::manager::key_teleport_manager::is_send_eligible_wallet_id(&wallet_id)
+    }
+
     #[uniffi::method]
     pub fn prices(&self) -> Result<PriceResponse, Error> {
         App::global().prices().ok_or_else(|| Error::PricesError("no prices saved".to_string()))

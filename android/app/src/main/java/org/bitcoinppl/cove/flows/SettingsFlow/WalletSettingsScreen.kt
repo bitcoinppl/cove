@@ -279,6 +279,11 @@ fun WalletSettingsScreen(
                         var dangerItemCount = 0
                         // only show for hot wallets that have a mnemonic
                         if (metadata.walletType == WalletType.HOT) {
+                            val canKeyTeleportSend =
+                                remember(metadata.id, metadata.walletType) {
+                                    app.canKeyTeleportSend(metadata.id)
+                                }
+
                             MaterialSettingsItem(
                                 title = stringResource(R.string.label_wallet_view_secrets),
                                 titleColor = CoveColor.WarningOrange,
@@ -288,7 +293,7 @@ fun WalletSettingsScreen(
                             )
                             dangerItemCount++
 
-                            if (app.canKeyTeleportSend(metadata.id)) {
+                            if (canKeyTeleportSend) {
                                 MaterialDivider()
                                 MaterialSettingsItem(
                                     title = "Send with Key Teleport",

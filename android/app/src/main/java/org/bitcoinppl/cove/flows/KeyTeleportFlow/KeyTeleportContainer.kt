@@ -271,7 +271,10 @@ private fun SendIdleView(
     )
     ActionRow(onScan = onScan, onPaste = onPaste)
 
-    val eligibleWallets = app.wallets.filter { manager.isSendEligible(it.id) }
+    val eligibleWallets =
+        remember(app.wallets) {
+            app.wallets.filter { app.canKeyTeleportSend(it.id) }
+        }
     if (eligibleWallets.isEmpty()) {
         Text(
             text = "No eligible hot wallets are available on this device.",

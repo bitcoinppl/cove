@@ -208,7 +208,7 @@ struct WalletTransitionRecoveryPlan {
     }
 
     func canKeyTeleportSend(walletId: WalletId) -> Bool {
-        ensureKeyTeleportManager().isSendEligible(walletId: walletId)
+        rust.canKeyTeleportSend(walletId: walletId)
     }
 
     @MainActor

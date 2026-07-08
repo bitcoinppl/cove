@@ -366,7 +366,7 @@ impl RustKeyTeleportManager {
 
     #[uniffi::method]
     pub fn is_send_eligible(&self, wallet_id: WalletId) -> bool {
-        eligible_wallet_by_id(&wallet_id).is_ok()
+        is_send_eligible_wallet_id(&wallet_id)
     }
 
     #[uniffi::method]
@@ -779,6 +779,10 @@ fn eligible_wallet_by_id(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTele
         .into_iter()
         .find(|wallet| wallet.id == *wallet_id)
         .ok_or(KeyTeleportAlert::IneligibleWallet)
+}
+
+pub(crate) fn is_send_eligible_wallet_id(wallet_id: &WalletId) -> bool {
+    eligible_wallet_by_id(wallet_id).is_ok()
 }
 
 fn is_send_eligible(wallet: &WalletMetadata) -> bool {

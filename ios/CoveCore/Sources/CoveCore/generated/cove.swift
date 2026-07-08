@@ -3300,6 +3300,8 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func canGoBack()  -> Bool
 
+    func canKeyTeleportSend(walletId: WalletId)  -> Bool
+
     /**
      * DANGER: This will wipe all wallet data on this device
      */
@@ -3502,6 +3504,16 @@ open func canGoBack() -> Bool  {
         uniffiCallStatus in
     uniffi_cove_fn_method_ffiapp_can_go_back(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func canKeyTeleportSend(walletId: WalletId) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_ffiapp_can_key_teleport_send(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeWalletId_lower(walletId),uniffiCallStatus
     )
 })
 }
@@ -44090,6 +44102,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_can_go_back() != 19459) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_can_key_teleport_send() != 8307) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 40843) {
