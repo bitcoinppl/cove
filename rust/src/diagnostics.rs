@@ -109,9 +109,10 @@ impl DiagnosticsReport {
         let description = self.redacted_user_description(description);
         let report = self.upload_report(description);
 
-        upload::submit_report(&report)
-            .await
-            .map_err(|error| DiagnosticsError::Submit(error.to_string()))
+        upload::submit_report(&report).await.map_err(|error| {
+            tracing::warn!("Failed to submit diagnostics report: {error}");
+            DiagnosticsError::Submit(error.user_message())
+        })
     }
 }
 

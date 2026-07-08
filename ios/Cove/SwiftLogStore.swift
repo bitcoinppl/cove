@@ -76,8 +76,8 @@ final class SwiftLogStore {
 
     private static func sanitized(_ message: String) -> String {
         message
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
     }
 
     private func writeEntry(_ entry: String) throws {

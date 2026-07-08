@@ -1,7 +1,7 @@
 use std::{io::Write as _, time::Duration};
 
 use flate2::{Compression, write::GzEncoder};
-use reqwest::header::CONTENT_TYPE;
+use reqwest::{StatusCode, header::CONTENT_TYPE};
 use serde::Deserialize;
 
 use super::DiagnosticsUploadReport;
@@ -11,6 +11,9 @@ const APP_TOKEN: &str = "v1.cove-mobile-2026-07";
 const GZIP_CONTENT_TYPE: &str = "application/gzip";
 const MAX_SUCCESS_RESPONSE_BYTES: usize = 16 * 1024;
 const MAX_STATUS_BODY_BYTES: usize = 2 * 1024;
+const MAX_UPLOAD_ATTEMPTS: usize = 2;
+const UPLOAD_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
+const UPLOAD_RETRY_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum UploadError {
@@ -33,6 +36,37 @@ pub(crate) enum UploadError {
     Status { status: reqwest::StatusCode, body: String },
 }
 
+impl UploadError {
+    pub(crate) fn user_message(&self) -> String {
+        match self {
+            Self::Client(_) | Self::Json(_) | Self::Gzip(_) => {
+                "Unable to prepare the diagnostics report. Please try again.".to_string()
+            }
+            Self::Request(error) if error.is_timeout() => {
+                "The diagnostics upload timed out. Please try again.".to_string()
+            }
+            Self::Request(_) => {
+                "Unable to reach the diagnostics collector. Check your connection and try again."
+                    .to_string()
+            }
+            Self::ResponseTooLarge { .. } => {
+                "The diagnostics collector returned an unexpected response. Please try again."
+                    .to_string()
+            }
+            Self::Status { status, .. } if *status == StatusCode::PAYLOAD_TOO_LARGE => {
+                "The diagnostics report is too large to submit. You can still share it manually."
+                    .to_string()
+            }
+            Self::Status { status, .. } if status.is_server_error() => {
+                format!("The diagnostics collector returned {status}. Please try again.")
+            }
+            Self::Status { status, .. } => {
+                format!("The diagnostics collector rejected the report ({status}).")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct UploadResponse {
     id: String,
@@ -41,12 +75,27 @@ struct UploadResponse {
 pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<String, UploadError> {
     let client = cove_http::new_client().map_err(UploadError::Client)?;
     let body = gzipped_json(report)?;
+
+    for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
+        match submit_report_once(&client, &body).await {
+            Ok(report_id) => return Ok(report_id),
+            Err(error) if attempt < MAX_UPLOAD_ATTEMPTS && upload_error_is_retryable(&error) => {
+                tokio::time::sleep(UPLOAD_RETRY_DELAY).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    unreachable!("upload attempts loop must return")
+}
+
+async fn submit_report_once(client: &reqwest::Client, body: &[u8]) -> Result<String, UploadError> {
     let mut response = client
         .post(upload_url())
-        .timeout(Duration::from_secs(60))
+        .timeout(UPLOAD_ATTEMPT_TIMEOUT)
         .bearer_auth(APP_TOKEN)
         .header(CONTENT_TYPE, GZIP_CONTENT_TYPE)
-        .body(body)
+        .body(body.to_vec())
         .send()
         .await
         .map_err(UploadError::Request)?;
@@ -79,6 +128,23 @@ fn upload_url() -> String {
     }
 
     PRODUCTION_UPLOAD_URL.to_string()
+}
+
+fn upload_error_is_retryable(error: &UploadError) -> bool {
+    match error {
+        UploadError::Request(error) => error.is_timeout() || error.is_connect(),
+        UploadError::Status { status, .. } => status_is_retryable(*status),
+        UploadError::Client(_)
+        | UploadError::Json(_)
+        | UploadError::Gzip(_)
+        | UploadError::ResponseTooLarge { .. } => false,
+    }
+}
+
+fn status_is_retryable(status: StatusCode) -> bool {
+    status == StatusCode::REQUEST_TIMEOUT
+        || status == StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
 }
 
 async fn read_success_body(response: &mut reqwest::Response) -> Result<Vec<u8>, UploadError> {
@@ -159,5 +225,28 @@ mod tests {
 
         assert!(json.contains("\"user_description\":\"description\""));
         assert!(json.contains("amount=5000 sats"));
+    }
+
+    #[test]
+    fn status_retry_classification_only_retries_transient_responses() {
+        assert!(status_is_retryable(StatusCode::REQUEST_TIMEOUT));
+        assert!(status_is_retryable(StatusCode::TOO_MANY_REQUESTS));
+        assert!(status_is_retryable(StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(status_is_retryable(StatusCode::BAD_GATEWAY));
+        assert!(!status_is_retryable(StatusCode::BAD_REQUEST));
+        assert!(!status_is_retryable(StatusCode::UNAUTHORIZED));
+        assert!(!status_is_retryable(StatusCode::PAYLOAD_TOO_LARGE));
+    }
+
+    #[test]
+    fn status_user_message_does_not_include_collector_body() {
+        let error = UploadError::Status {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            body: "{\"error\":\"internal collector error\"}".to_string(),
+        };
+        let message = error.user_message();
+
+        assert!(message.contains("500 Internal Server Error"));
+        assert!(!message.contains("internal collector error"));
     }
 }

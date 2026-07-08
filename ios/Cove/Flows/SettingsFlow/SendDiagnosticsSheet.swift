@@ -274,7 +274,7 @@ struct SendDiagnosticsSheet: View {
             refreshPreview(report: nextReport)
             loadState = .ready
         } catch {
-            loadState = .failed(error.localizedDescription)
+            loadState = .failed(diagnosticsErrorMessage(error))
         }
     }
 
@@ -290,7 +290,7 @@ struct SendDiagnosticsSheet: View {
             reportId = nextReportId
             alertState = .submitted(nextReportId)
         } catch {
-            alertState = .error(error.localizedDescription)
+            alertState = .error(diagnosticsErrorMessage(error))
         }
     }
 
@@ -343,6 +343,21 @@ struct SendDiagnosticsSheet: View {
         }
 
         return chunks
+    }
+}
+
+private func diagnosticsErrorMessage(_ error: Error) -> String {
+    guard let diagnosticsError = error as? DiagnosticsError else {
+        return error.localizedDescription
+    }
+
+    switch diagnosticsError {
+    case let .Build(message):
+        return message
+    case let .ClearLogs(message):
+        return message
+    case let .Submit(message):
+        return message
     }
 }
 

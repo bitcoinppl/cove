@@ -80,6 +80,20 @@ final class SwiftLogStoreTests: XCTestCase {
         XCTAssertEqual(makeStore().snapshot(), "no Swift logs captured\n")
     }
 
+    func testSnapshotPreservesMultilineMessageWhitespaceForDiagnosticsRedaction() {
+        let store = makeStore()
+        let mnemonic = """
+        abandon abandon abandon abandon abandon abandon
+        abandon abandon abandon abandon abandon about
+        """
+
+        store.record(level: .warn, category: "redaction", message: mnemonic)
+
+        let snapshot = store.snapshot()
+        XCTAssertTrue(snapshot.contains("abandon abandon\nabandon abandon"))
+        XCTAssertFalse(snapshot.contains("abandon abandon\\nabandon abandon"))
+    }
+
     func testSnapshotAfterReinstantiatingStoreIncludesPersistedLines() {
         let store = makeStore()
         store.record(level: .error, category: "restart", message: "before restart")
