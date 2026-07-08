@@ -111,7 +111,7 @@ build-android-connected-device:
 
 alias bad := build-android-connected-device
 
-# Build Android release APK
+# Build Android release Rust FFI and Kotlin bindings
 [group('build')]
 build-android-release:
     just xtask build-android release-speed && just say "done android release"
@@ -125,6 +125,14 @@ bundle-android: build-android-release
     just xtask bundle-android && just say "done android bundle"
 
 alias bua := bundle-android
+
+# Build signed store release APK for Google Play, copy to Downloads
+[group('build')]
+signed-android-release-apk: build-android-release
+    cd android && ./gradlew --stop
+    just xtask signed-android-release-apk && just say "done android release apk"
+
+alias sara := signed-android-release-apk
 
 # Build iOS debug for simulator
 [group('build')]

@@ -48,10 +48,15 @@ Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key m
 ### Android
 
 ```bash
-just build-android-release    # alias: just bar
+just signed-android-release-apk    # alias: just sara
+just bundle-android                # alias: just bua
 ```
 
-Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle/APK).
+`just signed-android-release-apk` builds release Rust FFI and Kotlin bindings, builds the signed store release APK, validates the APK signing and package metadata, and copies it to `~/Downloads/cove-<versionName>-<versionCode>.apk`.
+
+`just bundle-android` builds release Rust FFI and Kotlin bindings, builds the signed store release AAB and APK, validates the APK signing and package metadata, and copies the release artifacts to `~/Downloads`.
+
+Signed Android release workflows require `COVE_KEYSTORE_PATH`, `COVE_KEYSTORE_PASSWORD`, `COVE_KEY_ALIAS`, and `COVE_KEY_PASSWORD`. Set `COVE_SIGNING_CERT_SHA256` to the expected upload certificate SHA-256 digest when you want the script to verify the signing certificate fingerprint.
 
 ## Development Workflow
 
@@ -73,7 +78,9 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 |---------|-------|-------------|
 | `just build-android` | `just ba` | Build Android debug Rust FFI and Kotlin bindings for all ABIs |
 | `just build-android-connected-device` | `just bad` | Build Android debug Rust FFI and Kotlin bindings for the connected device ABI |
-| `just build-android-release` | `just bar` | Build Android release |
+| `just build-android-release` | `just bar` | Build Android release Rust FFI and Kotlin bindings |
+| `just signed-android-release-apk` | `just sara` | Build, validate, and copy signed Android store release APK |
+| `just bundle-android` | `just bua` | Build, validate, and copy signed Android store release AAB and APK |
 | `just build-ios` | `just bi` | Build iOS debug simulator |
 | `just build-ios-debug-device` | `just bidd` | Build iOS debug device |
 | `just build-ios-release` | `just bir` | Build iOS release |

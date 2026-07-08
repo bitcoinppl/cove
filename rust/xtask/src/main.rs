@@ -59,6 +59,10 @@ enum Commands {
     #[command(name = "bundle-android")]
     BundleAndroid,
 
+    /// Build signed store release APK for Play Store, validate it, and copy to Downloads
+    #[command(name = "signed-android-release-apk")]
+    SignedAndroidReleaseApk,
+
     /// Download Android screenshots into _scratch and delete them from the device
     #[command(name = "download-android-screenshots")]
     DownloadAndroidScreenshots,
@@ -267,6 +271,8 @@ fn main() -> Result<()> {
         }
 
         Commands::BundleAndroid => android::bundle_android(cli.verbose),
+
+        Commands::SignedAndroidReleaseApk => android::signed_android_release_apk(cli.verbose),
 
         Commands::DownloadAndroidScreenshots => android::download_android_screenshots(),
 
