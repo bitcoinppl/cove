@@ -169,7 +169,8 @@ impl CaptureState {
     }
 
     fn snapshot_text(&self) -> String {
-        let text = self.ring.text();
+        let text =
+            self.file.as_ref().map_or_else(|| self.ring.text(), RollingLogFile::snapshot_text);
         if text.is_empty() { "no Rust logs captured\n".to_string() } else { text }
     }
 
@@ -286,6 +287,27 @@ impl RollingLogFile {
         }
 
         Ok(())
+    }
+
+    fn snapshot_text(&self) -> String {
+        self.log_paths().fold(String::new(), |mut text, path| {
+            match std::fs::read_to_string(path) {
+                Ok(file_text) => text.push_str(&file_text),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    text.push_str(&format!("failed to read Rust diagnostics log file: {error}\n"));
+                }
+            }
+
+            text
+        })
+    }
+
+    fn log_paths(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        (1..=ARCHIVE_FILE_COUNT)
+            .rev()
+            .map(|index| archived_log_path(&self.dir, index))
+            .chain(std::iter::once(current_log_path(&self.dir)))
     }
 }
 
@@ -480,6 +502,38 @@ mod tests {
 
         let text = std::fs::read_to_string(current_log_path(dir.path()))?;
         assert_eq!(text.matches("before attach").count(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn snapshot_reads_persisted_current_file_after_restart() -> eyre::Result<()> {
+        let dir = TempDir::new()?;
+        {
+            let mut state = CaptureState::default();
+            state.attach(dir.path().to_path_buf())?;
+            state.record_line("before restart");
+        }
+
+        let mut state = CaptureState::default();
+        state.attach(dir.path().to_path_buf())?;
+
+        assert!(state.snapshot_text().contains("before restart"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn snapshot_reads_archives_before_current_file() -> eyre::Result<()> {
+        let dir = TempDir::new()?;
+        std::fs::write(archived_log_path(dir.path(), 2), "oldest\n")?;
+        std::fs::write(archived_log_path(dir.path(), 1), "older\n")?;
+        std::fs::write(current_log_path(dir.path()), "current\n")?;
+
+        let mut state = CaptureState::default();
+        state.attach(dir.path().to_path_buf())?;
+
+        assert_eq!(state.snapshot_text(), "oldest\nolder\ncurrent\n");
 
         Ok(())
     }
