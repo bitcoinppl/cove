@@ -76,6 +76,11 @@ import Observation
             throw CancellationError()
         }
 
+        // ensureWalletManagerLoaded checks before installWalletManager whether another wallet
+        // replaced the cache
+        // walletManager !== previousManager and walletManager.id != id means a different wallet
+        // owns it now
+        // close and cancel the newly loaded WalletManager so the replacement remains authoritative
         if let walletManager, walletManager !== previousManager, walletManager.id != id {
             loadedWalletManager.close()
             throw CancellationError()

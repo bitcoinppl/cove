@@ -196,23 +196,28 @@ class WalletManager :
                     WalletManagerBootstrap(rust, initialState)
                 }
 
+            var manager: WalletManager? = null
             try {
                 currentCoroutineContext().ensureActive()
-            } catch (e: CancellationException) {
-                try {
-                    bootstrap.rust.shutdown()
-                } finally {
-                    bootstrap.rust.close()
+
+                return withContext(Dispatchers.Main.immediate) {
+                    WalletManager(
+                        bootstrap.initialState.metadata.id,
+                        bootstrap.rust,
+                        bootstrap.initialState,
+                    ).also { manager = it }
                 }
+            } catch (e: CancellationException) {
+                manager?.close() ?: closeBootstrapRust(bootstrap)
                 throw e
             }
+        }
 
-            return withContext(Dispatchers.Main.immediate) {
-                WalletManager(
-                    bootstrap.initialState.metadata.id,
-                    bootstrap.rust,
-                    bootstrap.initialState,
-                )
+        private fun closeBootstrapRust(bootstrap: WalletManagerBootstrap) {
+            try {
+                bootstrap.rust.shutdown()
+            } finally {
+                bootstrap.rust.close()
             }
         }
 
