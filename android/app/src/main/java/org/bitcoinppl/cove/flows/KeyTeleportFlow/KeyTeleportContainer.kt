@@ -217,7 +217,10 @@ fun KeyTeleportContainer(
                         ready = state.v1,
                         onCopy = { text -> copyText(context, "Key Teleport", text) },
                         onShare = { text -> shareText(context, "Share Key Teleport", text) },
-                        onDone = { app.popRoute() },
+                        onDone = {
+                            manager.dispatch(KeyTeleportManagerAction.Clear)
+                            app.popRoute()
+                        },
                     )
                 }
             }
@@ -366,7 +369,7 @@ private fun ReceivePasswordView(manager: KeyTeleportManager) {
         onValueChange = { password = it },
         label = { Text("Password") },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         visualTransformation = PasswordVisualTransformation(),
         modifier = Modifier.fillMaxWidth(),
     )
@@ -412,6 +415,16 @@ private fun ReceiveMnemonicReviewView(
         ) {
             Text("Import Wallet")
         }
+        TextButton(
+            onClick = {
+                manager.dispatch(KeyTeleportManagerAction.FinishReview)
+                onDone()
+            },
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Finish Without Importing")
+        }
     } else {
         Text(
             text = "Imported $importedWalletName.",
@@ -441,6 +454,11 @@ private fun ReceiveXprvReviewView(
     var xprv by remember { mutableStateOf<String?>(null) }
 
     SecureScreenEffect()
+    DisposableEffect(Unit) {
+        onDispose {
+            manager.dispatch(KeyTeleportManagerAction.HideXprv)
+        }
+    }
 
     LaunchedEffect(review.revealed) {
         xprv = if (review.revealed) manager.revealXprv() else null
