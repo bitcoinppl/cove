@@ -272,10 +272,12 @@ private class SendDiagnosticsSheetState(
 
             val platformLogs = collectAndroidPlatformLogs(context, ioDispatcher)
             val nextReport =
-                buildDiagnosticsReport(
-                    platform = androidDiagnosticsPlatformInfo(),
-                    platformLogs = platformLogs,
-                )
+                withContext(ioDispatcher) {
+                    buildDiagnosticsReport(
+                        platform = androidDiagnosticsPlatformInfo(),
+                        platformLogs = platformLogs,
+                    )
+                }
 
             replaceReport(nextReport)
             refreshPreview(nextReport)
@@ -307,7 +309,7 @@ private class SendDiagnosticsSheetState(
         actionError = null
 
         try {
-            reportId = current.submit(description)
+            reportId = withContext(ioDispatcher) { current.submit(description) }
         } catch (error: DiagnosticsException) {
             actionError = error.displayMessage()
         } finally {
