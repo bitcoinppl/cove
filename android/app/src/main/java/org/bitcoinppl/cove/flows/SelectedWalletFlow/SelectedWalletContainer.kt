@@ -95,7 +95,7 @@ fun SelectedWalletContainer(
 
         try {
             android.util.Log.d(tag, "getting wallet $requestedId")
-            val wm = app.getWalletManager(requestedId)
+            val wm = app.getWalletManagerLoaded(requestedId)
 
             // only set manager if we're still loading the same wallet (not stale)
             if (isActive && requestedId == id) {

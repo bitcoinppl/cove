@@ -7,10 +7,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -20,6 +23,7 @@ import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.cancellation.CancellationException
 
 private val WalletScanStatus.isActive: Boolean
     get() =
@@ -36,6 +40,11 @@ val WalletLedgerState.initialScanIncomplete: Boolean
 
 val WalletLedgerState.initialScanActive: Boolean
     get() = this is WalletLedgerState.InitialScanIncomplete && v1 == InitialScanActivity.ACTIVE
+
+private data class WalletManagerBootstrap(
+    val rust: RustWalletManager,
+    val initialState: WalletInitialState,
+)
 
 /**
  * wallet manager - manages wallet state, balance, transactions
@@ -172,6 +181,44 @@ class WalletManager :
             val initialState = rust.initialState()
             android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
             return WalletManager(initialState.metadata.id, rust, initialState)
+        }
+
+        suspend fun load(
+            id: WalletId,
+            rustDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        ): WalletManager {
+            val bootstrap =
+                withContext(rustDispatcher) {
+                    val rust = RustWalletManager(id)
+                    val initialState = rust.initialState()
+                    android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
+
+                    WalletManagerBootstrap(rust, initialState)
+                }
+
+            var manager: WalletManager? = null
+            try {
+                currentCoroutineContext().ensureActive()
+
+                return withContext(Dispatchers.Main.immediate) {
+                    WalletManager(
+                        bootstrap.initialState.metadata.id,
+                        bootstrap.rust,
+                        bootstrap.initialState,
+                    ).also { manager = it }
+                }
+            } catch (e: CancellationException) {
+                manager?.close() ?: closeBootstrapRust(bootstrap)
+                throw e
+            }
+        }
+
+        private fun closeBootstrapRust(bootstrap: WalletManagerBootstrap) {
+            try {
+                bootstrap.rust.shutdown()
+            } finally {
+                bootstrap.rust.close()
+            }
         }
 
         // create from xpub

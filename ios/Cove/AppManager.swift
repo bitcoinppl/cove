@@ -128,6 +128,18 @@ private let walletModeChangeDelayMs = 250
         try managerCache.ensureWalletManager(id: id, delegate: self)
     }
 
+    @MainActor
+    func ensureWalletManagerLoaded(
+        id: WalletId,
+        isCurrent: @MainActor () -> Bool = { true }
+    ) async throws -> WalletManager {
+        try await managerCache.ensureWalletManagerLoaded(
+            id: id,
+            delegate: self,
+            isCurrent: isCurrent
+        )
+    }
+
     func beginInitialScanBackgroundTaskIfNeeded() {
         managerCache.beginInitialScanBackgroundTaskIfNeeded()
     }
@@ -424,10 +436,17 @@ private let walletModeChangeDelayMs = 250
             routes: routes
         ) { [weak self] id in
             guard let self else { return }
+            let isCurrent: @MainActor () -> Bool = { [weak self] in
+                self?.navigationCoordinator.isNavigationGenerationCurrent(generation) == true
+            }
 
             do {
-                let manager = try self.ensureWalletManager(id: id)
+                let manager = try await self.ensureWalletManagerLoaded(id: id, isCurrent: isCurrent)
+                guard isCurrent() else { return }
+
                 try await manager.startWalletScanIfNeeded()
+            } catch is CancellationError {
+                return
             } catch {
                 self.logger.error("Unable to prewarm selected wallet \(id): \(error)")
             }

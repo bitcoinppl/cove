@@ -45,7 +45,11 @@ fun WalletSettingsContainer(
     modifier: Modifier = Modifier,
 ) {
     var loadState by remember(id) {
-        mutableStateOf<WalletSettingsLoadState>(WalletSettingsLoadState.Loading)
+        mutableStateOf<WalletSettingsLoadState>(
+            app.cachedWalletManager(id)
+                ?.let(WalletSettingsLoadState::Ready)
+                ?: WalletSettingsLoadState.Loading,
+        )
     }
     var loadAttempt by remember(id) { mutableStateOf(0) }
     var recoveryGeneration by remember(id) { mutableStateOf(0) }
@@ -93,11 +97,19 @@ fun WalletSettingsContainer(
 
     // lazy load wallet manager
     LaunchedEffect(id, loadAttempt) {
+        app.cachedWalletManager(id)?.let { manager ->
+            loadState = WalletSettingsLoadState.Ready(manager)
+            return@LaunchedEffect
+        }
+
         loadState = WalletSettingsLoadState.Loading
 
         try {
             android.util.Log.d(tag, "getting wallet $id")
-            loadState = WalletSettingsLoadState.Ready(app.getWalletManager(id))
+            val manager = app.getWalletManagerLoaded(id)
+            if (manager.id == id) {
+                loadState = WalletSettingsLoadState.Ready(manager)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
