@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -41,7 +40,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -160,13 +158,9 @@ fun BackupExportScreen(
             .fillMaxSize()
             .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = {
-            TopAppBar(
-                title = { Text("Export Backup") },
-                navigationIcon = {
-                    IconButton(onClick = handleDismiss) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            SettingsTopAppBar(
+                title = "Export Backup",
+                onBack = handleDismiss,
             )
         },
     ) { paddingValues ->

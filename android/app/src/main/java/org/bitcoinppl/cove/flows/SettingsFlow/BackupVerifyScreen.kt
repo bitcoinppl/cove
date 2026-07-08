@@ -22,12 +22,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -48,7 +47,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -165,13 +163,9 @@ fun BackupVerifyScreen(
             .fillMaxSize()
             .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = {
-            TopAppBar(
-                title = { Text("Verify Backup") },
-                navigationIcon = {
-                    IconButton(onClick = handleDismiss) {
-                        Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            SettingsTopAppBar(
+                title = "Verify Backup",
+                onBack = handleDismiss,
             )
         },
     ) { paddingValues ->
@@ -473,7 +467,7 @@ fun WalletSummaryCard(wallet: BackupWalletSummary) {
             if (wallet.labelCount > 0u) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     MetadataItem(
-                        icon = Icons.Default.Label,
+                        icon = Icons.AutoMirrored.Default.Label,
                         text = "${wallet.labelCount} labels",
                         modifier = Modifier.weight(1f),
                     )

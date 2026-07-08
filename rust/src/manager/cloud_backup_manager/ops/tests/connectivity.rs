@@ -262,12 +262,13 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
     );
     let initial_attempt_count = globals.cloud.wallet_backup_upload_attempt_count();
 
-    resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;
-
     assert_eq!(
         manager.compute_sync_health().await,
         CloudSyncHealth::AuthorizationRequired("failed".into()),
     );
+
+    resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;
+
     wait_for_test_condition(
         Duration::from_secs(1),
         "startup resume should retry authorization failures",

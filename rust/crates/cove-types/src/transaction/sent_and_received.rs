@@ -89,14 +89,7 @@ impl SentAndReceived {
     pub fn preview_new() -> Self {
         let rand = rand::rng().random_range(0..3);
 
-        let direction =
-            if rand == 0 { TransactionDirection::Outgoing } else { TransactionDirection::Incoming };
-
-        Self {
-            direction,
-            sent: Amount::from_sat(random_amount()),
-            received: Amount::from_sat(random_amount()),
-        }
+        if rand == 0 { Self::preview_outgoing() } else { Self::preview_incoming() }
     }
 
     #[must_use]
@@ -120,4 +113,36 @@ impl SentAndReceived {
 
 fn random_amount() -> u64 {
     rand::rng().random_range(100_000..=200_000_000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_outgoing_has_positive_external_sent_amount() {
+        let sent_and_received = SentAndReceived::preview_outgoing();
+
+        assert_eq!(sent_and_received.direction(), TransactionDirection::Outgoing);
+        assert!(sent_and_received.sent().as_sats() > sent_and_received.received().as_sats());
+        assert!(sent_and_received.external_sent().as_sats() > 0);
+    }
+
+    #[test]
+    fn preview_incoming_matches_incoming_direction() {
+        let sent_and_received = SentAndReceived::preview_incoming();
+
+        assert_eq!(sent_and_received.direction(), TransactionDirection::Incoming);
+        assert!(sent_and_received.received().as_sats() >= sent_and_received.sent().as_sats());
+    }
+
+    #[test]
+    fn preview_new_never_panics_when_formatting_amounts() {
+        for _ in 0..100 {
+            let sent_and_received = SentAndReceived::preview_new();
+
+            let _ = sent_and_received.amount_fmt(BitcoinUnit::Btc);
+            let _ = sent_and_received.amount_fmt(BitcoinUnit::Sat);
+        }
+    }
 }
