@@ -7,7 +7,6 @@
 import Foundation
 import SwiftUI
 
-private let minimumSwipeToSendControlHeight: CGFloat = 70
 private let swipeToSendVerticalTextPadding: CGFloat = 48
 
 enum SendState: Hashable, Equatable {
@@ -18,6 +17,8 @@ enum SendState: Hashable, Equatable {
 }
 
 struct SwipeToSendView: View {
+    static let minimumControlHeight: CGFloat = 70
+
     @Environment(\.colorScheme) var colorScheme
 
     // args
@@ -35,7 +36,7 @@ struct SwipeToSendView: View {
     }
 
     var height: CGFloat {
-        max(minimumSwipeToSendControlHeight, measuredTextHeight + swipeToSendVerticalTextPadding)
+        max(Self.minimumControlHeight, measuredTextHeight + swipeToSendVerticalTextPadding)
     }
 
     var circleSize: CGFloat {
