@@ -4,6 +4,7 @@ use bip39::{Language, Mnemonic};
 use bitcoin::{Address, PrivateKey};
 
 const BIP39_WORD_COUNTS: [usize; 5] = [24, 21, 18, 15, 12];
+const TXID_HEX_LEN: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum SecretKind {
@@ -99,10 +100,42 @@ impl Redactor {
 
     fn redact_token(&mut self, token: &str) -> String {
         let Some(kind) = classify_secret(token) else {
-            return token.to_string();
+            return self.redact_embedded_txids(token);
         };
 
         self.placeholder_for(kind, token)
+    }
+
+    fn redact_embedded_txids(&mut self, token: &str) -> String {
+        let mut output = String::with_capacity(token.len());
+        let mut cursor = 0;
+
+        while cursor < token.len() {
+            let Some(run_start_offset) =
+                token[cursor..].bytes().position(|byte| byte.is_ascii_hexdigit())
+            else {
+                output.push_str(&token[cursor..]);
+                break;
+            };
+            let run_start = cursor + run_start_offset;
+            output.push_str(&token[cursor..run_start]);
+
+            let run_len =
+                token[run_start..].bytes().take_while(|byte| byte.is_ascii_hexdigit()).count();
+            let run_end = run_start + run_len;
+            let mut run_cursor = run_start;
+
+            while run_cursor + TXID_HEX_LEN <= run_end {
+                let txid = &token[run_cursor..run_cursor + TXID_HEX_LEN];
+                output.push_str(&self.placeholder_for(SecretKind::TransactionId, txid));
+                run_cursor += TXID_HEX_LEN;
+            }
+
+            output.push_str(&token[run_cursor..run_end]);
+            cursor = run_end;
+        }
+
+        output
     }
 
     fn placeholder_for(&mut self, kind: SecretKind, secret: &str) -> String {
@@ -254,7 +287,7 @@ fn normalized_mnemonic_phrase(text: &str, tokens: &[TokenSpan]) -> Option<String
 }
 
 fn is_txid(token: &str) -> bool {
-    token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+    token.len() == TXID_HEX_LEN && token.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn is_extended_key(token: &str) -> bool {
@@ -329,6 +362,19 @@ mod tests {
         assert_eq!(output.matches("<redacted-extended-key-1>").count(), 2);
         assert_eq!(output.matches("<redacted-transaction-id-1>").count(), 2);
         assert!(!output.contains(&xpub));
+        assert!(!output.contains(&txid));
+    }
+
+    #[test]
+    fn redacts_txids_embedded_inside_larger_tokens() {
+        let mut redactor = redactor_without_paths();
+        let txid = "4d3c2b1a".repeat(8);
+        let input = format!("payment{txid}suffix again {txid}");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output.matches("<redacted-transaction-id-1>").count(), 2);
+        assert!(output.contains("payment<redacted-transaction-id-1>suffix"));
         assert!(!output.contains(&txid));
     }
 
