@@ -704,9 +704,12 @@ impl PersistedReceiveSession {
     fn new() -> Self {
         let database = Database::global();
         let session = ReceiverSession::new();
+        let mut private_key = session.private_key_bytes();
+        let private_key_hex = hex::encode(private_key);
+        private_key.zeroize();
 
         Self {
-            private_key_hex: hex::encode(session.private_key_bytes()),
+            private_key_hex,
             created_at_secs: now_secs(),
             network: database.global_config.selected_network(),
             wallet_mode: database.global_config.wallet_mode(),
@@ -724,14 +727,17 @@ impl PersistedReceiveSession {
     fn receiver_session(&self) -> Result<ReceiverSession, KeyTeleportAlert> {
         let mut bytes = hex::decode(&self.private_key_hex)
             .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))?;
-        let private_key: [u8; 32] = bytes
+        let mut private_key: [u8; 32] = bytes
             .as_slice()
             .try_into()
             .map_err(|_| KeyTeleportAlert::Keychain("invalid receive private key length".into()))?;
         bytes.zeroize();
 
-        ReceiverSession::from_private_key_bytes(private_key)
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))
+        let session = ReceiverSession::from_private_key_bytes(private_key)
+            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()));
+        private_key.zeroize();
+
+        session
     }
 
     fn receive_request(&self) -> Result<ReceiveRequest, KeyTeleportAlert> {
