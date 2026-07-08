@@ -7,7 +7,13 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use xshell::{cmd, Shell};
 
 // Android build constants
@@ -26,6 +32,8 @@ const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove.dev";
 const ANDROID_ACTIVITY_NAME: &str = "org.bitcoinppl.cove.MainActivity";
 const APK_PATH_DEBUG: &str = "app/build/outputs/apk/dev/debug/app-dev-debug.apk";
 const APK_PATH_RELEASE: &str = "app/build/outputs/apk/dev/release/app-dev-release.apk";
+const ANDROID_SCREENSHOT_DIRS: &[&str] =
+    &["/sdcard/Pictures/Screenshots", "/sdcard/DCIM/Screenshots"];
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
@@ -43,6 +51,11 @@ pub enum BuildProfile {
 pub enum AndroidBuildTargets {
     All,
     ConnectedDevice,
+}
+
+#[derive(Debug)]
+struct AndroidScreenshot {
+    remote_path: String,
 }
 
 impl BuildProfile {
@@ -390,6 +403,238 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn download_android_screenshots() -> Result<()> {
+    ensure_adb_available()?;
+    ensure_connected_android_device()?;
+
+    let screenshots = collect_android_screenshots()?;
+    if screenshots.is_empty() {
+        print_info("No Android screenshots found");
+        return Ok(());
+    }
+
+    let output_dir = android_screenshots_output_dir()?;
+    fs::create_dir_all(&output_dir)
+        .wrap_err_with(|| format!("Failed to create {}", output_dir.display()))?;
+
+    let mut downloaded = 0;
+    for screenshot in screenshots {
+        let target_path = target_path_for_android_file(&output_dir, &screenshot.remote_path)?;
+
+        print_info(&format!("Downloading {}", screenshot.remote_path));
+        pull_android_file(&screenshot.remote_path, &target_path)?;
+        delete_android_file(&screenshot.remote_path)?;
+        downloaded += 1;
+    }
+
+    print_success(&format!(
+        "Downloaded {downloaded} Android screenshot(s) to {} and deleted them from the device",
+        output_dir.display()
+    ));
+
+    Ok(())
+}
+
+fn ensure_adb_available() -> Result<()> {
+    if command_exists("adb") {
+        return Ok(());
+    }
+
+    print_error("adb not found. Please install Android SDK platform-tools");
+    color_eyre::eyre::bail!("adb command not found");
+}
+
+fn ensure_connected_android_device() -> Result<()> {
+    let output =
+        Command::new("adb").arg("get-state").output().wrap_err("Failed to run adb get-state")?;
+
+    if !output.status.success() {
+        color_eyre::eyre::bail!("No connected Android device found: {}", command_error(&output));
+    }
+
+    let state = adb_stdout(&output).trim().to_string();
+    if state != "device" {
+        color_eyre::eyre::bail!("Connected Android device is not ready: {state}");
+    }
+
+    Ok(())
+}
+
+fn collect_android_screenshots() -> Result<Vec<AndroidScreenshot>> {
+    let mut screenshots = Vec::new();
+
+    for &remote_dir in ANDROID_SCREENSHOT_DIRS {
+        if !android_remote_dir_exists(remote_dir)? {
+            continue;
+        }
+
+        let remote_paths = list_android_screenshot_files(remote_dir)?;
+        screenshots
+            .extend(remote_paths.into_iter().map(|remote_path| AndroidScreenshot { remote_path }));
+    }
+
+    Ok(screenshots)
+}
+
+fn android_remote_dir_exists(remote_dir: &str) -> Result<bool> {
+    let command = format!("[ -d {} ]", remote_shell_quote(remote_dir));
+    let status = Command::new("adb")
+        .args(["shell", &command])
+        .status()
+        .wrap_err_with(|| format!("Failed to check Android directory {remote_dir}"))?;
+
+    Ok(status.success())
+}
+
+fn list_android_screenshot_files(remote_dir: &str) -> Result<Vec<String>> {
+    let command = format!(
+        "find {} -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \\) -print",
+        remote_shell_quote(remote_dir)
+    );
+    let output =
+        adb_shell_output(&command, &format!("Failed to list screenshots in {remote_dir}"))?;
+
+    Ok(output.lines().filter(|line| !line.is_empty()).map(ToOwned::to_owned).collect())
+}
+
+fn android_screenshots_output_dir() -> Result<PathBuf> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .wrap_err("System clock is before Unix epoch")?
+        .as_secs();
+
+    Ok(repo_root_from_current_dir()?
+        .join("_scratch")
+        .join(format!("android-screenshots-{timestamp}")))
+}
+
+fn repo_root_from_current_dir() -> Result<PathBuf> {
+    let current_dir = std::env::current_dir().wrap_err("Failed to read current directory")?;
+
+    if current_dir.join("rust/xtask/Cargo.toml").exists() {
+        return Ok(current_dir);
+    }
+
+    if current_dir.join("xtask/Cargo.toml").exists() {
+        return current_dir
+            .parent()
+            .map(Path::to_path_buf)
+            .context("Rust workspace directory has no parent");
+    }
+
+    Ok(current_dir)
+}
+
+fn target_path_for_android_file(output_dir: &Path, remote_path: &str) -> Result<PathBuf> {
+    let file_name = Path::new(remote_path)
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .context("Android screenshot path has no filename")?;
+    let target_path = output_dir.join(file_name);
+
+    if !target_path.exists() {
+        return Ok(target_path);
+    }
+
+    let file_name_path = Path::new(file_name);
+    let stem = file_name_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or(file_name);
+    let extension = file_name_path.extension().and_then(|extension| extension.to_str());
+
+    for suffix in 2.. {
+        let candidate_file_name = match extension {
+            Some(extension) => format!("{stem}-{suffix}.{extension}"),
+            None => format!("{stem}-{suffix}"),
+        };
+        let candidate = output_dir.join(candidate_file_name);
+
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    unreachable!("unbounded suffix search should always find a filename")
+}
+
+fn pull_android_file(remote_path: &str, target_path: &Path) -> Result<()> {
+    let status = Command::new("adb")
+        .args(["pull", remote_path])
+        .arg(target_path)
+        .status()
+        .wrap_err_with(|| format!("Failed to pull Android screenshot {remote_path}"))?;
+
+    if !status.success() {
+        color_eyre::eyre::bail!("Failed to pull Android screenshot {remote_path}: {status}");
+    }
+
+    Ok(())
+}
+
+fn delete_android_file(remote_path: &str) -> Result<()> {
+    let command = format!("rm -f {}", remote_shell_quote(remote_path));
+    let status = Command::new("adb")
+        .args(["shell", &command])
+        .status()
+        .wrap_err_with(|| format!("Failed to delete Android screenshot {remote_path}"))?;
+
+    if !status.success() {
+        color_eyre::eyre::bail!("Failed to delete Android screenshot {remote_path}: {status}");
+    }
+
+    Ok(())
+}
+
+fn adb_shell_output(command: &str, context: &str) -> Result<String> {
+    let output = Command::new("adb")
+        .args(["shell", command])
+        .output()
+        .wrap_err_with(|| context.to_string())?;
+
+    if !output.status.success() {
+        color_eyre::eyre::bail!("{context}: {}", command_error(&output));
+    }
+
+    Ok(adb_stdout(&output))
+}
+
+fn adb_stdout(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).replace('\r', "")
+}
+
+fn command_error(output: &Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr).replace('\r', "");
+    let stderr = stderr.trim();
+    if !stderr.is_empty() {
+        return stderr.to_string();
+    }
+
+    let stdout = adb_stdout(output);
+    let stdout = stdout.trim();
+    if !stdout.is_empty() {
+        return stdout.to_string();
+    }
+
+    output.status.to_string()
+}
+
+fn remote_shell_quote(value: &str) -> String {
+    let mut quoted = String::from("'");
+
+    for character in value.chars() {
+        if character == '\'' {
+            quoted.push_str("'\\''");
+        } else {
+            quoted.push(character);
+        }
+    }
+
+    quoted.push('\'');
+    quoted
+}
+
 fn extract_version_name(content: &str) -> Option<String> {
     let key = "versionName = \"";
     let start = content.find(key)?;
@@ -408,7 +653,8 @@ fn extract_version_code(content: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::target_for_abi;
+    use super::{remote_shell_quote, target_for_abi, target_path_for_android_file};
+    use std::fs;
 
     #[test]
     fn maps_supported_android_abis_to_rust_targets() {
@@ -425,5 +671,31 @@ mod tests {
     #[test]
     fn rejects_unsupported_android_abis() {
         assert_eq!(target_for_abi("x86"), None);
+    }
+
+    #[test]
+    fn quotes_android_shell_paths() {
+        assert_eq!(
+            remote_shell_quote("/sdcard/Pictures/Screenshots"),
+            "'/sdcard/Pictures/Screenshots'"
+        );
+        assert_eq!(
+            remote_shell_quote("/sdcard/Pictures/Screenshots/it's.png"),
+            "'/sdcard/Pictures/Screenshots/it'\\''s.png'"
+        );
+    }
+
+    #[test]
+    fn flat_android_screenshot_targets_avoid_collisions() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        fs::write(temp_dir.path().join("Screenshot.png"), []).unwrap();
+
+        let target = target_path_for_android_file(
+            temp_dir.path(),
+            "/sdcard/DCIM/Screenshots/Screenshot.png",
+        )
+        .unwrap();
+
+        assert_eq!(target, temp_dir.path().join("Screenshot-2.png"));
     }
 }

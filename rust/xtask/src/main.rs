@@ -59,6 +59,10 @@ enum Commands {
     #[command(name = "bundle-android")]
     BundleAndroid,
 
+    /// Download Android screenshots into _scratch and delete them from the device
+    #[command(name = "download-android-screenshots")]
+    DownloadAndroidScreenshots,
+
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
     BuildIos {
@@ -263,6 +267,8 @@ fn main() -> Result<()> {
         }
 
         Commands::BundleAndroid => android::bundle_android(cli.verbose),
+
+        Commands::DownloadAndroidScreenshots => android::download_android_screenshots(),
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);
