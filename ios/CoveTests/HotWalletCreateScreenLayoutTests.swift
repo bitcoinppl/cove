@@ -758,14 +758,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
         let croppedBand = try XCTUnwrap(cgImage.cropping(to: navBand))
         let pixels = try rgbaPixels(in: croppedBand)
-        let lightWordCardPixelCount = stride(from: 0, to: pixels.count, by: 4).count { offset in
-            pixels[offset] > 190 &&
-                pixels[offset] < 245 &&
-                pixels[offset + 1] > 195 &&
-                pixels[offset + 1] < 245 &&
-                pixels[offset + 2] > 200 &&
-                pixels[offset + 2] < 245
-        }
+        let lightWordCardPixelCount = lightWordCardPixelCount(in: pixels)
         let maximumAllowedLightPixels = max(1, croppedBand.width * croppedBand.height / 25)
 
         XCTAssertLessThan(
@@ -818,14 +811,39 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         let croppedImage = try XCTUnwrap(image.cropping(to: rect))
         let pixels = try rgbaPixels(in: croppedImage)
 
-        return stride(from: 0, to: pixels.count, by: 4).count { offset in
-            pixels[offset] > 190 &&
-                pixels[offset] < 245 &&
-                pixels[offset + 1] > 195 &&
-                pixels[offset + 1] < 245 &&
-                pixels[offset + 2] > 200 &&
-                pixels[offset + 2] < 245
+        return lightWordCardPixelCount(in: pixels)
+    }
+
+    private func lightWordCardPixelCount(in pixels: [UInt8]) -> Int {
+        var count = 0
+        var offset = 0
+
+        while offset + 2 < pixels.count {
+            if isLightWordCardPixel(
+                red: pixels[offset],
+                green: pixels[offset + 1],
+                blue: pixels[offset + 2]
+            ) {
+                count += 1
+            }
+
+            offset += 4
         }
+
+        return count
+    }
+
+    private func isLightWordCardPixel(red: UInt8, green: UInt8, blue: UInt8) -> Bool {
+        let red = Int(red)
+        let green = Int(green)
+        let blue = Int(blue)
+
+        return red > 190 &&
+            red < 245 &&
+            green > 195 &&
+            green < 245 &&
+            blue > 200 &&
+            blue < 245
     }
 
     private func rgbaPixels(in image: CGImage) throws -> [UInt8] {
