@@ -73,7 +73,8 @@ final class AmountFormatterTests: XCTestCase {
     }
 
     func testSentAndReceivedFormattingMatchesExistingHelpers() {
-        let metadata = walletMetadataPreview()
+        var metadata = walletMetadataPreview()
+        metadata.sensitiveVisible = false
         let transaction = transactionsPreviewNew(confirmed: 0, unconfirmed: 1)[0]
         let sentAndReceived = transaction.sentAndReceived()
         let formatter = AmountFormatter(metadata: metadata)
