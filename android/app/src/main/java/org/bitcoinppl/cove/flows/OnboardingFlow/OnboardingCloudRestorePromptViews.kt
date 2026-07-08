@@ -368,6 +368,8 @@ private fun CloudRestoreProviderHint.passkeyDisplayName(): String =
 
 @Composable
 private fun OnboardingCloudSearchHero() {
+    val innerRingSize = 68.dp
+
     Box(
         modifier = Modifier.size(118.dp),
         contentAlignment = Alignment.Center,
@@ -389,7 +391,7 @@ private fun OnboardingCloudSearchHero() {
         Box(
             modifier =
                 Modifier
-                    .size(58.dp)
+                    .size(innerRingSize)
                     .border(1.5.dp, OnboardingGradientLight.copy(alpha = 0.88f), CircleShape),
         )
 
@@ -399,6 +401,23 @@ private fun OnboardingCloudSearchHero() {
             tint = OnboardingGradientLight,
             modifier = Modifier.size(34.dp),
         )
+    }
+}
+
+@Preview(
+    name = "Onboarding Cloud Search Hero",
+    showBackground = true,
+    backgroundColor = 0xFF1C2536,
+    widthDp = 160,
+    heightDp = 160,
+)
+@Composable
+private fun OnboardingCloudSearchHeroPreview() {
+    Box(
+        modifier = Modifier.size(160.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        OnboardingCloudSearchHero()
     }
 }
 

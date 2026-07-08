@@ -41,7 +41,8 @@ struct OnboardingStatusHero: View {
     var fillColor: Color = .duskBlue.opacity(0.42)
     var pulse = false
     var iconSize: CGFloat = 24
-    var ringSizes: [CGFloat] = [118, 86, 58]
+    var innerBadgeSize: CGFloat = 68
+    var ringSizes: [CGFloat] = [118, 86, 68]
 
     var body: some View {
         Group {
@@ -69,11 +70,11 @@ struct OnboardingStatusHero: View {
 
             Circle()
                 .fill(fillColor)
-                .frame(width: 58, height: 58)
+                .frame(width: innerBadgeSize, height: innerBadgeSize)
 
             Circle()
                 .stroke(tint.opacity(pulse ? 0.88 : 0.7), lineWidth: 1.3)
-                .frame(width: 58, height: 58)
+                .frame(width: innerBadgeSize, height: innerBadgeSize)
 
             Image(systemName: systemImage)
                 .font(.system(size: iconSize, weight: .semibold))
@@ -110,6 +111,16 @@ struct OnboardingStatusHero: View {
         default: 0.04
         }
     }
+}
+
+#Preview("Onboarding Status Hero - Cloud") {
+    ZStack {
+        Color.midnightBlue
+            .ignoresSafeArea()
+
+        OnboardingStatusHero(systemImage: "icloud")
+    }
+    .frame(width: 160, height: 160)
 }
 
 struct OnboardingThinProgressBar: View {

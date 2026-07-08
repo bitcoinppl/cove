@@ -129,6 +129,21 @@ struct TapSignerContainer: View {
     }
 }
 
+struct TapSignerResultBackground: View {
+    var body: some View {
+        VStack {
+            Image(.chainCodePattern)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .ignoresSafeArea(edges: .all)
+                .padding(.top, 5)
+
+            Spacer()
+        }
+        .opacity(0.8)
+    }
+}
+
 #Preview {
     TapSignerContainer(route: .initSelect(tapSignerPreviewNew(preview: true)))
 }

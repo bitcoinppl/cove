@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -85,7 +86,8 @@ fun NumberPadPinView(
             Modifier
                 .fillMaxSize()
                 .background(CoveColor.midnightBlue)
-                .padding(16.dp),
+                .padding(16.dp)
+                .testTag("numberPadPin.viewport"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // cancel button header (matches iOS CancelView pattern)
@@ -195,6 +197,7 @@ fun NumberPadPinView(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
+                                .testTag("numberPadPin.cancel")
                                 .clickable { backAction() }
                                 .padding(vertical = 20.dp),
                         contentAlignment = Alignment.Center,
@@ -242,6 +245,7 @@ fun NumberPadPinView(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .testTag("numberPadPin.delete")
                             .clickable(
                                 onClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
                                 indication = null,
@@ -270,6 +274,7 @@ private fun NumberButton(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .testTag("numberPadPin.digit.$text")
                 .clickable(
                     onClick = onClick,
                     indication = null,

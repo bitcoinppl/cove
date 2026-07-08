@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct SecretWordsScreen: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
 
@@ -44,80 +45,25 @@ struct SecretWordsScreen: View {
     }
 
     var body: some View {
-        VStack {
-            Spacer()
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
             Group {
-                if let words {
-                    GroupBox {
-                        ColumnMajorGrid(items: words.allWords()) { _, word in
-                            HStack {
-                                Text("\(word.number).")
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.secondary)
-                                    .fontDesign(.monospaced)
-                                    .multilineTextAlignment(.leading)
-                                    .minimumScaleFactor(0.5)
-
-                                Text(word.word)
-                                    .fontWeight(.bold)
-                                    .fontDesign(.monospaced)
-                                    .multilineTextAlignment(.leading)
-                                    .minimumScaleFactor(0.75)
-                                    .lineLimit(1)
-                                    .fixedSize()
-
-                                Spacer()
-                            }
-                        }
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
                     }
-                    .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 32)
-                    .frame(width: screenWidth * 0.9)
-                    .font(.caption)
+                    .scrollIndicators(.hidden)
                 } else {
-                    Text(errorMessage ?? "Loading...")
-                }
-
-                Spacer()
-                Spacer()
-                Spacer()
-
-                VStack(spacing: 12) {
-                    HStack {
-                        Text("Recovery Words")
-                            .font(.system(size: 36, weight: .semibold))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.leading)
-
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text(
-                            "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin."
-                        )
-                        .multilineTextAlignment(.leading)
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.75))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text("Please save these words in a secure location.")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.leading)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .opacity(0.9)
-
-                        Spacer()
-                    }
+                    mainContent(usesFlexibleSpacing: true)
                 }
             }
         }
-        .padding()
         .onAppear {
             auth.lock()
             guard words == nil else { return }
@@ -156,6 +102,87 @@ struct SecretWordsScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
+        VStack {
+            if usesFlexibleSpacing {
+                Spacer()
+            }
+
+            Group {
+                if let words {
+                    GroupBox {
+                        ColumnMajorGrid(items: words.allWords()) { _, word in
+                            HStack {
+                                Text("\(word.number).")
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.secondary)
+                                    .fontDesign(.monospaced)
+                                    .multilineTextAlignment(.leading)
+                                    .minimumScaleFactor(0.5)
+
+                                Text(word.word)
+                                    .fontWeight(.bold)
+                                    .fontDesign(.monospaced)
+                                    .multilineTextAlignment(.leading)
+                                    .minimumScaleFactor(0.75)
+                                    .lineLimit(1)
+                                    .fixedSize()
+
+                                Spacer()
+                            }
+                        }
+                    }
+                    .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 32)
+                    .frame(width: screenWidth * 0.9)
+                    .font(.caption)
+                } else {
+                    Text(errorMessage ?? "Loading...")
+                }
+
+                if usesFlexibleSpacing {
+                    Spacer()
+                    Spacer()
+                    Spacer()
+                }
+
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Recovery Words")
+                            .font(.system(size: 36, weight: .semibold))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.leading)
+
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text(
+                            "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin."
+                        )
+                        .multilineTextAlignment(.leading)
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text("Please save these words in a secure location.")
+                            .font(.subheadline)
+                            .multilineTextAlignment(.leading)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .opacity(0.9)
+
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .padding()
     }
 }
 

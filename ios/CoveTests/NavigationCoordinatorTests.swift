@@ -20,9 +20,7 @@ final class NavigationCoordinatorTests: XCTestCase {
 
         await sleeper.waitForSleepCount(1)
         sleeper.resumeNext()
-        await Task.yield()
-
-        XCTAssertTrue(coordinator.isNavigationSettled)
+        await waitForNavigationSettled(coordinator)
     }
 
     func testOlderGenerationCannotSettleAfterNewGenerationAdvances() async {
@@ -48,8 +46,7 @@ final class NavigationCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.isNavigationSettled)
 
         sleeper.resumeNext()
-        await Task.yield()
-        XCTAssertTrue(coordinator.isNavigationSettled)
+        await waitForNavigationSettled(coordinator)
     }
 
     func testRapidSidebarNavigationOnlyRunsLatestAction() async {
@@ -83,10 +80,37 @@ final class NavigationCoordinatorTests: XCTestCase {
         XCTAssertTrue(actions.isEmpty)
 
         sleeper.resumeFirstSleep(duration: .milliseconds(250))
-        await Task.yield()
+        await waitForActions(["second"], currentActions: { actions })
         XCTAssertEqual(actions, ["second"])
 
         sleeper.resumeAll()
+    }
+
+    private func waitForNavigationSettled(
+        _ coordinator: NavigationCoordinator,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0 ..< 50 {
+            if coordinator.isNavigationSettled { break }
+            await Task.yield()
+        }
+
+        XCTAssertTrue(coordinator.isNavigationSettled, file: file, line: line)
+    }
+
+    private func waitForActions(
+        _ expectedActions: [String],
+        currentActions: @MainActor () -> [String],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0 ..< 50 {
+            if currentActions() == expectedActions { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(currentActions(), expectedActions, file: file, line: line)
     }
 }
 

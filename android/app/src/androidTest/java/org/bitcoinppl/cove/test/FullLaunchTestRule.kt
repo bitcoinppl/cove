@@ -7,8 +7,6 @@ import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
 
-private const val STAY_AWAKE_WHILE_PLUGGED_IN = "7"
-
 class FullLaunchTestRule : TestRule {
     override fun apply(
         base: Statement,
@@ -19,17 +17,7 @@ class FullLaunchTestRule : TestRule {
                 assumeTrue("manual full-launch tests require the ManualFullLaunchTest annotation argument", isManualRun(description))
 
                 val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-                val previousStayAwakeSetting =
-                    device.executeShellCommand("settings get global stay_on_while_plugged_in")
-                        .trim()
-                        .ifEmpty { "0" }
-
-                try {
-                    device.executeShellCommand("settings put global stay_on_while_plugged_in $STAY_AWAKE_WHILE_PLUGGED_IN")
-                    base.evaluate()
-                } finally {
-                    restoreStayAwakeSetting(device, previousStayAwakeSetting)
-                }
+                device.withStayAwake { base.evaluate() }
             }
         }
 
@@ -42,17 +30,5 @@ class FullLaunchTestRule : TestRule {
             className.contains(ManualFullLaunchTest::class.java.name) ||
             description.getAnnotation(ManualFullLaunchTest::class.java) != null ||
             description.testClass?.isAnnotationPresent(ManualFullLaunchTest::class.java) == true
-    }
-
-    private fun restoreStayAwakeSetting(
-        device: UiDevice,
-        previousSetting: String,
-    ) {
-        if (previousSetting == "null") {
-            device.executeShellCommand("settings delete global stay_on_while_plugged_in")
-            return
-        }
-
-        device.executeShellCommand("settings put global stay_on_while_plugged_in $previousSetting")
     }
 }

@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -152,7 +153,8 @@ fun TapSignerAdvancedChainCode(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 30.dp),
+                        .padding(horizontal = 16.dp, vertical = 30.dp)
+                        .testTag("tapSignerAdvanced.continue"),
                 colors =
                     ButtonDefaults.buttonColors(
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,

@@ -8,14 +8,39 @@
 import SwiftUI
 
 struct TapSignerChooseChainCode: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
     @Environment(TapSignerManager.self) var manager
 
     let tapSigner: TapSigner
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    mainContent(usesFlexibleSpacing: true)
+                }
+            }
+        }
+        .contentTransition(.opacity)
+        .background(TapSignerResultBackground())
+        .navigationBarHidden(true)
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
         VStack {
-            // Top Cancel Button
             HStack {
                 Button(action: { app.sheetState = .none }) {
                     Text("Cancel")
@@ -27,9 +52,10 @@ struct TapSignerChooseChainCode: View {
             .foregroundStyle(.primary)
             .fontWeight(.semibold)
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
-            // Title with Underline
             VStack {
                 Text("Setup Chain Code")
                     .font(.largeTitle)
@@ -37,7 +63,6 @@ struct TapSignerChooseChainCode: View {
                     .padding(.bottom, 5)
             }
 
-            // Description Text
             VStack(spacing: 12) {
                 Group {
                     Text("A chain code works with your private key to generate Bitcoin addresses")
@@ -84,9 +109,10 @@ struct TapSignerChooseChainCode: View {
             .foregroundStyle(.primary)
             .padding(.top, 50)
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
-            // Advanced Setup Link
             Button(action: {
                 manager.navigate(to: .initAdvanced(tapSigner))
             }) {
@@ -97,21 +123,6 @@ struct TapSignerChooseChainCode: View {
             }
             .contentShape(Rectangle())
         }
-        .contentTransition(.opacity)
-        .edgesIgnoringSafeArea(.all)
-        .background(
-            VStack {
-                Image(.chainCodePattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .ignoresSafeArea(edges: .all)
-                    .padding(.top, 5)
-
-                Spacer()
-            }
-            .opacity(0.8)
-        )
-        .navigationBarHidden(true)
     }
 }
 

@@ -13,6 +13,8 @@ enum NextScreenDialog {
 }
 
 struct HotWalletSelectScreen: View {
+    @Environment(\.sizeCategory) private var sizeCategory
+
     @State private var isSheetShown = false
     @State private var nextScreen: NextScreenDialog = .create
 
@@ -26,9 +28,78 @@ struct HotWalletSelectScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 28) {
-            Spacer()
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
 
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleTopSpacer: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .bottom)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    bottomActionLayout()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            }
+        }
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .brightness(0.05)
+        )
+        .background(Color.midnightBlue)
+        .navigationTitle("Add New Wallet")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private func mainContent(usesFlexibleTopSpacer: Bool) -> some View {
+        VStack(spacing: 28) {
+            if usesFlexibleTopSpacer {
+                Spacer()
+            }
+
+            promptContent
+
+            Divider()
+                .overlay(.coveLightGray.opacity(0.50))
+
+            walletChoiceActions
+        }
+        .padding()
+        .frame(maxHeight: .infinity)
+    }
+
+    private func bottomActionLayout() -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            promptContent
+                .padding(.horizontal)
+                .padding(.bottom, 28)
+
+            VStack(spacing: 28) {
+                Divider()
+                    .overlay(.coveLightGray.opacity(0.50))
+
+                walletChoiceActions
+            }
+            .padding(.horizontal)
+            .padding(.top, 16)
+            .padding(.bottom, 56)
+        }
+    }
+
+    private var promptContent: some View {
+        VStack(spacing: 28) {
             HStack {
                 DotMenuView(selected: 1, size: 5)
                 Spacer()
@@ -42,69 +113,54 @@ struct HotWalletSelectScreen: View {
 
                 Spacer()
             }
+        }
+    }
 
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
-
-            VStack(spacing: 24) {
-                Button(action: {
-                    isSheetShown = true
-                    nextScreen = .create
-                }) {
-                    Text("Create new wallet")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .padding(.horizontal, 10)
-                        .background(Color.btnPrimary)
-                        .foregroundColor(.midnightBlue)
-                        .cornerRadius(10)
-                }
-
-                Button(action: {
-                    isSheetShown = true
-                    nextScreen = .import_
-                }) {
-                    Text("Import existing wallet")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .foregroundColor(.white)
-                }
+    private var walletChoiceActions: some View {
+        VStack(spacing: 24) {
+            Button(action: {
+                isSheetShown = true
+                nextScreen = .create
+            }) {
+                Text("Create new wallet")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 10)
+                    .background(Color.btnPrimary)
+                    .foregroundColor(.midnightBlue)
+                    .cornerRadius(10)
             }
-            .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
-                if nextScreen == .import_ {
-                    NavigationLink(value: route(.twentyFour, importType: .qr)) {
-                        Text("Scan QR")
-                    }
 
-                    NavigationLink(value: route(.twentyFour, importType: .nfc)) {
-                        Text("NFC")
-                    }
-                }
-                NavigationLink(value: route(.twelve)) {
-                    Text("12 Words")
-                }
-                NavigationLink(value: route(.twentyFour)) {
-                    Text("24 Words")
-                }
+            Button(action: {
+                isSheetShown = true
+                nextScreen = .import_
+            }) {
+                Text("Import existing wallet")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .frame(maxWidth: .infinity)
+                    .foregroundColor(.white)
             }
         }
-        .padding()
-        .frame(maxHeight: .infinity)
-        .background(
-            Image(.newWalletPattern)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
-                .frame(maxWidth: .infinity)
-                .brightness(0.05)
-        )
-        .background(Color.midnightBlue)
-        .navigationTitle("Add New Wallet")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+            if nextScreen == .import_ {
+                NavigationLink(value: route(.twentyFour, importType: .qr)) {
+                    Text("Scan QR")
+                }
+
+                NavigationLink(value: route(.twentyFour, importType: .nfc)) {
+                    Text("NFC")
+                }
+            }
+            NavigationLink(value: route(.twelve)) {
+                Text("12 Words")
+            }
+            NavigationLink(value: route(.twentyFour)) {
+                Text("24 Words")
+            }
+        }
     }
 }
 

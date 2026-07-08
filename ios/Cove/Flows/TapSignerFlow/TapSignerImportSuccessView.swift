@@ -9,6 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TapSignerImportSuccess: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
@@ -28,6 +29,34 @@ struct TapSignerImportSuccess: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    mainContent(usesFlexibleSpacing: true)
+                }
+            }
+        }
+        .onAppear {
+            saveWallet()
+        }
+        .background(TapSignerResultBackground())
+        .scrollIndicators(.hidden)
+        .navigationBarHidden(true)
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
         VStack(spacing: 40) {
             VStack {
                 HStack {
@@ -43,7 +72,9 @@ struct TapSignerImportSuccess: View {
                 .fontWeight(.semibold)
             }
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack(spacing: 20) {
                 Image(systemName: "checkmark.circle.fill")
@@ -62,7 +93,9 @@ struct TapSignerImportSuccess: View {
                 }
             }
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack(spacing: 14) {
                 Button("Continue") {
@@ -74,23 +107,6 @@ struct TapSignerImportSuccess: View {
             }
         }
         .padding(.horizontal)
-        .onAppear {
-            saveWallet()
-        }
-        .background(
-            VStack {
-                Image(.chainCodePattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .ignoresSafeArea(edges: .all)
-                    .padding(.top, 5)
-
-                Spacer()
-            }
-            .opacity(0.8)
-        )
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
     }
 }
 

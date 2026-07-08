@@ -9,12 +9,38 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TapSignerImportRetry: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    mainContent(usesFlexibleSpacing: true)
+                }
+            }
+        }
+        .background(TapSignerResultBackground())
+        .scrollIndicators(.hidden)
+        .navigationBarHidden(true)
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
         VStack(spacing: 40) {
             VStack {
                 HStack {
@@ -30,7 +56,9 @@ struct TapSignerImportRetry: View {
                 .fontWeight(.semibold)
             }
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack(spacing: 20) {
                 Image(systemName: "x.circle.fill")
@@ -52,7 +80,9 @@ struct TapSignerImportRetry: View {
             }
             .padding(.horizontal)
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack(spacing: 14) {
                 Button("Retry") {
@@ -76,20 +106,6 @@ struct TapSignerImportRetry: View {
                 .padding(.horizontal)
             }
         }
-        .background(
-            VStack {
-                Image(.chainCodePattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .ignoresSafeArea(edges: .all)
-                    .padding(.top, 5)
-
-                Spacer()
-            }
-            .opacity(0.8)
-        )
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
     }
 }
 

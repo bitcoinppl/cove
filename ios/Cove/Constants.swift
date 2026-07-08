@@ -19,7 +19,12 @@ let screenHeight = UIScreen.main.bounds.height
 let screenWidth = UIScreen.main.bounds.width
 
 let isMiniDevice = screenHeight <= 812
+let compactLayoutHeightThreshold: CGFloat = 812
 
 func isMiniDeviceOrLargeText(_ sizeCategory: ContentSizeCategory) -> Bool {
     isMiniDevice || sizeCategory >= .extraExtraLarge
+}
+
+func usesCompactLayout(sizeCategory: ContentSizeCategory, availableHeight: CGFloat) -> Bool {
+    sizeCategory >= .extraExtraLarge || availableHeight <= compactLayoutHeightThreshold
 }

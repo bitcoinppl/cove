@@ -19,9 +19,6 @@ struct HotWalletCreateScreen: View {
     }
 }
 
-private let columns =
-    Array(repeating: GridItem(.flexible()), count: 3)
-
 struct WordsView: View {
     @Environment(\.sizeCategory) var sizeCategory
 
@@ -35,9 +32,10 @@ struct WordsView: View {
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
 
-    init(manager: PendingWalletManager) {
+    init(manager: PendingWalletManager, initialTabIndex: Int = 0) {
         self.manager = manager
         self.groupedWords = manager.rust.bip39WordsGrouped()
+        self.tabIndex = initialTabIndex
     }
 
     var lastIndex: Int {
@@ -45,33 +43,70 @@ struct WordsView: View {
     }
 
     var body: some View {
-        if sizeCategory >= .extraExtraLarge || isMiniDevice {
-            ScrollView {
-                RecoveryWordsContent(
-                    groupedWords: groupedWords,
-                    tabIndex: $tabIndex,
-                    lastIndex: lastIndex,
-                    showConfirmationAlert: $showConfirmationAlert,
-                    saveWallet: saveWallet,
-                    dismiss: { dismiss() }
-                )
-                .frame(minHeight: screenHeight, maxHeight: .infinity)
-            }
-            .background(
-                Color.midnightBlue
-                    .ignoresSafeArea(.all)
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
             )
 
-        } else {
-            RecoveryWordsContent(
-                groupedWords: groupedWords,
+            Group {
+                if scrollableLayout {
+                    VStack(spacing: 0) {
+                        ScrollView {
+                            recoveryWordsContent(
+                                compactHeight: scrollableLayout,
+                                includesPrimaryAction: false
+                            )
+                            .padding(.bottom, 24)
+                        }
+                        .scrollIndicators(.hidden)
+
+                        compactBottomAction
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .background(
+                        Color.midnightBlue
+                            .ignoresSafeArea(.all)
+                    )
+
+                } else {
+                    recoveryWordsContent(
+                        compactHeight: scrollableLayout,
+                        includesPrimaryAction: true
+                    )
+                }
+            }
+        }
+    }
+
+    private func recoveryWordsContent(compactHeight: Bool, includesPrimaryAction: Bool) -> some View {
+        RecoveryWordsContent(
+            groupedWords: groupedWords,
+            tabIndex: $tabIndex,
+            lastIndex: lastIndex,
+            showConfirmationAlert: $showConfirmationAlert,
+            compactHeight: compactHeight,
+            includesPrimaryAction: includesPrimaryAction,
+            saveWallet: saveWallet,
+            dismiss: { dismiss() }
+        )
+    }
+
+    private var compactBottomAction: some View {
+        VStack(spacing: 16) {
+            Divider()
+                .overlay(.coveLightGray.opacity(0.50))
+
+            RecoveryWordsPrimaryActionButton(
                 tabIndex: $tabIndex,
                 lastIndex: lastIndex,
-                showConfirmationAlert: $showConfirmationAlert,
-                saveWallet: saveWallet,
-                dismiss: { dismiss() }
+                saveWallet: saveWallet
             )
         }
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .padding(.bottom, 56)
+        .background(Color.midnightBlue)
     }
 
     private func saveWallet() {
@@ -89,18 +124,22 @@ struct RecoveryWordsContent: View {
     @Binding var tabIndex: Int
     let lastIndex: Int
     @Binding var showConfirmationAlert: Bool
+    let compactHeight: Bool
+    let includesPrimaryAction: Bool
     let saveWallet: () -> Void
     let dismiss: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
-            StyledWordCard(tabIndex: $tabIndex) {
+            StyledWordCard(tabIndex: $tabIndex, compactHeight: compactHeight) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
                     WordCardView(words: wordGroup).tag(index)
                 }
             }
 
-            Spacer()
+            if !compactHeight {
+                Spacer()
+            }
 
             HStack {
                 DotMenuView(selected: 2, size: 5)
@@ -140,46 +179,21 @@ struct RecoveryWordsContent: View {
                 Spacer()
             }
 
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
+            if includesPrimaryAction {
+                Divider()
+                    .overlay(.coveLightGray.opacity(0.50))
 
-            VStack(spacing: 24) {
-                Group {
-                    if tabIndex == lastIndex {
-                        Button(action: saveWallet) {
-                            Text("Save Wallet")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .frame(maxWidth: .infinity)
-                                .contentShape(Rectangle())
-                                .padding(.vertical, 20)
-                                .padding(.horizontal, 10)
-                                .background(Color.btnPrimary)
-                                .foregroundColor(.midnightBlue)
-                                .cornerRadius(10)
-                        }
-                    } else {
-                        Button(action: {
-                            withAnimation { tabIndex += 1 }
-                        }) {
-                            Text("Next")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .frame(maxWidth: .infinity)
-                                .contentShape(Rectangle())
-                                .padding(.vertical, 20)
-                                .padding(.horizontal, 10)
-                                .background(Color.btnPrimary)
-                                .foregroundColor(.midnightBlue)
-                                .cornerRadius(10)
-                        }
-                    }
+                VStack(spacing: 24) {
+                    primaryActionButton
                 }
             }
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
         .adaptiveToolbarStyle()
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)
@@ -217,62 +231,126 @@ struct RecoveryWordsContent: View {
         }
         .navigationBarBackButtonHidden(true)
     }
+
+    private var primaryActionButton: some View {
+        RecoveryWordsPrimaryActionButton(
+            tabIndex: $tabIndex,
+            lastIndex: lastIndex,
+            saveWallet: saveWallet
+        )
+    }
+}
+
+struct RecoveryWordsPrimaryActionButton: View {
+    @Binding var tabIndex: Int
+    let lastIndex: Int
+    let saveWallet: () -> Void
+
+    var body: some View {
+        if tabIndex == lastIndex {
+            Button(action: saveWallet) {
+                primaryActionLabel("Save Wallet")
+            }
+        } else {
+            Button(action: {
+                withAnimation { tabIndex += 1 }
+            }) {
+                primaryActionLabel("Next")
+            }
+        }
+    }
+
+    private func primaryActionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .padding(.vertical, 20)
+            .padding(.horizontal, 10)
+            .background(Color.btnPrimary)
+            .foregroundColor(.midnightBlue)
+            .cornerRadius(10)
+    }
 }
 
 struct WordCardView: View {
     @Environment(\.sizeCategory) var sizeCategory
     let words: [GroupedWord]
 
+    private let columnCount = 3
+    private let columnSpacing: CGFloat = 12
+
     var body: some View {
-        ColumnMajorGrid(items: words) { _, group in
-            HStack(spacing: 0) {
-                Text("\(String(format: "%d", group.number)). ")
-                    .fontWeight(.medium)
-                    .foregroundColor(.black.opacity(0.5))
-                    .multilineTextAlignment(.leading)
-                    .frame(alignment: .leading)
-                    .minimumScaleFactor(0.8)
-                    .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
-                    .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .caption)
-
-                Spacer()
-
-                Text(group.word)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.midnightBlue)
-                    .multilineTextAlignment(.center)
-                    .frame(alignment: .leading)
-                    .minimumScaleFactor(0.2)
-                    .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
-                    .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
-
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 12)
-            .frame(width: (screenWidth * 0.33) - 20)
-            .background(Color.btnPrimary)
-            .cornerRadius(10)
-            .contextMenu {
-                isMiniDeviceOrLargeText(sizeCategory)
-                    ? Button(action: {}) {
-                        Text("\(String(format: "%d", group.number)). \(group.word)")
-                    } : nil
+        GeometryReader { proxy in
+            ColumnMajorGrid(items: words, numberOfColumns: columnCount, spacing: columnSpacing) { _, group in
+                wordCard(group, width: wordCardWidth(availableWidth: proxy.size.width))
             }
         }
+    }
+
+    private func wordCard(_ group: GroupedWord, width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Text("\(String(format: "%d", group.number)). ")
+                .fontWeight(.medium)
+                .foregroundColor(.black.opacity(0.5))
+                .multilineTextAlignment(.leading)
+                .frame(alignment: .leading)
+                .minimumScaleFactor(0.8)
+                .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
+                .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .caption)
+
+            Spacer(minLength: 4)
+
+            Text(group.word)
+                .fontWeight(.medium)
+                .foregroundStyle(.midnightBlue)
+                .multilineTextAlignment(.center)
+                .frame(alignment: .leading)
+                .minimumScaleFactor(0.2)
+                .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
+                .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
+
+            Spacer(minLength: 4)
+        }
+        .padding(.horizontal, isMiniDeviceOrLargeText(sizeCategory) ? 8 : 10)
+        .padding(.vertical, 12)
+        .frame(width: width)
+        .background(Color.btnPrimary)
+        .cornerRadius(10)
+        .contextMenu {
+            isMiniDeviceOrLargeText(sizeCategory)
+                ? Button(action: {}) {
+                    Text("\(String(format: "%d", group.number)). \(group.word)")
+                } : nil
+        }
+    }
+
+    private func wordCardWidth(availableWidth: CGFloat) -> CGFloat {
+        let totalColumnSpacing = columnSpacing * CGFloat(columnCount - 1)
+
+        return max((availableWidth - totalColumnSpacing) / CGFloat(columnCount), 0)
     }
 }
 
 struct StyledWordCard<Content: View>: View {
+    @Environment(\.sizeCategory) var sizeCategory
+
     @Binding var tabIndex: Int
+    let compactHeight: Bool
     @ViewBuilder var content: Content
 
     var body: some View {
-        TabView(selection: $tabIndex) {
+        let tabView = TabView(selection: $tabIndex) {
             content.padding(.bottom, 40)
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-        .frame(minHeight: isMiniDevice ? 350 : nil)
+
+        if compactHeight {
+            tabView.frame(height: isMiniDeviceOrLargeText(sizeCategory) ? 320 : 260)
+        } else {
+            tabView
+        }
     }
 }
 

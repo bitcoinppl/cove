@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -249,7 +251,8 @@ internal fun OnboardingStatusHero(
                 .wrapContentHeight(Alignment.CenterVertically),
         contentAlignment = Alignment.Center,
     ) {
-        val ringSizes = remember { listOf(118.dp, 86.dp, 58.dp) }
+        val innerBadgeSize = 68.dp
+        val ringSizes = remember { listOf(118.dp, 86.dp, innerBadgeSize) }
         val ringAlphas = remember { listOf(0.15f, 0.22f, 0.34f) }
 
         ringSizes.zip(ringAlphas).forEach { (size, alpha) ->
@@ -265,7 +268,7 @@ internal fun OnboardingStatusHero(
         Box(
             modifier =
                 Modifier
-                    .size(58.dp)
+                    .size(innerBadgeSize)
                     .clip(CircleShape)
                     .background(fillColor)
                     .border(1.3.dp, tint.copy(alpha = 0.72f), CircleShape),
@@ -278,6 +281,23 @@ internal fun OnboardingStatusHero(
                 modifier = Modifier.size(24.dp),
             )
         }
+    }
+}
+
+@Preview(
+    name = "Onboarding Status Hero - Cloud",
+    showBackground = true,
+    backgroundColor = 0xFF1C2536,
+    widthDp = 160,
+    heightDp = 160,
+)
+@Composable
+private fun OnboardingStatusHeroCloudPreview() {
+    Box(
+        modifier = Modifier.size(160.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        OnboardingStatusHero(icon = Icons.Default.Cloud)
     }
 }
 

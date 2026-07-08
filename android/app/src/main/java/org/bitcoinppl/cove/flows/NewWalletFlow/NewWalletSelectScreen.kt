@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -219,9 +220,10 @@ fun NewWalletSelectScreen(
 
         Box(
             modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .testTag("newWalletSelect.viewport"),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
@@ -284,7 +286,7 @@ fun NewWalletSelectScreen(
                                     containerColor = CoveColor.btnPrimary,
                                     contentColor = CoveColor.midnightBlue,
                                 ),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("newWalletSelect.hardwareWallet"),
                         )
 
                         ImageButton(
@@ -296,7 +298,7 @@ fun NewWalletSelectScreen(
                                     containerColor = CoveColor.btnPrimary,
                                     contentColor = CoveColor.midnightBlue,
                                 ),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("newWalletSelect.onThisDevice"),
                         )
                     }
 

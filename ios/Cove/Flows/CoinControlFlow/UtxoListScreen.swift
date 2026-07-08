@@ -110,157 +110,136 @@ struct UtxoListScreen: View {
 
     /// ─── Body ────────────────────────────────────────────────
     var body: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 16) {
-                // ─ Search bar ─
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                    TextField("Search UTXOs", text: manager.searchBinding)
-                        .focused($isFocused)
-                        .autocorrectionDisabled()
-                        .autocapitalization(.none)
-
-                    if !manager.search.isEmpty {
-                        Button(action: { manager.dispatch(.clearSearch) }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .transition(.scale)
-                    }
-                }
-                .padding(8)
-                .background(Color.systemGray5)
-                .cornerRadius(10)
-                .padding(.horizontal)
-
-                // ─ Sort buttons ─
-                if !isFocused {
+        VStack(spacing: 0) {
+            VStack(spacing: 24) {
+                VStack(spacing: 16) {
+                    // ─ Search bar ─
                     HStack {
-                        sortButton(for: .date)
-                        Spacer()
-                        sortButton(for: .name)
-                        Spacer()
-                        sortButton(for: .amount)
-                        Spacer()
-                        sortButton(for: .change)
-                    }
-                    .padding(.horizontal)
-                }
-            }
+                        Image(systemName: "magnifyingglass")
+                        TextField("Search UTXOs", text: manager.searchBinding)
+                            .focused($isFocused)
+                            .autocorrectionDisabled()
+                            .autocapitalization(.none)
 
-            VStack(spacing: 8) {
-                // ─ Section header ─
-                HStack {
-                    Text("LIST OF UTXOS")
-                        .font(.caption)
-                        .fontWeight(.regular)
-                        .foregroundColor(.primary.opacity(0.6))
-                    Spacer()
-
-                    Group {
-                        if manager.selected.isEmpty {
-                            Text("Select All")
-                        } else {
-                            Text("Deselect All")
+                        if !manager.search.isEmpty {
+                            Button(action: { manager.dispatch(.clearSearch) }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .transition(.scale)
                         }
                     }
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.link)
-                    .contentShape(
-                        Rectangle().inset(
-                            by:
-                            EdgeInsets(
-                                top: -15,
-                                leading: -35,
-                                bottom: -10,
-                                trailing: -35
+                    .padding(8)
+                    .background(Color.systemGray5)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+
+                    // ─ Sort buttons ─
+                    if !isFocused {
+                        HStack {
+                            sortButton(for: .date)
+                            Spacer()
+                            sortButton(for: .name)
+                            Spacer()
+                            sortButton(for: .amount)
+                            Spacer()
+                            sortButton(for: .change)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                VStack(spacing: 8) {
+                    // ─ Section header ─
+                    HStack {
+                        Text("LIST OF UTXOS")
+                            .font(.caption)
+                            .fontWeight(.regular)
+                            .foregroundColor(.primary.opacity(0.6))
+                        Spacer()
+
+                        Group {
+                            if manager.selected.isEmpty {
+                                Text("Select All")
+                            } else {
+                                Text("Deselect All")
+                            }
+                        }
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.link)
+                        .contentShape(
+                            Rectangle().inset(
+                                by:
+                                EdgeInsets(
+                                    top: -15,
+                                    leading: -35,
+                                    bottom: -10,
+                                    trailing: -35
+                                )
                             )
                         )
-                    )
-                    .onTapGesture { manager.dispatch(.toggleSelectAll) }
-                }
-                .padding(.horizontal)
-                .padding(.horizontal)
-                .zIndex(1)
-
-                // ─ UTXO list ─
-                VStack(spacing: 8) {
-                    UtxoList()
-                    if manager.lockStateLoadFailed {
-                        Text("Unable to read UTXO lock state. UTXOs are shown locked for safety.")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+                        .onTapGesture { manager.dispatch(.toggleSelectAll) }
                     }
+                    .padding(.horizontal)
+                    .padding(.horizontal)
+                    .zIndex(1)
 
-                    Text(manager.totalSelectedAmount)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .opacity(manager.selected.isEmpty ? 0 : 0.8)
-                        .contentTransition(.numericText())
-                        .animation(.easeInOut(duration: 0.1), value: manager.totalSelectedAmount)
-                }
-            }
+                    // ─ UTXO list ─
+                    VStack(spacing: 8) {
+                        UtxoList()
+                        if manager.lockStateLoadFailed {
+                            Text("Unable to read UTXO lock state. UTXOs are shown locked for safety.")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
 
-            Spacer()
-
-            if !isFocused {
-                // ─ Footer notes ─
-                VStack(spacing: 16) {
-                    HStack {
-                        Text(
-                            "Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use."
-                        )
-                        .font(.caption)
-                        .fontWeight(.regular)
-
-                        Spacer()
+                        Text(manager.totalSelectedAmount)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .opacity(manager.selected.isEmpty ? 0 : 0.8)
+                            .contentTransition(.numericText())
+                            .animation(.easeInOut(duration: 0.1), value: manager.totalSelectedAmount)
                     }
+                }
 
-                    HStack(spacing: 4) {
-                        Image(systemName: "circlebadge.2")
-                            .font(.footnote)
+                Spacer()
 
-                        Text("Denotes UTXO change")
+                if !isFocused {
+                    // ─ Footer notes ─
+                    VStack(spacing: 16) {
+                        HStack {
+                            Text(
+                                "Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use."
+                            )
                             .font(.caption)
                             .fontWeight(.regular)
 
-                        Spacer()
-                    }
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-                .padding(.horizontal)
+                            Spacer()
+                        }
 
-                // ─ Action buttons ─
-                Button(continueText) {
-                    manager.continuePressed()
-                    navigate(
-                        RouteFactory()
-                            .coinControlSend(
-                                id: manager.id,
-                                utxos: manager.selectedUtxos()
-                            )
-                    )
+                        HStack(spacing: 4) {
+                            Image(systemName: "circlebadge.2")
+                                .font(.footnote)
+
+                            Text("Denotes UTXO change")
+                                .font(.caption)
+                                .fontWeight(.regular)
+
+                            Spacer()
+                        }
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.horizontal)
                 }
-                .buttonStyle(
-                    canContinue
-                        ? DarkButtonStyle()
-                        : DarkButtonStyle(
-                            backgroundColor: .systemGray4, foregroundColor: .secondary
-                        )
-                )
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-                .padding(.bottom, 4)
-                .disabled(!canContinue)
-                .contentTransition(.interpolate)
             }
+            .frame(maxHeight: .infinity)
+            .padding(.bottom, isFocused ? 0 : 112)
         }
         .navigationTitle("Manage UTXOs")
         .navigationBarTitleDisplayMode(isFocused ? .inline : .automatic)
@@ -292,6 +271,13 @@ struct UtxoListScreen: View {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
         )
+        .overlay(alignment: .bottom) {
+            if !isFocused {
+                continueButton
+                    .padding(.horizontal)
+                    .padding(.bottom, 32)
+            }
+        }
         .alert("UTXO Locked", isPresented: $showLockedSelectionAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -312,6 +298,30 @@ struct UtxoListScreen: View {
     }
 
     // MARK: - Helpers
+
+    private var continueButton: some View {
+        Button(continueText) {
+            manager.continuePressed()
+            navigate(
+                RouteFactory()
+                    .coinControlSend(
+                        id: manager.id,
+                        utxos: manager.selectedUtxos()
+                    )
+            )
+        }
+        .buttonStyle(
+            canContinue
+                ? DarkButtonStyle()
+                : DarkButtonStyle(
+                    backgroundColor: .systemGray4, foregroundColor: .secondary
+                )
+        )
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+        .disabled(!canContinue)
+        .contentTransition(.interpolate)
+    }
 
     private func sortButton(for key: CoinControlListSortKey) -> some View {
         let _ = manager.sort

@@ -19,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -105,7 +106,8 @@ fun TapSignerChooseChainCode(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 50.dp),
+                            .padding(horizontal = 20.dp, vertical = 50.dp)
+                            .testTag("tapSignerChoose.automaticSetup"),
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
@@ -148,7 +150,7 @@ fun TapSignerChooseChainCode(
                     onClick = {
                         manager.navigate(TapSignerRoute.InitAdvanced(tapSigner))
                     },
-                    modifier = Modifier.padding(bottom = 30.dp),
+                    modifier = Modifier.padding(bottom = 30.dp).testTag("tapSignerChoose.advancedSetup"),
                 ) {
                     Text(
                         text = "Advanced Setup",

@@ -125,55 +125,53 @@ struct OnboardingSecretWordsView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button("Back", action: onBack)
-                    .foregroundStyle(.white)
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
+        GeometryReader { proxy in
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        HStack {
+                            Button("Back", action: onBack)
+                                .foregroundStyle(.white)
+                                .font(.headline)
+                            Spacer()
+                        }
+                        .padding(.top, 20)
 
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Text("Your Recovery Words")
-                            .font(.system(size: 34, weight: .semibold))
-                            .foregroundStyle(.white)
+                        VStack(spacing: 12) {
+                            Text("Your Recovery Words")
+                                .font(.system(size: 34, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(
+                                "Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin."
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.coveLightGray.opacity(0.74))
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        }
 
-                        Text(
-                            "Write these down exactly in order and keep them offline. Anyone with these words can control your Bitcoin."
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.74))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                        let wordCards = onboardingWordsInTwoColumnVisualOrder(words)
 
-                    let wordCards = onboardingWordsInTwoColumnVisualOrder(words)
-
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(wordCards) { wordCard in
-                            OnboardingWordCard(index: wordCard.index, word: wordCard.word)
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(wordCards) { wordCard in
+                                OnboardingWordCard(index: wordCard.index, word: wordCard.word)
+                            }
                         }
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 140)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
-                .padding(.bottom, 120)
+
+                Button("I Saved These Words", action: onSaved)
+                    .buttonStyle(OnboardingPrimaryButtonStyle())
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 56)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
-        .safeAreaInset(edge: .bottom) {
-            Button("I Saved These Words", action: onSaved)
-                .buttonStyle(OnboardingPrimaryButtonStyle())
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
-                .background(.clear)
-        }
     }
 }
 

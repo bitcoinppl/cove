@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct TapSignerSetupSuccess: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
@@ -33,6 +34,34 @@ struct TapSignerSetupSuccess: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        mainContent(usesFlexibleSpacing: false)
+                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                            .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    mainContent(usesFlexibleSpacing: true)
+                }
+            }
+        }
+        .background(TapSignerResultBackground())
+        .scrollIndicators(.hidden)
+        .navigationBarHidden(true)
+        .onAppear {
+            saveWallet()
+        }
+    }
+
+    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
         VStack(spacing: 40) {
             VStack {
                 HStack {
@@ -48,7 +77,9 @@ struct TapSignerSetupSuccess: View {
                 .fontWeight(.semibold)
             }
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack(spacing: 20) {
                 Image(systemName: "checkmark.circle.fill")
@@ -111,7 +142,9 @@ struct TapSignerSetupSuccess: View {
             .font(.footnote)
             .fontWeight(.semibold)
 
-            Spacer()
+            if usesFlexibleSpacing {
+                Spacer()
+            }
 
             VStack(spacing: 14) {
                 Button("Continue") {
@@ -123,23 +156,6 @@ struct TapSignerSetupSuccess: View {
             }
         }
         .padding(.horizontal)
-        .background(
-            VStack {
-                Image(.chainCodePattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .ignoresSafeArea(edges: .all)
-                    .padding(.top, 5)
-
-                Spacer()
-            }
-            .opacity(0.8)
-        )
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
-        .onAppear {
-            saveWallet()
-        }
     }
 }
 
