@@ -2778,6 +2778,8 @@ public protocol DatabaseProtocol: AnyObject, Sendable {
 
     func dangerousResetAllData()
 
+    func diagnosticsReports()  -> DiagnosticsReportsTable
+
     func globalConfig()  -> GlobalConfigTable
 
     func globalFlag()  -> GlobalFlagTable
@@ -2856,6 +2858,15 @@ open func dangerousResetAllData()  {try! rustCall() {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
+}
+
+open func diagnosticsReports() -> DiagnosticsReportsTable  {
+    return try!  FfiConverterTypeDiagnosticsReportsTable_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_database_diagnostics_reports(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
 open func globalConfig() -> GlobalConfigTable  {
@@ -3140,6 +3151,133 @@ public func FfiConverterTypeDiagnosticsReport_lift(_ handle: UInt64) throws -> D
 #endif
 public func FfiConverterTypeDiagnosticsReport_lower(_ value: DiagnosticsReport) -> UInt64 {
     return FfiConverterTypeDiagnosticsReport.lower(value)
+}
+
+
+
+
+
+
+public protocol DiagnosticsReportsTableProtocol: AnyObject, Sendable {
+
+    func all() throws  -> [DiagnosticsReportRecord]
+
+    func clear() throws
+
+}
+open class DiagnosticsReportsTable: DiagnosticsReportsTableProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_diagnosticsreportstable(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_diagnosticsreportstable(handle, $0) }
+    }
+
+
+
+
+open func all()throws  -> [DiagnosticsReportRecord]  {
+    return try  FfiConverterSequenceTypeDiagnosticsReportRecord.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreportstable_all(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func clear()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreportstable_clear(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsReportsTable: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = DiagnosticsReportsTable
+
+    public static func lift(_ handle: UInt64) throws -> DiagnosticsReportsTable {
+        return DiagnosticsReportsTable(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: DiagnosticsReportsTable) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsReportsTable {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: DiagnosticsReportsTable, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReportsTable_lift(_ handle: UInt64) throws -> DiagnosticsReportsTable {
+    return try FfiConverterTypeDiagnosticsReportsTable.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReportsTable_lower(_ value: DiagnosticsReportsTable) -> UInt64 {
+    return FfiConverterTypeDiagnosticsReportsTable.lower(value)
 }
 
 
@@ -15149,6 +15287,64 @@ public func FfiConverterTypeDiagnosticsPlatformInfo_lower(_ value: DiagnosticsPl
 }
 
 
+public struct DiagnosticsReportRecord: Equatable, Hashable {
+    public var reportId: String
+    public var submittedAt: UInt64
+    public var description: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(reportId: String, submittedAt: UInt64, description: String?) {
+        self.reportId = reportId
+        self.submittedAt = submittedAt
+        self.description = description
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DiagnosticsReportRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsReportRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsReportRecord {
+        return
+            try DiagnosticsReportRecord(
+                reportId: FfiConverterString.read(from: &buf),
+                submittedAt: FfiConverterUInt64.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiagnosticsReportRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.reportId, into: &buf)
+        FfiConverterUInt64.write(value.submittedAt, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReportRecord_lift(_ buf: RustBuffer) throws -> DiagnosticsReportRecord {
+    return try FfiConverterTypeDiagnosticsReportRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReportRecord_lower(_ value: DiagnosticsReportRecord) -> RustBuffer {
+    return FfiConverterTypeDiagnosticsReportRecord.lower(value)
+}
+
+
 public struct FeeResponse: Equatable, Hashable {
     public var fastestFee: Float
     public var halfHourFee: Float
@@ -23460,6 +23656,8 @@ enum DatabaseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     )
     case HistoricalPrice(HistoricalPriceTableError
     )
+    case DiagnosticsReports(DiagnosticsReportsTableError
+    )
     case Serialization(SerdeError
     )
     case WalletNotFound
@@ -23541,31 +23739,34 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case 8: return .HistoricalPrice(
             try FfiConverterTypeHistoricalPriceTableError.read(from: &buf)
             )
-        case 9: return .Serialization(
+        case 9: return .DiagnosticsReports(
+            try FfiConverterTypeDiagnosticsReportsTableError.read(from: &buf)
+            )
+        case 10: return .Serialization(
             try FfiConverterTypeSerdeError.read(from: &buf)
             )
-        case 10: return .WalletNotFound
-        case 11: return .EncryptionKeyNotSet
-        case 12: return .BootstrapFailed(
+        case 11: return .WalletNotFound
+        case 12: return .EncryptionKeyNotSet
+        case 13: return .BootstrapFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 13: return .BackendOpen(
+        case 14: return .BackendOpen(
             path: try FfiConverterString.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 14: return .CorruptBlock(
+        case 15: return .CorruptBlock(
             path: try FfiConverterString.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 15: return .DatabaseAlreadyOpen
-        case 16: return .HeaderIntegrity(
+        case 16: return .DatabaseAlreadyOpen
+        case 17: return .HeaderIntegrity(
             path: try FfiConverterString.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 17: return .UnsupportedVersion(
+        case 18: return .UnsupportedVersion(
             try FfiConverterTypeUnsupportedDbVersion.read(from: &buf)
             )
-        case 18: return .PlaintextNotAllowed(
+        case 19: return .PlaintextNotAllowed(
             path: try FfiConverterString.read(from: &buf)
             )
 
@@ -23620,53 +23821,58 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             FfiConverterTypeHistoricalPriceTableError.write(v1, into: &buf)
 
 
-        case let .Serialization(v1):
+        case let .DiagnosticsReports(v1):
             writeInt(&buf, Int32(9))
+            FfiConverterTypeDiagnosticsReportsTableError.write(v1, into: &buf)
+
+
+        case let .Serialization(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterTypeSerdeError.write(v1, into: &buf)
 
 
         case .WalletNotFound:
-            writeInt(&buf, Int32(10))
-
-
-        case .EncryptionKeyNotSet:
             writeInt(&buf, Int32(11))
 
 
-        case let .BootstrapFailed(v1):
+        case .EncryptionKeyNotSet:
             writeInt(&buf, Int32(12))
+
+
+        case let .BootstrapFailed(v1):
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .BackendOpen(path,error):
-            writeInt(&buf, Int32(13))
-            FfiConverterString.write(path, into: &buf)
-            FfiConverterString.write(error, into: &buf)
-
-
-        case let .CorruptBlock(path,error):
             writeInt(&buf, Int32(14))
             FfiConverterString.write(path, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
-        case .DatabaseAlreadyOpen:
+        case let .CorruptBlock(path,error):
             writeInt(&buf, Int32(15))
+            FfiConverterString.write(path, into: &buf)
+            FfiConverterString.write(error, into: &buf)
+
+
+        case .DatabaseAlreadyOpen:
+            writeInt(&buf, Int32(16))
 
 
         case let .HeaderIntegrity(path,error):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(path, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .UnsupportedVersion(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeUnsupportedDbVersion.write(v1, into: &buf)
 
 
         case let .PlaintextNotAllowed(path):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(path, into: &buf)
 
         }
@@ -24212,6 +24418,102 @@ public func FfiConverterTypeDiagnosticsError_lift(_ buf: RustBuffer) throws -> D
 #endif
 public func FfiConverterTypeDiagnosticsError_lower(_ value: DiagnosticsError) -> RustBuffer {
     return FfiConverterTypeDiagnosticsError.lower(value)
+}
+
+
+public
+enum DiagnosticsReportsTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case Save(String
+    )
+    case Read(String
+    )
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_diagnosticsreportstableerror_uniffi_trait_display(
+            FfiConverterTypeDiagnosticsReportsTableError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension DiagnosticsReportsTableError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsReportsTableError: FfiConverterRustBuffer {
+    typealias SwiftType = DiagnosticsReportsTableError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsReportsTableError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .Save(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .Read(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DiagnosticsReportsTableError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case let .Save(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Read(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReportsTableError_lift(_ buf: RustBuffer) throws -> DiagnosticsReportsTableError {
+    return try FfiConverterTypeDiagnosticsReportsTableError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsReportsTableError_lower(_ value: DiagnosticsReportsTableError) -> RustBuffer {
+    return FfiConverterTypeDiagnosticsReportsTableError.lower(value)
 }
 
 
@@ -39087,6 +39389,31 @@ fileprivate struct FfiConverterSequenceTypeCloudBackupWalletItem: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeDiagnosticsReportRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [DiagnosticsReportRecord]
+
+    public static func write(_ value: [DiagnosticsReportRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDiagnosticsReportRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DiagnosticsReportRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DiagnosticsReportRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDiagnosticsReportRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFoundAddress: FfiConverterRustBuffer {
     typealias SwiftType = [FoundAddress]
 
@@ -40710,6 +41037,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 25988) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_database_diagnostics_reports() != 32801) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_database_global_config() != 34695) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -40723,6 +41053,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_database_wallets() != 16005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreportstable_all() != 6560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_diagnosticsreportstable_clear() != 15672) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_authtype() != 62043) {

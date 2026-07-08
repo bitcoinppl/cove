@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
+use crate::database::{Database, diagnostics_reports::DiagnosticsReportRecord};
+
 const DIAGNOSTICS_REPORT_SIZE_UNIT_BYTES: u64 = 1_000;
 const DIAGNOSTICS_REPORT_SIZE_UNIT_SCALE: f64 = DIAGNOSTICS_REPORT_SIZE_UNIT_BYTES as f64;
 const DIAGNOSTICS_REPORT_SIZE_FRACTIONAL_LIMIT: f64 = 10.0;
@@ -107,12 +109,19 @@ impl DiagnosticsReport {
 
     pub async fn submit(&self, description: Option<String>) -> Result<String, DiagnosticsError> {
         let description = self.redacted_user_description(description);
-        let report = self.upload_report(description);
+        let report = self.upload_report(description.clone());
 
-        upload::submit_report(&report).await.map_err(|error| {
+        let report_id = upload::submit_report(&report).await.map_err(|error| {
             tracing::warn!("Failed to submit diagnostics report: {error}");
             DiagnosticsError::Submit(error.user_message())
-        })
+        })?;
+
+        let record = DiagnosticsReportRecord::now(report_id.clone(), description);
+        if let Err(error) = Database::global().diagnostics_reports.add(record) {
+            tracing::warn!("Failed to save diagnostics report history: {error}");
+        }
+
+        Ok(report_id)
     }
 }
 
@@ -324,6 +333,26 @@ fn timestamp() -> String {
 mod tests {
     use super::*;
 
+    static DIAGNOSTICS_UPLOAD_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct EnvVarGuard(&'static str);
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            // tests hold DIAGNOSTICS_UPLOAD_ENV_LOCK while mutating process environment
+            unsafe { std::env::set_var(key, value) };
+
+            Self(key)
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            // tests hold DIAGNOSTICS_UPLOAD_ENV_LOCK while mutating process environment
+            unsafe { std::env::remove_var(self.0) };
+        }
+    }
+
     fn platform_info() -> DiagnosticsPlatformInfo {
         DiagnosticsPlatformInfo {
             platform: "ios".to_string(),
@@ -331,6 +360,32 @@ mod tests {
             os_version: "iOS 20.0".to_string(),
             device_model: "iPhone17,1".to_string(),
         }
+    }
+
+    async fn upload_server_url(report_id: &'static str) -> String {
+        use tokio::{
+            io::{AsyncReadExt as _, AsyncWriteExt as _},
+            net::TcpListener,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
+        let addr = listener.local_addr().expect("test server has local addr");
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("test server accepts request");
+            let mut buffer = [0; 4096];
+            let _ = socket.read(&mut buffer).await.expect("test server reads request");
+
+            let body = format!(r#"{{"id":"{report_id}"}}"#);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len(),
+            );
+
+            socket.write_all(response.as_bytes()).await.expect("test server writes response");
+        });
+
+        format!("http://{addr}/reports")
     }
 
     #[test]
@@ -423,6 +478,32 @@ mod tests {
 
         assert_eq!(preview, report.preview_text());
         assert!(upload.user_description.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn submit_persists_successful_report_history() {
+        let _guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().expect("upload env lock poisoned");
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::database::test_support::delete_database();
+        Database::try_reinit().expect("database reinitializes");
+
+        let upload_url = upload_server_url("report_123").await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let report_id = report.submit(Some("description".to_string())).await.unwrap();
+
+        let records = Database::global().diagnostics_reports.all().unwrap();
+        assert_eq!(report_id, "report_123");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].report_id, "report_123");
+        assert_eq!(records[0].description, Some("description".to_string()));
     }
 
     #[test]
