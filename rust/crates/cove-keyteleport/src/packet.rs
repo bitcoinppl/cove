@@ -5,7 +5,7 @@ use bbqr::{
     split::{Split, SplitOptions},
 };
 
-use crate::{Error, Result};
+use crate::{Error, Result, crypto};
 
 const KEY_TELEPORT_DOMAIN: &str = "keyteleport.com";
 
@@ -53,7 +53,7 @@ pub struct ReceiverPacket(Vec<u8>);
 
 impl ReceiverPacket {
     pub fn new(payload: Vec<u8>) -> Result<Self> {
-        if payload.len() != 33 {
+        if payload.len() != crypto::RECEIVER_PACKET_LEN {
             return Err(Error::InvalidReceiverPacket);
         }
 

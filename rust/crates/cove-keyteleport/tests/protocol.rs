@@ -12,9 +12,9 @@ const SENDER_SECRET: [u8; 32] = [3; 32];
 const PASSWORD_BYTES: [u8; 5] = [0x12, 0x34, 0x56, 0x78, 0x9a];
 const XPRV: &str = "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa";
 const KEYTELEPORT_DOC_EXAMPLE: &str =
-    "https://keyteleport.com/#B$2R0100VHT2AGUUH7KUZUUSTOWOIWHJX3XM7GA2N4BHQOXDFHXLVHVA7K6ZO";
+    "https://keyteleport.com/#B$2R0100Y3GFSRDTFB52NIFPRNVF6UMDZ5I4W5INDXYQZCTMYURW7ZB7YXS5ZSOVJIKA";
 const EXPECTED_RECEIVER_PACKET: &str =
-    "c6cc594473287ba6a0af8b6a5f5183cf51cb750d1df10c8a6cc5236fe43fc5e5dc";
+    "c6cc594473287ba6a0af8b6a5f5183cf51cb750d1df10c8a6cc5236fe43fc5e5dcc9d54a14";
 const EXPECTED_SENDER_PACKET: &str = "02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33781594411bb9b79f98984a9407507af99615676fa9bac";
 
 #[test]
@@ -79,6 +79,21 @@ fn wrong_receiver_key_fails_outer_checksum_without_consuming_packet() {
 }
 
 #[test]
+fn mistyped_receiver_code_fails_before_sender_packet_is_created() {
+    let receiver = ReceiverSession::from_private_key_bytes(RECEIVER_SECRET).unwrap();
+    let request = receiver.request().unwrap();
+
+    for wrong_code in single_digit_mistypes(&request.numeric_code) {
+        let sender = SenderSession::new(&request.packet, &wrong_code);
+
+        assert!(
+            matches!(sender, Err(Error::InvalidReceiverPacket)),
+            "accepted receiver code {wrong_code}",
+        );
+    }
+}
+
+#[test]
 fn bbqr_headers_match_key_teleport_file_types() {
     let receiver = ReceiverSession::from_private_key_bytes(RECEIVER_SECRET).unwrap();
     let request = receiver.request().unwrap();
@@ -104,7 +119,7 @@ fn url_parse_build_handles_case_and_rejects_invalid_fragments() {
     let packet = Packet::from_url(KEYTELEPORT_DOC_EXAMPLE).unwrap();
 
     match &packet {
-        Packet::Receiver(receiver) => assert_eq!(receiver.as_bytes().len(), 33),
+        Packet::Receiver(receiver) => assert_eq!(receiver.as_bytes().len(), 37),
         _ => panic!("expected receiver packet"),
     }
 
@@ -152,6 +167,26 @@ fn roundtrip(payload: Payload) -> Result<DecodedPayload, Error> {
 
 fn test_mnemonic_12() -> Mnemonic {
     Mnemonic::from_entropy(&[0_u8; 16]).unwrap()
+}
+
+fn single_digit_mistypes(code: &NumericCode) -> Vec<NumericCode> {
+    let mut mistypes = Vec::new();
+
+    for (index, original) in code.as_str().bytes().enumerate() {
+        for replacement in b'0'..=b'9' {
+            if replacement == original {
+                continue;
+            }
+
+            let mut bytes = code.as_str().as_bytes().to_vec();
+            bytes[index] = replacement;
+            let value = std::str::from_utf8(&bytes).unwrap();
+
+            mistypes.push(NumericCode::from_str(value).unwrap());
+        }
+    }
+
+    mistypes
 }
 
 fn hex_string(bytes: &[u8]) -> String {
