@@ -43,6 +43,10 @@ impl EphemeralPrivateKey {
         self.0
     }
 
+    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
     pub(crate) fn public_key(&self) -> Result<PublicKey> {
         let secp = Secp256k1::new();
         let secret_key = self.secret_key()?;
@@ -165,7 +169,7 @@ pub(crate) fn decrypt_inner(paranoid_key: &[u8; 32], body: &[u8]) -> Result<Vec<
 
 fn receiver_code_hash(private_key: &EphemeralPrivateKey) -> [u8; 32] {
     let mut material = Vec::with_capacity(32 + RECEIVER_CODE_DOMAIN.len());
-    material.extend_from_slice(&private_key.expose_bytes());
+    material.extend_from_slice(private_key.as_bytes());
     material.extend_from_slice(RECEIVER_CODE_DOMAIN);
 
     let first = Sha256::digest(&material);
