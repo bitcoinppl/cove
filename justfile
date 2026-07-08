@@ -290,6 +290,7 @@ lint-rust *flags="":
 [working-directory('android')]
 lint-android *flags="":
     ./gradlew ktlintCheck {{ flags }}
+    ./gradlew detekt
 
 # Lint Swift code
 [group('lint')]
