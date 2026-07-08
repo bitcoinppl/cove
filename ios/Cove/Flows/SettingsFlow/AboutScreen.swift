@@ -115,10 +115,6 @@ struct AboutScreen: View {
                         HStack {
                             Text("Send Diagnostics")
                                 .foregroundStyle(.primary)
-                            Spacer()
-                            Text("Review before upload")
-                                .foregroundStyle(.secondary)
-                                .font(.footnote)
                         }
                     }
                 }
