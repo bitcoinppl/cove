@@ -494,6 +494,13 @@ reset-android:
 alias rra := reset-run-android
 alias rea := reset-android
 
+# Download Android screenshots into _scratch and delete them from the device
+[group('util')]
+download-android-screenshots:
+    just xtask download-android-screenshots
+
+alias das := download-android-screenshots
+
 # Build and clean install Android (rebuilds native libs, clears Gradle cache)
 [group('util')]
 [working-directory('android')]
