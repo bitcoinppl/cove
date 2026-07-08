@@ -26,6 +26,8 @@ struct AboutScreen: View {
     @State private var isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
     @State private var alertState: TaggedItem<AboutAlertState>? = nil
     @State private var isSendDiagnosticsPresented = false
+    @State private var isSubmittedDiagnosticsPresented = false
+    @State private var submittedDiagnosticsRecords: [DiagnosticsReportRecord] = []
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -42,6 +44,11 @@ struct AboutScreen: View {
             dismiss: { dismiss() },
             wipeCloudBackup: Self.debugWipeCloudBackup
         )
+    }
+
+    private var submittedDiagnosticsCountText: String {
+        let count = submittedDiagnosticsRecords.count
+        return count == 1 ? "1 report" : "\(count) reports"
     }
 
     var body: some View {
@@ -117,6 +124,21 @@ struct AboutScreen: View {
                                 .foregroundStyle(.primary)
                         }
                     }
+
+                    if !submittedDiagnosticsRecords.isEmpty {
+                        Button {
+                            isSubmittedDiagnosticsPresented = true
+                        } label: {
+                            HStack {
+                                Text("Submitted Diagnostics")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(submittedDiagnosticsCountText)
+                                    .foregroundStyle(.secondary)
+                                    .font(.footnote)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -137,11 +159,40 @@ struct AboutScreen: View {
             #endif
         }
         .navigationTitle("About")
+        .task { refreshSubmittedDiagnostics() }
+        .onChange(of: isSendDiagnosticsPresented) { _, isPresented in
+            guard !isPresented else { return }
+
+            refreshSubmittedDiagnostics()
+        }
+        .onChange(of: auth.isInDecoyMode()) { _, _ in
+            refreshSubmittedDiagnostics()
+        }
         .onDisappear { buildTapTimer?.invalidate(); buildTapTimer = nil }
         .sheet(isPresented: $isSendDiagnosticsPresented) {
             SendDiagnosticsSheet()
         }
+        .sheet(isPresented: $isSubmittedDiagnosticsPresented, onDismiss: refreshSubmittedDiagnostics) {
+            SubmittedDiagnosticsSheet(
+                records: submittedDiagnosticsRecords,
+                onRecordsChanged: refreshSubmittedDiagnostics
+            )
+        }
         .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
+    }
+
+    private func refreshSubmittedDiagnostics() {
+        guard !auth.isInDecoyMode() else {
+            submittedDiagnosticsRecords = []
+            isSubmittedDiagnosticsPresented = false
+            return
+        }
+
+        do {
+            submittedDiagnosticsRecords = try Database().diagnosticsReports().all()
+        } catch {
+            Log.warn("Failed to load submitted diagnostics: \(error.localizedDescription)")
+        }
     }
 
     private nonisolated static func debugWipeCloudBackup() -> WipeCloudResult {

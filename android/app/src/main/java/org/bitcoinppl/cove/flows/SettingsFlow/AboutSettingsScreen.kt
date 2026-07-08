@@ -50,6 +50,7 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.DiagnosticsReportRecord
 import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
@@ -74,9 +75,13 @@ fun AboutSettingsScreen(
     var wipeCloudResult by remember { mutableStateOf<WipeCloudResult?>(null) }
     var showResetLocalStateDialog by remember { mutableStateOf(false) }
     var showSendDiagnostics by remember { mutableStateOf(false) }
+    var showSubmittedDiagnostics by remember { mutableStateOf(false) }
     var sendDiagnosticsSubmitting by remember { mutableStateOf(false) }
     var resetLocalStateMessage by remember { mutableStateOf<String?>(null) }
     val isInDecoyMode = Auth.isInDecoyMode()
+    var submittedDiagnosticsRecords by remember {
+        mutableStateOf<List<DiagnosticsReportRecord>>(emptyList())
+    }
     var isBetaEnabled by remember {
         mutableStateOf(
             Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
@@ -89,6 +94,23 @@ fun AboutSettingsScreen(
             delay(2000)
             buildTapCount = 0
         }
+    }
+
+    fun refreshSubmittedDiagnostics() {
+        submittedDiagnosticsRecords =
+            if (isInDecoyMode) {
+                emptyList()
+            } else {
+                loadSubmittedDiagnosticsRecords()
+            }
+    }
+
+    LaunchedEffect(isInDecoyMode) {
+        if (isInDecoyMode) {
+            showSubmittedDiagnostics = false
+        }
+
+        refreshSubmittedDiagnostics()
     }
 
     AboutSettingsContent(
@@ -114,6 +136,13 @@ fun AboutSettingsScreen(
         showSendDiagnostics = !isInDecoyMode,
         onSendDiagnosticsClick = {
             if (!isInDecoyMode) showSendDiagnostics = true
+        },
+        showSubmittedDiagnostics = !isInDecoyMode && submittedDiagnosticsRecords.isNotEmpty(),
+        submittedDiagnosticsCount = submittedDiagnosticsRecords.size,
+        onSubmittedDiagnosticsClick = {
+            if (!isInDecoyMode && submittedDiagnosticsRecords.isNotEmpty()) {
+                showSubmittedDiagnostics = true
+            }
         },
         onWipeCloudBackupClick = { showWipeCloudDialog = true },
         onResetLocalBackupStateClick = { showResetLocalStateDialog = true },
@@ -265,6 +294,7 @@ fun AboutSettingsScreen(
     val dismissSendDiagnostics = {
         if (!sendDiagnosticsSubmitting) {
             showSendDiagnostics = false
+            refreshSubmittedDiagnostics()
         }
     }
 
@@ -276,6 +306,22 @@ fun AboutSettingsScreen(
             SendDiagnosticsSheet(
                 onDismiss = dismissSendDiagnostics,
                 onSubmittingChange = { sendDiagnosticsSubmitting = it },
+            )
+        }
+    }
+
+    val dismissSubmittedDiagnostics = {
+        showSubmittedDiagnostics = false
+        refreshSubmittedDiagnostics()
+    }
+
+    if (showSubmittedDiagnostics && !isInDecoyMode) {
+        FullScreenSettingsModal(
+            onDismiss = dismissSubmittedDiagnostics,
+        ) {
+            SubmittedDiagnosticsScreen(
+                onDismiss = dismissSubmittedDiagnostics,
+                onRecordsChanged = { refreshSubmittedDiagnostics() },
             )
         }
     }
@@ -294,6 +340,9 @@ internal fun AboutSettingsContent(
     onFeedbackClick: () -> Unit,
     showSendDiagnostics: Boolean,
     onSendDiagnosticsClick: () -> Unit,
+    showSubmittedDiagnostics: Boolean,
+    submittedDiagnosticsCount: Int,
+    onSubmittedDiagnosticsClick: () -> Unit,
     onWipeCloudBackupClick: () -> Unit,
     onResetLocalBackupStateClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -361,6 +410,15 @@ internal fun AboutSettingsContent(
                                 onClick = onSendDiagnosticsClick,
                             )
                         }
+                        if (showSubmittedDiagnostics) {
+                            MaterialDivider()
+                            AboutRow(
+                                label = "Submitted Diagnostics",
+                                value = diagnosticsReportCountText(submittedDiagnosticsCount),
+                                valueStyle = MaterialTheme.typography.bodySmall,
+                                onClick = onSubmittedDiagnosticsClick,
+                            )
+                        }
                     }
                 }
 
@@ -425,11 +483,21 @@ internal fun AboutSettingsPreviewContent() {
             onFeedbackClick = { },
             showSendDiagnostics = true,
             onSendDiagnosticsClick = { },
+            showSubmittedDiagnostics = true,
+            submittedDiagnosticsCount = 3,
+            onSubmittedDiagnosticsClick = { },
             onWipeCloudBackupClick = { },
             onResetLocalBackupStateClick = { },
         )
     }
 }
+
+private fun diagnosticsReportCountText(count: Int): String =
+    if (count == 1) {
+        "1 report"
+    } else {
+        "$count reports"
+    }
 
 @Composable
 private fun DebugRow(
