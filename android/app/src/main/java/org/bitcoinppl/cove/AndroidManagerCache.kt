@@ -74,9 +74,7 @@ internal class AndroidManagerCache(
     ): WalletManager {
         val previousManager =
             withContext(Dispatchers.Main.immediate) {
-                if (!isCurrent()) {
-                    throw CancellationException("wallet manager load for $id was superseded")
-                }
+                ensureWalletLoadIsCurrent(id, isCurrent)
 
                 val current = walletManager
                 if (current != null) {
@@ -91,9 +89,7 @@ internal class AndroidManagerCache(
                 current
             }
         if (previousManager?.id == id) {
-            if (!isCurrent()) {
-                throw CancellationException("wallet manager load for $id was superseded")
-            }
+            ensureWalletLoadIsCurrent(id, isCurrent)
 
             return previousManager
         }
@@ -110,19 +106,37 @@ internal class AndroidManagerCache(
 
         return withContext(Dispatchers.Main.immediate) {
             if (!isCurrent()) {
-                manager.close()
-                throw CancellationException("wallet manager load for $id was superseded")
+                closeLoadedManagerAndCancel(manager, id)
             }
 
             val currentManager = walletManager
             if (currentManager != null && currentManager !== previousManager && currentManager.id != id) {
-                manager.close()
-                throw CancellationException("wallet manager load for $id was superseded")
+                closeLoadedManagerAndCancel(manager, id)
             }
 
             installWalletManager(manager)
         }
     }
+
+    private fun ensureWalletLoadIsCurrent(
+        id: WalletId,
+        isCurrent: () -> Boolean,
+    ) {
+        if (!isCurrent()) {
+            throw walletLoadSuperseded(id)
+        }
+    }
+
+    private fun closeLoadedManagerAndCancel(
+        manager: WalletManager,
+        id: WalletId,
+    ): Nothing {
+        manager.close()
+        throw walletLoadSuperseded(id)
+    }
+
+    private fun walletLoadSuperseded(id: WalletId): CancellationException =
+        CancellationException("wallet manager load for $id was superseded")
 
     private fun installWalletManager(manager: WalletManager): WalletManager {
         val currentManager = walletManager
