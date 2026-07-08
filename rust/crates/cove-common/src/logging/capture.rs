@@ -5,7 +5,8 @@ use std::{
     fs::{File, OpenOptions},
     io::Write as _,
     path::{Path, PathBuf},
-    sync::LazyLock,
+    sync::{LazyLock, mpsc},
+    thread::{self, JoinHandle},
 };
 
 use parking_lot::Mutex;
@@ -43,6 +44,12 @@ pub enum CaptureError {
 
     #[error("failed to remove diagnostics log file {path}: {source}")]
     RemoveFile { path: String, source: std::io::Error },
+
+    #[error("failed to start diagnostics log writer: {source}")]
+    StartWriter { source: std::io::Error },
+
+    #[error("diagnostics log writer is unavailable while trying to {action}")]
+    WriterUnavailable { action: &'static str },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -53,10 +60,9 @@ struct Capture {
     state: Mutex<CaptureState>,
 }
 
-#[derive(Debug)]
 struct CaptureState {
     ring: RingBuffer,
-    file: Option<RollingLogFile>,
+    writer: Option<LogWriter>,
     replayed_on_attach: bool,
 }
 
@@ -72,6 +78,19 @@ struct RollingLogFile {
     dir: PathBuf,
     file: File,
     current_size: usize,
+}
+
+struct LogWriter {
+    dir: PathBuf,
+    sender: mpsc::Sender<WriterCommand>,
+    handle: Option<JoinHandle<()>>,
+}
+
+enum WriterCommand {
+    Write(String),
+    Flush(mpsc::Sender<Result<(), CaptureError>>),
+    ClearAndWrite { marker: String, reply: mpsc::Sender<Result<(), CaptureError>> },
+    Shutdown,
 }
 
 pub fn layer() -> CaptureLayer {
@@ -134,7 +153,7 @@ impl Drop for ReentrancyGuard {
 
 impl Default for CaptureState {
     fn default() -> Self {
-        Self { ring: RingBuffer::new(RING_CAP_BYTES), file: None, replayed_on_attach: false }
+        Self { ring: RingBuffer::new(RING_CAP_BYTES), writer: None, replayed_on_attach: false }
     }
 }
 
@@ -154,7 +173,7 @@ impl CaptureState {
             self.replayed_on_attach = true;
         }
 
-        self.file = Some(file);
+        self.writer = Some(LogWriter::spawn(file)?);
         Ok(())
     }
 
@@ -163,29 +182,104 @@ impl CaptureState {
         line.push('\n');
         self.ring.push(line.clone());
 
-        if let Some(file) = &mut self.file {
-            let _ = file.write_entry(&line);
+        if let Some(writer) = &self.writer {
+            writer.write(line);
         }
     }
 
     fn snapshot_text(&self) -> String {
-        let text =
-            self.file.as_ref().map_or_else(|| self.ring.text(), RollingLogFile::snapshot_text);
+        let text = self.writer.as_ref().map_or_else(
+            || self.ring.text(),
+            |writer| {
+                let mut text = String::new();
+                if let Err(error) = writer.flush() {
+                    text.push_str(&format!("failed to flush Rust diagnostics log file: {error}\n"));
+                }
+
+                text.push_str(&RollingLogFile::snapshot_text_in_dir(&writer.dir));
+                text
+            },
+        );
+
         if text.is_empty() { "no Rust logs captured\n".to_string() } else { text }
     }
 
     fn clear(&mut self) -> Result<(), CaptureError> {
-        if let Some(file) = &self.file {
-            file.remove_all_logs()?;
-        }
-
+        let marker = format!("diagnostics logs cleared at {}", timestamp());
         self.ring.clear();
-        if let Some(file) = &mut self.file {
-            *file = RollingLogFile::open(file.dir.clone())?;
+        self.ring.push(format!("{marker}\n"));
+
+        if let Some(writer) = &self.writer {
+            writer.clear_and_write(format!("{marker}\n"))?;
         }
 
-        self.record_line(format!("diagnostics logs cleared at {}", timestamp()));
         Ok(())
+    }
+}
+
+impl LogWriter {
+    fn spawn(file: RollingLogFile) -> Result<Self, CaptureError> {
+        let dir = file.dir.clone();
+        let (sender, receiver) = mpsc::channel();
+        let handle = thread::Builder::new()
+            .name("cove-diagnostics-log-writer".to_string())
+            .spawn(move || run_writer(file, receiver))
+            .map_err(|source| CaptureError::StartWriter { source })?;
+
+        Ok(Self { dir, sender, handle: Some(handle) })
+    }
+
+    fn write(&self, entry: String) {
+        let _ = self.sender.send(WriterCommand::Write(entry));
+    }
+
+    fn flush(&self) -> Result<(), CaptureError> {
+        let (reply, receiver) = mpsc::channel();
+        self.sender
+            .send(WriterCommand::Flush(reply))
+            .map_err(|_| CaptureError::WriterUnavailable { action: "flush diagnostics logs" })?;
+
+        receiver
+            .recv()
+            .map_err(|_| CaptureError::WriterUnavailable { action: "flush diagnostics logs" })?
+    }
+
+    fn clear_and_write(&self, marker: String) -> Result<(), CaptureError> {
+        let (reply, receiver) = mpsc::channel();
+        self.sender
+            .send(WriterCommand::ClearAndWrite { marker, reply })
+            .map_err(|_| CaptureError::WriterUnavailable { action: "clear diagnostics logs" })?;
+
+        receiver
+            .recv()
+            .map_err(|_| CaptureError::WriterUnavailable { action: "clear diagnostics logs" })?
+    }
+}
+
+impl Drop for LogWriter {
+    fn drop(&mut self) {
+        let _ = self.sender.send(WriterCommand::Shutdown);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn run_writer(mut file: RollingLogFile, receiver: mpsc::Receiver<WriterCommand>) {
+    for command in receiver {
+        match command {
+            WriterCommand::Write(entry) => {
+                let _ = file.write_entry(&entry);
+            }
+            WriterCommand::Flush(reply) => {
+                let _ = reply.send(file.flush());
+            }
+            WriterCommand::ClearAndWrite { marker, reply } => {
+                let result = file.clear_and_write(&marker);
+                let _ = reply.send(result);
+            }
+            WriterCommand::Shutdown => break,
+        }
     }
 }
 
@@ -257,6 +351,13 @@ impl RollingLogFile {
         Ok(())
     }
 
+    fn flush(&mut self) -> Result<(), CaptureError> {
+        self.file.flush().map_err(|source| CaptureError::WriteFile {
+            path: current_log_path(&self.dir).display().to_string(),
+            source,
+        })
+    }
+
     fn rotate(&mut self) -> Result<(), CaptureError> {
         self.file.flush().map_err(|source| CaptureError::WriteFile {
             path: current_log_path(&self.dir).display().to_string(),
@@ -289,8 +390,14 @@ impl RollingLogFile {
         Ok(())
     }
 
-    fn snapshot_text(&self) -> String {
-        self.log_paths().fold(String::new(), |mut text, path| {
+    fn clear_and_write(&mut self, marker: &str) -> Result<(), CaptureError> {
+        self.remove_all_logs()?;
+        *self = Self::open(self.dir.clone())?;
+        self.write_entry(marker)
+    }
+
+    fn snapshot_text_in_dir(dir: &Path) -> String {
+        Self::log_paths(dir).fold(String::new(), |mut text, path| {
             match std::fs::read_to_string(path) {
                 Ok(file_text) => text.push_str(&file_text),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -303,11 +410,11 @@ impl RollingLogFile {
         })
     }
 
-    fn log_paths(&self) -> impl Iterator<Item = PathBuf> + '_ {
+    fn log_paths(dir: &Path) -> impl Iterator<Item = PathBuf> + '_ {
         (1..=ARCHIVE_FILE_COUNT)
             .rev()
-            .map(|index| archived_log_path(&self.dir, index))
-            .chain(std::iter::once(current_log_path(&self.dir)))
+            .map(|index| archived_log_path(dir, index))
+            .chain(std::iter::once(current_log_path(dir)))
     }
 }
 
@@ -548,7 +655,7 @@ mod tests {
         state.clear()?;
         state.record_line("after clear");
 
-        let text = std::fs::read_to_string(current_log_path(dir.path()))?;
+        let text = state.snapshot_text();
         assert!(!text.contains("before clear"));
         assert!(text.contains("diagnostics logs cleared at"));
         assert!(text.contains("after clear"));

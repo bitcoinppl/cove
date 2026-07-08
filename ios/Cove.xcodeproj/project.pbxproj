@@ -23,6 +23,7 @@
 		C0B000192F10000000000001 /* AmountFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000182F10000000000001 /* AmountFormatterTests.swift */; };
 		C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */; };
 		C0B0001C2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */; };
+		C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +71,7 @@
 		C0B000182F10000000000001 /* AmountFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountFormatterTests.swift; sourceTree = "<group>"; };
 		C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateScreenLayoutTests.swift; sourceTree = "<group>"; };
+		C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLogStoreTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -136,6 +138,7 @@
 				C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */,
 				C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */,
 				C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */,
+				C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
 				C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */,
 			);
@@ -326,6 +329,7 @@
 				C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */,
 				C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */,
 				C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */,
+				C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

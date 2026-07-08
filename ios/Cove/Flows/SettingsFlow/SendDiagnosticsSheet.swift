@@ -3,6 +3,7 @@ import UIKit
 
 private let diagnosticsFilename = "cove-diagnostics.txt"
 private let previewChunkSize = 4096
+private let previewRefreshDelayNanoseconds: UInt64 = 300_000_000
 
 private struct DiagnosticsPreviewChunk: Identifiable {
     let id: Int
@@ -44,6 +45,7 @@ struct SendDiagnosticsSheet: View {
     @State private var loadState = DiagnosticsLoadState.loading
     @State private var isSubmitting = false
     @State private var alertState: SendDiagnosticsAlert? = nil
+    @State private var previewRefreshTask: Task<Void, Never>? = nil
 
     private var isReady: Bool {
         switch loadState {
@@ -107,7 +109,10 @@ struct SendDiagnosticsSheet: View {
             }
         }
         .onChange(of: description) { _, _ in
-            refreshPreviewForCurrentDescription()
+            schedulePreviewRefresh()
+        }
+        .onDisappear {
+            previewRefreshTask?.cancel()
         }
         .alert(item: $alertState) { alert in
             switch alert {
@@ -248,6 +253,8 @@ struct SendDiagnosticsSheet: View {
         loadState = .loading
         reportId = nil
         report = nil
+        previewRefreshTask?.cancel()
+        previewRefreshTask = nil
         previewText = ""
         previewChunks = []
         reportSize = ""
@@ -255,6 +262,7 @@ struct SendDiagnosticsSheet: View {
         do {
             if clearStoredLogs {
                 try clearDiagnosticsLogs()
+                SwiftLogStore.shared.clear()
             }
 
             let nextReport = try await buildDiagnosticsReport(
@@ -301,6 +309,19 @@ struct SendDiagnosticsSheet: View {
     }
 
     @MainActor
+    private func schedulePreviewRefresh() {
+        previewRefreshTask?.cancel()
+        previewRefreshTask = Task {
+            try? await Task.sleep(nanoseconds: previewRefreshDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                refreshPreviewForCurrentDescription()
+            }
+        }
+    }
+
+    @MainActor
     private func refreshPreview(report: DiagnosticsReport) {
         let nextPreviewText = report.previewTextForDescription(description: description)
 
@@ -336,8 +357,10 @@ private enum IOSDiagnostics {
     }
 
     static func platformLogs() -> String {
-        [
-            "iOS system logs are unavailable to sandboxed apps.",
+        let swiftLogs = SwiftLogStore.shared.snapshot()
+
+        return [
+            "iOS system logs are unavailable to sandboxed apps; app-recorded Swift logs are below.",
             "Generated: \(ISO8601DateFormatter().string(from: Date()))",
             "App version: \(bundleValue("CFBundleShortVersionString"))",
             "Build: \(bundleValue("CFBundleVersion"))",
@@ -345,6 +368,10 @@ private enum IOSDiagnostics {
             "Device: \(deviceModelIdentifier())",
             "Low power mode: \(ProcessInfo.processInfo.isLowPowerModeEnabled)",
             "Thermal state: \(thermalStateDescription(ProcessInfo.processInfo.thermalState))",
+            "",
+            "Swift app logs",
+            "--------------",
+            swiftLogs,
         ].joined(separator: "\n")
     }
 
