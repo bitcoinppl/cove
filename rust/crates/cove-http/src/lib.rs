@@ -3,6 +3,15 @@ use std::time::Duration;
 /// Build a reqwest Client that uses webpki-roots for TLS cert verification,
 /// bypassing rustls-platform-verifier (which requires Android JNI init)
 pub fn new_client() -> Result<reqwest::Client, reqwest::Error> {
+    client_builder().build()
+}
+
+/// Build a reqwest Client with the shared TLS configuration that does not follow redirects
+pub fn new_client_without_redirects() -> Result<reqwest::Client, reqwest::Error> {
+    client_builder().redirect(reqwest::redirect::Policy::none()).build()
+}
+
+fn client_builder() -> reqwest::ClientBuilder {
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
@@ -13,5 +22,4 @@ pub fn new_client() -> Result<reqwest::Client, reqwest::Error> {
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
         .tls_backend_preconfigured(tls_config)
-        .build()
 }

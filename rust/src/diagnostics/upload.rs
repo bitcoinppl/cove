@@ -48,11 +48,16 @@ impl UploadError {
             Self::Client(_) | Self::EncodeJson(_) | Self::Gzip(_) => {
                 "Unable to prepare the diagnostics report. Please try again.".to_string()
             }
+            Self::Request(error) if error.is_connect() => {
+                "Unable to reach the diagnostics collector. Check your connection and try again."
+                    .to_string()
+            }
             Self::Request(error) if error.is_timeout() => {
-                "The diagnostics upload timed out. Please try again.".to_string()
+                "The diagnostics upload timed out after it may have reached the collector. Retrying could submit it again; you can share the report manually."
+                    .to_string()
             }
             Self::Request(_) => {
-                "Unable to reach the diagnostics collector. Check your connection and try again."
+                "The diagnostics upload failed after it may have reached the collector. Retrying could submit it again; you can share the report manually."
                     .to_string()
             }
             Self::DecodeResponse(_) | Self::InvalidResponse(_) | Self::ResponseTooLarge { .. } => {
@@ -64,7 +69,9 @@ impl UploadError {
                     .to_string()
             }
             Self::Status { status, .. } if status.is_server_error() => {
-                format!("The diagnostics collector returned {status}. Please try again.")
+                format!(
+                    "The diagnostics collector returned {status} after upload. The report may have been received; retrying could submit it again. You can share the report manually."
+                )
             }
             Self::Status { status, .. } => {
                 format!("The diagnostics collector rejected the report ({status}).")
@@ -98,7 +105,7 @@ struct UploadResponse {
 }
 
 pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<String, UploadError> {
-    let client = cove_http::new_client().map_err(UploadError::Client)?;
+    let client = cove_http::new_client_without_redirects().map_err(UploadError::Client)?;
     let body = gzipped_json(report)?;
 
     for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
@@ -167,21 +174,16 @@ fn upload_url() -> String {
 
 fn upload_error_is_retryable(error: &UploadError) -> bool {
     match error {
-        UploadError::Request(error) => error.is_timeout() || error.is_connect(),
-        UploadError::Status { status, .. } => status_is_retryable(*status),
+        // only retry pre-connection failures because POST outcomes are otherwise ambiguous
+        UploadError::Request(error) => error.is_connect(),
         UploadError::Client(_)
         | UploadError::EncodeJson(_)
         | UploadError::Gzip(_)
+        | UploadError::Status { .. }
         | UploadError::DecodeResponse(_)
         | UploadError::InvalidResponse(_)
         | UploadError::ResponseTooLarge { .. } => false,
     }
-}
-
-fn status_is_retryable(status: StatusCode) -> bool {
-    status == StatusCode::REQUEST_TIMEOUT
-        || status == StatusCode::TOO_MANY_REQUESTS
-        || status.is_server_error()
 }
 
 async fn read_success_body(response: &mut reqwest::Response) -> Result<Vec<u8>, UploadError> {
@@ -239,7 +241,7 @@ mod tests {
     use flate2::read::GzDecoder;
     use tokio::{
         io::{AsyncReadExt as _, AsyncWriteExt as _},
-        net::TcpListener,
+        net::{TcpListener, TcpStream},
     };
 
     use super::*;
@@ -279,6 +281,8 @@ mod tests {
                 os_version: "iOS 20".to_string(),
                 device_model: "iPhone".to_string(),
                 rust_git_hash: "abc".to_string(),
+                rust_git_branch: "main".to_string(),
+                rust_build_profile: "debug".to_string(),
             },
             user_description: Some("description".to_string()),
             sections: vec![DiagnosticsSection {
@@ -289,6 +293,7 @@ mod tests {
     }
 
     async fn upload_server(responses: Vec<TestResponse>) -> (String, Arc<AtomicUsize>) {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
         let request_count = Arc::new(AtomicUsize::new(0));
@@ -320,6 +325,56 @@ mod tests {
         (format!("http://{addr}/reports"), request_count)
     }
 
+    async fn read_request_head(socket: &mut TcpStream) -> Vec<u8> {
+        let mut request = Vec::new();
+
+        loop {
+            let mut buffer = [0; 1024];
+            let bytes_read = socket.read(&mut buffer).await.expect("test server reads request");
+            assert_ne!(bytes_read, 0, "request ended before its headers");
+            request.extend_from_slice(&buffer[..bytes_read]);
+            assert!(request.len() <= MAX_SUCCESS_RESPONSE_BYTES, "request headers are too large");
+
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                return request;
+            }
+        }
+    }
+
+    async fn redirect_server(
+        location: &str,
+    ) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
+        let addr = listener.local_addr().expect("test server has local addr");
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_request_count = request_count.clone();
+        let location = location.to_string();
+
+        let server = tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.expect("test server accepts request");
+                let request = read_request_head(&mut socket).await;
+                server_request_count.fetch_add(1, Ordering::Relaxed);
+
+                assert!(request.starts_with(b"POST /reports HTTP/1.1\r\n"));
+
+                let body = r#"{"error":"redirect"}"#;
+                let http_response = format!(
+                    "HTTP/1.1 307 Temporary Redirect\r\nlocation: {location}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len(),
+                );
+
+                socket
+                    .write_all(http_response.as_bytes())
+                    .await
+                    .expect("test server writes response");
+            }
+        });
+
+        (format!("http://{addr}/reports"), request_count, server)
+    }
+
     #[test]
     fn gzipped_json_contains_report_and_description() {
         let report = report();
@@ -334,14 +389,64 @@ mod tests {
     }
 
     #[test]
-    fn status_retry_classification_only_retries_transient_responses() {
-        assert!(status_is_retryable(StatusCode::REQUEST_TIMEOUT));
-        assert!(status_is_retryable(StatusCode::TOO_MANY_REQUESTS));
-        assert!(status_is_retryable(StatusCode::INTERNAL_SERVER_ERROR));
-        assert!(status_is_retryable(StatusCode::BAD_GATEWAY));
-        assert!(!status_is_retryable(StatusCode::BAD_REQUEST));
-        assert!(!status_is_retryable(StatusCode::UNAUTHORIZED));
-        assert!(!status_is_retryable(StatusCode::PAYLOAD_TOO_LARGE));
+    fn collector_responses_are_not_retried_without_idempotency_support() {
+        for status in [
+            StatusCode::REQUEST_TIMEOUT,
+            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::BAD_GATEWAY,
+        ] {
+            let error = UploadError::Status { status, body: String::new() };
+
+            assert!(!upload_error_is_retryable(&error));
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn connection_establishment_failures_are_retryable() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let addr = {
+            let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
+
+            listener.local_addr().expect("test server has local addr")
+        };
+        let client = cove_http::new_client_without_redirects().unwrap();
+
+        let error = client.post(format!("http://{addr}/reports")).send().await.unwrap_err();
+
+        assert!(error.is_connect());
+        assert!(upload_error_is_retryable(&UploadError::Request(error)));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn timeout_after_connection_is_not_retryable() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
+        let addr = listener.local_addr().expect("test server has local addr");
+        let server = tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.expect("test server accepts request");
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        });
+        let client = cove_http::new_client_without_redirects().unwrap();
+
+        let error = client
+            .post(format!("http://{addr}/reports"))
+            .timeout(Duration::from_millis(20))
+            .body("report")
+            .send()
+            .await
+            .unwrap_err();
+
+        server.abort();
+
+        let error = UploadError::Request(error);
+
+        assert!(matches!(&error, UploadError::Request(error) if error.is_timeout()));
+        assert!(!upload_error_is_retryable(&error));
+        assert!(error.user_message().contains("may have reached"));
     }
 
     #[test]
@@ -357,22 +462,38 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn submit_retries_transient_status_once() {
+    async fn submit_does_not_retry_server_error_after_collector_received_request() {
         let _global_guard = crate::test_support::global_state_test_lock().lock().await;
-        let (upload_url, request_count) = upload_server(vec![
-            TestResponse {
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-                body: r#"{"error":"temporary"}"#.to_string(),
-            },
-            TestResponse { status: StatusCode::OK, body: r#"{"id":"report_retry"}"#.to_string() },
-        ])
+        let (upload_url, request_count) = upload_server(vec![TestResponse {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            body: r#"{"error":"temporary"}"#.to_string(),
+        }])
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let report_id = submit_report(&report()).await.unwrap();
+        let error = submit_report(&report()).await.unwrap_err();
 
-        assert_eq!(report_id, "report_retry");
-        assert_eq!(request_count.load(Ordering::Relaxed), 2);
+        assert!(matches!(error, UploadError::Status { status, .. } if status.is_server_error()));
+        assert!(error.user_message().contains("may have been received"));
+        assert_eq!(request_count.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn submit_does_not_follow_or_retry_post_redirect() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let (upload_url, request_count, server) =
+            redirect_server("http://127.0.0.1:0/reports").await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+
+        let error = submit_report(&report()).await.unwrap_err();
+
+        server.abort();
+
+        assert!(matches!(
+            error,
+            UploadError::Status { status: StatusCode::TEMPORARY_REDIRECT, .. }
+        ));
+        assert_eq!(request_count.load(Ordering::Relaxed), 1);
     }
 
     #[tokio::test(flavor = "current_thread")]
