@@ -246,8 +246,22 @@ fn is_token_character(character: char) -> bool {
 fn token_spans(text: &str) -> Vec<TokenSpan> {
     let mut tokens = Vec::new();
     let mut token_start = None;
+    let mut characters = text.char_indices().peekable();
 
-    for (index, character) in text.char_indices() {
+    while let Some((index, character)) = characters.next() {
+        if let Some(escape_len) = escaped_whitespace_len(&text[index..]) {
+            if let Some(start) = token_start.take() {
+                tokens.push(TokenSpan { start, end: index });
+            }
+
+            let escape_end = index + escape_len;
+            while characters.peek().is_some_and(|(index, _)| *index < escape_end) {
+                characters.next();
+            }
+
+            continue;
+        }
+
         if is_token_character(character) {
             token_start.get_or_insert(index);
             continue;
@@ -272,29 +286,26 @@ impl TokenSpan {
 }
 
 fn mnemonic_match(text: &str, tokens: &[TokenSpan], token_index: usize) -> Option<MnemonicMatch> {
+    let candidate = mnemonic_candidate(text, tokens, token_index)?;
+
     for word_count in BIP39_WORD_COUNTS {
-        let end_index = token_index + word_count;
-        if end_index > tokens.len() {
+        if word_count > candidate.word_token_indexes.len() {
             continue;
         }
 
-        let candidate_tokens = &tokens[token_index..end_index];
-        if !is_whitespace_separated(text, candidate_tokens) {
-            continue;
-        }
-
-        let Some(normalized_phrase) = normalized_mnemonic_phrase(text, candidate_tokens) else {
-            continue;
-        };
+        let word_token_indexes = &candidate.word_token_indexes[..word_count];
+        let normalized_phrase = normalized_mnemonic_phrase(text, tokens, word_token_indexes);
 
         if Mnemonic::parse_in_normalized(Language::English, &normalized_phrase).is_err() {
             continue;
         }
 
+        let last_word_index = word_token_indexes[word_count - 1];
+
         return Some(MnemonicMatch {
-            start: candidate_tokens[0].start,
-            end: candidate_tokens[word_count - 1].end,
-            next_token_index: end_index,
+            start: candidate.start,
+            end: tokens[last_word_index].end,
+            next_token_index: last_word_index + 1,
             normalized_phrase,
         });
     }
@@ -302,25 +313,224 @@ fn mnemonic_match(text: &str, tokens: &[TokenSpan], token_index: usize) -> Optio
     None
 }
 
-fn is_whitespace_separated(text: &str, tokens: &[TokenSpan]) -> bool {
-    tokens
-        .windows(2)
-        .all(|window| text[window[0].end..window[1].start].chars().all(char::is_whitespace))
+struct MnemonicCandidate {
+    start: usize,
+    word_token_indexes: Vec<usize>,
 }
 
-fn normalized_mnemonic_phrase(text: &str, tokens: &[TokenSpan]) -> Option<String> {
-    let mut words = Vec::with_capacity(tokens.len());
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MnemonicNumbering {
+    ZeroBased,
+    OneBased,
+}
 
-    for token in tokens {
-        let word = token.text(text);
-        if !word.chars().all(|character| character.is_ascii_alphabetic()) {
-            return None;
+fn mnemonic_candidate(
+    text: &str,
+    tokens: &[TokenSpan],
+    token_index: usize,
+) -> Option<MnemonicCandidate> {
+    let token = tokens[token_index];
+    let (start, mut word_token_index, mut numbering) = if is_mnemonic_word(token.text(text)) {
+        (token.start, token_index, mnemonic_numbering_before_word(text, tokens, token_index))
+    } else {
+        let (word_token_index, numbering) =
+            numbered_mnemonic_word_index(text, tokens, token_index, 0, None)?;
+
+        (tokens[word_token_index].start, word_token_index, Some(numbering))
+    };
+    let mut word_token_indexes = Vec::with_capacity(BIP39_WORD_COUNTS[0]);
+
+    loop {
+        let word = tokens[word_token_index].text(text);
+        if !is_mnemonic_word(word) {
+            break;
         }
 
-        words.push(word.to_ascii_lowercase());
+        word_token_indexes.push(word_token_index);
+        if word_token_indexes.len() == BIP39_WORD_COUNTS[0] {
+            break;
+        }
+
+        let Some((next_word_token_index, next_numbering)) = next_mnemonic_word_index(
+            text,
+            tokens,
+            word_token_index,
+            word_token_indexes.len(),
+            numbering,
+        ) else {
+            break;
+        };
+
+        word_token_index = next_word_token_index;
+        numbering = next_numbering;
     }
 
-    Some(words.join(" "))
+    Some(MnemonicCandidate { start, word_token_indexes })
+}
+
+fn next_mnemonic_word_index(
+    text: &str,
+    tokens: &[TokenSpan],
+    word_token_index: usize,
+    next_word_index: usize,
+    numbering: Option<MnemonicNumbering>,
+) -> Option<(usize, Option<MnemonicNumbering>)> {
+    let next_token_index = word_token_index + 1;
+    let next_token = *tokens.get(next_token_index)?;
+    let separator = &text[tokens[word_token_index].end..next_token.start];
+    if !is_mnemonic_separator(separator) {
+        return None;
+    }
+
+    if is_mnemonic_word(next_token.text(text)) {
+        return Some((next_token_index, numbering));
+    }
+
+    let (word_token_index, numbering) =
+        numbered_mnemonic_word_index(text, tokens, next_token_index, next_word_index, numbering)?;
+
+    Some((word_token_index, Some(numbering)))
+}
+
+fn numbered_mnemonic_word_index(
+    text: &str,
+    tokens: &[TokenSpan],
+    number_token_index: usize,
+    word_index: usize,
+    expected_numbering: Option<MnemonicNumbering>,
+) -> Option<(usize, MnemonicNumbering)> {
+    let number_token = tokens.get(number_token_index)?.text(text);
+    let numbering = MnemonicNumbering::from_marker(number_token.parse().ok()?, word_index)?;
+    if expected_numbering.is_some_and(|expected| expected != numbering) {
+        return None;
+    }
+
+    let word_token_index = number_token_index + 1;
+    let word_token = *tokens.get(word_token_index)?;
+    let separator = &text[tokens[number_token_index].end..word_token.start];
+    if !is_mnemonic_separator(separator) || !is_mnemonic_word(word_token.text(text)) {
+        return None;
+    }
+
+    Some((word_token_index, numbering))
+}
+
+fn mnemonic_numbering_before_word(
+    text: &str,
+    tokens: &[TokenSpan],
+    word_token_index: usize,
+) -> Option<MnemonicNumbering> {
+    let number_token_index = word_token_index.checked_sub(1)?;
+    let (numbered_word_token_index, numbering) =
+        numbered_mnemonic_word_index(text, tokens, number_token_index, 0, None)?;
+
+    (numbered_word_token_index == word_token_index).then_some(numbering)
+}
+
+impl MnemonicNumbering {
+    fn from_marker(marker: usize, word_index: usize) -> Option<Self> {
+        match marker.checked_sub(word_index)? {
+            0 => Some(Self::ZeroBased),
+            1 => Some(Self::OneBased),
+            _ => None,
+        }
+    }
+}
+
+fn is_mnemonic_word(word: &str) -> bool {
+    word.chars().all(|character| character.is_ascii_alphabetic())
+}
+
+fn is_mnemonic_separator(separator: &str) -> bool {
+    !separator.is_empty()
+        && mnemonic_separator_characters_are_valid(separator, is_mnemonic_format_character)
+}
+
+fn mnemonic_separator_characters_are_valid(
+    separator: &str,
+    mut is_format_character: impl FnMut(char) -> bool,
+) -> bool {
+    let mut cursor = 0;
+
+    while cursor < separator.len() {
+        if let Some(escape_len) = escaped_whitespace_len(&separator[cursor..]) {
+            cursor += escape_len;
+            continue;
+        }
+
+        let character = separator[cursor..].chars().next().expect("cursor is in bounds");
+        if !character.is_whitespace() && !is_format_character(character) {
+            return false;
+        }
+
+        cursor += character.len_utf8();
+    }
+
+    true
+}
+
+fn escaped_whitespace_len(text: &str) -> Option<usize> {
+    if text.starts_with("\\n") || text.starts_with("\\r") || text.starts_with("\\t") {
+        return Some(2);
+    }
+
+    let unicode_escape = text.strip_prefix("\\u{")?;
+    let closing_brace = unicode_escape.find('}')?;
+    let hexadecimal = &unicode_escape[..closing_brace];
+    if hexadecimal.is_empty()
+        || hexadecimal.len() > 6
+        || !hexadecimal.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return None;
+    }
+
+    let value = u32::from_str_radix(hexadecimal, 16).ok()?;
+    let character = char::from_u32(value)?;
+    character.is_whitespace().then_some(closing_brace + 4)
+}
+
+fn is_mnemonic_format_character(character: char) -> bool {
+    matches!(
+        character,
+        ',' | ';'
+            | '.'
+            | ':'
+            | '\''
+            | '"'
+            | '`'
+            | '\\'
+            | '['
+            | ']'
+            | '('
+            | ')'
+            | '-'
+            | '–'
+            | '—'
+            | '*'
+            | '+'
+            | '|'
+            | '/'
+            | '•'
+            | '◦'
+            | '‘'
+            | '’'
+            | '“'
+            | '”'
+    )
+}
+
+fn normalized_mnemonic_phrase(
+    text: &str,
+    tokens: &[TokenSpan],
+    word_token_indexes: &[usize],
+) -> String {
+    let mut words = Vec::with_capacity(word_token_indexes.len());
+
+    for token_index in word_token_indexes {
+        words.push(tokens[*token_index].text(text).to_ascii_lowercase());
+    }
+
+    words.join(" ")
 }
 
 fn is_txid(token: &str) -> bool {
@@ -365,6 +575,11 @@ fn is_bitcoin_address(token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const MNEMONIC_WORDS: [&str; 12] = [
+        "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+        "abandon", "abandon", "abandon", "about",
+    ];
 
     fn redactor_without_paths() -> Redactor {
         Redactor::new(vec![])
@@ -451,6 +666,183 @@ mod tests {
         let output = redactor.redact(mnemonic);
 
         assert_eq!(output, "<redacted-seed-phrase-1>");
+    }
+
+    #[test]
+    fn redacts_formatted_bip39_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+        let words = MNEMONIC_WORDS;
+        let comma_separated = words.join(",");
+        let quoted = format!("{words:?}");
+        let numbered = words
+            .iter()
+            .enumerate()
+            .map(|(index, word)| format!("{}. {word}", index + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let bulleted = words.iter().map(|word| format!("- {word}")).collect::<Vec<_>>().join("\n");
+
+        for formatted in [comma_separated, quoted, numbered, bulleted] {
+            let output = redactor.redact(&formatted);
+
+            assert!(output.contains("<redacted-seed-phrase-1>"), "output: {output}");
+            assert!(!output.contains("abandon"), "output: {output}");
+            assert!(!output.contains("about"), "output: {output}");
+        }
+    }
+
+    #[test]
+    fn redacts_zero_and_one_based_numbered_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+
+        for numbering_base in [0, 1] {
+            let input = MNEMONIC_WORDS
+                .iter()
+                .enumerate()
+                .map(|(index, word)| format!("{}. {word}", index + numbering_base))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let output = redactor.redact(&input);
+
+            assert_eq!(output, format!("{numbering_base}. <redacted-seed-phrase-1>"));
+        }
+    }
+
+    #[test]
+    fn redacts_whitespace_only_numbered_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+
+        for (numbering_base, column_separator) in [(1, " "), (0, "\t")] {
+            let input = MNEMONIC_WORDS
+                .iter()
+                .enumerate()
+                .map(|(index, word)| format!("{}{column_separator}{word}", index + numbering_base))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let output = redactor.redact(&input);
+
+            assert_eq!(
+                output,
+                format!("{numbering_base}{column_separator}<redacted-seed-phrase-1>")
+            );
+        }
+    }
+
+    #[test]
+    fn numbered_seed_phrases_require_consistent_sequential_markers() {
+        let mut redactor = redactor_without_paths();
+        let input = MNEMONIC_WORDS
+            .iter()
+            .enumerate()
+            .map(|(index, word)| {
+                let number = if index == 6 { index + 2 } else { index + 1 };
+                format!("{number} {word}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn redacts_debug_formatted_multiline_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+        let mnemonic =
+            format!("{}\n{}", MNEMONIC_WORDS[..6].join(" "), MNEMONIC_WORDS[6..].join(" "));
+        let input = format!("{mnemonic:?}");
+
+        let output = redactor.redact(&input);
+
+        assert!(input.contains("\\n"));
+        assert_eq!(output, "\"<redacted-seed-phrase-1>\"");
+    }
+
+    #[test]
+    fn redacts_debug_formatted_unicode_whitespace_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+        let mnemonic = MNEMONIC_WORDS.join("\u{b}");
+        let input = format!("{mnemonic:?}");
+
+        let output = redactor.redact(&input);
+
+        assert!(input.contains("\\u{b}"));
+        assert_eq!(output, "\"<redacted-seed-phrase-1>\"");
+
+        let non_whitespace_escape = MNEMONIC_WORDS.join("\\u{61}");
+        assert_eq!(redactor.redact(&non_whitespace_escape), non_whitespace_escape);
+    }
+
+    #[test]
+    fn redacts_slash_separated_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+        let input = MNEMONIC_WORDS.join("/");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, "<redacted-seed-phrase-1>");
+    }
+
+    #[test]
+    fn redacts_period_separated_seed_phrases() {
+        let mut redactor = redactor_without_paths();
+        let input = MNEMONIC_WORDS.join(". ");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, "<redacted-seed-phrase-1>");
+    }
+
+    #[test]
+    fn numbered_quoted_seed_phrase_boundaries_remain_balanced() {
+        let mut redactor = redactor_without_paths();
+        let input = MNEMONIC_WORDS
+            .iter()
+            .enumerate()
+            .map(|(index, word)| format!("{}. \"{word}\"", index + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, "1. \"<redacted-seed-phrase-1>\"");
+    }
+
+    #[test]
+    fn bracketed_numbered_seed_phrase_boundaries_preserve_the_first_label() {
+        let mut redactor = redactor_without_paths();
+        let compact = MNEMONIC_WORDS
+            .iter()
+            .enumerate()
+            .map(|(index, word)| format!("[{}] {word}", index + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let spaced = MNEMONIC_WORDS
+            .iter()
+            .enumerate()
+            .map(|(index, word)| format!("[ {} ] {word}", index + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let compact_output = redactor.redact(&compact);
+        let spaced_output = redactor.redact(&spaced);
+
+        assert_eq!(compact_output, "[1] <redacted-seed-phrase-1>");
+        assert_eq!(spaced_output, "[ 1 ] <redacted-seed-phrase-1>");
+    }
+
+    #[test]
+    fn formatted_words_still_require_a_valid_bip39_checksum() {
+        let mut redactor = redactor_without_paths();
+        let invalid_words = ["abandon"; 12];
+        let input = format!("{invalid_words:?}");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, input);
     }
 
     #[test]
