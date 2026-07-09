@@ -17,6 +17,7 @@ final class SwiftLogStore {
     private let fileManager: FileManager
     private let queue: DispatchQueue
     private var currentSize: Int?
+    private var lastWriteError: String?
 
     init(
         logsDirectory: URL,
@@ -32,13 +33,22 @@ final class SwiftLogStore {
         let line = Self.line(level: level, category: category, message: message)
 
         queue.async {
-            try? self.writeEntry(line)
+            do {
+                try self.writeEntry(line)
+            } catch {
+                self.lastWriteError = error.localizedDescription
+            }
         }
     }
 
     func snapshot() -> String {
         queue.sync {
-            let text = logFileURLs().reduce(into: "") { snapshot, url in
+            var text = ""
+            if let lastWriteError {
+                text.append("failed to write Swift diagnostics log file: \(lastWriteError)\n")
+            }
+
+            text += logFileURLs().reduce(into: "") { snapshot, url in
                 guard fileManager.fileExists(atPath: url.path) else { return }
 
                 do {
@@ -55,11 +65,19 @@ final class SwiftLogStore {
     func clear() {
         queue.sync {
             for url in allLogFileURLs() {
-                try? removeFileIfExists(url)
+                do {
+                    try removeFileIfExists(url)
+                } catch {
+                    lastWriteError = error.localizedDescription
+                }
             }
 
             currentSize = nil
-            try? writeEntry("swift diagnostics logs cleared at \(Self.timestamp())\n")
+            do {
+                try writeEntry("swift diagnostics logs cleared at \(Self.timestamp())\n")
+            } catch {
+                lastWriteError = error.localizedDescription
+            }
         }
     }
 

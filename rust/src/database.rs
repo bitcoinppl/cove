@@ -90,9 +90,17 @@ impl Database {
     }
 
     pub fn dangerous_reset_all_data(&self) {
-        if let Err(error) = std::fs::remove_file(database_location()) {
-            error!("unable to delete database cove_main error: {error}");
-            return;
+        match std::fs::remove_file(database_location()) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                error!("unable to delete database cove_main error: {error}");
+                return;
+            }
+        }
+
+        if let Err(error) = cove_common::logging::capture::clear_default_logs_dir() {
+            error!("unable to clear diagnostics logs during data reset: {error}");
         }
 
         let db = Self::init().expect("failed to reinitialize database after reset");

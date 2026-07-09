@@ -104,6 +104,28 @@ final class SwiftLogStoreTests: XCTestCase {
         XCTAssertTrue(restarted.snapshot().contains("before restart"))
     }
 
+    func testSnapshotIncludesWriteFailureBreadcrumb() throws {
+        let fileURL = tempDirectory.appendingPathComponent("not-a-directory")
+        try "not a directory".write(to: fileURL, atomically: true, encoding: .utf8)
+        let store = SwiftLogStore(logsDirectory: fileURL)
+
+        store.record(level: .error, category: "failure", message: "cannot write")
+
+        let snapshot = store.snapshot()
+        XCTAssertTrue(snapshot.contains("failed to write Swift diagnostics log file"))
+    }
+
+    func testClearFailureIsIncludedInSnapshot() throws {
+        let fileURL = tempDirectory.appendingPathComponent("not-a-directory")
+        try "not a directory".write(to: fileURL, atomically: true, encoding: .utf8)
+        let store = SwiftLogStore(logsDirectory: fileURL)
+
+        store.clear()
+
+        let snapshot = store.snapshot()
+        XCTAssertTrue(snapshot.contains("failed to write Swift diagnostics log file"))
+    }
+
     private func makeStore() -> SwiftLogStore {
         SwiftLogStore(logsDirectory: tempDirectory)
     }
