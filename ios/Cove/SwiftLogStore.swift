@@ -62,21 +62,21 @@ final class SwiftLogStore {
         }
     }
 
-    func clear() {
-        queue.sync {
-            for url in allLogFileURLs() {
-                do {
-                    try removeFileIfExists(url)
-                } catch {
-                    lastWriteError = error.localizedDescription
-                }
-            }
-
+    func clear() throws {
+        try queue.sync {
             currentSize = nil
+
             do {
+                for url in allLogFileURLs() {
+                    try removeFileIfExists(url)
+                }
+
+                lastWriteError = nil
                 try writeEntry("swift diagnostics logs cleared at \(Self.timestamp())\n")
             } catch {
                 lastWriteError = error.localizedDescription
+
+                throw error
             }
         }
     }

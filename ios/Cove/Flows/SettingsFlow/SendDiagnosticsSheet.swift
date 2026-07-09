@@ -255,7 +255,7 @@ struct SendDiagnosticsSheet: View {
         do {
             if clearStoredLogs {
                 try clearDiagnosticsLogs()
-                SwiftLogStore.shared.clear()
+                try SwiftLogStore.shared.clear()
             }
 
             let nextReport = try await buildDiagnosticsReport(

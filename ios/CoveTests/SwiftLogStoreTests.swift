@@ -64,12 +64,12 @@ final class SwiftLogStoreTests: XCTestCase {
         XCTAssertLessThanOrEqual(totalBytes, 2 * 1024 * 1024)
     }
 
-    func testClearRemovesExistingLogsAndWritesMarker() {
+    func testClearRemovesExistingLogsAndWritesMarker() throws {
         let store = makeStore()
         store.record(level: .warn, category: "clear", message: "before clear")
         XCTAssertTrue(store.snapshot().contains("before clear"))
 
-        store.clear()
+        try store.clear()
 
         let snapshot = store.snapshot()
         XCTAssertFalse(snapshot.contains("before clear"))
@@ -115,18 +115,35 @@ final class SwiftLogStoreTests: XCTestCase {
         XCTAssertTrue(snapshot.contains("failed to write Swift diagnostics log file"))
     }
 
-    func testClearFailureIsIncludedInSnapshot() throws {
+    func testClearWriteFailureIsThrownAndIncludedInSnapshot() throws {
         let fileURL = tempDirectory.appendingPathComponent("not-a-directory")
         try "not a directory".write(to: fileURL, atomically: true, encoding: .utf8)
         let store = SwiftLogStore(logsDirectory: fileURL)
 
-        store.clear()
+        XCTAssertThrowsError(try store.clear())
 
         let snapshot = store.snapshot()
         XCTAssertTrue(snapshot.contains("failed to write Swift diagnostics log file"))
     }
 
+    func testClearDeletionFailureIsThrown() {
+        let fileManager = FailingRemoveFileManager()
+        let store = SwiftLogStore(logsDirectory: tempDirectory, fileManager: fileManager)
+
+        XCTAssertThrowsError(try store.clear())
+    }
+
     private func makeStore() -> SwiftLogStore {
         SwiftLogStore(logsDirectory: tempDirectory)
+    }
+}
+
+private final class FailingRemoveFileManager: FileManager, @unchecked Sendable {
+    override func fileExists(atPath _: String) -> Bool {
+        true
+    }
+
+    override func removeItem(at _: URL) throws {
+        throw CocoaError(.fileWriteNoPermission)
     }
 }
