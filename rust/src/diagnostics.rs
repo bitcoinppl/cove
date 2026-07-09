@@ -79,6 +79,8 @@ pub(crate) struct DiagnosticsMetadata {
     os_version: String,
     device_model: String,
     rust_git_hash: String,
+    rust_git_branch: String,
+    rust_build_profile: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -225,6 +227,8 @@ impl DiagnosticsReport {
             os_version: platform.os_version,
             device_model: platform.device_model,
             rust_git_hash: crate::build::git_short_hash(),
+            rust_git_branch: crate::build::git_branch(),
+            rust_build_profile: crate::build::profile(),
         };
         let mut redactor = redact::Redactor::with_default_paths();
         let sections = raw_sections_from(startup, platform_logs, rust_logs)
@@ -331,8 +335,8 @@ fn render_preview(
     text.push_str(&format!("OS version: {}\n", metadata.os_version));
     text.push_str(&format!("Device model: {}\n", metadata.device_model));
     text.push_str(&format!("Rust git hash: {}\n", metadata.rust_git_hash));
-    text.push_str(&format!("Rust git branch: {}\n", crate::build::git_branch()));
-    text.push_str(&format!("Rust build profile: {}\n", crate::build::profile()));
+    text.push_str(&format!("Rust git branch: {}\n", metadata.rust_git_branch));
+    text.push_str(&format!("Rust build profile: {}\n", metadata.rust_build_profile));
 
     for section in sections {
         text.push_str("\n## ");
@@ -465,6 +469,32 @@ mod tests {
 
         assert!(json.contains("\"user_description\":\"description\""));
         assert!(!json.contains("\"description\":\"description\""));
+    }
+
+    #[test]
+    fn upload_includes_build_metadata_shown_in_preview() {
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+        let upload = report.upload_report(None);
+        let json = serde_json::to_value(upload).unwrap();
+
+        assert_eq!(json["metadata"]["rust_git_branch"], report.metadata.rust_git_branch);
+        assert_eq!(json["metadata"]["rust_build_profile"], report.metadata.rust_build_profile);
+        assert!(
+            report
+                .preview_text
+                .contains(&format!("Rust git branch: {}", report.metadata.rust_git_branch))
+        );
+        assert!(
+            report
+                .preview_text
+                .contains(&format!("Rust build profile: {}", report.metadata.rust_build_profile))
+        );
     }
 
     #[test]
