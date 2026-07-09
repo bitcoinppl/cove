@@ -26,7 +26,7 @@ import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.HotWalletImportScreen
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.HotWalletSelectScreen
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.VerificationCompleteScreen
 import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.VerifyWordsScreen
-import org.bitcoinppl.cove.flows.SendFlow.SendFlowConfirmScreen
+import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.flows.SendFlow.SendState
