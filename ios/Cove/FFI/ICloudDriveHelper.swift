@@ -11,6 +11,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     let defaultTimeout: TimeInterval = 60
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
+    private let metadataListingTimeout: TimeInterval = 5
     private let progressLogInterval: TimeInterval = 1
     private static let legacyFileReadNoSuchFileError = 4
 
@@ -724,7 +725,10 @@ final class ICloudDriveHelper: @unchecked Sendable {
     ///
     /// Tries FileManager first (fast, sees .icloud stubs and dataless files),
     /// falls back to metadata query only if FileManager finds nothing
-    func listSubdirectories(parentPath: String) throws -> [String] {
+    func listSubdirectories(
+        parentPath: String,
+        metadataTimeout: TimeInterval? = nil
+    ) throws -> [String] {
         let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
 
         if let names = try? listSubdirectoriesViaFileManager(parentURL: parentURL), !names.isEmpty {
@@ -732,7 +736,10 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         Log.info("listSubdirectories: FileManager found nothing, falling back to metadata query")
-        return try metadataSubdirectoryNames(parentDirectoryURL: parentURL)
+        return try metadataSubdirectoryNames(
+            parentDirectoryURL: parentURL,
+            timeout: metadataTimeout ?? metadataListingTimeout
+        )
     }
 
     private func listSubdirectoriesViaFileManager(parentURL: URL) throws -> [String] {
@@ -758,6 +765,37 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         return Array(names)
+    }
+
+    private func metadataSubdirectoryNames(
+        parentDirectoryURL: URL,
+        timeout: TimeInterval
+    ) throws -> [String] {
+        let resolvedParent = parentDirectoryURL.resolvingSymlinksInPath().path
+        let pathPrefix = resolvedParent + "/"
+        let items = try metadataQuery(
+            predicate: NSPredicate(value: true),
+            timeout: timeout
+        )
+        var names = Set<String>()
+
+        for item in items {
+            let metadataPath: String? = if let path = item.value(forAttribute: NSMetadataItemPathKey) as? String {
+                URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            } else if let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL {
+                url.resolvingSymlinksInPath().path
+            } else {
+                nil
+            }
+
+            guard let metadataPath, metadataPath.hasPrefix(pathPrefix) else { continue }
+
+            let relativePath = String(metadataPath.dropFirst(pathPrefix.count))
+            guard let firstComponent = relativePath.split(separator: "/").first else { continue }
+            names.insert(String(firstComponent))
+        }
+
+        return names.sorted()
     }
 
     /// Lists filenames matching a prefix within a namespace directory

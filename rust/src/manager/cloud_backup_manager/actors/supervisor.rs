@@ -902,7 +902,9 @@ impl CloudBackupSupervisor {
                 Err(error) => {
                     error!("restore_from_cloud_backup failed: {error}");
                     operation
-                        .send_event_if_current(CloudBackupRestoreEvent::Failed(error.to_string()))
+                        .send_event_if_current(CloudBackupRestoreEvent::Failed(
+                            error.reader_message(),
+                        ))
                         .await;
                     send!(addr.fail_exclusive_operation(claim, error));
                 }

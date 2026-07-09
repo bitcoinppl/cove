@@ -107,7 +107,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");
                 manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Failed(
-                    error.to_string(),
+                    error.reader_message(),
                 ));
             }
         }
@@ -163,7 +163,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.to_string(),
+                    error.reader_message(),
                 ));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -200,7 +200,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.to_string(),
+                    error.reader_message(),
                 ));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -251,7 +251,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.to_string(),
+                    error.reader_message(),
                 ));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -290,7 +290,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Failed(
-                    error.to_string(),
+                    error.reader_message(),
                 ));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -325,7 +325,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Failed(
-                    error.to_string(),
+                    error.reader_message(),
                 ));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -358,7 +358,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.to_string()));
+                manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(error.reader_message()));
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
             }

@@ -224,7 +224,7 @@ fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudB
         PasskeyError::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
         PasskeyError::NoCredentialFound => Ok(PasskeyAuthOutcome::NoCredentialFound),
         PasskeyError::PrfUnsupportedProvider => Err(CloudBackupError::UnsupportedPasskeyProvider),
-        other => Err(CloudBackupError::Passkey(other.to_string())),
+        other => Err(CloudBackupError::Passkey(other)),
     }
 }
 
@@ -252,9 +252,13 @@ mod tests {
             reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
         })
         .unwrap_err();
-        assert!(
-            matches!(error, CloudBackupError::Passkey(message) if message == "authenticate assertion failed: unknown: boom")
-        );
+        assert!(matches!(
+            error,
+            CloudBackupError::Passkey(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::AuthenticateAssertion,
+                reason: PasskeyFailureReason::Unknown { diagnostic_message },
+            }) if diagnostic_message == "boom"
+        ));
     }
 
     #[test]

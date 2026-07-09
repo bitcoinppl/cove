@@ -544,7 +544,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -579,7 +579,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -808,7 +808,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -842,7 +842,7 @@ impl CloudBackupSupervisor {
                 {
                     manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                         action: RecoveryAction::RepairPasskey,
-                        error: error.to_string(),
+                        error: error.reader_message(),
                     });
                     self.active_operation = None;
                     manager.project_exclusive_operation_finished(claim);
@@ -859,7 +859,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -894,7 +894,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);

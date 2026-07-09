@@ -212,6 +212,7 @@ private func onboardingWordGridRowCount(_ wordCount: Int) -> Int {
 
 struct OnboardingCloudBackupStepView: View {
     let branch: OnboardingBranch?
+    let isCloudRestoreCheckPending: Bool
     let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
@@ -220,6 +221,7 @@ struct OnboardingCloudBackupStepView: View {
         switch branch {
         case .softwareImport:
             OnboardingSoftwareImportCloudBackupStepView(
+                isCloudRestoreCheckPending: isCloudRestoreCheckPending,
                 onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip
@@ -227,6 +229,7 @@ struct OnboardingCloudBackupStepView: View {
 
         case .hardware:
             OnboardingHardwareImportCloudBackupStepView(
+                isCloudRestoreCheckPending: isCloudRestoreCheckPending,
                 onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip
@@ -234,6 +237,7 @@ struct OnboardingCloudBackupStepView: View {
 
         case .newUser, .exchange, .softwareCreate, nil:
             OnboardingCloudBackupDetailsStepView(
+                isCloudRestoreCheckPending: isCloudRestoreCheckPending,
                 onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: onSkip,
@@ -246,6 +250,7 @@ struct OnboardingCloudBackupStepView: View {
 private struct OnboardingSoftwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
+    let isCloudRestoreCheckPending: Bool
     let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
@@ -253,6 +258,7 @@ private struct OnboardingSoftwareImportCloudBackupStepView: View {
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
+                isCloudRestoreCheckPending: isCloudRestoreCheckPending,
                 onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
@@ -270,6 +276,7 @@ private struct OnboardingSoftwareImportCloudBackupStepView: View {
 private struct OnboardingHardwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
+    let isCloudRestoreCheckPending: Bool
     let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
@@ -277,6 +284,7 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
+                isCloudRestoreCheckPending: isCloudRestoreCheckPending,
                 onEnable: onEnable,
                 onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
@@ -295,6 +303,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
     @State private var didReportEnabled = false
 
+    let isCloudRestoreCheckPending: Bool
     let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
@@ -355,7 +364,7 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private func handleEnableTap() {
-        guard !isBusy, !isPromptingForEnableChoice else { return }
+        guard !isCloudRestoreCheckPending, !isBusy, !isPromptingForEnableChoice else { return }
 
         if needsManualPasskeyConfirmation {
             return backupManager.dispatch(action: .confirmSavedPasskey)
@@ -381,7 +390,11 @@ private struct OnboardingCloudBackupDetailsStepView: View {
                 onEnable: handleEnableTap,
                 onCancel: handleSkipTap,
                 message: onboardingMessage,
+                statusMessage: isCloudRestoreCheckPending
+                    ? "Finishing the iCloud check…"
+                    : nil,
                 isBusy: isBusy || isPromptingForEnableChoice,
+                isEnableDisabled: isCloudRestoreCheckPending,
                 context: context,
                 primaryButtonTitle: primaryButtonTitle
             )

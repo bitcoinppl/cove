@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct CloudCheckContent: View {
+    let onContinue: () -> Void
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -15,12 +17,12 @@ struct CloudCheckContent: View {
                 .frame(height: 44)
 
             VStack(spacing: 10) {
-                Text("Looking for iCloud backup...")
+                Text("Looking for your iCloud backup")
                     .font(OnboardingRecoveryTypography.compactTitle)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
-                Text("This only takes a moment")
+                Text("iCloud can take a little while on a newly set-up iPhone. Cove will keep checking.")
                     .font(OnboardingRecoveryTypography.body)
                     .foregroundStyle(.coveLightGray.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -28,6 +30,9 @@ struct CloudCheckContent: View {
             .padding(.horizontal, 24)
 
             Spacer(minLength: 0)
+
+            Button("Continue Setup", action: onContinue)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
         }
         .padding(.horizontal, 28)
         .padding(.top, 18)
@@ -39,6 +44,8 @@ struct CloudCheckContent: View {
 
 struct OnboardingWelcomeScreen: View {
     let errorMessage: String?
+    let cloudRestoreState: OnboardingCloudRestoreState
+    let onRestoreFromCoveBackup: () -> Void
     let onContinue: () -> Void
 
     var body: some View {
@@ -51,9 +58,43 @@ struct OnboardingWelcomeScreen: View {
                 OnboardingInlineMessage(text: errorMessage)
             }
 
+            if cloudRestoreState == .checking {
+                OnboardingCloudCheckStatus(
+                    text: "Checking iCloud for an existing Cove backup…"
+                )
+            }
+
             Button("Get Started", action: onContinue)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
+
+            Button("Restore from Cove Backup", action: onRestoreFromCoveBackup)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
         }
+    }
+}
+
+struct OnboardingCloudCheckStatus: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .tint(.white)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.84))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.duskBlue.opacity(0.56))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.coveLightGray.opacity(0.16), lineWidth: 1)
+        )
     }
 }
 
@@ -95,18 +136,18 @@ struct OnboardingBitcoinChoiceScreen: View {
 
 struct OnboardingRestoreUnavailableScreen: View {
     let onContinue: () -> Void
-    let onBack: () -> Void
+    let onCheckAgain: () -> Void
 
     var body: some View {
         OnboardingPromptScreen(
             icon: "icloud.slash",
-            title: "No iCloud Backup Found",
-            subtitle: "We couldn't find a Cove backup in iCloud for this account. You can continue without cloud restore or go back."
+            title: "No Backup Found Yet",
+            subtitle: "iCloud may still be syncing on this iPhone. Check again in a moment, or continue setup and check Cloud Backup from Settings."
         ) {
-            Button("Continue Without Cloud Restore", action: onContinue)
+            Button("Check Again", action: onCheckAgain)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
 
-            Button("Back", action: onBack)
+            Button("Continue Setup", action: onContinue)
                 .buttonStyle(OnboardingSecondaryButtonStyle())
         }
     }
@@ -385,7 +426,7 @@ struct OnboardingInlineMessage: View {
 }
 
 #Preview("Cloud Check") {
-    CloudCheckContent()
+    CloudCheckContent(onContinue: {})
 }
 
 #Preview("Restore Offline") {

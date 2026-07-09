@@ -712,10 +712,6 @@ impl MockPasskeyProviderImpl {
         results.push_back(result);
     }
 
-    pub(crate) fn push_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        self.authenticate_results.lock().push_back(result);
-    }
-
     pub(crate) fn authenticate_count(&self) -> usize {
         *self.authenticate_count.lock()
     }

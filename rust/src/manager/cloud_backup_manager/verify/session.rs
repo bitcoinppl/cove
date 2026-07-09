@@ -973,7 +973,7 @@ impl VerificationSession {
         let retry_context =
             is_connectivity_related_issue(&error).then(|| self.connectivity_retry_context());
 
-        self.retry_result_with_context(error.to_string(), retry_context)
+        self.retry_result_with_context(error.reader_message(), retry_context)
     }
 
     fn cloud_backup_retry_result(
@@ -988,7 +988,7 @@ impl VerificationSession {
             );
         }
 
-        self.retry_result(format!("{context}: {error}"))
+        self.retry_result(format!("{context}: {}", error.reader_message()))
     }
 
     /// Builds the failure shown when wallet blobs are missing but local data can recreate the manifest

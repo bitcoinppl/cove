@@ -17,6 +17,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Welcome to Cove"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Get Started"].exists)
+        XCTAssertTrue(app.buttons["Restore from Cove Backup"].exists)
     }
 
     func testSoftwareWalletImportShowsTermsBeforeWalletSelection() {

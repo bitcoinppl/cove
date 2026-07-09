@@ -91,7 +91,7 @@ impl RustCloudBackupManager {
         });
 
         DeepVerificationResult::Failed(DeepVerificationFailure::retry(
-            error.to_string(),
+            error.reader_message(),
             None,
             retry_context,
         ))
@@ -439,7 +439,7 @@ impl RustCloudBackupManager {
         let authenticated = match auth_outcome {
             PasskeyAuthOutcome::Authenticated(result) => result,
             PasskeyAuthOutcome::UserCancelled => {
-                return Err(CloudBackupError::Passkey("user cancelled".into()));
+                return Err(CloudBackupError::PasskeyDiscoveryCancelled);
             }
             PasskeyAuthOutcome::NoCredentialFound => {
                 return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
@@ -452,9 +452,7 @@ impl RustCloudBackupManager {
                     CloudBackupError::RecoveryRequired(recovery_message.into())
                 }
                 PasskeyAuthPolicy::StoredThenDiscover | PasskeyAuthPolicy::DiscoverOnly => {
-                    CloudBackupError::Passkey(
-                        "selected passkey didn't unlock this cloud backup".into(),
-                    )
+                    CloudBackupError::PasskeyMismatch
                 }
             })?;
 

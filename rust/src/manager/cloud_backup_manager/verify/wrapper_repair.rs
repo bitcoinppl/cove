@@ -320,7 +320,7 @@ impl WrapperRepairOperation {
                     )
                 })
                 .await
-                .map_err_str(CloudBackupError::Passkey)?;
+                .map_err(CloudBackupError::Passkey)?;
 
                 let prf_key: [u8; 32] = prf_output
                     .try_into()

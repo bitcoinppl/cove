@@ -9,7 +9,9 @@ struct CloudBackupEnableOnboardingView: View {
     let onEnable: () -> Void
     let onCancel: () -> Void
     let message: String?
+    let statusMessage: String?
     let isBusy: Bool
+    let isEnableDisabled: Bool
     let context: CloudBackupEnableOnboardingContext
     let primaryButtonTitle: String
 
@@ -23,14 +25,18 @@ struct CloudBackupEnableOnboardingView: View {
         onEnable: @escaping () -> Void,
         onCancel: @escaping () -> Void,
         message: String?,
+        statusMessage: String? = nil,
         isBusy: Bool,
+        isEnableDisabled: Bool = false,
         context: CloudBackupEnableOnboardingContext = .standard,
         primaryButtonTitle: String = "Enable Cloud Backup"
     ) {
         self.onEnable = onEnable
         self.onCancel = onCancel
         self.message = message
+        self.statusMessage = statusMessage
         self.isBusy = isBusy
+        self.isEnableDisabled = isEnableDisabled
         self.context = context
         self.primaryButtonTitle = primaryButtonTitle
     }
@@ -49,6 +55,9 @@ struct CloudBackupEnableOnboardingView: View {
                     infoCard
                     if let message {
                         OnboardingInlineMessage(text: message)
+                    }
+                    if let statusMessage {
+                        CloudBackupEnableStatusMessage(text: statusMessage)
                     }
                     checkboxSection
                     enableButton
@@ -215,7 +224,7 @@ struct CloudBackupEnableOnboardingView: View {
             Text(primaryButtonTitle)
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
-        .disabled(!allChecked || isBusy)
+        .disabled(!allChecked || isBusy || isEnableDisabled)
         .animation(.easeInOut(duration: 0.2), value: allChecked)
     }
 
@@ -245,6 +254,31 @@ struct CloudBackupEnableOnboardingView: View {
             )
         }
         .ignoresSafeArea()
+    }
+}
+
+private struct CloudBackupEnableStatusMessage: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .tint(.white)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.84))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.duskBlue.opacity(0.56))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.coveLightGray.opacity(0.16), lineWidth: 1)
+        )
     }
 }
 

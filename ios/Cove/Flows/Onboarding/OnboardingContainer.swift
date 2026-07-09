@@ -46,7 +46,9 @@ struct OnboardingContainer: View {
             }
 
         case .cloudCheck:
-            CloudCheckContent()
+            CloudCheckContent {
+                manager.dispatch(.continueWithoutCloudRestore)
+            }
 
         case .restoreOffer:
             CloudRestoreOfferView(
@@ -70,7 +72,7 @@ struct OnboardingContainer: View {
         case .restoreUnavailable:
             OnboardingRestoreUnavailableScreen(
                 onContinue: { manager.dispatch(.continueWithoutCloudRestore) },
-                onBack: { manager.dispatch(.back) }
+                onCheckAgain: { manager.dispatch(.back) }
             )
 
         case .restoring, .restoreComplete, .restoreFailed:
@@ -82,9 +84,12 @@ struct OnboardingContainer: View {
             )
 
         case .welcome:
-            OnboardingWelcomeScreen(errorMessage: manager.state.errorMessage) {
-                manager.dispatch(.continueFromWelcome)
-            }
+            OnboardingWelcomeScreen(
+                errorMessage: manager.state.errorMessage,
+                cloudRestoreState: manager.state.cloudRestoreState,
+                onRestoreFromCoveBackup: { manager.dispatch(.openCloudRestore) },
+                onContinue: { manager.dispatch(.continueFromWelcome) }
+            )
 
         case .bitcoinChoice:
             OnboardingBitcoinChoiceScreen(
@@ -122,6 +127,7 @@ struct OnboardingContainer: View {
         case .cloudBackup:
             OnboardingCloudBackupStepView(
                 branch: manager.state.branch,
+                isCloudRestoreCheckPending: manager.state.cloudRestoreState == .checking,
                 onEnable: { manager.dispatch(.beginCloudBackupEnable) },
                 onEnabled: { manager.dispatch(.cloudBackupEnabled) },
                 onSkip: { manager.dispatch(.skipCloudBackup) }

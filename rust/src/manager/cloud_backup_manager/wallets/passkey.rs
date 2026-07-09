@@ -1,6 +1,7 @@
+use std::future::Future;
 use std::time::Duration;
 
-use backon::{ExponentialBuilder, Retryable as _};
+use backon::{BackoffBuilder as _, ExponentialBuilder, Retryable as _};
 use cove_cspp::backup_data::{
     EncryptedMasterKeyBackup, MasterKeyBackupVersion, PasskeyProviderHint,
     PasskeyRegistrationPlatform as BackupPasskeyRegistrationPlatform,
@@ -21,6 +22,51 @@ const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
 const PASSKEY_SUFFIX_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const PASSKEY_SUFFIX_EPOCH_SECONDS: i64 = 1_767_225_600;
 const PASSKEY_SUFFIX_MIN_LENGTH: usize = 4;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlatformAuthorizationRetryPolicy {
+    IosInteractive,
+    LegacyDiscovery,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PlatformAuthorizationRetryConfig {
+    min_delay: Duration,
+    max_delay: Duration,
+    total_delay: Duration,
+    jitter: bool,
+}
+
+impl PlatformAuthorizationRetryPolicy {
+    fn config(self) -> PlatformAuthorizationRetryConfig {
+        match self {
+            Self::IosInteractive => PlatformAuthorizationRetryConfig {
+                min_delay: Duration::from_millis(500),
+                max_delay: Duration::from_secs(4),
+                total_delay: Duration::from_secs(15),
+                jitter: true,
+            },
+            Self::LegacyDiscovery => PlatformAuthorizationRetryConfig {
+                min_delay: Duration::from_millis(50),
+                max_delay: Duration::from_secs(60),
+                total_delay: Duration::from_secs(2),
+                jitter: false,
+            },
+        }
+    }
+
+    fn preserves_discovery_registration_fallback(self) -> bool {
+        matches!(self, Self::LegacyDiscovery)
+    }
+}
+
+fn platform_authorization_retry_policy() -> PlatformAuthorizationRetryPolicy {
+    if cfg!(target_os = "ios") {
+        PlatformAuthorizationRetryPolicy::IosInteractive
+    } else {
+        PlatformAuthorizationRetryPolicy::LegacyDiscovery
+    }
+}
 
 pub(crate) async fn delay_before_new_passkey_auth() {
     let delay = Duration::from_secs(3);
@@ -183,8 +229,9 @@ impl PasskeyMaterialAcquirer {
     ) -> Result<PasskeyMaterialOutcome, CloudBackupError> {
         info!("{}", purpose.attempt_message());
         let prf_salt: [u8; 32] = rand::rng().random();
+        let retry_policy = platform_authorization_retry_policy();
 
-        match self.discover_with_platform_authorization_retry(prf_salt).await {
+        match discover_with_platform_authorization_retry(&self.passkey, prf_salt).await {
             Ok(discovered) => {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
                 info!("{}", purpose.discovered_message());
@@ -207,6 +254,10 @@ impl PasskeyMaterialAcquirer {
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 Err(CloudBackupError::UnsupportedPasskeyProvider)
             }
+            Err(error) if !retry_policy.preserves_discovery_registration_fallback() => {
+                warn!("{}: {error}", purpose.failed_message());
+                Err(CloudBackupError::Passkey(error))
+            }
             Err(error) => {
                 warn!("{} ({error}), {}", purpose.failed_message(), purpose.fallback_message());
                 self.create_or_register_for_purpose(purpose).await
@@ -227,41 +278,6 @@ impl PasskeyMaterialAcquirer {
                 self.create_for_wrapper_repair().await.map(PasskeyMaterialOutcome::Authenticated)
             }
         }
-    }
-
-    async fn discover_with_platform_authorization_retry(
-        &self,
-        prf_salt: [u8; 32],
-    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
-        (|| self.discover_with_prf_salt(prf_salt))
-            .retry(
-                ExponentialBuilder::default()
-                    .with_min_delay(Duration::from_millis(50))
-                    .without_max_times()
-                    .with_total_delay(Some(Duration::from_secs(2))),
-            )
-            .when(is_platform_authorization_error)
-            .notify(|error, delay| {
-                warn!(
-                    "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
-                );
-            })
-            .await
-    }
-
-    async fn discover_with_prf_salt(
-        &self,
-        prf_salt: [u8; 32],
-    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
-        let passkey = self.passkey.clone();
-        unblock::run_blocking(move || {
-            passkey.discover_and_authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                prf_salt.to_vec(),
-                random_challenge(),
-            )
-        })
-        .await
     }
 
     async fn create_new_prf_key_with_mapper(
@@ -292,13 +308,10 @@ impl PasskeyMaterialAcquirer {
         &self,
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<(PasskeyRegistrationResult, String), CloudBackupError> {
-        let passkey = self.passkey.clone();
         let (user, name_suffix) = passkey_registration_user();
-        let registration = unblock::run_blocking(move || {
-            passkey.create_passkey(PASSKEY_RP_ID.to_string(), random_challenge(), user)
-        })
-        .await
-        .map_err(map_passkey_error)?;
+        let registration = create_passkey_with_platform_authorization_retry(&self.passkey, user)
+            .await
+            .map_err(map_passkey_error)?;
 
         Ok((registration, name_suffix))
     }
@@ -309,18 +322,9 @@ impl PasskeyMaterialAcquirer {
         prf_salt: [u8; 32],
         map_passkey_error: fn(PasskeyError) -> CloudBackupError,
     ) -> Result<Vec<u8>, CloudBackupError> {
-        let passkey = self.passkey.clone();
-        let credential_id = credential_id.to_vec();
-        unblock::run_blocking(move || {
-            passkey.authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                credential_id,
-                prf_salt.to_vec(),
-                random_challenge(),
-            )
-        })
-        .await
-        .map_err(map_passkey_error)
+        authenticate_with_platform_authorization_retry(&self.passkey, credential_id, prf_salt)
+            .await
+            .map_err(map_passkey_error)
     }
 }
 
@@ -460,7 +464,8 @@ impl NamespacePasskeyMatcher {
 
         let (namespace_id, first_encrypted) = &downloaded[0];
         let discovery =
-            self.discover_with_platform_authorization_retry(first_encrypted.prf_salt).await;
+            discover_with_platform_authorization_retry(&self.passkey, first_encrypted.prf_salt)
+                .await;
         let discovered = match discovery {
             Ok(discovered) => discovered,
             Err(PasskeyError::UserCancelled) => return Ok(NamespaceMatchOutcome::UserDeclined),
@@ -468,7 +473,7 @@ impl NamespacePasskeyMatcher {
             Err(PasskeyError::PrfUnsupportedProvider) => {
                 return Err(CloudBackupError::UnsupportedPasskeyProvider);
             }
-            Err(error) => return Err(CloudBackupError::Passkey(error.to_string())),
+            Err(error) => return Err(CloudBackupError::Passkey(error)),
         };
 
         let mut matches = Vec::new();
@@ -484,20 +489,12 @@ impl NamespacePasskeyMatcher {
         }
 
         for (namespace_id, encrypted) in downloaded.iter().skip(1) {
-            let prf_output_result = {
-                let passkey = self.passkey.clone();
-                let credential_id = discovered.credential_id.clone();
-                let prf_salt = encrypted.prf_salt;
-                unblock::run_blocking(move || {
-                    passkey.authenticate_with_prf(
-                        PASSKEY_RP_ID.to_string(),
-                        credential_id,
-                        prf_salt.to_vec(),
-                        random_challenge(),
-                    )
-                })
-                .await
-            };
+            let prf_output_result = authenticate_with_platform_authorization_retry(
+                &self.passkey,
+                &discovered.credential_id,
+                encrypted.prf_salt,
+            )
+            .await;
 
             let prf_output = match prf_output_result {
                 Ok(prf_output) => prf_output,
@@ -546,52 +543,149 @@ impl NamespacePasskeyMatcher {
 
         Ok(NamespaceMatchOutcome::NoMatch)
     }
-
-    async fn discover_with_platform_authorization_retry(
-        &self,
-        prf_salt: [u8; 32],
-    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
-        (|| self.discover_with_prf_salt(prf_salt))
-            .retry(
-                ExponentialBuilder::default()
-                    .with_min_delay(Duration::from_millis(50))
-                    .without_max_times()
-                    .with_total_delay(Some(Duration::from_secs(2))),
-            )
-            .when(is_platform_authorization_error)
-            .notify(|error, delay| {
-                warn!(
-                    "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
-                );
-            })
-            .await
-    }
-
-    async fn discover_with_prf_salt(
-        &self,
-        prf_salt: [u8; 32],
-    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
-        let passkey = self.passkey.clone();
-        unblock::run_blocking(move || {
-            passkey.discover_and_authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                prf_salt.to_vec(),
-                random_challenge(),
-            )
-        })
-        .await
-    }
 }
 
-fn is_platform_authorization_error(error: &PasskeyError) -> bool {
-    matches!(
-        error,
-        PasskeyError::RequestFailed {
-            operation: PasskeyOperation::DiscoverAssertion,
-            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
-            ..
+fn platform_authorization_retry_backoff(
+    policy: PlatformAuthorizationRetryPolicy,
+    jitter_seed: Option<u64>,
+) -> impl backon::Backoff {
+    let config = policy.config();
+    let mut builder = ExponentialBuilder::default()
+        .with_min_delay(config.min_delay)
+        .with_max_delay(config.max_delay)
+        .without_max_times()
+        .with_total_delay(None);
+
+    if config.jitter {
+        builder = builder.with_jitter();
+    }
+    if let Some(seed) = jitter_seed {
+        builder = builder.with_jitter_seed(seed);
+    }
+
+    let mut cumulative_delay = Duration::ZERO;
+    builder.build().map(move |delay| delay.min(config.max_delay)).map_while(move |delay| {
+        let next_cumulative_delay = cumulative_delay.saturating_add(delay);
+        if next_cumulative_delay > config.total_delay {
+            return None;
         }
-    )
+
+        cumulative_delay = next_cumulative_delay;
+        Some(delay)
+    })
+}
+
+async fn retry_platform_authorization<T, Operation, OperationFuture>(
+    operation: Operation,
+) -> Result<T, PasskeyError>
+where
+    Operation: FnMut() -> OperationFuture,
+    OperationFuture: Future<Output = Result<T, PasskeyError>>,
+{
+    retry_platform_authorization_with_policy(operation, platform_authorization_retry_policy()).await
+}
+
+async fn retry_platform_authorization_with_policy<T, Operation, OperationFuture>(
+    operation: Operation,
+    policy: PlatformAuthorizationRetryPolicy,
+) -> Result<T, PasskeyError>
+where
+    Operation: FnMut() -> OperationFuture,
+    OperationFuture: Future<Output = Result<T, PasskeyError>>,
+{
+    operation
+        .retry(platform_authorization_retry_backoff(policy, None))
+        .when(move |error| policy.retries(error))
+        .notify(|error, delay| {
+            warn!(
+                "Passkey platform authorization failed before presentation: {error}; retrying in {delay:?}"
+            );
+        })
+        .await
+}
+
+async fn discover_with_platform_authorization_retry(
+    passkey: &PasskeyAccess,
+    prf_salt: [u8; 32],
+) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+    retry_platform_authorization(|| {
+        let passkey = passkey.clone();
+
+        async move {
+            unblock::run_blocking(move || {
+                passkey.discover_and_authenticate_with_prf(
+                    PASSKEY_RP_ID.to_string(),
+                    prf_salt.to_vec(),
+                    random_challenge(),
+                )
+            })
+            .await
+        }
+    })
+    .await
+}
+
+async fn create_passkey_with_platform_authorization_retry(
+    passkey: &PasskeyAccess,
+    user: PasskeyRegistrationUser,
+) -> Result<PasskeyRegistrationResult, PasskeyError> {
+    retry_platform_authorization(|| {
+        let passkey = passkey.clone();
+        let user = user.clone();
+
+        async move {
+            unblock::run_blocking(move || {
+                passkey.create_passkey(PASSKEY_RP_ID.to_string(), random_challenge(), user)
+            })
+            .await
+        }
+    })
+    .await
+}
+
+async fn authenticate_with_platform_authorization_retry(
+    passkey: &PasskeyAccess,
+    credential_id: &[u8],
+    prf_salt: [u8; 32],
+) -> Result<Vec<u8>, PasskeyError> {
+    retry_platform_authorization(|| {
+        let passkey = passkey.clone();
+        let credential_id = credential_id.to_vec();
+
+        async move {
+            unblock::run_blocking(move || {
+                passkey.authenticate_with_prf(
+                    PASSKEY_RP_ID.to_string(),
+                    credential_id,
+                    prf_salt.to_vec(),
+                    random_challenge(),
+                )
+            })
+            .await
+        }
+    })
+    .await
+}
+
+impl PlatformAuthorizationRetryPolicy {
+    fn retries(self, error: &PasskeyError) -> bool {
+        let operation_is_in_scope = match self {
+            Self::IosInteractive => true,
+            Self::LegacyDiscovery => matches!(
+                error,
+                PasskeyError::RequestFailed { operation: PasskeyOperation::DiscoverAssertion, .. }
+            ),
+        };
+
+        operation_is_in_scope
+            && matches!(
+                error,
+                PasskeyError::RequestFailed {
+                    reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+                    ..
+                }
+            )
+    }
 }
 
 fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
@@ -601,10 +695,7 @@ fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
             info!("User cancelled new passkey flow for wrapper repair");
             CloudBackupError::PasskeyDiscoveryCancelled
         }
-        error if is_android_passkey_association_error(&error) => {
-            CloudBackupError::Passkey(android_passkey_association_message().into())
-        }
-        other => CloudBackupError::Passkey(other.to_string()),
+        other => CloudBackupError::Passkey(other),
     }
 }
 
@@ -615,25 +706,8 @@ fn map_enable_passkey_error(error: PasskeyError) -> CloudBackupError {
             info!("User cancelled new passkey flow for cloud backup enable");
             CloudBackupError::PasskeyDiscoveryCancelled
         }
-        error if is_android_passkey_association_error(&error) => {
-            CloudBackupError::Passkey(android_passkey_association_message().into())
-        }
-        other => CloudBackupError::Passkey(other.to_string()),
+        other => CloudBackupError::Passkey(other),
     }
-}
-
-fn is_android_passkey_association_error(error: &PasskeyError) -> bool {
-    matches!(
-        error,
-        PasskeyError::RequestFailed {
-            operation: PasskeyOperation::Registration,
-            reason: PasskeyFailureReason::DeviceNotConfigured,
-        }
-    )
-}
-
-fn android_passkey_association_message() -> &'static str {
-    "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. If this keeps happening, update Cove or contact support."
 }
 
 fn prf_output_to_key(prf_output: Vec<u8>) -> Result<[u8; 32], CloudBackupError> {
@@ -649,6 +723,8 @@ fn random_challenge() -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn passkey_suffix_encodes_seconds_since_2026_utc_epoch() {
@@ -698,8 +774,9 @@ mod tests {
 
         let error = map_enable_passkey_error(source);
 
-        assert!(
-            matches!(error, CloudBackupError::Passkey(message) if message == android_passkey_association_message())
+        assert_eq!(
+            error.reader_message(),
+            "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. If this keeps happening, update Cove or contact support."
         );
     }
 
@@ -713,5 +790,139 @@ mod tests {
         let error = map_wrapper_repair_passkey_error(source);
 
         assert!(!matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
+    }
+
+    #[test]
+    fn ios_retries_platform_authorization_failures_for_every_interactive_operation() {
+        for operation in [
+            PasskeyOperation::Registration,
+            PasskeyOperation::DiscoverAssertion,
+            PasskeyOperation::AuthenticateAssertion,
+        ] {
+            let error = PasskeyError::RequestFailed {
+                operation,
+                reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+            };
+
+            assert!(PlatformAuthorizationRetryPolicy::IosInteractive.retries(&error));
+        }
+    }
+
+    #[test]
+    fn non_ios_retains_only_the_legacy_discovery_retry() {
+        let registration = platform_authorization_error(PasskeyOperation::Registration);
+        let discovery = platform_authorization_error(PasskeyOperation::DiscoverAssertion);
+        let authentication = platform_authorization_error(PasskeyOperation::AuthenticateAssertion);
+
+        let policy = PlatformAuthorizationRetryPolicy::LegacyDiscovery;
+
+        assert!(!policy.retries(&registration));
+        assert!(policy.retries(&discovery));
+        assert!(!policy.retries(&authentication));
+    }
+
+    #[test]
+    fn non_ios_retains_the_legacy_discovery_backoff_budget() {
+        let policy = PlatformAuthorizationRetryPolicy::LegacyDiscovery;
+        let config = policy.config();
+        let delays = platform_authorization_retry_backoff(policy, None).collect::<Vec<_>>();
+        let total_delay = delays.iter().sum::<Duration>();
+
+        assert_eq!(delays.first(), Some(&config.min_delay));
+        assert!(total_delay <= config.total_delay);
+        assert!(delays.iter().all(|delay| *delay <= config.max_delay));
+    }
+
+    #[test]
+    fn ios_surfaces_discovery_failures_while_non_ios_preserves_legacy_fallback() {
+        assert!(
+            !PlatformAuthorizationRetryPolicy::IosInteractive
+                .preserves_discovery_registration_fallback()
+        );
+        assert!(
+            PlatformAuthorizationRetryPolicy::LegacyDiscovery
+                .preserves_discovery_registration_fallback()
+        );
+    }
+
+    #[test]
+    fn does_not_retry_cancellation_or_post_presentation_failure() {
+        let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
+
+        assert!(!policy.retries(&PasskeyError::UserCancelled));
+        assert!(!policy.retries(&PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::InvalidResponse,
+        }));
+    }
+
+    #[test]
+    fn platform_authorization_retry_budget_extends_beyond_two_seconds() {
+        let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
+        let config = policy.config();
+        let delays = platform_authorization_retry_backoff(policy, Some(7)).collect::<Vec<_>>();
+        let total_delay = delays.iter().sum::<Duration>();
+
+        assert!(delays[0] >= config.min_delay);
+        assert!(total_delay > Duration::from_secs(2));
+        assert!(total_delay <= config.total_delay);
+        assert!(delays.iter().all(|delay| *delay <= config.max_delay));
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn ios_retry_recovers_without_retrying_non_transient_failures() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let retry_attempts = Arc::clone(&attempts);
+        let result = retry_platform_authorization_with_policy(
+            move || {
+                let retry_attempts = Arc::clone(&retry_attempts);
+
+                async move {
+                    let attempt = retry_attempts.fetch_add(1, Ordering::SeqCst);
+                    if attempt < 2 {
+                        Err(platform_authorization_error(PasskeyOperation::AuthenticateAssertion))
+                    } else {
+                        Ok(())
+                    }
+                }
+            },
+            PlatformAuthorizationRetryPolicy::IosInteractive,
+        )
+        .await;
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+
+        for error in [
+            PasskeyError::UserCancelled,
+            PasskeyError::RequestFailed {
+                operation: PasskeyOperation::AuthenticateAssertion,
+                reason: PasskeyFailureReason::InvalidResponse,
+            },
+        ] {
+            let attempts = Arc::new(AtomicUsize::new(0));
+            let operation_attempts = Arc::clone(&attempts);
+            let expected = error.clone();
+            let actual = retry_platform_authorization_with_policy(
+                move || {
+                    operation_attempts.fetch_add(1, Ordering::SeqCst);
+                    let error = error.clone();
+
+                    async move { Err::<(), _>(error) }
+                },
+                PlatformAuthorizationRetryPolicy::IosInteractive,
+            )
+            .await;
+
+            assert_eq!(actual, Err(expected));
+            assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    fn platform_authorization_error(operation: PasskeyOperation) -> PasskeyError {
+        PasskeyError::RequestFailed {
+            operation,
+            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+        }
     }
 }

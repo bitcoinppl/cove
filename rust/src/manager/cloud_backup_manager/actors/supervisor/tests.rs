@@ -1,7 +1,6 @@
 use super::*;
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization, PendingEnableUploadSelection,
-    SavedPasskeyConfirmationRetry,
 };
 use super::verification::DeepVerificationContinuation;
 use crate::database::cloud_backup::PersistedDisablingCloudBackup;
@@ -955,7 +954,6 @@ async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
     supervisor
         .complete_saved_passkey_confirmation(
             stale,
-            SavedPasskeyConfirmationRetry::Manual,
             CloudBackupSavedPasskeyConfirmation::Failed(CloudBackupError::Internal(
                 "stale completion".into(),
             )),
@@ -969,7 +967,6 @@ async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
     supervisor
         .complete_saved_passkey_confirmation(
             current,
-            SavedPasskeyConfirmationRetry::Manual,
             CloudBackupSavedPasskeyConfirmation::Failed(CloudBackupError::Internal(
                 "current completion".into(),
             )),
