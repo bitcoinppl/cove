@@ -44,8 +44,8 @@ struct TapSignerSetupSuccess: View {
                 if scrollableLayout {
                     ScrollView {
                         mainContent(usesFlexibleSpacing: false)
+                            .padding(.bottom, 40)
                             .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
                     }
                     .scrollIndicators(.hidden)
                 } else {
@@ -62,7 +62,9 @@ struct TapSignerSetupSuccess: View {
     }
 
     private func mainContent(usesFlexibleSpacing: Bool) -> some View {
-        VStack(spacing: 40) {
+        let contentSpacing: CGFloat = usesFlexibleSpacing ? 40 : 24
+
+        return VStack(spacing: contentSpacing) {
             VStack {
                 HStack {
                     Button(action: { app.sheetState = .none }) {

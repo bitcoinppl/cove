@@ -81,7 +81,6 @@ class HotWalletCreateScreenTest {
 
         if (screenshotMode() == "initial") {
             saveViewportScreenshot()
-            return
         }
 
         compose

@@ -48,14 +48,16 @@ struct WordsView: View {
                 sizeCategory: sizeCategory,
                 availableHeight: proxy.size.height
             )
+            let layout: RecoveryWordsLayout = scrollableLayout ? .stickyBottom : .inline
+            let contentWidth = max(proxy.size.width - 32, 0)
 
             Group {
                 if scrollableLayout {
                     VStack(spacing: 0) {
                         ScrollView {
                             recoveryWordsContent(
-                                compactHeight: scrollableLayout,
-                                includesPrimaryAction: false
+                                layout: layout,
+                                availableWidth: contentWidth
                             )
                             .padding(.bottom, 24)
                         }
@@ -71,22 +73,22 @@ struct WordsView: View {
 
                 } else {
                     recoveryWordsContent(
-                        compactHeight: scrollableLayout,
-                        includesPrimaryAction: true
+                        layout: layout,
+                        availableWidth: contentWidth
                     )
                 }
             }
         }
     }
 
-    private func recoveryWordsContent(compactHeight: Bool, includesPrimaryAction: Bool) -> some View {
+    private func recoveryWordsContent(layout: RecoveryWordsLayout, availableWidth: CGFloat) -> some View {
         RecoveryWordsContent(
             groupedWords: groupedWords,
             tabIndex: $tabIndex,
             lastIndex: lastIndex,
             showConfirmationAlert: $showConfirmationAlert,
-            compactHeight: compactHeight,
-            includesPrimaryAction: includesPrimaryAction,
+            layout: layout,
+            availableWidth: availableWidth,
             saveWallet: saveWallet,
             dismiss: { dismiss() }
         )
@@ -119,25 +121,38 @@ struct WordsView: View {
     }
 }
 
+enum RecoveryWordsLayout {
+    case stickyBottom
+    case inline
+
+    var usesCompactCardHeight: Bool {
+        self == .stickyBottom
+    }
+
+    var showsPrimaryActionInline: Bool {
+        self == .inline
+    }
+}
+
 struct RecoveryWordsContent: View {
     let groupedWords: [[GroupedWord]]
     @Binding var tabIndex: Int
     let lastIndex: Int
     @Binding var showConfirmationAlert: Bool
-    let compactHeight: Bool
-    let includesPrimaryAction: Bool
+    let layout: RecoveryWordsLayout
+    let availableWidth: CGFloat
     let saveWallet: () -> Void
     let dismiss: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
-            StyledWordCard(tabIndex: $tabIndex, compactHeight: compactHeight) {
+            StyledWordCard(tabIndex: $tabIndex, compactHeight: layout.usesCompactCardHeight) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
-                    WordCardView(words: wordGroup).tag(index)
+                    WordCardView(words: wordGroup, availableWidth: availableWidth).tag(index)
                 }
             }
 
-            if !compactHeight {
+            if !layout.usesCompactCardHeight {
                 Spacer()
             }
 
@@ -179,7 +194,7 @@ struct RecoveryWordsContent: View {
                 Spacer()
             }
 
-            if includesPrimaryAction {
+            if layout.showsPrimaryActionInline {
                 Divider()
                     .overlay(.coveLightGray.opacity(0.50))
 
@@ -277,15 +292,14 @@ struct RecoveryWordsPrimaryActionButton: View {
 struct WordCardView: View {
     @Environment(\.sizeCategory) var sizeCategory
     let words: [GroupedWord]
+    let availableWidth: CGFloat
 
     private let columnCount = 3
     private let columnSpacing: CGFloat = 12
 
     var body: some View {
-        GeometryReader { proxy in
-            ColumnMajorGrid(items: words, numberOfColumns: columnCount, spacing: columnSpacing) { _, group in
-                wordCard(group, width: wordCardWidth(availableWidth: proxy.size.width))
-            }
+        ColumnMajorGrid(items: words, numberOfColumns: columnCount, spacing: columnSpacing) { _, group in
+            wordCard(group, width: wordCardWidth(availableWidth: availableWidth))
         }
     }
 
@@ -298,7 +312,7 @@ struct WordCardView: View {
                 .frame(alignment: .leading)
                 .minimumScaleFactor(0.8)
                 .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
-                .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .caption)
+                .font(usesCompactTypography(sizeCategory: sizeCategory) ? .caption2 : .caption)
 
             Spacer(minLength: 4)
 
@@ -309,17 +323,17 @@ struct WordCardView: View {
                 .frame(alignment: .leading)
                 .minimumScaleFactor(0.2)
                 .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
-                .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
+                .font(usesCompactTypography(sizeCategory: sizeCategory) ? .caption2 : .footnote)
 
             Spacer(minLength: 4)
         }
-        .padding(.horizontal, isMiniDeviceOrLargeText(sizeCategory) ? 8 : 10)
+        .padding(.horizontal, usesCompactTypography(sizeCategory: sizeCategory) ? 8 : 10)
         .padding(.vertical, 12)
         .frame(width: width)
         .background(Color.btnPrimary)
         .cornerRadius(10)
         .contextMenu {
-            isMiniDeviceOrLargeText(sizeCategory)
+            usesCompactTypography(sizeCategory: sizeCategory)
                 ? Button(action: {}) {
                     Text("\(String(format: "%d", group.number)). \(group.word)")
                 } : nil
@@ -346,11 +360,7 @@ struct StyledWordCard<Content: View>: View {
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
 
-        if compactHeight {
-            tabView.frame(height: isMiniDeviceOrLargeText(sizeCategory) ? 320 : 260)
-        } else {
-            tabView
-        }
+        tabView.frame(height: usesCompactTypography(sizeCategory: sizeCategory) ? 320 : 260)
     }
 }
 

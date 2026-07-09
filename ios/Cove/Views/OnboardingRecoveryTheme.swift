@@ -42,7 +42,6 @@ struct OnboardingStatusHero: View {
     var pulse = false
     var iconSize: CGFloat = 24
     var innerBadgeSize: CGFloat = 68
-    var ringSizes: [CGFloat] = [118, 86, 68]
 
     var body: some View {
         Group {
@@ -56,7 +55,23 @@ struct OnboardingStatusHero: View {
                 ringStack { _ in 1 }
             }
         }
-        .frame(width: 118, height: 118)
+        .frame(width: frameSize, height: frameSize)
+    }
+
+    private var frameSize: CGFloat {
+        outerRingSize
+    }
+
+    private var outerRingSize: CGFloat {
+        innerBadgeSize * (118.0 / 68.0)
+    }
+
+    private var ringSizes: [CGFloat] {
+        [
+            outerRingSize,
+            innerBadgeSize * (86.0 / 68.0),
+            innerBadgeSize,
+        ]
     }
 
     private func ringStack(scale: @escaping (Int) -> CGFloat) -> some View {

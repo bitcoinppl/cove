@@ -18,13 +18,15 @@ let conservativeDustLimitSats = Int(conservativeDustLimitSatsU)
 let screenHeight = UIScreen.main.bounds.height
 let screenWidth = UIScreen.main.bounds.width
 
-let isMiniDevice = screenHeight <= 812
 let compactLayoutHeightThreshold: CGFloat = 812
+let isMiniDevice = screenHeight <= compactLayoutHeightThreshold
 
-func isMiniDeviceOrLargeText(_ sizeCategory: ContentSizeCategory) -> Bool {
+/// Uses the global device height and Dynamic Type when sizing dense text controls
+func usesCompactTypography(sizeCategory: ContentSizeCategory) -> Bool {
     isMiniDevice || sizeCategory >= .extraExtraLarge
 }
 
+/// Uses the current container height and Dynamic Type when choosing scrollable layout
 func usesCompactLayout(sizeCategory: ContentSizeCategory, availableHeight: CGFloat) -> Bool {
     sizeCategory >= .extraExtraLarge || availableHeight <= compactLayoutHeightThreshold
 }

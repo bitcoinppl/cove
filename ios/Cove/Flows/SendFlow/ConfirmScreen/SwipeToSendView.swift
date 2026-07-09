@@ -8,6 +8,7 @@ import Foundation
 import SwiftUI
 
 private let swipeToSendVerticalTextPadding: CGFloat = 48
+private let swipeToSendMinimumTrailingTextPadding: CGFloat = 16
 
 enum SendState: Hashable, Equatable {
     case idle
@@ -80,16 +81,22 @@ struct SwipeToSendView: View {
             .frame(height: height)
 
             // "Swipe to Send" text
-            HStack {
-                Spacer()
+            HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: circleSize + swipeToSendMinimumTrailingTextPadding)
+
                 Text("Swipe to Send")
                     .foregroundColor(colorScheme == .dark ? .white : .midnightBtn)
                     .fontWeight(.medium)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
                     .opacity(fontOpacity)
                     .recordSwipeToSendTextHeight()
 
-                Spacer()
+                Color.clear
+                    .frame(width: swipeToSendMinimumTrailingTextPadding)
             }
 
             // Draggable button

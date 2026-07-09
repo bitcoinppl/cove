@@ -24,13 +24,10 @@ class AndroidDeviceStayAwakeRule : TestRule {
 
 internal fun UiDevice.withStayAwake(block: () -> Unit) {
     val previousStayAwakeSetting =
-        executeShellCommand("settings get global stay_on_while_plugged_in")
-            .trim()
-            .ifEmpty { "0" }
+        readAndroidSetting("global", "stay_on_while_plugged_in", "stay-awake setting")
     val previousScreenOffTimeout =
-        executeShellCommand("settings get system screen_off_timeout")
-            .trim()
-            .ifEmpty { "30000" }
+        readAndroidSetting("system", "screen_off_timeout", "screen-off timeout")
+    var testFailure: Throwable? = null
 
     try {
         executeShellCommand("settings put global stay_on_while_plugged_in $STAY_AWAKE_WHILE_PLUGGED_IN")
@@ -40,11 +37,75 @@ internal fun UiDevice.withStayAwake(block: () -> Unit) {
         executeShellCommand("wm dismiss-keyguard")
 
         block()
+    } catch (error: Throwable) {
+        testFailure = error
+        throw error
     } finally {
+        val restoreFailure =
+            restoreStayAwakeState(
+                previousStayAwakeSetting = previousStayAwakeSetting,
+                previousScreenOffTimeout = previousScreenOffTimeout,
+            )
+
+        if (restoreFailure != null) {
+            testFailure?.addSuppressed(restoreFailure)
+
+            if (testFailure == null) {
+                throw restoreFailure
+            }
+        }
+    }
+}
+
+private fun UiDevice.readAndroidSetting(
+    namespace: String,
+    setting: String,
+    label: String,
+): String {
+    val value = executeShellCommand("settings get $namespace $setting").trim()
+
+    check(value.isNotEmpty()) {
+        "Unable to read Android $label before enabling stay-awake"
+    }
+
+    return value
+}
+
+private fun UiDevice.restoreStayAwakeState(
+    previousStayAwakeSetting: String,
+    previousScreenOffTimeout: String,
+): Throwable? {
+    var failure: Throwable? = null
+
+    fun recordRestoreFailure(
+        label: String,
+        restore: () -> Unit,
+    ) {
+        try {
+            restore()
+        } catch (error: Throwable) {
+            val wrapped = IllegalStateException("Failed to restore Android $label", error)
+            val currentFailure = failure
+
+            if (currentFailure == null) {
+                failure = wrapped
+            } else {
+                currentFailure.addSuppressed(wrapped)
+            }
+        }
+    }
+
+    recordRestoreFailure("svc stayon") {
         restoreStayOnService(previousStayAwakeSetting)
+    }
+    recordRestoreFailure("stay-awake setting") {
         restoreStayAwakeSetting(previousStayAwakeSetting)
+    }
+    recordRestoreFailure("screen-off timeout") {
         restoreScreenOffTimeout(previousScreenOffTimeout)
     }
+
+    return failure
 }
 
 private fun UiDevice.restoreStayOnService(previousSetting: String) {

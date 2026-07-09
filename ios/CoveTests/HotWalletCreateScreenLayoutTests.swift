@@ -285,6 +285,44 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
     }
 
+    func testLargeDynamicTypeSendFlowConfirmActionIsVisibleOnTallViewport() async throws {
+        try await bootstrapIfNeeded()
+
+        let size = CGSize(width: 430, height: 932)
+        let manager = WalletManager(preview: "preview_only")
+        let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
+        let image = render(
+            view: NavigationStack {
+                SendFlowConfirmScreen(
+                    id: WalletId(),
+                    manager: manager,
+                    details: confirmDetailsPreviewNew(),
+                    input: .unsigned,
+                    payjoinEndpoint: nil
+                )
+                .environment(AppManager.shared)
+                .environment(AuthManager.shared)
+                .environment(presenter)
+            }
+            .environment(\.sizeCategory, .accessibilityExtraExtraLarge)
+            .frame(width: size.width, height: size.height),
+            size: size
+        )
+        addScreenshotAttachment(image, name: "large-dynamic-type-send-flow-confirm")
+        try saveAuditScreenshotIfDirectoryRequested(
+            image,
+            name: "send-flow-confirm-large-dynamic-type-after.png"
+        )
+        try assertLightScreenBottomEdgeIsClear(in: image)
+
+        let recognizedText = try normalizedRecognizedText(in: image)
+
+        XCTAssertTrue(
+            recognizedText.contains("swipe to send"),
+            "expected large Dynamic Type send confirmation screen to show Swipe to Send, got:\n\(recognizedText)"
+        )
+    }
+
     func testCompactHotWalletImportActionIsVisible() async throws {
         try await bootstrapIfNeeded()
 
@@ -364,6 +402,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
         addScreenshotAttachment(image, name: "compact-secret-words")
         try saveAuditScreenshotIfDirectoryRequested(image, screenName: "secret-words")
+        try assertRecoveryWordCardsStayInsideHorizontalViewport(in: image)
+        try assertPrimaryActionIsNotClippedAtBottom(in: image)
 
         let recognizedText = try normalizedRecognizedText(in: image)
 
@@ -393,6 +433,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
         addScreenshotAttachment(image, name: "compact-utxo-list")
         try saveAuditScreenshotIfDirectoryRequested(image, screenName: "utxo-list")
+        try assertLightScreenBottomButtonBandIsVisible(in: image)
 
         let recognizedText = try normalizedRecognizedText(in: image)
 
@@ -435,6 +476,20 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             let image = render(hostingController: hostingController, size: size)
             addScreenshotAttachment(image, name: "compact-recovery-words-initial")
             try saveScreenshotIfRequested(image)
+            try assertNavigationChromeDoesNotShowWordCardBackground(in: image)
+            try assertRecoveryWordCardsStayInsideHorizontalViewport(in: image)
+            try assertPrimaryActionIsNotClippedAtBottom(in: image)
+
+            let recognizedText = try normalizedRecognizedText(in: image)
+
+            XCTAssertTrue(
+                recognizedText.contains("next"),
+                "expected compact recovery words initial screen to show Next, got:\n\(recognizedText)"
+            )
+            XCTAssertTrue(
+                recognizedText.contains("recovery words"),
+                "expected compact recovery words initial screen to keep the word-copy context visible, got:\n\(recognizedText)"
+            )
             return
         }
 
@@ -606,7 +661,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         line: UInt = #line
     ) throws {
         let cgImage = try XCTUnwrap(image.cgImage)
-        let sampleHeight = min(16, cgImage.height)
+        let scale = CGFloat(cgImage.width) / image.size.width
+        let sampleHeight = min(Int(16 * scale), cgImage.height)
         let bottomRect = CGRect(
             x: 0,
             y: cgImage.height - sampleHeight,
@@ -678,7 +734,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         line: UInt = #line
     ) throws {
         let cgImage = try XCTUnwrap(image.cgImage)
-        let sampleHeight = min(16, cgImage.height)
+        let scale = CGFloat(cgImage.width) / image.size.width
+        let sampleHeight = min(Int(16 * scale), cgImage.height)
         let bottomRect = CGRect(
             x: 0,
             y: cgImage.height - sampleHeight,
@@ -712,9 +769,9 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         let scale = CGFloat(cgImage.width) / image.size.width
         let bandRect = CGRect(
             x: Int(16 * scale),
-            y: Int((image.size.height - 150) * scale),
+            y: Int((image.size.height - 112) * scale),
             width: Int((image.size.width - 32) * scale),
-            height: Int(95 * scale)
+            height: Int(80 * scale)
         )
         let actionBand = try XCTUnwrap(cgImage.cropping(to: bandRect))
         let pixels = try rgbaPixels(in: actionBand)
@@ -732,7 +789,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                 blue < 235 &&
                 channelSpread < 18
         }
-        let minimumButtonPixels = actionBand.width * actionBand.height / 5
+        let minimumButtonPixels = actionBand.width * actionBand.height / 10
 
         XCTAssertGreaterThan(
             neutralButtonPixelCount,

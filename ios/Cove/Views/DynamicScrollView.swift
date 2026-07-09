@@ -17,7 +17,7 @@ struct DynamicHeightScrollView<Content: View>: View {
     let content: Content
 
     var body: some View {
-        if isMiniDeviceOrLargeText(sizeCategory) {
+        if usesCompactTypography(sizeCategory: sizeCategory) {
             ScrollView {
                 if let idealHeight {
                     content.frame(idealHeight: idealHeight)

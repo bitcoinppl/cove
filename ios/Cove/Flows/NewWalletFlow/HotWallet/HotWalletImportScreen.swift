@@ -333,7 +333,7 @@ struct HotWalletImportScreen: View {
             ZStack(alignment: .bottom) {
                 HotWalletImportMainContent(
                     keyboardIsShowing: keyboardObserver.keyboardIsShowing,
-                    isCompactLayout: isMiniDeviceOrLargeText(sizeCategory),
+                    isCompactLayout: usesCompactTypography(sizeCategory: sizeCategory),
                     numberOfWords: numberOfWords,
                     tabIndex: $tabIndex,
                     enteredWords: $enteredWords,
@@ -358,7 +358,7 @@ struct HotWalletImportScreen: View {
         }
         .animation(.easeInOut(duration: 0.25), value: keyboardObserver.keyboardIsShowing)
         .padding()
-        .padding(.bottom, 24)
+        .padding(.bottom, 40)
         .toolbar { ToolbarContent }
         .navigationTitle("Import Wallet")
         .navigationBarTitleDisplayMode(.inline)

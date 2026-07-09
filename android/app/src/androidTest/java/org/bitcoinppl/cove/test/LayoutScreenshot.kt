@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
@@ -12,6 +13,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+
+private const val LAYOUT_SCREENSHOT_TAG = "LayoutScreenshot"
 
 fun ComposeContentTestRule.saveNodeScreenshotToLayoutAudit(
     tag: String,
@@ -28,7 +32,9 @@ fun ComposeContentTestRule.saveNodeScreenshotToLayoutAudit(
             .asAndroidBitmap()
 
     FileOutputStream(screenshotFile).use { output ->
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+            "Unable to encode layout screenshot ${screenshotFile.absolutePath}"
+        }
     }
 
     saveBitmapToPictures(targetContext, name, bitmap)
@@ -49,13 +55,35 @@ private fun saveBitmapToPictures(
     val resolver = context.contentResolver
     val uri =
         resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-            ?: return
+            ?: run {
+                Log.w(LAYOUT_SCREENSHOT_TAG, "Unable to insert layout screenshot into MediaStore: $name")
+                return
+            }
 
-    resolver.openOutputStream(uri)?.use { output ->
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+    try {
+        val output =
+            resolver.openOutputStream(uri)
+                ?: throw IOException("MediaStore returned no output stream for $name")
+
+        output.use {
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) {
+                throw IOException("Bitmap compression failed for $name")
+            }
+        }
+
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        val updated = resolver.update(uri, values, null, null)
+
+        if (updated == 0) {
+            Log.w(LAYOUT_SCREENSHOT_TAG, "Unable to clear MediaStore pending state for $name")
+        }
+    } catch (error: Exception) {
+        Log.w(LAYOUT_SCREENSHOT_TAG, "Unable to write layout screenshot to MediaStore: $name", error)
+        runCatching {
+            resolver.delete(uri, null, null)
+        }.onFailure { deleteError ->
+            Log.w(LAYOUT_SCREENSHOT_TAG, "Unable to delete pending MediaStore screenshot: $name", deleteError)
+        }
     }
-
-    values.clear()
-    values.put(MediaStore.Images.Media.IS_PENDING, 0)
-    resolver.update(uri, values, null, null)
 }

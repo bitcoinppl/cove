@@ -57,19 +57,12 @@ private struct VerifyWordsLoadedView: View {
     var body: some View {
         Group {
             if let stateMachine {
-                if sizeCategory > .extraExtraExtraLarge || isMiniDevice {
-                    ScrollView {
-                        loadedScreen(stateMachine: stateMachine)
-                            .frame(minHeight: screenHeight, maxHeight: .infinity)
-                    }
+                loadedScreen(stateMachine: stateMachine)
                     .background(
                         Color.midnightBlue
                             .ignoresSafeArea(.all)
                     )
                     .adaptiveToolbarStyle()
-                } else {
-                    loadedScreen(stateMachine: stateMachine)
-                }
             } else if let loadingError {
                 loadingErrorView(error: loadingError)
             } else {

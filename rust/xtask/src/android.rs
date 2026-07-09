@@ -654,7 +654,7 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
 
     let previous_stay_awake_setting = read_stay_awake_setting()?;
     let previous_screen_off_timeout = read_screen_off_timeout_setting()?;
-    let _guard =
+    let mut guard =
         AndroidStayAwakeGuard::new(previous_stay_awake_setting, previous_screen_off_timeout);
 
     adb_status(
@@ -695,6 +695,8 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
         bail!("Android command failed with status {status}");
     }
 
+    guard.restore()?;
+
     Ok(())
 }
 
@@ -713,23 +715,43 @@ pub fn run_manual_ui_tests() -> Result<()> {
 struct AndroidStayAwakeGuard {
     previous_stay_awake_setting: String,
     previous_screen_off_timeout: String,
+    restore_attempted: bool,
 }
 
 impl AndroidStayAwakeGuard {
     fn new(previous_stay_awake_setting: String, previous_screen_off_timeout: String) -> Self {
-        Self { previous_stay_awake_setting, previous_screen_off_timeout }
+        Self { previous_stay_awake_setting, previous_screen_off_timeout, restore_attempted: false }
+    }
+
+    fn restore(&mut self) -> Result<()> {
+        self.restore_attempted = true;
+        let mut errors = Vec::new();
+
+        if let Err(error) = restore_stayon_service_state(&self.previous_stay_awake_setting) {
+            errors.push(error.to_string());
+        }
+        if let Err(error) = restore_stay_awake_setting(&self.previous_stay_awake_setting) {
+            errors.push(error.to_string());
+        }
+        if let Err(error) = restore_screen_off_timeout_setting(&self.previous_screen_off_timeout) {
+            errors.push(error.to_string());
+        }
+
+        if !errors.is_empty() {
+            bail!("Failed to restore Android stay-awake state: {}", errors.join("; "));
+        }
+
+        Ok(())
     }
 }
 
 impl Drop for AndroidStayAwakeGuard {
     fn drop(&mut self) {
-        if let Err(error) = restore_stayon_service_state(&self.previous_stay_awake_setting) {
-            print_warning(&format!("{error}"));
+        if self.restore_attempted {
+            return;
         }
-        if let Err(error) = restore_stay_awake_setting(&self.previous_stay_awake_setting) {
-            print_warning(&format!("{error}"));
-        }
-        if let Err(error) = restore_screen_off_timeout_setting(&self.previous_screen_off_timeout) {
+
+        if let Err(error) = self.restore() {
             print_warning(&format!("{error}"));
         }
     }
@@ -763,7 +785,12 @@ fn read_android_setting(namespace: &str, setting: &str, label: &str) -> Result<S
         bail!("Failed to read {label}: {}", stderr.trim());
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        bail!("Failed to read {label}: empty setting value");
+    }
+
+    Ok(value)
 }
 
 fn restore_stay_awake_setting(previous_setting: &str) -> Result<()> {

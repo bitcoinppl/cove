@@ -182,18 +182,18 @@ compile-android:
 ui-manual:
     just android-ui-manual && just ios-ui-background
 
-# Run an Android device command from android/ with stay-awake enabled.
+# Run an Android device command from android/ with stay-awake enabled
 #
 # Use this for ad hoc device UI testing:
 #   just android-stay-awake ./gradlew :app:connectedUiTestDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.LayoutRegressionTest
 #
 # Focused instrumentation tests should use AndroidDeviceStayAwakeRule when the
-# stay-awake behavior belongs in the test itself.
+# stay-awake behavior belongs in the test itself
 [group('test')]
 android-stay-awake *command:
     just xtask android-stay-awake -- {{ command }}
 
-# Run manual Android full-launch onboarding UI tests.
+# Run manual Android full-launch onboarding UI tests
 [group('test')]
 android-ui-manual:
     just xtask android-ui-manual
