@@ -19,7 +19,6 @@ private enum DiagnosticsLoadState: Equatable {
 private enum SendDiagnosticsAlert: Identifiable, Equatable {
     case confirmClear
     case error(String)
-    case submitted(String)
 
     var id: String {
         switch self {
@@ -27,8 +26,6 @@ private enum SendDiagnosticsAlert: Identifiable, Equatable {
             "confirm-clear"
         case let .error(message):
             "error-\(message)"
-        case let .submitted(reportId):
-            "submitted-\(reportId)"
         }
     }
 }
@@ -42,6 +39,7 @@ struct SendDiagnosticsSheet: View {
     @State private var description = ""
     @State private var reportSize = ""
     @State private var reportId: String? = nil
+    @State private var submissionWarning: String? = nil
     @State private var loadState = DiagnosticsLoadState.loading
     @State private var isSubmitting = false
     @State private var alertState: SendDiagnosticsAlert? = nil
@@ -132,18 +130,6 @@ struct SendDiagnosticsSheet: View {
                     message: Text(message),
                     dismissButton: .default(Text("OK"))
                 )
-
-            case let .submitted(reportId):
-                Alert(
-                    title: Text("Diagnostics Sent"),
-                    message: Text("Report ID: \(reportId)"),
-                    primaryButton: .default(Text("Copy ID")) {
-                        UIPasteboard.general.string = reportId
-                    },
-                    secondaryButton: .default(Text("Done")) {
-                        dismiss()
-                    }
-                )
             }
         }
         .interactiveDismissDisabled(isSubmitting)
@@ -199,6 +185,12 @@ struct SendDiagnosticsSheet: View {
                         .font(.system(.callout, design: .monospaced))
                         .textSelection(.enabled)
 
+                    if let submissionWarning {
+                        Text(submissionWarning)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+
                     HStack {
                         Button("Copy ID") {
                             UIPasteboard.general.string = reportId
@@ -252,6 +244,7 @@ struct SendDiagnosticsSheet: View {
     private func rebuildReport(clearStoredLogs: Bool) async {
         loadState = .loading
         reportId = nil
+        submissionWarning = nil
         report = nil
         previewRefreshTask?.cancel()
         previewRefreshTask = nil
@@ -286,9 +279,9 @@ struct SendDiagnosticsSheet: View {
         defer { isSubmitting = false }
 
         do {
-            let nextReportId = try await report.submit(description: description)
-            reportId = nextReportId
-            alertState = .submitted(nextReportId)
+            let submission = try await report.submit(description: description)
+            reportId = submission.reportId
+            submissionWarning = submission.warning
         } catch {
             alertState = .error(diagnosticsErrorMessage(error))
         }

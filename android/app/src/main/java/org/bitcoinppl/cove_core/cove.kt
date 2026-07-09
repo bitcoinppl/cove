@@ -4251,7 +4251,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_diagnosticsreport_size_bytes_for_description() != 25891.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_diagnosticsreport_submit() != 1462.toShort()) {
+    if (lib.uniffi_cove_checksum_method_diagnosticsreport_submit() != 54230.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_priceresponse_get() != 6552.toShort()) {
@@ -10324,7 +10324,7 @@ public interface DiagnosticsReportInterface {
 
     fun `sizeBytesForDescription`(`description`: kotlin.String?): kotlin.ULong
 
-    suspend fun `submit`(`description`: kotlin.String?): kotlin.String
+    suspend fun `submit`(`description`: kotlin.String?): DiagnosticsSubmission
 
     companion object
 }
@@ -10514,7 +10514,7 @@ open class DiagnosticsReport: Disposable, AutoCloseable, DiagnosticsReportInterf
 
     @Throws(DiagnosticsException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `submit`(`description`: kotlin.String?) : kotlin.String {
+    override suspend fun `submit`(`description`: kotlin.String?) : DiagnosticsSubmission {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_diagnosticsreport_submit(
@@ -10527,7 +10527,7 @@ open class DiagnosticsReport: Disposable, AutoCloseable, DiagnosticsReportInterf
         { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
         { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
-        { FfiConverterString.lift(it) },
+        { FfiConverterTypeDiagnosticsSubmission.lift(it) },
         // Error FFI converter
         DiagnosticsException.ErrorHandler,
     )
@@ -30350,6 +30350,49 @@ public object FfiConverterTypeDiagnosticsReportRecord: FfiConverterRustBuffer<Di
             FfiConverterString.write(value.`reportId`, buf)
             FfiConverterULong.write(value.`submittedAt`, buf)
             FfiConverterOptionalString.write(value.`description`, buf)
+    }
+}
+
+
+
+data class DiagnosticsSubmission (
+    var `reportId`: kotlin.String
+    ,
+    var `historySaved`: kotlin.Boolean
+    ,
+    var `warning`: kotlin.String?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer<DiagnosticsSubmission> {
+    override fun read(buf: ByteBuffer): DiagnosticsSubmission {
+        return DiagnosticsSubmission(
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DiagnosticsSubmission) = (
+            FfiConverterString.allocationSize(value.`reportId`) +
+            FfiConverterBoolean.allocationSize(value.`historySaved`) +
+            FfiConverterOptionalString.allocationSize(value.`warning`)
+    )
+
+    override fun write(value: DiagnosticsSubmission, buf: ByteBuffer) {
+            FfiConverterString.write(value.`reportId`, buf)
+            FfiConverterBoolean.write(value.`historySaved`, buf)
+            FfiConverterOptionalString.write(value.`warning`, buf)
     }
 }
 

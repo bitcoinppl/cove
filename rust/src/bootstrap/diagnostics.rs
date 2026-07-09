@@ -558,6 +558,7 @@ fn main_table_classification() -> TableClassification {
         crate::database::unsigned_transactions::MAIN_TABLE.name(),
         crate::database::unsigned_transactions::BY_WALLET_TABLE.name(),
         crate::database::historical_price::TABLE.name(),
+        crate::database::diagnostics_reports::TABLE.name(),
     ]
     .into_iter()
     .map(str::to_string)
@@ -790,7 +791,7 @@ mod tests {
         std::fs::create_dir_all(&wallet_dir)?;
         create_redb_with_tables(
             &dir.path().join("cove.db"),
-            &["global_flag", "global_bool_config"],
+            &["global_flag", "global_bool_config", "diagnostics_reports"],
         )?;
 
         reset_test_state();
@@ -799,8 +800,10 @@ mod tests {
 
         assert!(report.contains("global_flag (current)"));
         assert!(report.contains("global_bool_config (historical)"));
+        assert!(report.contains("diagnostics_reports (current)"));
         assert!(report.contains("historical skipped tables: global_bool_config"));
         assert!(!report.contains("unknown tables: global_bool_config"));
+        assert!(!report.contains("unknown tables: diagnostics_reports"));
 
         Ok(())
     }

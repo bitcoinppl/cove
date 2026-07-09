@@ -1,8 +1,9 @@
 pub mod redact;
 pub mod upload;
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
+use cove_util::result_ext::ResultExt as _;
 use serde::Serialize;
 
 use crate::database::{Database, diagnostics_reports::DiagnosticsReportRecord};
@@ -33,13 +34,32 @@ pub enum DiagnosticsError {
     Submit(String),
 }
 
-#[derive(Debug, uniffi::Object)]
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiagnosticsSubmission {
+    pub report_id: String,
+    pub history_saved: bool,
+    pub warning: Option<String>,
+}
+
+#[derive(uniffi::Object)]
 pub struct DiagnosticsReport {
     generated_at: String,
     metadata: DiagnosticsMetadata,
     sections: Vec<DiagnosticsSection>,
     preview_text: String,
     redactor: redact::Redactor,
+}
+
+impl fmt::Debug for DiagnosticsReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DiagnosticsReport")
+            .field("generated_at", &self.generated_at)
+            .field("metadata", &self.metadata)
+            .field("sections_count", &self.sections.len())
+            .field("preview_text", &format_args!("<redacted len={}>", self.preview_text.len()))
+            .field("redactor", &self.redactor)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -72,13 +92,15 @@ pub async fn build_diagnostics_report(
     platform: DiagnosticsPlatformInfo,
     platform_logs: String,
 ) -> Result<Arc<DiagnosticsReport>, DiagnosticsError> {
-    DiagnosticsReport::build(platform, platform_logs).map(Arc::new)
+    cove_tokio::unblock::run_blocking(move || {
+        DiagnosticsReport::build(platform, platform_logs).map(Arc::new)
+    })
+    .await
 }
 
 #[uniffi::export]
 pub fn clear_diagnostics_logs() -> Result<(), DiagnosticsError> {
-    cove_common::logging::capture::clear()
-        .map_err(|error| DiagnosticsError::ClearLogs(error.to_string()))
+    cove_common::logging::capture::clear().map_err_str(DiagnosticsError::ClearLogs)
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -107,21 +129,36 @@ impl DiagnosticsReport {
         format_diagnostics_report_size(self.size_bytes_for_description(description))
     }
 
-    pub async fn submit(&self, description: Option<String>) -> Result<String, DiagnosticsError> {
+    pub async fn submit(
+        &self,
+        description: Option<String>,
+    ) -> Result<DiagnosticsSubmission, DiagnosticsError> {
         let description = self.redacted_user_description(description);
         let report = self.upload_report(description.clone());
 
         let report_id = upload::submit_report(&report).await.map_err(|error| {
-            tracing::warn!("Failed to submit diagnostics report: {error}");
+            tracing::warn!("Failed to submit diagnostics report: {}", error.log_message());
             DiagnosticsError::Submit(error.user_message())
         })?;
 
         let record = DiagnosticsReportRecord::now(report_id.clone(), description);
-        if let Err(error) = Database::global().diagnostics_reports.add(record) {
+        let save_result = cove_tokio::unblock::run_blocking(move || {
+            Database::global().diagnostics_reports.add(record)
+        })
+        .await;
+        if let Err(error) = save_result {
             tracing::warn!("Failed to save diagnostics report history: {error}");
+            return Ok(DiagnosticsSubmission {
+                report_id,
+                history_saved: false,
+                warning: Some(
+                    "Diagnostics were uploaded, but Cove could not save the report ID on this device. Copy the report ID before closing this screen."
+                        .to_string(),
+                ),
+            });
         }
 
-        Ok(report_id)
+        Ok(DiagnosticsSubmission { report_id, history_saved: true, warning: None })
     }
 }
 
@@ -271,7 +308,7 @@ fn raw_sections_from(
     vec![
         DiagnosticsSection::new(
             "Privacy notice",
-            "Cove redacts bitcoin addresses, extended public/private keys, WIF private keys, BIP39 seed phrases, transaction IDs, and known local app data paths. Amounts remain visible. Review the report before submitting.",
+            "Cove redacts bitcoin addresses, extended public/private keys, WIF private keys, English BIP39 seed phrases, transaction IDs, and known local app data paths. Amounts remain visible. Review the report before submitting.",
         ),
         DiagnosticsSection::new("Startup diagnostics", startup),
         DiagnosticsSection::new("Platform logs", platform_logs),
@@ -333,7 +370,7 @@ fn timestamp() -> String {
 mod tests {
     use super::*;
 
-    static DIAGNOSTICS_UPLOAD_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static DIAGNOSTICS_UPLOAD_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     struct EnvVarGuard(&'static str);
 
@@ -363,6 +400,10 @@ mod tests {
     }
 
     async fn upload_server_url(report_id: &'static str) -> String {
+        upload_server_response("200 OK", format!(r#"{{"id":"{report_id}"}}"#)).await
+    }
+
+    async fn upload_server_response(status: &'static str, body: String) -> String {
         use tokio::{
             io::{AsyncReadExt as _, AsyncWriteExt as _},
             net::TcpListener,
@@ -376,9 +417,8 @@ mod tests {
             let mut buffer = [0; 4096];
             let _ = socket.read(&mut buffer).await.expect("test server reads request");
 
-            let body = format!(r#"{{"id":"{report_id}"}}"#);
             let response = format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                 body.len(),
             );
 
@@ -482,8 +522,10 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn submit_persists_successful_report_history() {
-        let _guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().expect("upload env lock poisoned");
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
         let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::delete_database();
         Database::try_reinit().expect("database reinitializes");
 
@@ -497,13 +539,117 @@ mod tests {
         )
         .unwrap();
 
-        let report_id = report.submit(Some("description".to_string())).await.unwrap();
+        let submission = report.submit(Some("description".to_string())).await.unwrap();
 
         let records = Database::global().diagnostics_reports.all().unwrap();
-        assert_eq!(report_id, "report_123");
+        assert_eq!(submission.report_id, "report_123");
+        assert!(submission.history_saved);
+        assert!(submission.warning.is_none());
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].report_id, "report_123");
         assert_eq!(records[0].description, Some("description".to_string()));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn submit_persists_redacted_history_description() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        Database::try_reinit().expect("database reinitializes");
+
+        let upload_url = upload_server_url("report_secret").await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            "platform saw bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let description =
+            format!("same address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq seed {mnemonic}");
+
+        let submission = report.submit(Some(description)).await.unwrap();
+
+        let records = Database::global().diagnostics_reports.all().unwrap();
+        let history_description = records[0].description.as_ref().expect("description saved");
+        assert_eq!(submission.report_id, "report_secret");
+        assert!(history_description.contains("<redacted-bitcoin-address-1>"));
+        assert!(history_description.contains("<redacted-seed-phrase-1>"));
+        assert!(!history_description.contains("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"));
+        assert!(!history_description.contains(mnemonic));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn failed_upload_does_not_persist_history_and_returns_safe_message() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        Database::try_reinit().expect("database reinitializes");
+
+        let upload_url = upload_server_response(
+            "413 Payload Too Large",
+            r#"{"error":"collector internal detail"}"#.to_string(),
+        )
+        .await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let error = report.submit(Some("description".to_string())).await.unwrap_err();
+
+        let records = Database::global().diagnostics_reports.all().unwrap();
+        let DiagnosticsError::Submit(message) = error else {
+            panic!("expected submit error");
+        };
+        assert!(records.is_empty());
+        assert!(message.contains("too large to submit"));
+        assert!(!message.contains("collector internal detail"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn upload_success_with_history_save_failure_returns_warning() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        Database::try_reinit().expect("database reinitializes");
+        crate::database::diagnostics_reports::test_support::write_invalid_history(
+            &Database::global().diagnostics_reports,
+        );
+
+        let upload_url = upload_server_url("report_history_failed").await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let submission = report.submit(Some("description".to_string())).await.unwrap();
+
+        assert_eq!(submission.report_id, "report_history_failed");
+        assert!(!submission.history_saved);
+        assert!(
+            submission
+                .warning
+                .as_deref()
+                .is_some_and(|warning| warning.contains("could not save the report ID"))
+        );
+        assert!(Database::global().diagnostics_reports.all().is_err());
     }
 
     #[test]

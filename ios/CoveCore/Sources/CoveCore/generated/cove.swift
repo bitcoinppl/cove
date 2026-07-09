@@ -2978,7 +2978,7 @@ public protocol DiagnosticsReportProtocol: AnyObject, Sendable {
 
     func sizeBytesForDescription(description: String?)  -> UInt64
 
-    func submit(description: String?) async throws  -> String
+    func submit(description: String?) async throws  -> DiagnosticsSubmission
 
 }
 open class DiagnosticsReport: DiagnosticsReportProtocol, @unchecked Sendable {
@@ -3091,7 +3091,7 @@ open func sizeBytesForDescription(description: String?) -> UInt64  {
 })
 }
 
-open func submit(description: String?)async throws  -> String  {
+open func submit(description: String?)async throws  -> DiagnosticsSubmission  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3103,7 +3103,7 @@ open func submit(description: String?)async throws  -> String  {
             pollFunc: ffi_cove_rust_future_poll_rust_buffer,
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
+            liftFunc: FfiConverterTypeDiagnosticsSubmission_lift,
             errorHandler: FfiConverterTypeDiagnosticsError_lift
         )
 }
@@ -15342,6 +15342,64 @@ public func FfiConverterTypeDiagnosticsReportRecord_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeDiagnosticsReportRecord_lower(_ value: DiagnosticsReportRecord) -> RustBuffer {
     return FfiConverterTypeDiagnosticsReportRecord.lower(value)
+}
+
+
+public struct DiagnosticsSubmission: Equatable, Hashable {
+    public var reportId: String
+    public var historySaved: Bool
+    public var warning: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(reportId: String, historySaved: Bool, warning: String?) {
+        self.reportId = reportId
+        self.historySaved = historySaved
+        self.warning = warning
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DiagnosticsSubmission: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiagnosticsSubmission {
+        return
+            try DiagnosticsSubmission(
+                reportId: FfiConverterString.read(from: &buf),
+                historySaved: FfiConverterBool.read(from: &buf),
+                warning: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiagnosticsSubmission, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.reportId, into: &buf)
+        FfiConverterBool.write(value.historySaved, into: &buf)
+        FfiConverterOptionString.write(value.warning, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsSubmission_lift(_ buf: RustBuffer) throws -> DiagnosticsSubmission {
+    return try FfiConverterTypeDiagnosticsSubmission.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiagnosticsSubmission_lower(_ value: DiagnosticsSubmission) -> RustBuffer {
+    return FfiConverterTypeDiagnosticsSubmission.lower(value)
 }
 
 
@@ -41211,7 +41269,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_diagnosticsreport_size_bytes_for_description() != 25891) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_diagnosticsreport_submit() != 1462) {
+    if (uniffi_cove_checksum_method_diagnosticsreport_submit() != 54230) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_priceresponse_get() != 6552) {

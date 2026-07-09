@@ -174,7 +174,9 @@ private fun DiagnosticsFeedback(
     when (feedback) {
         DiagnosticsContentFeedback.None -> Unit
         is DiagnosticsContentFeedback.Error -> DiagnosticsActionError(feedback.message)
-        is DiagnosticsContentFeedback.Sent -> DiagnosticsSentReport(feedback.reportId, actions)
+        is DiagnosticsContentFeedback.Sent -> {
+            DiagnosticsSentReport(feedback.reportId, feedback.warning, actions)
+        }
     }
 }
 
@@ -190,6 +192,7 @@ private fun DiagnosticsActionError(message: String) {
 @Composable
 private fun DiagnosticsSentReport(
     reportId: String,
+    warning: String?,
     actions: SendDiagnosticsContentActions,
 ) {
     Column(
@@ -210,6 +213,13 @@ private fun DiagnosticsSentReport(
             style = MaterialTheme.typography.bodyMedium,
             fontFamily = FontFamily.Monospace,
         )
+        warning?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(
                 onClick = {
@@ -348,7 +358,10 @@ internal sealed interface DiagnosticsContentFeedback {
 
     data class Error(val message: String) : DiagnosticsContentFeedback
 
-    data class Sent(val reportId: String) : DiagnosticsContentFeedback
+    data class Sent(
+        val reportId: String,
+        val warning: String? = null,
+    ) : DiagnosticsContentFeedback
 }
 
 internal data class SendDiagnosticsContentActions(

@@ -33,16 +33,36 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove_core.DiagnosticsException
 import org.bitcoinppl.cove_core.DiagnosticsReport
 import org.bitcoinppl.cove_core.buildDiagnosticsReport
 import org.bitcoinppl.cove_core.clearDiagnosticsLogs
 
 private const val PREVIEW_CHUNK_SIZE = 4096
+private const val PREVIEW_REFRESH_DEBOUNCE_MS = 250L
+
+internal class DiagnosticsGenerationTracker {
+    private var generation = 0
+
+    fun advance(): Int {
+        generation += 1
+
+        return generation
+    }
+
+    fun invalidate() {
+        generation += 1
+    }
+
+    fun isCurrent(token: Int): Boolean = token == generation
+}
 
 @Suppress("InjectDispatcher")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +75,9 @@ fun SendDiagnosticsSheet(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val state = remember(ioDispatcher) { SendDiagnosticsSheetState(ioDispatcher) }
+    val state = remember(ioDispatcher, coroutineScope) {
+        SendDiagnosticsSheetState(ioDispatcher, coroutineScope)
+    }
     val currentOnSubmittingChange by rememberUpdatedState(onSubmittingChange)
 
     LaunchedEffect(Unit) {
@@ -238,8 +260,11 @@ private fun ClearStoredLogsDialog(
 
 private class SendDiagnosticsSheetState(
     private val ioDispatcher: CoroutineDispatcher,
+    private val coroutineScope: CoroutineScope,
 ) {
     private var report by mutableStateOf<DiagnosticsReport?>(null)
+    private val rebuildGeneration = DiagnosticsGenerationTracker()
+    private var previewRefreshJob: Job? = null
     private var previewText by mutableStateOf("")
     var previewChunks by mutableStateOf<List<String>>(emptyList())
         private set
@@ -253,6 +278,7 @@ private class SendDiagnosticsSheetState(
         private set
     var reportId by mutableStateOf<String?>(null)
         private set
+    private var submissionWarning by mutableStateOf<String?>(null)
     var showClearConfirmation by mutableStateOf(false)
     var loading by mutableStateOf(true)
         private set
@@ -263,6 +289,8 @@ private class SendDiagnosticsSheetState(
         context: Context,
         clearStoredLogs: Boolean,
     ) {
+        val generation = rebuildGeneration.advance()
+        var builtReport: DiagnosticsReport? = null
         startLoadingReport()
 
         try {
@@ -278,26 +306,42 @@ private class SendDiagnosticsSheetState(
                         platformLogs = platformLogs,
                     )
                 }
+            builtReport = nextReport
+            val nextPreview = buildPreview(nextReport, description)
 
+            if (!rebuildGeneration.isCurrent(generation)) {
+                return
+            }
+
+            builtReport = null
             replaceReport(nextReport)
-            refreshPreview(nextReport)
-        } catch (error: DiagnosticsException) {
-            loadError = error.displayMessage()
+            applyPreview(nextPreview)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (rebuildGeneration.isCurrent(generation)) {
+                loadError = error.displayMessage()
+            }
         } finally {
-            loading = false
+            builtReport?.close()
+            if (rebuildGeneration.isCurrent(generation)) {
+                loading = false
+            }
         }
     }
 
     fun updateDescription(nextDescription: String) {
         description = nextDescription
-        report?.let(::refreshPreview)
+        schedulePreviewRefresh()
     }
 
     suspend fun share(context: Context) {
         val content = report?.previewTextForDescription(description) ?: previewText
-        runCatching {
+        try {
             shareDiagnosticsFile(context, content, ioDispatcher)
-        }.onFailure { error ->
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             actionError = error.displayMessage()
         }
     }
@@ -309,8 +353,12 @@ private class SendDiagnosticsSheetState(
         actionError = null
 
         try {
-            reportId = withContext(ioDispatcher) { current.submit(description) }
-        } catch (error: DiagnosticsException) {
+            val submission = withContext(ioDispatcher) { current.submit(description) }
+            reportId = submission.reportId
+            submissionWarning = submission.warning
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             actionError = error.displayMessage()
         } finally {
             submitting = false
@@ -318,6 +366,7 @@ private class SendDiagnosticsSheetState(
     }
 
     fun close() {
+        rebuildGeneration.invalidate()
         replaceReport(null)
     }
 
@@ -335,6 +384,7 @@ private class SendDiagnosticsSheetState(
         loadError = null
         actionError = null
         reportId = null
+        submissionWarning = null
         replaceReport(null)
         previewText = ""
         previewChunks = emptyList()
@@ -342,23 +392,82 @@ private class SendDiagnosticsSheetState(
     }
 
     private fun replaceReport(nextReport: DiagnosticsReport?) {
-        report?.close()
+        val oldReport = report
+        val oldPreviewRefreshJob = previewRefreshJob
+        oldPreviewRefreshJob?.cancel()
+        previewRefreshJob = null
         report = nextReport
+        closeReportAfterPreview(oldReport, oldPreviewRefreshJob)
     }
 
-    private fun refreshPreview(nextReport: DiagnosticsReport) {
-        val nextPreviewText = nextReport.previewTextForDescription(description)
+    private fun closeReportAfterPreview(
+        oldReport: DiagnosticsReport?,
+        oldPreviewRefreshJob: Job?,
+    ) {
+        if (oldReport == null) return
 
-        previewText = nextPreviewText
-        previewChunks = nextPreviewText.chunked(PREVIEW_CHUNK_SIZE)
-        reportSize = nextReport.formattedSizeForDescription(description)
+        if (oldPreviewRefreshJob == null || oldPreviewRefreshJob.isCompleted) {
+            oldReport.close()
+            return
+        }
+
+        oldPreviewRefreshJob.invokeOnCompletion {
+            oldReport.close()
+        }
+    }
+
+    private fun schedulePreviewRefresh() {
+        val currentReport = report ?: return
+        val currentDescription = description
+        previewRefreshJob?.cancel()
+        previewRefreshJob =
+            coroutineScope.launch {
+                try {
+                    delay(PREVIEW_REFRESH_DEBOUNCE_MS)
+                    val nextPreview = buildPreview(currentReport, currentDescription)
+
+                    if (report == currentReport && description == currentDescription) {
+                        applyPreview(nextPreview)
+                    }
+                } finally {
+                    if (previewRefreshJob == this.coroutineContext[Job]) {
+                        previewRefreshJob = null
+                    }
+                }
+            }
+    }
+
+    private suspend fun buildPreview(
+        nextReport: DiagnosticsReport,
+        nextDescription: String,
+    ): DiagnosticsPreviewState =
+        withContext(ioDispatcher) {
+            val nextPreviewText = nextReport.previewTextForDescription(nextDescription)
+
+            DiagnosticsPreviewState(
+                text = nextPreviewText,
+                chunks = nextPreviewText.chunked(PREVIEW_CHUNK_SIZE),
+                formattedSize = nextReport.formattedSizeForDescription(nextDescription),
+            )
+        }
+
+    private fun applyPreview(nextPreview: DiagnosticsPreviewState) {
+        previewText = nextPreview.text
+        previewChunks = nextPreview.chunks
+        reportSize = nextPreview.formattedSize
     }
 
     private fun feedback(): DiagnosticsContentFeedback =
         actionError?.let { DiagnosticsContentFeedback.Error(it) }
-            ?: reportId?.let { DiagnosticsContentFeedback.Sent(it) }
+            ?: reportId?.let { DiagnosticsContentFeedback.Sent(it, submissionWarning) }
             ?: DiagnosticsContentFeedback.None
 }
+
+private data class DiagnosticsPreviewState(
+    val text: String,
+    val chunks: List<String>,
+    val formattedSize: String,
+)
 
 private data class SendDiagnosticsSheetActions(
     val onDismiss: () -> Unit,

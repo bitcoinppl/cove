@@ -1,7 +1,9 @@
-use std::{cmp::Reverse, collections::BTreeMap, path::PathBuf, str::FromStr as _};
+use std::{cmp::Reverse, collections::BTreeMap, fmt, path::PathBuf, str::FromStr as _};
 
 use bip39::{Language, Mnemonic};
 use bitcoin::{Address, PrivateKey};
+use rand::RngExt as _;
+use sha2::{Digest as _, Sha256};
 
 const BIP39_WORD_COUNTS: [usize; 5] = [24, 21, 18, 15, 12];
 const TXID_HEX_LEN: usize = 64;
@@ -21,11 +23,28 @@ struct PathPlaceholder {
     placeholder: &'static str,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct Redactor {
     paths: Vec<PathPlaceholder>,
-    seen: BTreeMap<String, String>,
+    fingerprint_salt: [u8; 32],
+    seen: BTreeMap<SecretFingerprint, String>,
     counts: BTreeMap<SecretKind, u32>,
+}
+
+impl fmt::Debug for Redactor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Redactor")
+            .field("paths_count", &self.paths.len())
+            .field("seen_count", &self.seen.len())
+            .field("counts", &self.counts)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct SecretFingerprint {
+    kind: SecretKind,
+    digest: [u8; 32],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -51,7 +70,10 @@ impl Redactor {
         let mut paths = paths.into_iter().filter(|path| !path.path.is_empty()).collect::<Vec<_>>();
         paths.sort_by_key(|path| Reverse(path.path.len()));
 
-        Self { paths, seen: BTreeMap::new(), counts: BTreeMap::new() }
+        let mut fingerprint_salt = [0; 32];
+        rand::rng().fill(&mut fingerprint_salt);
+
+        Self { paths, fingerprint_salt, seen: BTreeMap::new(), counts: BTreeMap::new() }
     }
 
     pub(crate) fn redact(&mut self, text: &str) -> String {
@@ -139,15 +161,30 @@ impl Redactor {
     }
 
     fn placeholder_for(&mut self, kind: SecretKind, secret: &str) -> String {
-        if let Some(placeholder) = self.seen.get(secret) {
+        let fingerprint = SecretFingerprint::new(kind, secret, &self.fingerprint_salt);
+        if let Some(placeholder) = self.seen.get(&fingerprint) {
             return placeholder.clone();
         }
 
         let next = self.counts.entry(kind).and_modify(|count| *count += 1).or_insert(1);
         let placeholder = format!("<redacted-{}-{next}>", kind.placeholder_name());
-        self.seen.insert(secret.to_string(), placeholder.clone());
+        self.seen.insert(fingerprint, placeholder.clone());
 
         placeholder
+    }
+}
+
+impl SecretFingerprint {
+    fn new(kind: SecretKind, secret: &str, salt: &[u8; 32]) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(salt);
+        hasher.update([0]);
+        hasher.update(kind.placeholder_name().as_bytes());
+        hasher.update([0]);
+        hasher.update(secret.as_bytes());
+        let digest = hasher.finalize().into();
+
+        Self { kind, digest }
     }
 }
 
@@ -376,6 +413,22 @@ mod tests {
         assert_eq!(output.matches("<redacted-transaction-id-1>").count(), 2);
         assert!(output.contains("payment<redacted-transaction-id-1>suffix"));
         assert!(!output.contains(&txid));
+    }
+
+    #[test]
+    fn debug_output_does_not_include_seen_plaintext_secrets() {
+        let mut redactor = redactor_without_paths();
+        let address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let output = redactor.redact(&format!("{address} {mnemonic}"));
+        let debug = format!("{redactor:?}");
+
+        assert!(output.contains("<redacted-bitcoin-address-1>"));
+        assert!(output.contains("<redacted-seed-phrase-1>"));
+        assert!(!debug.contains(address));
+        assert!(!debug.contains(mnemonic));
+        assert!(debug.contains("seen_count"));
     }
 
     #[test]
