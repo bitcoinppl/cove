@@ -189,6 +189,9 @@ impl Default for CaptureState {
 
 impl CaptureState {
     fn attach(&mut self, logs_dir: PathBuf) -> Result<(), CaptureError> {
+        let previous_writer = self.writer.take();
+        drop(previous_writer);
+
         std::fs::create_dir_all(&logs_dir).map_err(|source| CaptureError::CreateDir {
             path: logs_dir.display().to_string(),
             source,
@@ -692,6 +695,25 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    fn writer_that_replaces_current_file_on_shutdown(dir: &Path) -> LogWriter {
+        let writer_dir = dir.to_path_buf();
+        let (sender, receiver) = mpsc::channel();
+        let join_handle = thread::spawn(move || {
+            while let Ok(command) = receiver.recv() {
+                if matches!(command, WriterCommand::Shutdown) {
+                    std::fs::remove_file(current_log_path(&writer_dir)).unwrap();
+                    std::fs::write(current_log_path(&writer_dir), "replacement\n").unwrap();
+                    break;
+                }
+            }
+        });
+
+        LogWriter {
+            handle: LogWriterHandle { dir: dir.to_path_buf(), sender },
+            join_handle: Some(join_handle),
+        }
+    }
+
     #[test]
     fn ring_cap_keeps_latest_lines_in_order() {
         let mut ring = RingBuffer::new(18);
@@ -755,6 +777,21 @@ mod tests {
 
         let text = std::fs::read_to_string(current_log_path(dir.path()))?;
         assert_eq!(text.matches("before attach").count(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn reattach_stops_previous_writer_before_opening_replacement() -> eyre::Result<()> {
+        let dir = TempDir::new()?;
+        std::fs::write(current_log_path(dir.path()), "original\n")?;
+
+        let mut state = CaptureState::default();
+        state.writer = Some(writer_that_replaces_current_file_on_shutdown(dir.path()));
+        state.attach(dir.path().to_path_buf())?;
+        state.record_line("after reattach");
+
+        assert_eq!(state.snapshot_text(), "replacement\nafter reattach\n");
 
         Ok(())
     }
