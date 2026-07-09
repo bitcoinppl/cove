@@ -27,7 +27,7 @@ struct AboutScreen: View {
     @State private var alertState: TaggedItem<AboutAlertState>? = nil
     @State private var isSendDiagnosticsPresented = false
     @State private var isSubmittedDiagnosticsPresented = false
-    @State private var submittedDiagnosticsRecords: [DiagnosticsReportRecord] = []
+    @State private var submittedDiagnosticsLoadState: SubmittedDiagnosticsLoadState = .loaded([])
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -46,9 +46,27 @@ struct AboutScreen: View {
         )
     }
 
-    private var submittedDiagnosticsCountText: String {
-        let count = submittedDiagnosticsRecords.count
-        return count == 1 ? "1 report" : "\(count) reports"
+    private var shouldShowSubmittedDiagnostics: Bool {
+        switch submittedDiagnosticsLoadState {
+        case .loading:
+            false
+        case let .loaded(records):
+            !records.isEmpty
+        case .failed:
+            true
+        }
+    }
+
+    private var submittedDiagnosticsSummary: String {
+        switch submittedDiagnosticsLoadState {
+        case .loading:
+            return "Loading"
+        case let .loaded(records):
+            let count = records.count
+            return count == 1 ? "1 report" : "\(count) reports"
+        case .failed:
+            return "Unavailable"
+        }
     }
 
     var body: some View {
@@ -125,7 +143,7 @@ struct AboutScreen: View {
                         }
                     }
 
-                    if !submittedDiagnosticsRecords.isEmpty {
+                    if shouldShowSubmittedDiagnostics {
                         Button {
                             isSubmittedDiagnosticsPresented = true
                         } label: {
@@ -133,7 +151,7 @@ struct AboutScreen: View {
                                 Text("Submitted Diagnostics")
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text(submittedDiagnosticsCountText)
+                                Text(submittedDiagnosticsSummary)
                                     .foregroundStyle(.secondary)
                                     .font(.footnote)
                             }
@@ -174,7 +192,7 @@ struct AboutScreen: View {
         }
         .sheet(isPresented: $isSubmittedDiagnosticsPresented, onDismiss: refreshSubmittedDiagnostics) {
             SubmittedDiagnosticsSheet(
-                records: submittedDiagnosticsRecords,
+                loadState: submittedDiagnosticsLoadState,
                 onRecordsChanged: refreshSubmittedDiagnostics
             )
         }
@@ -183,15 +201,20 @@ struct AboutScreen: View {
 
     private func refreshSubmittedDiagnostics() {
         guard !auth.isInDecoyMode() else {
-            submittedDiagnosticsRecords = []
+            submittedDiagnosticsLoadState = .loaded([])
             isSubmittedDiagnosticsPresented = false
             return
         }
 
-        do {
-            submittedDiagnosticsRecords = try Database().diagnosticsReports().all()
-        } catch {
-            Log.warn("Failed to load submitted diagnostics: \(error.localizedDescription)")
+        Task {
+            let loadState = await loadSubmittedDiagnosticsHistory()
+            guard !auth.isInDecoyMode() else {
+                submittedDiagnosticsLoadState = .loaded([])
+                isSubmittedDiagnosticsPresented = false
+                return
+            }
+
+            submittedDiagnosticsLoadState = loadState
         }
     }
 

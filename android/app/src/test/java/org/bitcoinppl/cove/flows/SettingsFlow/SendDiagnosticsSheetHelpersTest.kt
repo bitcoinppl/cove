@@ -2,7 +2,12 @@
 
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SendDiagnosticsSheetHelpersTest {
@@ -19,4 +24,53 @@ class SendDiagnosticsSheetHelpersTest {
 
         assertEquals(value, value.takeLastAtRedactionBoundary(100))
     }
+
+    @Test
+    fun generationTrackerInvalidatesOlderTokens() {
+        val tracker = DiagnosticsGenerationTracker()
+
+        val first = tracker.advance()
+        val second = tracker.advance()
+
+        assertFalse(tracker.isCurrent(first))
+        assertTrue(tracker.isCurrent(second))
+    }
+
+    @Test
+    fun generationTrackerInvalidateClearsCurrentToken() {
+        val tracker = DiagnosticsGenerationTracker()
+        val token = tracker.advance()
+
+        tracker.invalidate()
+
+        assertFalse(tracker.isCurrent(token))
+    }
+
+    @Test
+    fun submittedDiagnosticsLoadFailureIsNotEmptyHistory() =
+        runTest {
+            val state =
+                loadSubmittedDiagnosticsRecords(
+                    ioDispatcher = StandardTestDispatcher(testScheduler),
+                    loadRecords = {
+                        throw IllegalStateException("history corrupt")
+                    },
+                    logFailure = { _ -> },
+                )
+
+            assertTrue(state is SubmittedDiagnosticsLoadState.Failed)
+            assertEquals("history corrupt", (state as SubmittedDiagnosticsLoadState.Failed).message)
+        }
+
+    @Test(expected = CancellationException::class)
+    fun submittedDiagnosticsLoadRethrowsCancellation() =
+        runTest {
+            loadSubmittedDiagnosticsRecords(
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+                loadRecords = {
+                    throw CancellationException("cancelled")
+                },
+                logFailure = { _ -> },
+            )
+        }
 }

@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
@@ -50,7 +51,6 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.DiagnosticsReportRecord
 import org.bitcoinppl.cove_core.GlobalFlagKey
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
@@ -79,9 +79,13 @@ fun AboutSettingsScreen(
     var sendDiagnosticsSubmitting by remember { mutableStateOf(false) }
     var resetLocalStateMessage by remember { mutableStateOf<String?>(null) }
     val isInDecoyMode = Auth.isInDecoyMode()
-    var submittedDiagnosticsRecords by remember {
-        mutableStateOf<List<DiagnosticsReportRecord>>(emptyList())
+    var submittedDiagnosticsLoadState by remember {
+        mutableStateOf<SubmittedDiagnosticsLoadState>(
+            SubmittedDiagnosticsLoadState.Loaded(emptyList()),
+        )
     }
+    var submittedDiagnosticsRefreshId by remember { mutableIntStateOf(0) }
+    var submittedDiagnosticsRefreshJob by remember { mutableStateOf<Job?>(null) }
     var isBetaEnabled by remember {
         mutableStateOf(
             Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
@@ -97,12 +101,29 @@ fun AboutSettingsScreen(
     }
 
     fun refreshSubmittedDiagnostics() {
-        submittedDiagnosticsRecords =
-            if (isInDecoyMode) {
-                emptyList()
-            } else {
-                loadSubmittedDiagnosticsRecords()
+        submittedDiagnosticsRefreshId++
+        val refreshId = submittedDiagnosticsRefreshId
+        submittedDiagnosticsRefreshJob?.cancel()
+
+        if (Auth.isInDecoyMode()) {
+            submittedDiagnosticsLoadState = SubmittedDiagnosticsLoadState.Loaded(emptyList())
+            return
+        }
+
+        submittedDiagnosticsRefreshJob = coroutineScope.launch {
+            val loadState = loadSubmittedDiagnosticsRecords()
+
+            if (refreshId != submittedDiagnosticsRefreshId) {
+                return@launch
             }
+
+            submittedDiagnosticsLoadState =
+                if (Auth.isInDecoyMode()) {
+                    SubmittedDiagnosticsLoadState.Loaded(emptyList())
+                } else {
+                    loadState
+                }
+        }
     }
 
     LaunchedEffect(isInDecoyMode) {
@@ -137,10 +158,11 @@ fun AboutSettingsScreen(
         onSendDiagnosticsClick = {
             if (!isInDecoyMode) showSendDiagnostics = true
         },
-        showSubmittedDiagnostics = !isInDecoyMode && submittedDiagnosticsRecords.isNotEmpty(),
-        submittedDiagnosticsCount = submittedDiagnosticsRecords.size,
+        showSubmittedDiagnostics =
+            !isInDecoyMode && submittedDiagnosticsLoadState.shouldShowAboutEntry,
+        submittedDiagnosticsSummary = submittedDiagnosticsSummary(submittedDiagnosticsLoadState),
         onSubmittedDiagnosticsClick = {
-            if (!isInDecoyMode && submittedDiagnosticsRecords.isNotEmpty()) {
+            if (!isInDecoyMode && submittedDiagnosticsLoadState.shouldShowAboutEntry) {
                 showSubmittedDiagnostics = true
             }
         },
@@ -341,7 +363,7 @@ internal fun AboutSettingsContent(
     showSendDiagnostics: Boolean,
     onSendDiagnosticsClick: () -> Unit,
     showSubmittedDiagnostics: Boolean,
-    submittedDiagnosticsCount: Int,
+    submittedDiagnosticsSummary: String,
     onSubmittedDiagnosticsClick: () -> Unit,
     onWipeCloudBackupClick: () -> Unit,
     onResetLocalBackupStateClick: () -> Unit,
@@ -414,7 +436,7 @@ internal fun AboutSettingsContent(
                             MaterialDivider()
                             AboutRow(
                                 label = "Submitted Diagnostics",
-                                value = diagnosticsReportCountText(submittedDiagnosticsCount),
+                                value = submittedDiagnosticsSummary,
                                 valueStyle = MaterialTheme.typography.bodySmall,
                                 onClick = onSubmittedDiagnosticsClick,
                             )
@@ -484,7 +506,7 @@ internal fun AboutSettingsPreviewContent() {
             showSendDiagnostics = true,
             onSendDiagnosticsClick = { },
             showSubmittedDiagnostics = true,
-            submittedDiagnosticsCount = 3,
+            submittedDiagnosticsSummary = "3 reports",
             onSubmittedDiagnosticsClick = { },
             onWipeCloudBackupClick = { },
             onResetLocalBackupStateClick = { },
@@ -497,6 +519,21 @@ private fun diagnosticsReportCountText(count: Int): String =
         "1 report"
     } else {
         "$count reports"
+    }
+
+private val SubmittedDiagnosticsLoadState.shouldShowAboutEntry: Boolean
+    get() =
+        when (this) {
+            SubmittedDiagnosticsLoadState.Loading -> false
+            is SubmittedDiagnosticsLoadState.Loaded -> records.isNotEmpty()
+            is SubmittedDiagnosticsLoadState.Failed -> true
+        }
+
+private fun submittedDiagnosticsSummary(state: SubmittedDiagnosticsLoadState): String =
+    when (state) {
+        SubmittedDiagnosticsLoadState.Loading -> "Loading"
+        is SubmittedDiagnosticsLoadState.Loaded -> diagnosticsReportCountText(state.records.size)
+        is SubmittedDiagnosticsLoadState.Failed -> "Unavailable"
     }
 
 @Composable

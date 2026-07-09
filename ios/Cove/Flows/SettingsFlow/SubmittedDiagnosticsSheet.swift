@@ -1,6 +1,46 @@
 import SwiftUI
 import UIKit
 
+enum SubmittedDiagnosticsLoadState: Equatable {
+    case loading
+    case loaded([DiagnosticsReportRecord])
+    case failed(String)
+
+    var records: [DiagnosticsReportRecord] {
+        switch self {
+        case .loading, .failed:
+            []
+        case let .loaded(records):
+            records
+        }
+    }
+
+    var canClear: Bool {
+        switch self {
+        case .loading:
+            false
+        case let .loaded(records):
+            !records.isEmpty
+        case .failed:
+            true
+        }
+    }
+}
+
+func loadSubmittedDiagnosticsHistory() async -> SubmittedDiagnosticsLoadState {
+    do {
+        let records = try await Task.detached {
+            try Database().diagnosticsReports().all()
+        }.value
+
+        return .loaded(records)
+    } catch {
+        Log.warn("Failed to load submitted diagnostics: \(error.localizedDescription)")
+
+        return .failed(error.localizedDescription)
+    }
+}
+
 private enum SubmittedDiagnosticsAlert: Identifiable, Equatable {
     case confirmClear
     case error(String)
@@ -18,20 +58,43 @@ private enum SubmittedDiagnosticsAlert: Identifiable, Equatable {
 struct SubmittedDiagnosticsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var records: [DiagnosticsReportRecord]
+    @State private var loadState: SubmittedDiagnosticsLoadState
     @State private var alertState: SubmittedDiagnosticsAlert? = nil
 
     let onRecordsChanged: () -> Void
 
-    init(records: [DiagnosticsReportRecord], onRecordsChanged: @escaping () -> Void) {
-        _records = State(initialValue: records)
+    init(loadState: SubmittedDiagnosticsLoadState, onRecordsChanged: @escaping () -> Void) {
+        _loadState = State(initialValue: loadState)
         self.onRecordsChanged = onRecordsChanged
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if records.isEmpty {
+                switch loadState {
+                case .loading:
+                    ProgressView("Loading submitted diagnostics...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                case let .failed(message):
+                    VStack(spacing: 12) {
+                        Text("Submitted diagnostics unavailable")
+                            .font(.headline)
+
+                        Text(message)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Button("Retry") {
+                            reloadHistory()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                case let .loaded(records) where records.isEmpty:
                     VStack(spacing: 8) {
                         Text("No submitted diagnostics")
                             .font(.headline)
@@ -40,7 +103,8 @@ struct SubmittedDiagnosticsSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
+
+                case let .loaded(records):
                     List(records, id: \.reportId) { record in
                         SubmittedDiagnosticsRow(record: record)
                     }
@@ -57,7 +121,7 @@ struct SubmittedDiagnosticsSheet: View {
                     Button("Clear", role: .destructive) {
                         alertState = .confirmClear
                     }
-                    .disabled(records.isEmpty)
+                    .disabled(!loadState.canClear)
                 }
             }
         }
@@ -84,13 +148,30 @@ struct SubmittedDiagnosticsSheet: View {
     }
 
     private func clearHistory() {
-        do {
-            try Database().diagnosticsReports().clear()
-            records = []
-            onRecordsChanged()
-        } catch {
-            alertState = .error(error.localizedDescription)
+        Task {
+            do {
+                try await Self.clearStoredHistory()
+                loadState = .loaded([])
+                onRecordsChanged()
+            } catch {
+                alertState = .error(error.localizedDescription)
+            }
         }
+    }
+
+    private func reloadHistory() {
+        loadState = .loading
+
+        Task {
+            loadState = await loadSubmittedDiagnosticsHistory()
+            onRecordsChanged()
+        }
+    }
+
+    private nonisolated static func clearStoredHistory() async throws {
+        try await Task.detached {
+            try Database().diagnosticsReports().clear()
+        }.value
     }
 }
 
@@ -138,18 +219,20 @@ private struct SubmittedDiagnosticsRow: View {
 
 #Preview {
     SubmittedDiagnosticsSheet(
-        records: [
-            DiagnosticsReportRecord(
-                reportId: "diag_01JZV1ABCDEF",
-                submittedAt: 1_783_529_280,
-                description: "App froze after scanning a QR code on the send screen."
-            ),
-            DiagnosticsReportRecord(
-                reportId: "diag_01JZV1XYZ123",
-                submittedAt: 1_783_532_400,
-                description: nil
-            ),
-        ],
+        loadState: .loaded(
+            [
+                DiagnosticsReportRecord(
+                    reportId: "diag_01JZV1ABCDEF",
+                    submittedAt: 1_783_529_280,
+                    description: "App froze after scanning a QR code on the send screen."
+                ),
+                DiagnosticsReportRecord(
+                    reportId: "diag_01JZV1XYZ123",
+                    submittedAt: 1_783_532_400,
+                    description: nil
+                ),
+            ]
+        ),
         onRecordsChanged: {}
     )
 }

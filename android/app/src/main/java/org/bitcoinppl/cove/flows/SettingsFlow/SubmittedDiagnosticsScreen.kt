@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +49,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DiagnosticsReportRecord
@@ -58,13 +66,17 @@ fun SubmittedDiagnosticsScreen(
     onDismiss: () -> Unit,
     onRecordsChanged: () -> Unit,
     modifier: Modifier = Modifier,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    var records by remember { mutableStateOf<List<DiagnosticsReportRecord>>(emptyList()) }
+    val coroutineScope = rememberCoroutineScope()
+    var loadState by remember {
+        mutableStateOf<SubmittedDiagnosticsLoadState>(SubmittedDiagnosticsLoadState.Loading)
+    }
     var showClearConfirmation by remember { mutableStateOf(false) }
     var actionError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        records = loadSubmittedDiagnosticsRecords()
+        loadState = loadSubmittedDiagnosticsRecords(ioDispatcher)
     }
 
     Scaffold(
@@ -74,14 +86,20 @@ fun SubmittedDiagnosticsScreen(
                 .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = {
             SubmittedDiagnosticsTopBar(
-                hasRecords = records.isNotEmpty(),
+                canClear = loadState.canClear,
                 onDismiss = onDismiss,
                 onClear = { showClearConfirmation = true },
             )
         },
     ) { paddingValues ->
         SubmittedDiagnosticsBody(
-            records = records,
+            loadState = loadState,
+            onRetry = {
+                coroutineScope.launch {
+                    loadState = SubmittedDiagnosticsLoadState.Loading
+                    loadState = loadSubmittedDiagnosticsRecords(ioDispatcher)
+                }
+            },
             paddingValues = paddingValues,
         )
     }
@@ -91,12 +109,18 @@ fun SubmittedDiagnosticsScreen(
         onDismiss = { showClearConfirmation = false },
         onConfirm = {
             showClearConfirmation = false
-            try {
-                Database().diagnosticsReports().clear()
-                records = emptyList()
-                onRecordsChanged()
-            } catch (error: Exception) {
-                actionError = error.displayMessage()
+            coroutineScope.launch {
+                try {
+                    withContext(ioDispatcher) {
+                        Database().diagnosticsReports().clear()
+                    }
+                    loadState = SubmittedDiagnosticsLoadState.Loaded(emptyList())
+                    onRecordsChanged()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    actionError = error.displayMessage()
+                }
             }
         },
     )
@@ -118,7 +142,7 @@ fun SubmittedDiagnosticsScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SubmittedDiagnosticsTopBar(
-    hasRecords: Boolean,
+    canClear: Boolean,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -139,12 +163,12 @@ private fun SubmittedDiagnosticsTopBar(
         actions = {
             TextButton(
                 onClick = onClear,
-                enabled = hasRecords,
+                enabled = canClear,
             ) {
                 Text(
                     text = "Clear",
                     color =
-                        if (hasRecords) {
+                        if (canClear) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -157,6 +181,77 @@ private fun SubmittedDiagnosticsTopBar(
 
 @Composable
 private fun SubmittedDiagnosticsBody(
+    loadState: SubmittedDiagnosticsLoadState,
+    onRetry: () -> Unit,
+    paddingValues: PaddingValues,
+) {
+    when (loadState) {
+        SubmittedDiagnosticsLoadState.Loading -> {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Text(
+                        text = "Loading submitted diagnostics...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+            return
+        }
+        is SubmittedDiagnosticsLoadState.Failed -> {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Submitted diagnostics unavailable",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        text = loadState.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Button(
+                        onClick = onRetry,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp),
+                    ) {
+                        Text("Retry")
+                    }
+                }
+            }
+            return
+        }
+        is SubmittedDiagnosticsLoadState.Loaded -> {
+            SubmittedDiagnosticsRecordsBody(
+                records = loadState.records,
+                paddingValues = paddingValues,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubmittedDiagnosticsRecordsBody(
     records: List<DiagnosticsReportRecord>,
     paddingValues: PaddingValues,
 ) {
@@ -285,12 +380,24 @@ private fun ClearSubmittedDiagnosticsDialog(
     )
 }
 
-internal fun loadSubmittedDiagnosticsRecords(): List<DiagnosticsReportRecord> =
-    try {
+internal suspend fun loadSubmittedDiagnosticsRecords(
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    loadRecords: () -> List<DiagnosticsReportRecord> = {
         Database().diagnosticsReports().all()
-    } catch (error: Exception) {
+    },
+    logFailure: (Exception) -> Unit = { error ->
         Log.w(TAG, "Failed to load submitted diagnostics", error)
-        emptyList()
+    },
+): SubmittedDiagnosticsLoadState =
+    withContext(ioDispatcher) {
+        try {
+            SubmittedDiagnosticsLoadState.Loaded(loadRecords())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            logFailure(error)
+            SubmittedDiagnosticsLoadState.Failed(error.displayMessage())
+        }
     }
 
 private fun formattedSubmittedAt(timestamp: ULong): String =
@@ -298,3 +405,23 @@ private fun formattedSubmittedAt(timestamp: ULong): String =
         .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
         .withZone(ZoneId.systemDefault())
         .format(Instant.ofEpochSecond(timestamp.toLong()))
+
+internal sealed interface SubmittedDiagnosticsLoadState {
+    data object Loading : SubmittedDiagnosticsLoadState
+
+    data class Loaded(
+        val records: List<DiagnosticsReportRecord>,
+    ) : SubmittedDiagnosticsLoadState
+
+    data class Failed(
+        val message: String,
+    ) : SubmittedDiagnosticsLoadState
+}
+
+private val SubmittedDiagnosticsLoadState.canClear: Boolean
+    get() =
+        when (this) {
+            SubmittedDiagnosticsLoadState.Loading -> false
+            is SubmittedDiagnosticsLoadState.Loaded -> records.isNotEmpty()
+            is SubmittedDiagnosticsLoadState.Failed -> true
+        }
