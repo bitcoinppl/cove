@@ -31,7 +31,7 @@ async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
 
     assert!(matches!(
         manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message) if message.contains("upload failed")
+        CloudSyncHealth::Failed(message) if message == GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
     ));
 }
 
@@ -94,6 +94,90 @@ async fn connected_connectivity_failure_retries_detail_refresh_once() {
         || manager.model_snapshot().detail.is_some(),
     )
     .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), false);
+    globals.cloud.fail_list_wallet_files("metadata timed out");
+
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(1), "expected incomplete detail inventory", || {
+        matches!(
+            manager.state().lifecycle,
+            CloudBackupLifecycle::Configured(ref configured)
+                if matches!(&configured.detail, CloudBackupDetailState::Failed { .. })
+        )
+    })
+    .await;
+
+    globals.cloud.clear_list_wallet_files_error();
+    let snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
+
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(6), "expected manual detail refresh", || {
+        globals.cloud.list_wallet_files_snapshot_attempt_count() > snapshot_attempts
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn provider_signal_reopens_only_an_owned_detail_inventory() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), true);
+
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(1), "expected complete detail inventory", || {
+        matches!(
+            manager.state().lifecycle,
+            CloudBackupLifecycle::Configured(ref configured)
+                if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
+        )
+    })
+    .await;
+    let complete_detail = manager.model_snapshot().detail.expect("expected loaded detail");
+
+    manager.cloud_storage_did_change();
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "expected provider signal checking state",
+        || {
+            matches!(
+                manager.state().lifecycle,
+                CloudBackupLifecycle::Configured(ref configured)
+                    if matches!(&configured.detail, CloudBackupDetailState::Checking { .. })
+            )
+        },
+    )
+    .await;
+
+    call!(manager.supervisor.close_detail()).await.unwrap();
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(complete_detail));
+    let snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
+
+    manager.cloud_storage_did_change();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::Configured(ref configured)
+            if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
+    ));
+    assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), snapshot_attempts);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -264,7 +348,10 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
 
     assert_eq!(
         manager.compute_sync_health().await,
-        CloudSyncHealth::AuthorizationRequired("failed".into()),
+        CloudSyncHealth::AuthorizationRequired(
+            "Cove couldn't access your cloud backup. Reconnect your cloud account, then try again."
+                .into(),
+        ),
     );
 
     resume_wallet_uploads_from_persisted_state_for_test_async(&manager).await;

@@ -17,14 +17,12 @@ impl CloudBackupSupervisor {
         match result {
             Ok(completion) => {
                 if let Err(error) = self.start_enable_recovery_finalization(claim, completion) {
-                    manager.rollback_enable_recovery_master_key();
-                    self.fail_enable_operation(&manager, claim, error);
+                    self.fail_enable_recovery_before_commit(&manager, claim, error);
                 }
             }
             Err(error) => {
-                manager.rollback_enable_recovery_master_key();
                 error!("enable recovery failed: {error}");
-                self.fail_enable_operation(&manager, claim, error);
+                self.fail_enable_recovery_before_commit(&manager, claim, error);
             }
         }
 
@@ -52,8 +50,7 @@ impl CloudBackupSupervisor {
                 }
 
                 let Some(addr) = self.addr() else {
-                    manager.rollback_enable_recovery_master_key();
-                    self.fail_enable_operation(
+                    self.fail_enable_recovery_before_commit(
                         &manager,
                         claim,
                         CloudBackupError::Internal(
@@ -95,23 +92,20 @@ impl CloudBackupSupervisor {
             cleanup_sources,
         } = completion;
 
-        CloudBackupKeychain::new(Keychain::global().clone())
-            .save_passkey_and_namespace(&credential_id, prf_salt, &namespace_id)
-            .map_err(|source| {
-                CloudBackupError::internal_context("save cspp credentials", source)
-            })?;
+        let manager = self
+            .manager()
+            .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
+        manager.begin_enable_recovery_local_promotion(&namespace_id, &credential_id, prf_salt)?;
 
-        self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
-            namespace_id: namespace_id.clone(),
-            credential_id,
-            prf_salt,
-        });
-
+        let pending_completion =
+            enable_pending_verification_completion(namespace_id.clone(), pending_uploads);
         let finalization = EnableRecoveryFinalization {
             context,
             namespace_id: namespace_id.clone(),
+            credential_id,
+            prf_salt,
             active_critical_key,
-            pending_uploads,
+            pending_completion: pending_completion.clone(),
             cleanup_sources,
         };
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
@@ -121,7 +115,9 @@ impl CloudBackupSupervisor {
                     CloudStorage::global_explicit_client(),
                     namespace_id,
                     uploaded_wallets,
-                    CloudBackupUploadedWalletsStateMode::ResetVerification,
+                    CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
+                        pending_completion,
+                    ),
                 )
                 .await;
             send!(addr.complete_enable_recovery_finalization(claim, finalization, result));
@@ -144,55 +140,106 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(()) => {
-                let EnableRecoveryFinalization {
-                    context,
-                    namespace_id,
-                    active_critical_key,
-                    pending_uploads,
-                    cleanup_sources,
-                } = finalization;
-                call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
-                    cloud: CloudStorage::global_explicit_client(),
-                    active_namespace_id: namespace_id.clone(),
-                    active_critical_key: *active_critical_key,
-                    sources: cleanup_sources,
-                }))
-                .await
-                .map_err(CloudBackupError::internal)?;
-
-                let should_finalize_now = pending_uploads.is_empty();
-                let report = DeepVerificationReport {
-                    master_key_wrapper_repaired: false,
-                    local_master_key_repaired: false,
-                    credential_recovered: false,
-                    wallets_verified: 0,
-                    wallets_failed: 0,
-                    wallets_unsupported: 0,
-                    detail: None,
-                };
-                manager.replace_pending_verification_completion_for_source(
-                    PendingVerificationCompletion::new(report, namespace_id, pending_uploads),
-                    context.verification_source,
-                );
-                manager.apply_verification_state(VerificationState::Idle);
-                self.pending_enable_session = None;
-                manager.clear_enable_progress(CloudBackupStatus::Enabled);
-                manager.refresh_persisted_flags();
-                if should_finalize_now {
-                    manager.finalize_pending_verification_if_ready().await;
+        let EnableRecoveryFinalization {
+            context,
+            namespace_id,
+            credential_id,
+            prf_salt,
+            active_critical_key,
+            pending_completion,
+            cleanup_sources,
+        } = finalization;
+        let should_finalize_now = pending_completion.uploads().is_empty();
+        let activation = manager.activate_persisted_pending_verification_completion_for_source(
+            pending_completion,
+            context.verification_source,
+        );
+        match (result, activation) {
+            (Err(error), Err(_)) => {
+                if let Err(rollback) = manager.restore_pending_enable_local_promotion_for_retry() {
+                    self.fail_enable_operation(
+                        &manager,
+                        claim,
+                        CloudBackupError::Internal(
+                            format!(
+                                "enable recovery finalization failed: {error}; local rollback failed: {rollback}"
+                            )
+                            .into(),
+                        ),
+                    );
+                } else {
+                    self.fail_enable_operation(&manager, claim, error);
                 }
-
-                info!("Cloud backup enabled (recovered existing namespace)");
-                self.finish_enable_operation(manager, claim);
+                return Produces::ok(());
             }
-            Err(error) => {
-                manager.rollback_enable_recovery_master_key();
+            (Ok(()), Err(error)) => {
                 self.fail_enable_operation(&manager, claim, error);
+                return Produces::ok(());
             }
+            (Err(error), Ok(())) => {
+                warn!(
+                    "Recovered enable local blob finalization was incomplete after durable confirmation was persisted: {error}"
+                );
+            }
+            (Ok(()), Ok(())) => {}
         }
 
+        // reset verification while the pending-enable journal still owns completion
+        manager.apply_verification_state(VerificationState::Idle);
+        if let Err(error) = manager.commit_pending_enable_local_promotion() {
+            self.fail_enable_operation(&manager, claim, error);
+            return Produces::ok(());
+        }
+
+        self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
+            namespace_id: namespace_id.clone(),
+            credential_id,
+            prf_salt,
+        });
+        if let Err(error) = call!(self.cleanup.enqueue_cleanup(CloudBackupCleanupJob {
+            cloud: CloudStorage::global_explicit_client(),
+            active_namespace_id: namespace_id.clone(),
+            active_critical_key: *active_critical_key,
+            sources: cleanup_sources,
+        }))
+        .await
+        {
+            warn!(
+                "Recovered enable committed, but merge-source cleanup could not be scheduled; retaining source backups: {error}"
+            );
+        }
+
+        self.pending_enable_session = None;
+        manager.clear_enable_progress(CloudBackupStatus::Enabled);
+        manager.refresh_persisted_flags();
+        if should_finalize_now {
+            manager.finalize_pending_verification_if_ready().await;
+        }
+
+        info!("Cloud backup enabled (recovered existing namespace)");
+        self.finish_enable_operation(manager, claim);
+
         Produces::ok(())
+    }
+
+    fn fail_enable_recovery_before_commit(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        claim: CloudBackupExclusiveOperationClaim,
+        error: CloudBackupError,
+    ) {
+        match manager.rollback_enable_recovery_master_key() {
+            Ok(()) => self.fail_enable_operation(manager, claim, error),
+            Err(rollback) => self.fail_enable_operation(
+                manager,
+                claim,
+                CloudBackupError::Internal(
+                    format!(
+                        "enable recovery failed: {error}; recovered local rollback failed: {rollback}"
+                    )
+                    .into(),
+                ),
+            ),
+        }
     }
 }

@@ -10,7 +10,8 @@ use crate::manager::cloud_backup_manager::wallets::{
     WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
+    BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
+    CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
     current_namespace_wallet_record_ids, is_connectivity_related_issue,
 };
 
@@ -76,7 +77,7 @@ impl RustCloudBackupManager {
                         report.wallets_failed += 1;
                         report
                             .failed_wallet_errors
-                            .push("wallet was listed but missing from cloud backup".to_string());
+                            .push(CloudBackupError::NoBackupFound.reader_message());
                         continue;
                     }
 
@@ -85,9 +86,7 @@ impl RustCloudBackupManager {
                             "Failed to recover wallet from other backup: unsupported wallet backup version {version}"
                         );
                         report.wallets_failed += 1;
-                        report.failed_wallet_errors.push(format!(
-                            "wallet uses unsupported wallet backup version {version}"
-                        ));
+                        report.failed_wallet_errors.push(CLOUD_BACKUP_COMPATIBILITY_MESSAGE.into());
                         continue;
                     }
 
@@ -100,7 +99,7 @@ impl RustCloudBackupManager {
                         }
                         warn!("Failed to recover wallet from other backup: {error}");
                         report.wallets_failed += 1;
-                        report.failed_wallet_errors.push(error.to_string());
+                        report.failed_wallet_errors.push(error.reader_message());
                         continue;
                     }
                 };
@@ -110,7 +109,9 @@ impl RustCloudBackupManager {
                         report.wallets_restored += 1;
                         if let Some(warning) = labels_warning {
                             report.labels_failed_wallet_names.push(warning.wallet_name);
-                            report.labels_failed_errors.push(warning.error);
+                            report
+                                .labels_failed_errors
+                                .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                         }
 
                         restored_wallets.push(wallet.metadata);
@@ -126,7 +127,7 @@ impl RustCloudBackupManager {
                         }
                         warn!("Failed to recover wallet from other backup: {error}");
                         report.wallets_failed += 1;
-                        report.failed_wallet_errors.push(error.to_string());
+                        report.failed_wallet_errors.push(error.reader_message());
                     }
                 };
             }

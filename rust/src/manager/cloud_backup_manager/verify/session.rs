@@ -26,10 +26,12 @@ use super::wrapper_repair::{
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
-    CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupRetryAction, CloudBackupStore,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PASSKEY_RP_ID,
-    PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
+    BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
+    CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupDetail,
+    CloudBackupError, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupRetryAction,
+    CloudBackupStore, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PASSKEY_RP_ID, PendingVerificationCompletion,
+    PendingVerificationUpload, RustCloudBackupManager,
     actors::CloudBackupUploadedWallet,
     blocking_cloud_error,
     cloud_inventory::{CloudWalletInventory, RemoteWalletTruth},
@@ -457,13 +459,11 @@ impl VerificationSession {
                 match encrypted.backup_version() {
                     Ok(MasterKeyBackupVersion::V1) => {}
                     Err(unsupported) => {
-                        let version = unsupported.0;
+                        let _version = unsupported.0;
                         return Ok(EncryptedMasterKeyStep::Finished(
                             DeepVerificationResult::Failed(
                                 DeepVerificationFailure::UnsupportedVersion {
-                                    message: format!(
-                                        "master key backup version {version} is not supported",
-                                    ),
+                                    message: CLOUD_BACKUP_COMPATIBILITY_MESSAGE.into(),
                                     detail: self.detail(),
                                 },
                             ),
@@ -480,9 +480,7 @@ impl VerificationSession {
                 }
 
                 Ok(EncryptedMasterKeyStep::Finished(
-                    self.reinitialize_result(
-                        "master key backup not found in iCloud and no local key",
-                    ),
+                    self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
                 ))
             }
 
@@ -518,7 +516,7 @@ impl VerificationSession {
                 }
 
                 return Ok(MasterKeyResolution::Finished(
-                    self.reinitialize_result("no passkey found and no local master key"),
+                    self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
                 ));
             }
         };
@@ -532,7 +530,10 @@ impl VerificationSession {
                     self.cloud_keychain.save_passkey(&authenticated.credential_id, prf_salt)
                 {
                     return Ok(MasterKeyResolution::Finished(
-                        self.retry_result(format!("save cspp credentials: {error}")),
+                        self.retry_result(
+                            CloudBackupError::internal_context("save cloud backup passkey", error)
+                                .reader_message(),
+                        ),
                     ));
                 }
 
@@ -550,9 +551,9 @@ impl VerificationSession {
                 },
             )),
             // without a local key there is no trusted source left to rebuild the cloud wrapper
-            Err(_) => Ok(MasterKeyResolution::Finished(self.reinitialize_result(
-                "could not decrypt cloud master key and no local key available",
-            ))),
+            Err(_) => Ok(MasterKeyResolution::Finished(
+                self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
+            )),
         }
     }
 
@@ -597,7 +598,7 @@ impl VerificationSession {
     ) -> Result<RepairedMasterKeyResolution, CloudBackupError> {
         let Some(local_master_key) = self.local_master_key.as_ref() else {
             return Ok(RepairedMasterKeyResolution::Finished(
-                self.reinitialize_result("no local master key available for wrapper repair"),
+                self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
             ));
         };
         let local_master_key = MasterKey::from_bytes(*local_master_key.as_bytes());
@@ -619,14 +620,12 @@ impl VerificationSession {
                 },
             ))),
 
-            Err(WrapperRepairError::WrongKey) => {
-                Ok(RepairedMasterKeyResolution::Finished(self.reinitialize_result(
-                    "local master key cannot decrypt existing cloud wallet backups",
-                )))
-            }
+            Err(WrapperRepairError::WrongKey) => Ok(RepairedMasterKeyResolution::Finished(
+                self.reinitialize_result(CLOUD_BACKUP_REINITIALIZE_MESSAGE),
+            )),
 
             Err(WrapperRepairError::Inconclusive) => Ok(RepairedMasterKeyResolution::Finished(
-                self.retry_result("could not download any wallet to verify local key"),
+                self.retry_result(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE),
             )),
 
             Err(WrapperRepairError::Operation(error)) => Err(error),
@@ -703,7 +702,7 @@ impl VerificationSession {
                 self.report.detail = Some(detail.clone());
                 if inventory.has_unknown_remote_wallets() {
                     return CloudBackupDeepVerificationStep::Complete(
-                        self.retry_result("failed to refresh remote wallet truth for some wallets"),
+                        self.retry_result(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE),
                     );
                 }
 
@@ -811,7 +810,7 @@ impl VerificationSession {
 
         if inventory.has_unknown_remote_wallets() {
             return CloudBackupDeepVerificationAutoSyncCompletion::complete(
-                self.retry_result("failed to refresh remote wallet truth for some wallets"),
+                self.retry_result(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE),
             );
         }
 
@@ -971,28 +970,28 @@ impl VerificationSession {
         let retry_action =
             is_connectivity_related_issue(&error).then_some(self.connectivity_retry_action());
 
-        self.retry_result_with_context(error.to_string(), retry_action)
+        self.retry_result_with_context(error.reader_message(), retry_action)
     }
 
     fn cloud_backup_retry_result(
         &self,
-        context: &'static str,
+        _context: &'static str,
         error: &CloudBackupError,
     ) -> DeepVerificationResult {
         if is_connectivity_related_issue(error) {
             return self.retry_result_with_context(
-                offline_error_for_step(BlockingCloudStep::Verify).to_string(),
+                offline_error_for_step(BlockingCloudStep::Verify).reader_message(),
                 Some(self.connectivity_retry_action()),
             );
         }
 
-        self.retry_result(format!("{context}: {error}"))
+        self.retry_result(error.reader_message())
     }
 
     /// Builds the failure shown when wallet blobs are missing but local data can recreate the manifest
     fn recreate_manifest_result(&self) -> DeepVerificationResult {
         DeepVerificationResult::Failed(DeepVerificationFailure::RecreateManifest {
-            message: "wallet backups not found in iCloud namespace".into(),
+            message: CLOUD_BACKUP_RECREATE_MESSAGE.into(),
             warning: RECREATE_WARNING.into(),
             detail: self.detail(),
         })

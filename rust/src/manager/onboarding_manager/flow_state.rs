@@ -110,6 +110,7 @@ pub(crate) enum FlowState {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum TransitionCommand {
     None,
+    RequestCloudCheck,
     StartCloudCheck,
     CreateWallet(OnboardingBranch),
     StartRestore { attempt_id: u64 },
@@ -148,17 +149,22 @@ pub(crate) enum CloudRestoreDiscovery {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OnboardingCloudBackupEnableStart {
-    ConfirmExistingBackup(Option<CloudRestoreProviderHint>),
+    ConfirmKnownBackup(Option<CloudRestoreProviderHint>),
+    RequireExistingPasskey,
+    ChooseExistingOrNew,
     CreateNewPasskey,
 }
 
 impl OnboardingCloudBackupEnableStart {
-    pub(crate) fn from_discovery(discovery: CloudRestoreDiscovery) -> Self {
+    pub(crate) fn from_discovery(discovery: CloudRestoreDiscovery) -> Option<Self> {
         match discovery {
-            CloudRestoreDiscovery::BackupFound(hint) => Self::ConfirmExistingBackup(hint),
-            CloudRestoreDiscovery::Checking
-            | CloudRestoreDiscovery::NoBackupFound
-            | CloudRestoreDiscovery::Inconclusive(_) => Self::CreateNewPasskey,
+            CloudRestoreDiscovery::Checking => None,
+            CloudRestoreDiscovery::BackupFound(hint) => Some(Self::ConfirmKnownBackup(hint)),
+            CloudRestoreDiscovery::Inconclusive(CloudCheckIssue::BackupMetadataPending) => {
+                Some(Self::RequireExistingPasskey)
+            }
+            CloudRestoreDiscovery::Inconclusive(_) => Some(Self::ChooseExistingOrNew),
+            CloudRestoreDiscovery::NoBackupFound => Some(Self::CreateNewPasskey),
         }
     }
 }
@@ -221,6 +227,12 @@ impl InternalState {
             &mut self.restore_offer_allowed,
             restore_attempt_id,
         );
+        let command = if command == TransitionCommand::RequestCloudCheck {
+            self.cloud_restore_discovery = CloudRestoreDiscovery::Checking;
+            self.request_cloud_check()
+        } else {
+            command
+        };
         if matches!(action, OnboardingAction::DismissCloudRestoreAlert)
             && matches!(self.flow, FlowState::HardwareImport | FlowState::SoftwareImport { .. })
         {
@@ -413,6 +425,15 @@ impl FlowState {
         let current = std::mem::replace(self, Self::Welcome { error_message: None });
 
         let (next, command) = match (current, action) {
+            (Self::CloudCheck { origin }, OnboardingAction::ContinueSetup) => {
+                (origin.flow_state(), TransitionCommand::None)
+            }
+            (Self::RestoreUnavailable { origin }, OnboardingAction::CheckCloudRestoreAgain) => {
+                (Self::CloudCheck { origin }, TransitionCommand::RequestCloudCheck)
+            }
+            (Self::RestoreUnavailable { origin }, OnboardingAction::ContinueSetup) => {
+                (origin.flow_state(), TransitionCommand::None)
+            }
             (Self::Welcome { .. }, OnboardingAction::ContinueFromWelcome) => {
                 (Self::BitcoinChoice { error_message: None }, TransitionCommand::None)
             }
@@ -471,6 +492,14 @@ impl FlowState {
             }
             (Self::BackupWallet(flow), OnboardingAction::OpenCloudBackup) => {
                 (Self::CloudBackup(CloudBackupFlow::CreatedWallet(flow)), TransitionCommand::None)
+            }
+            (state @ Self::CloudBackup(_), OnboardingAction::BeginCloudBackupEnable)
+                if cloud_restore_discovery == CloudRestoreDiscovery::Checking =>
+            {
+                warn!(
+                    "Onboarding: cloud backup enable requested while restore discovery is checking"
+                );
+                (state, TransitionCommand::None)
             }
             (state @ Self::CloudBackup(_), OnboardingAction::BeginCloudBackupEnable) => (
                 state,
@@ -1051,9 +1080,9 @@ impl FlowState {
     fn restore_inconclusive_entry_for(issue: CloudCheckIssue, origin: RestoreOrigin) -> Self {
         match issue {
             CloudCheckIssue::Offline => Self::RestoreOffline { origin },
-            CloudCheckIssue::CloudUnavailable | CloudCheckIssue::Unknown => {
-                Self::RestoreOffer { origin, error_message: None }
-            }
+            CloudCheckIssue::CloudUnavailable
+            | CloudCheckIssue::BackupMetadataPending
+            | CloudCheckIssue::Unknown => Self::RestoreOffer { origin, error_message: None },
         }
     }
 
@@ -1234,6 +1263,148 @@ mod tests {
     }
 
     #[test]
+    fn continue_setup_during_check_keeps_late_discovery_active() {
+        let mut state =
+            InternalState::new(FlowState::CloudCheck { origin: RestoreOrigin::Welcome });
+
+        assert_eq!(
+            apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+            TransitionCommand::StartCloudCheck
+        );
+
+        let (command, _) = apply_action(&mut state, OnboardingAction::ContinueSetup);
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
+        assert!(matches!(state.flow, FlowState::Welcome { error_message: None }));
+
+        let (command, _) = apply_event(
+            &mut state,
+            InternalEvent::CloudCheckFinished {
+                outcome: CloudCheckOutcome::BackupFound(None),
+                connected: true,
+            },
+        );
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::Idle);
+        assert!(matches!(
+            state.flow,
+            FlowState::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None }
+        ));
+    }
+
+    #[test]
+    fn late_backup_found_offers_restore_from_choice_steps() {
+        let cases = [
+            (FlowState::BitcoinChoice { error_message: None }, RestoreOrigin::BitcoinChoice),
+            (FlowState::StorageChoice { error_message: None }, RestoreOrigin::StorageChoice),
+        ];
+
+        for (flow, expected_origin) in cases {
+            let mut state = InternalState::new(flow);
+
+            assert_eq!(
+                apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+                TransitionCommand::StartCloudCheck
+            );
+
+            let (command, _) = apply_event(
+                &mut state,
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(None),
+                    connected: true,
+                },
+            );
+
+            assert_eq!(command, TransitionCommand::None);
+            assert_eq!(state.cloud_check, CloudCheckState::Idle);
+            assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::BackupFound(None));
+            assert!(matches!(
+                state.flow,
+                FlowState::RestoreOffer { origin, error_message: None }
+                    if origin == expected_origin
+            ));
+            assert_eq!(state.ui.step, OnboardingStep::RestoreOffer);
+        }
+    }
+
+    #[test]
+    fn late_backup_found_shows_once_only_alert_on_import_steps() {
+        let cases = [
+            (FlowState::HardwareImport, OnboardingStep::HardwareImport),
+            (FlowState::SoftwareImport { error_message: None }, OnboardingStep::SoftwareImport),
+        ];
+
+        for (flow, expected_step) in cases {
+            let mut state = InternalState::new(flow);
+
+            assert_eq!(
+                apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+                TransitionCommand::StartCloudCheck
+            );
+
+            let (command, _) = apply_event(
+                &mut state,
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(None),
+                    connected: true,
+                },
+            );
+
+            assert_eq!(command, TransitionCommand::None);
+            assert_eq!(state.ui.step, expected_step);
+            assert!(state.ui.should_offer_cloud_restore);
+            assert!(state.ui.cloud_restore_alert_visible);
+
+            let (command, _) = apply_action(&mut state, OnboardingAction::DismissCloudRestoreAlert);
+
+            assert_eq!(command, TransitionCommand::None);
+            assert!(state.cloud_restore_alert_dismissed);
+            assert!(!state.ui.cloud_restore_alert_visible);
+
+            assert_eq!(
+                apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+                TransitionCommand::StartCloudCheck
+            );
+            let (command, _) = apply_event(
+                &mut state,
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(None),
+                    connected: true,
+                },
+            );
+
+            assert_eq!(command, TransitionCommand::None);
+            assert_eq!(state.ui.step, expected_step);
+            assert!(state.ui.should_offer_cloud_restore);
+            assert!(!state.ui.cloud_restore_alert_visible);
+        }
+    }
+
+    #[test]
+    fn check_again_from_empty_reenters_checking_with_owned_request() {
+        let mut state =
+            InternalState::new(FlowState::RestoreUnavailable { origin: RestoreOrigin::Welcome });
+        state.cloud_restore_discovery = CloudRestoreDiscovery::NoBackupFound;
+
+        let (command, _) = apply_action(&mut state, OnboardingAction::CheckCloudRestoreAgain);
+
+        assert_eq!(command, TransitionCommand::StartCloudCheck);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::Checking);
+        assert!(matches!(state.flow, FlowState::CloudCheck { origin: RestoreOrigin::Welcome }));
+        assert_eq!(state.ui.step, OnboardingStep::CloudCheck);
+        assert_eq!(state.ui.cloud_restore_state, OnboardingCloudRestoreState::Checking);
+
+        let (command, _) = apply_action(&mut state, OnboardingAction::CheckCloudRestoreAgain);
+
+        assert_eq!(command, TransitionCommand::None);
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+    }
+
+    #[test]
     fn queued_cloud_check_retry_is_consumed_by_offline_finish() {
         let mut state =
             InternalState::new(FlowState::CloudCheck { origin: RestoreOrigin::Welcome });
@@ -1309,6 +1480,17 @@ mod tests {
     ) -> (TransitionCommand, Vec<SingleOrMany<Message>>) {
         let (mut deferred, receiver) = deferred_sender();
         let command = state.apply_event(event, &mut deferred);
+        drop(deferred);
+
+        (command, receiver.try_iter().collect())
+    }
+
+    fn apply_action(
+        state: &mut InternalState,
+        action: OnboardingAction,
+    ) -> (TransitionCommand, Vec<SingleOrMany<Message>>) {
+        let (mut deferred, receiver) = deferred_sender();
+        let command = state.apply_user_action(action, &mut deferred);
         drop(deferred);
 
         (command, receiver.try_iter().collect())

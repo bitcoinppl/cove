@@ -10,7 +10,10 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use super::{CreatedWalletFlow, FlowState, OnboardingBranch, RustOnboardingManager, TermsContext};
+use super::{
+    CreatedWalletFlow, FlowState, OnboardingBranch, RustOnboardingManager, TermsContext,
+    flow_state::CloudBackupFlow,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct InitialFlowResolution {
@@ -100,7 +103,11 @@ impl From<CreatedWalletFlow> for OnboardingProgress {
 }
 
 impl OnboardingProgress {
-    pub(crate) fn restore_flow<F>(&self, load_mnemonic: F) -> Option<FlowState>
+    pub(crate) fn restore_flow<F>(
+        &self,
+        should_resume_onboarding_enable: bool,
+        load_mnemonic: F,
+    ) -> Option<FlowState>
     where
         F: FnOnce(&WalletId, Network, WalletMode) -> Option<bip39::Mnemonic>,
     {
@@ -116,7 +123,7 @@ impl OnboardingProgress {
                 let mnemonic = load_mnemonic(wallet_id, *network, *wallet_mode)?;
                 let created_words = mnemonic.words().map(str::to_string).collect();
 
-                Some(FlowState::BackupWallet(CreatedWalletFlow {
+                let flow = CreatedWalletFlow {
                     branch: *branch,
                     wallet_id: wallet_id.clone(),
                     network: *network,
@@ -125,7 +132,13 @@ impl OnboardingProgress {
                     word_validator: Arc::new(WordValidator::new(mnemonic)),
                     cloud_backup_enabled: *cloud_backup_enabled,
                     secret_words_saved: *secret_words_saved,
-                }))
+                };
+
+                if should_resume_onboarding_enable {
+                    Some(FlowState::CloudBackup(CloudBackupFlow::CreatedWallet(flow)))
+                } else {
+                    Some(FlowState::BackupWallet(flow))
+                }
             }
         }
     }
@@ -142,24 +155,27 @@ fn default_initial_flow(has_wallets: bool) -> FlowState {
 pub(crate) fn resolve_initial_flow<F>(
     progress: Option<OnboardingProgress>,
     has_wallets: bool,
+    should_resume_onboarding_enable: bool,
     load_mnemonic: F,
 ) -> InitialFlowResolution
 where
     F: FnOnce(&WalletId, Network, WalletMode) -> Option<bip39::Mnemonic>,
 {
     match progress {
-        Some(progress) => match progress.restore_flow(load_mnemonic) {
-            Some(flow) => InitialFlowResolution {
-                flow,
-                clear_persisted_progress: false,
-                start_cloud_check: false,
-            },
-            None => InitialFlowResolution {
-                flow: default_initial_flow(has_wallets),
-                clear_persisted_progress: true,
-                start_cloud_check: !has_wallets,
-            },
-        },
+        Some(progress) => {
+            match progress.restore_flow(should_resume_onboarding_enable, load_mnemonic) {
+                Some(flow) => InitialFlowResolution {
+                    flow,
+                    clear_persisted_progress: false,
+                    start_cloud_check: false,
+                },
+                None => InitialFlowResolution {
+                    flow: default_initial_flow(has_wallets),
+                    clear_persisted_progress: true,
+                    start_cloud_check: !has_wallets,
+                },
+            }
+        }
         None => InitialFlowResolution {
             flow: default_initial_flow(has_wallets),
             clear_persisted_progress: false,

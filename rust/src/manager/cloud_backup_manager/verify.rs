@@ -89,7 +89,7 @@ impl RustCloudBackupManager {
         });
 
         DeepVerificationResult::Failed(DeepVerificationFailure::retry(
-            error.to_string(),
+            error.reader_message(),
             None,
             retry_action,
         ))
@@ -306,7 +306,7 @@ impl RustCloudBackupManager {
     pub(crate) fn finish_passkey_wrapper_repair(
         &self,
         uploaded: CloudBackupUploadedPasskeyWrapperRepair,
-    ) {
+    ) -> Result<(), CloudBackupError> {
         self.replace_pending_verification_completion(PendingVerificationCompletion::new(
             DeepVerificationReport {
                 master_key_wrapper_repaired: true,
@@ -319,9 +319,10 @@ impl RustCloudBackupManager {
             },
             uploaded.namespace_id,
             vec![PendingVerificationUpload::master_key_wrapper()],
-        ));
+        ))?;
 
         info!("Repaired cloud master key wrapper with repaired passkey association");
+        Ok(())
     }
 
     pub(crate) async fn prepare_passkey_repair_finalization(
@@ -489,6 +490,7 @@ mod tests {
             verification,
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
+            pending_restore_all: None,
         })
     }
 

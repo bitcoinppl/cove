@@ -19,7 +19,7 @@ pub use state::{
     PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
     PersistedConfiguredCloudBackup, PersistedDeepVerificationReport, PersistedDisablingCloudBackup,
     PersistedPasskeyState, PersistedPendingVerificationCompletion,
-    PersistedPendingVerificationUpload,
+    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -65,6 +65,7 @@ impl CloudBackupStateTable {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn delete(&self) -> Result<(), Error> {
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
@@ -222,7 +223,66 @@ mod tests {
             verification,
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
+            pending_restore_all: None,
         })
+    }
+
+    #[test]
+    fn pending_restore_all_marker_requires_configured_state() {
+        let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
+        let mut disabled = PersistedCloudBackupState::Disabled;
+
+        assert!(!disabled.replace_pending_restore_all(marker));
+        assert!(disabled.pending_restore_all().is_none());
+        assert!(!disabled.clear_pending_restore_all());
+    }
+
+    #[test]
+    fn pending_restore_all_marker_replaces_and_clears() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            None,
+            Some(2),
+        );
+        let first = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
+        let second = PersistedRestoreAllMarker { namespace_id: "namespace-2".into() };
+
+        assert!(state.replace_pending_restore_all(first));
+        assert!(state.replace_pending_restore_all(second.clone()));
+        assert_eq!(state.pending_restore_all(), Some(&second));
+        assert!(state.clear_pending_restore_all());
+        assert!(state.pending_restore_all().is_none());
+        assert!(!state.clear_pending_restore_all());
+    }
+
+    #[test]
+    fn enabling_preserves_pending_restore_all_marker() {
+        let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            None,
+            Some(2),
+        );
+        assert!(state.replace_pending_restore_all(marker.clone()));
+
+        let enabled = state.mark_enabled_preserving_verification(20, 3);
+
+        assert_eq!(enabled.pending_restore_all(), Some(&marker));
+    }
+
+    #[test]
+    fn reset_enable_does_not_inherit_pending_restore_all_marker() {
+        let enabled = PersistedCloudBackupState::mark_enabled_reset_verification(20, 3);
+
+        assert!(enabled.pending_restore_all().is_none());
     }
 
     #[test]

@@ -1,7 +1,150 @@
+use cove_cspp::backup_data::PasskeyProviderHint;
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use super::wallets::{StagedPrfKey, UnpersistedPrfKey};
 use super::{CloudBackupEnableContext, CloudBackupError};
+
+pub(crate) const PENDING_ENABLE_JOURNAL_VERSION: u8 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PendingEnablePasskeyMetadata {
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: [u8; 32],
+    pub(crate) provider_hint: Option<PasskeyProviderHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum PendingEnableJournalPhase {
+    Staged,
+    PasskeyRegistered(PendingEnablePasskeyMetadata),
+    RemoteWritesStarted(PendingEnablePasskeyMetadata),
+    LocalPromotionStarted(PendingEnablePasskeyMetadata),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum PendingEnableNamespaceOwnership {
+    FreshOwned,
+    RecoveredExisting,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PendingEnableLocalMetadataSnapshot {
+    pub(crate) credential_id: Option<String>,
+    pub(crate) prf_salt: Option<String>,
+    pub(crate) namespace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PendingEnableJournal {
+    version: u8,
+    context: CloudBackupEnableContext,
+    namespace_id: String,
+    namespace_ownership: PendingEnableNamespaceOwnership,
+    phase: PendingEnableJournalPhase,
+    previous_metadata: PendingEnableLocalMetadataSnapshot,
+}
+
+impl PendingEnableJournal {
+    pub(crate) fn staged(
+        context: CloudBackupEnableContext,
+        namespace_id: String,
+        namespace_ownership: PendingEnableNamespaceOwnership,
+        previous_metadata: PendingEnableLocalMetadataSnapshot,
+    ) -> Self {
+        Self {
+            version: PENDING_ENABLE_JOURNAL_VERSION,
+            context,
+            namespace_id,
+            namespace_ownership,
+            phase: PendingEnableJournalPhase::Staged,
+            previous_metadata,
+        }
+    }
+
+    pub(crate) fn context(&self) -> CloudBackupEnableContext {
+        self.context
+    }
+
+    pub(crate) fn version(&self) -> u8 {
+        self.version
+    }
+
+    pub(crate) fn namespace_id(&self) -> &str {
+        &self.namespace_id
+    }
+
+    pub(crate) fn namespace_ownership(&self) -> PendingEnableNamespaceOwnership {
+        self.namespace_ownership
+    }
+
+    pub(crate) fn phase(&self) -> &PendingEnableJournalPhase {
+        &self.phase
+    }
+
+    pub(crate) fn passkey(&self) -> Option<&PendingEnablePasskeyMetadata> {
+        match &self.phase {
+            PendingEnableJournalPhase::Staged => None,
+            PendingEnableJournalPhase::PasskeyRegistered(passkey)
+            | PendingEnableJournalPhase::RemoteWritesStarted(passkey)
+            | PendingEnableJournalPhase::LocalPromotionStarted(passkey) => Some(passkey),
+        }
+    }
+
+    pub(crate) fn previous_metadata(&self) -> &PendingEnableLocalMetadataSnapshot {
+        &self.previous_metadata
+    }
+
+    pub(crate) fn register_passkey(&mut self, passkey: PendingEnablePasskeyMetadata) -> bool {
+        match &self.phase {
+            PendingEnableJournalPhase::Staged => {
+                self.phase = PendingEnableJournalPhase::PasskeyRegistered(passkey);
+                true
+            }
+            PendingEnableJournalPhase::PasskeyRegistered(current)
+            | PendingEnableJournalPhase::RemoteWritesStarted(current)
+            | PendingEnableJournalPhase::LocalPromotionStarted(current) => *current == passkey,
+        }
+    }
+
+    pub(crate) fn mark_remote_writes_started(&mut self) -> bool {
+        match &self.phase {
+            PendingEnableJournalPhase::PasskeyRegistered(passkey) => {
+                self.phase = PendingEnableJournalPhase::RemoteWritesStarted(passkey.clone());
+                true
+            }
+            PendingEnableJournalPhase::RemoteWritesStarted(_)
+            | PendingEnableJournalPhase::LocalPromotionStarted(_) => true,
+            PendingEnableJournalPhase::Staged => false,
+        }
+    }
+
+    pub(crate) fn mark_local_promotion_started(&mut self) -> bool {
+        match &self.phase {
+            PendingEnableJournalPhase::RemoteWritesStarted(passkey) => {
+                self.phase = PendingEnableJournalPhase::LocalPromotionStarted(passkey.clone());
+                true
+            }
+            PendingEnableJournalPhase::LocalPromotionStarted(_) => true,
+            PendingEnableJournalPhase::Staged | PendingEnableJournalPhase::PasskeyRegistered(_) => {
+                false
+            }
+        }
+    }
+
+    pub(crate) fn roll_back_local_promotion(&mut self) -> bool {
+        match &self.phase {
+            PendingEnableJournalPhase::LocalPromotionStarted(passkey) => {
+                self.phase = PendingEnableJournalPhase::RemoteWritesStarted(passkey.clone());
+                true
+            }
+            PendingEnableJournalPhase::RemoteWritesStarted(_) => true,
+            PendingEnableJournalPhase::Staged | PendingEnableJournalPhase::PasskeyRegistered(_) => {
+                false
+            }
+        }
+    }
+}
 
 pub(crate) struct PendingEnableSessionMaterial {
     master_key: Zeroizing<cove_cspp::master_key::MasterKey>,

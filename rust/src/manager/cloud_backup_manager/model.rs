@@ -8,9 +8,9 @@ use super::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupError,
     CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
     CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudOnlyOperation, CloudOnlyState, OtherBackupsOperation,
-    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
-    is_connectivity_related_issue,
+    CloudBackupVerificationReason, CloudBackupWalletStatus, CloudOnlyOperation, CloudOnlyState,
+    OtherBackupsOperation, PendingUploadVerificationState, RecoveryAction, RecoveryState,
+    SyncState, VerificationState, is_connectivity_related_issue,
 };
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
@@ -22,13 +22,15 @@ mod state_types;
 
 pub(crate) use self::events::{
     CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
-    CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect, CloudBackupStateReducerEffects,
+    CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect,
+    CloudBackupRestoreAllRuntimeState, CloudBackupStateReducerEffects,
     CloudBackupStateReducerEvent, CloudBackupStateReducerEventRejection,
 };
 pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
-    CloudBackupEnableFlow, CloudBackupFailure, CloudBackupLifecycle, CloudBackupPasskeyRepairState,
-    CloudBackupPasskeyState, CloudBackupRestoreFlow, CloudBackupSyncState,
+    CloudBackupEnableFlow, CloudBackupFailure, CloudBackupInventoryIncompleteReason,
+    CloudBackupLifecycle, CloudBackupPasskeyRepairState, CloudBackupPasskeyState,
+    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupSyncState,
     CloudBackupVerificationState, LoadedCloudBackupDetail,
 };
 
@@ -80,6 +82,20 @@ impl CloudBackupDetailResult {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct CloudBackupDetailInventorySnapshot {
+    pub(crate) namespace: String,
+    pub(crate) wallet_record_ids: Vec<String>,
+    pub(crate) is_complete: bool,
+    pub(crate) provisional_detail: Option<CloudBackupDetail>,
+}
+
+#[derive(Debug)]
+pub(crate) enum CloudBackupDetailInventorySnapshotResult {
+    Success(CloudBackupDetailInventorySnapshot),
+    AccessError(CloudBackupError),
+}
+
 /// Private reducer wrapper that projects public Cloud Backup state
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CloudBackupStateReducer {
@@ -92,6 +108,7 @@ struct CloudBackupReducerState {
     configured: CloudBackupConfiguredReducerState,
     active_operation: Option<CloudBackupExclusiveOperationClaim>,
     active_enable_context: Option<CloudBackupEnableContext>,
+    restore_all: CloudBackupRestoreAllRuntimeState,
     sync_health: CloudSyncHealth,
     missing_passkey_dismissed: bool,
     should_prompt_verification: bool,
@@ -132,6 +149,7 @@ impl Default for CloudBackupReducerState {
             configured: CloudBackupConfiguredReducerState::default(),
             active_operation: None,
             active_enable_context: None,
+            restore_all: CloudBackupRestoreAllRuntimeState::Idle,
             sync_health: CloudSyncHealth::Unknown,
             missing_passkey_dismissed: false,
             should_prompt_verification: false,
@@ -188,10 +206,71 @@ impl CloudBackupReducerState {
             sync: self.configured.sync.clone(),
             destructive_operation: self.public_destructive_operation(),
             detail: self.configured.detail.clone(),
+            restore_all: self.public_restore_all_state(),
             root_prompt: self.root_prompt(),
             sync_health: self.sync_health.clone(),
             verification_presentation: self.verification_presentation.clone(),
         }
+    }
+
+    fn public_restore_all_state(&self) -> CloudBackupRestoreAllState {
+        let wallet_count = self.restore_all_eligible_wallet_count();
+
+        match &self.restore_all {
+            CloudBackupRestoreAllRuntimeState::Running {
+                completed,
+                total,
+                current_wallet_name,
+                cancellation_requested,
+            } => CloudBackupRestoreAllState::Running {
+                completed: *completed,
+                total: *total,
+                current_wallet_name: current_wallet_name.clone(),
+                cancellation_requested: *cancellation_requested,
+            },
+            CloudBackupRestoreAllRuntimeState::RetryRemaining => {
+                if wallet_count == 0 {
+                    return CloudBackupRestoreAllState::NotShown;
+                }
+
+                if self.restore_all_action_is_available() {
+                    CloudBackupRestoreAllState::RetryAvailable { wallet_count }
+                } else {
+                    CloudBackupRestoreAllState::RetryDisabled { wallet_count }
+                }
+            }
+            CloudBackupRestoreAllRuntimeState::Idle => {
+                if wallet_count < 2 {
+                    return CloudBackupRestoreAllState::NotShown;
+                }
+
+                if self.restore_all_action_is_available() {
+                    CloudBackupRestoreAllState::StartAvailable { wallet_count }
+                } else {
+                    CloudBackupRestoreAllState::StartDisabled { wallet_count }
+                }
+            }
+        }
+    }
+
+    fn restore_all_eligible_wallet_count(&self) -> u32 {
+        let Some(LoadedCloudBackupDetail {
+            cloud_only: CloudOnlyState::Loaded { wallets }, ..
+        }) = self.loaded_detail()
+        else {
+            return 0;
+        };
+
+        wallets
+            .iter()
+            .filter(|wallet| wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice)
+            .count()
+            .try_into()
+            .unwrap_or(u32::MAX)
+    }
+
+    fn restore_all_action_is_available(&self) -> bool {
+        self.detail_inventory_is_complete() && self.active_operation.is_none()
     }
 
     fn public_destructive_operation(&self) -> CloudBackupDestructiveOperationState {
@@ -278,6 +357,12 @@ impl CloudBackupReducerState {
             ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
             (
                 CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
+                    CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, _),
+                )),
+                CloudBackupEnablePromptChoice::UseExisting,
+            ) => Some(CloudBackupAcceptedEnablePrompt::Enable(*context)),
+            (
+                CloudBackupLifecyclePhase::Enabling(CloudBackupEnableFlow::AwaitingPasskeyChoice(
                     CloudBackupPasskeyChoiceIntent::Enable(context, _),
                 )),
                 CloudBackupEnablePromptChoice::CreateNew,
@@ -354,6 +439,7 @@ impl CloudBackupReducerState {
                 | CloudBackupExclusiveOperation::RecoverOtherBackups
                 | CloudBackupExclusiveOperation::DeleteOtherBackups
                 | CloudBackupExclusiveOperation::RestoreCloudWallet
+                | CloudBackupExclusiveOperation::RestoreAllCloudWallets
                 | CloudBackupExclusiveOperation::DeleteCloudWallet,
             )
             | None => {}
@@ -513,11 +599,15 @@ impl CloudBackupReducerState {
 
     fn loaded_detail(&self) -> Option<&LoadedCloudBackupDetail> {
         match &self.configured.detail {
-            CloudBackupDetailState::Loaded { state } => Some(state),
-            CloudBackupDetailState::NotLoaded
-            | CloudBackupDetailState::Loading
-            | CloudBackupDetailState::Failed(_) => None,
+            CloudBackupDetailState::Complete { state } => Some(state),
+            CloudBackupDetailState::Checking { retained }
+            | CloudBackupDetailState::Failed { retained, .. } => retained.as_ref(),
+            CloudBackupDetailState::NotLoaded => None,
         }
+    }
+
+    fn detail_inventory_is_complete(&self) -> bool {
+        matches!(self.configured.detail, CloudBackupDetailState::Complete { .. })
     }
 
     fn project_exclusive_operation_start(&mut self, claim: CloudBackupExclusiveOperationClaim) {
@@ -561,8 +651,43 @@ impl CloudBackupReducerState {
             CloudBackupExclusiveOperation::RecoverOtherBackups
             | CloudBackupExclusiveOperation::DeleteOtherBackups
             | CloudBackupExclusiveOperation::RestoreCloudWallet
+            | CloudBackupExclusiveOperation::RestoreAllCloudWallets
             | CloudBackupExclusiveOperation::DeleteCloudWallet => {}
         }
+    }
+
+    fn start_restore_all(&mut self, total: u32) {
+        self.restore_all = CloudBackupRestoreAllRuntimeState::Running {
+            completed: 0,
+            total,
+            current_wallet_name: None,
+            cancellation_requested: false,
+        };
+    }
+
+    fn report_restore_all_progress(&mut self, completed: u32, current_wallet_name: Option<String>) {
+        let CloudBackupRestoreAllRuntimeState::Running {
+            completed: current_completed,
+            total,
+            current_wallet_name: current_name,
+            ..
+        } = &mut self.restore_all
+        else {
+            return;
+        };
+
+        *current_completed = completed.min(*total);
+        *current_name = current_wallet_name;
+    }
+
+    fn request_restore_all_cancellation(&mut self) {
+        let CloudBackupRestoreAllRuntimeState::Running { cancellation_requested, .. } =
+            &mut self.restore_all
+        else {
+            return;
+        };
+
+        *cancellation_requested = true;
     }
 
     fn apply_status(&mut self, status: CloudBackupStatus) {
@@ -861,7 +986,7 @@ impl CloudBackupReducerState {
                         .unwrap_or(CloudOnlyState::NotFetched)
                 };
 
-                CloudBackupDetailState::Loaded {
+                CloudBackupDetailState::Complete {
                     state: LoadedCloudBackupDetail {
                         detail,
                         cloud_only,
@@ -880,34 +1005,81 @@ impl CloudBackupReducerState {
         };
     }
 
+    fn apply_detail_refresh_started(&mut self) {
+        let retained = self.loaded_detail().cloned();
+        self.configured.detail = CloudBackupDetailState::Checking { retained };
+    }
+
+    fn apply_detail_refresh_provisional(&mut self, detail: CloudBackupDetail) {
+        if let Some(previous_loaded) = self.loaded_detail().cloned() {
+            self.configured.detail =
+                CloudBackupDetailState::Checking { retained: Some(previous_loaded) };
+            return;
+        }
+
+        self.configured.detail = CloudBackupDetailState::Checking {
+            retained: Some(LoadedCloudBackupDetail {
+                detail,
+                cloud_only: CloudOnlyState::NotFetched,
+                cloud_only_operation: CloudOnlyOperation::Idle,
+                other_backups_operation: OtherBackupsOperation::Idle,
+            }),
+        };
+    }
+
+    fn apply_detail_refresh_failure(
+        &mut self,
+        reason: CloudBackupInventoryIncompleteReason,
+        error: String,
+    ) {
+        let retained = self.loaded_detail().cloned();
+        self.configured.detail = CloudBackupDetailState::Failed { reason, error, retained };
+    }
+
     fn resolve_cloud_only_state(&mut self, cloud_only: CloudOnlyState) {
         match (&mut self.configured.detail, cloud_only) {
-            (CloudBackupDetailState::Loaded { state }, cloud_only) => {
+            (CloudBackupDetailState::Complete { state }, cloud_only) => {
                 state.cloud_only = cloud_only;
             }
             (detail, CloudOnlyState::Loading) => {
-                *detail = CloudBackupDetailState::Loading;
+                let retained = match detail {
+                    CloudBackupDetailState::Complete { state } => Some(state.clone()),
+                    CloudBackupDetailState::Checking { retained }
+                    | CloudBackupDetailState::Failed { retained, .. } => retained.clone(),
+                    CloudBackupDetailState::NotLoaded => None,
+                };
+                *detail = CloudBackupDetailState::Checking { retained };
             }
             (detail, CloudOnlyState::Failed { error }) => {
-                *detail = CloudBackupDetailState::Failed(error);
+                let retained = match detail {
+                    CloudBackupDetailState::Complete { state } => Some(state.clone()),
+                    CloudBackupDetailState::Checking { retained }
+                    | CloudBackupDetailState::Failed { retained, .. } => retained.clone(),
+                    CloudBackupDetailState::NotLoaded => None,
+                };
+                *detail = CloudBackupDetailState::Failed {
+                    reason: CloudBackupInventoryIncompleteReason::Unknown,
+                    error,
+                    retained,
+                };
             }
             (detail, CloudOnlyState::NotFetched) => {
                 *detail = CloudBackupDetailState::NotLoaded;
             }
             (CloudBackupDetailState::NotLoaded, CloudOnlyState::Loaded { .. })
-            | (CloudBackupDetailState::Loading, CloudOnlyState::Loaded { .. })
-            | (CloudBackupDetailState::Failed(_), CloudOnlyState::Loaded { .. }) => {}
+            | (CloudBackupDetailState::Checking { .. }, CloudOnlyState::Loaded { .. })
+            | (CloudBackupDetailState::Failed { .. }, CloudOnlyState::Loaded { .. }) => {}
         }
     }
 
     fn resolve_cloud_only_operation(&mut self, cloud_only_operation: CloudOnlyOperation) {
-        if let CloudBackupDetailState::Loaded { state } = &mut self.configured.detail {
+        if let CloudBackupDetailState::Complete { state } = &mut self.configured.detail {
             state.cloud_only_operation = cloud_only_operation;
         }
     }
 
     fn resolve_other_backups_operation(&mut self, other_backups_operation: OtherBackupsOperation) {
-        if let CloudBackupDetailState::Loaded { state } = &mut self.configured.detail {
+        if let CloudBackupDetailState::Complete { state } = &mut self.configured.detail {
             state.other_backups_operation = other_backups_operation;
         }
     }
@@ -977,6 +1149,10 @@ impl CloudBackupStateReducer {
         self.state.detail()
     }
 
+    pub(crate) fn detail_inventory_is_complete(&self) -> bool {
+        self.state.detail_inventory_is_complete()
+    }
+
     pub(crate) fn cloud_only(&self) -> CloudOnlyState {
         self.state.cloud_only()
     }
@@ -1000,6 +1176,7 @@ impl CloudBackupStateReducer {
                 CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
                     | CloudBackupEnableFlow::AwaitingPasskeyChoice(
                         CloudBackupPasskeyChoiceIntent::Enable(_, _)
+                            | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(_, _)
                     )
             )
         )
@@ -1048,7 +1225,8 @@ impl CloudBackupStateReducer {
                 }
             }
             CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent) => match &intent {
-                CloudBackupPasskeyChoiceIntent::Enable(context, _) => {
+                CloudBackupPasskeyChoiceIntent::Enable(context, _)
+                | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, _) => {
                     self.state.active_enable_context = Some(*context);
                     self.state.phase = CloudBackupLifecyclePhase::Enabling(
                         CloudBackupEnableFlow::AwaitingPasskeyChoice(intent),
@@ -1066,6 +1244,7 @@ impl CloudBackupStateReducer {
                     CloudBackupLifecyclePhase::Enabling(
                         CloudBackupEnableFlow::AwaitingPasskeyChoice(
                             CloudBackupPasskeyChoiceIntent::Enable(_, _)
+                                | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(_, _)
                         )
                     )
                 ) {
@@ -1088,6 +1267,24 @@ impl CloudBackupStateReducer {
             }
             CloudBackupStateReducerEvent::RestoreProgressReported(progress) => {
                 self.state.report_restore_progress(progress);
+            }
+            CloudBackupStateReducerEvent::RestoreAllStarted { total } => {
+                self.state.start_restore_all(total);
+            }
+            CloudBackupStateReducerEvent::RestoreAllProgressed {
+                completed,
+                current_wallet_name,
+            } => {
+                self.state.report_restore_all_progress(completed, current_wallet_name);
+            }
+            CloudBackupStateReducerEvent::RestoreAllCancellationRequested => {
+                self.state.request_restore_all_cancellation();
+            }
+            CloudBackupStateReducerEvent::RestoreAllRetryRequired => {
+                self.state.restore_all = CloudBackupRestoreAllRuntimeState::RetryRemaining;
+            }
+            CloudBackupStateReducerEvent::RestoreAllReset => {
+                self.state.restore_all = CloudBackupRestoreAllRuntimeState::Idle;
             }
             CloudBackupStateReducerEvent::SyncHealthObserved(sync_health) => {
                 self.state.sync_health = sync_health;
@@ -1137,8 +1334,17 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::DisableStateResolved(outcome) => {
                 self.state.resolve_disable(outcome);
             }
+            CloudBackupStateReducerEvent::DetailRefreshStarted => {
+                self.state.apply_detail_refresh_started();
+            }
+            CloudBackupStateReducerEvent::DetailRefreshProvisional(detail) => {
+                self.state.apply_detail_refresh_provisional(detail);
+            }
             CloudBackupStateReducerEvent::DetailRefreshApplied { detail, reset_cloud_only } => {
                 self.state.apply_detail_refresh(detail, reset_cloud_only);
+            }
+            CloudBackupStateReducerEvent::DetailRefreshFailed { reason, error } => {
+                self.state.apply_detail_refresh_failure(reason, error);
             }
             CloudBackupStateReducerEvent::CloudOnlyStateResolved(cloud_only) => {
                 self.state.resolve_cloud_only_state(cloud_only);
@@ -1308,9 +1514,10 @@ pub(crate) mod test_support {
 mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{
-        CloudBackupEnableContext, CloudBackupPasskeyHint, CloudBackupProgress,
-        CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-        CloudBackupVerificationReason, CloudBackupVerificationSource, DeepVerificationReport,
+        CloudBackupEnableContext, CloudBackupOtherBackupsState, CloudBackupPasskeyHint,
+        CloudBackupProgress, CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+        CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletItem,
+        DeepVerificationReport,
     };
 
     fn operation_event(
@@ -1340,6 +1547,347 @@ mod tests {
             sync_health,
             ..Default::default()
         }
+    }
+
+    fn test_detail(cloud_only_count: u32) -> CloudBackupDetail {
+        CloudBackupDetail {
+            last_sync: None,
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            cloud_only_count,
+            other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
+        }
+    }
+
+    fn cloud_only_wallet(
+        record_id: &str,
+        sync_status: CloudBackupWalletStatus,
+    ) -> CloudBackupWalletItem {
+        CloudBackupWalletItem {
+            name: record_id.into(),
+            network: None,
+            wallet_mode: None,
+            wallet_type: None,
+            fingerprint: None,
+            label_count: None,
+            backup_updated_at: None,
+            sync_status,
+            restore_failure: None,
+            record_id: record_id.into(),
+        }
+    }
+
+    fn configured_model_with_cloud_only(
+        wallets: Vec<CloudBackupWalletItem>,
+    ) -> CloudBackupStateReducer {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                detail: Some(test_detail(wallets.len() as u32)),
+                reset_cloud_only: false,
+            })
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Loaded { wallets },
+            ))
+            .unwrap();
+        model
+    }
+
+    fn restore_all_state(model: &CloudBackupStateReducer) -> CloudBackupRestoreAllState {
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+
+        configured.restore_all
+    }
+
+    #[test]
+    fn restore_all_start_requires_two_supported_complete_rows() {
+        let one_wallet = configured_model_with_cloud_only(vec![cloud_only_wallet(
+            "wallet-1",
+            CloudBackupWalletStatus::DeletedFromDevice,
+        )]);
+        assert_eq!(restore_all_state(&one_wallet), CloudBackupRestoreAllState::NotShown);
+
+        let two_wallets = configured_model_with_cloud_only(vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("unsupported", CloudBackupWalletStatus::UnsupportedVersion),
+            cloud_only_wallet("unknown", CloudBackupWalletStatus::RemoteStateUnknown),
+        ]);
+        assert_eq!(
+            restore_all_state(&two_wallets),
+            CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn retained_restore_all_count_is_disabled_while_inventory_is_incomplete() {
+        let wallets = vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+        ];
+        let mut checking = configured_model_with_cloud_only(wallets.clone());
+
+        checking.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        assert_eq!(
+            restore_all_state(&checking),
+            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+
+        let mut failed = configured_model_with_cloud_only(wallets);
+        failed
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+                reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
+                error: "provider unavailable".into(),
+            })
+            .unwrap();
+        assert_eq!(
+            restore_all_state(&failed),
+            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn conflicting_exclusive_operation_disables_restore_all_start() {
+        let mut model = configured_model_with_cloud_only(vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+        ]);
+
+        model
+            .apply_event(operation_event(CloudBackupExclusiveOperation::RestoreCloudWallet, 1))
+            .unwrap();
+
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn restore_all_retry_allows_one_remaining_wallet_only_when_complete() {
+        let detail = test_detail(1);
+        let mut model = configured_model_with_cloud_only(vec![cloud_only_wallet(
+            "wallet-1",
+            CloudBackupWalletStatus::DeletedFromDevice,
+        )]);
+
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllRetryRequired).unwrap();
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
+        );
+
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::RetryDisabled { wallet_count: 1 },
+        );
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                detail: Some(detail),
+                reset_cloud_only: false,
+            })
+            .unwrap();
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
+        );
+    }
+
+    #[test]
+    fn restore_all_runtime_events_project_progress_and_cancellation() {
+        let mut model = configured_model_with_cloud_only(vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+        ]);
+
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllStarted { total: 2 }).unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+                completed: 1,
+                current_wallet_name: Some("Savings".into()),
+            })
+            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested).unwrap();
+
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::Running {
+                completed: 1,
+                total: 2,
+                current_wallet_name: Some("Savings".into()),
+                cancellation_requested: true,
+            },
+        );
+
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllReset).unwrap();
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn detail_refresh_failure_retains_last_known_rows() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        let detail = test_detail(2);
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                detail: Some(detail.clone()),
+                reset_cloud_only: false,
+            })
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+                reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
+                error: "iCloud unavailable".into(),
+            })
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Failed { reason, error, retained: Some(retained) } =
+            configured.detail
+        else {
+            panic!("expected retained failed detail");
+        };
+
+        assert_eq!(reason, CloudBackupInventoryIncompleteReason::ProviderUnavailable);
+        assert_eq!(error, "iCloud unavailable");
+        assert_eq!(retained.detail, detail);
+        assert_eq!(model.state.detail(), Some(detail));
+    }
+
+    #[test]
+    fn checking_retains_rows_but_disables_completeness_dependent_actions() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        let detail = test_detail(2);
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                detail: Some(detail.clone()),
+                reset_cloud_only: false,
+            })
+            .unwrap();
+        assert!(model.detail_inventory_is_complete());
+
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
+        else {
+            panic!("expected checking detail with retained rows");
+        };
+
+        assert_eq!(retained.detail, detail);
+        assert_eq!(model.state.detail(), Some(detail));
+        assert!(!model.detail_inventory_is_complete());
+    }
+
+    #[test]
+    fn provisional_detail_is_visible_without_becoming_complete() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        let provisional = test_detail(1);
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(
+                provisional.clone(),
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
+        else {
+            panic!("expected provisional checking detail");
+        };
+
+        assert_eq!(retained.detail, provisional);
+        assert!(!model.detail_inventory_is_complete());
+    }
+
+    #[test]
+    fn smaller_provisional_snapshot_does_not_drop_retained_rows() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        let retained = test_detail(3);
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                detail: Some(retained.clone()),
+                reset_cloud_only: false,
+            })
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(test_detail(0)))
+            .unwrap();
+
+        assert_eq!(model.state.detail(), Some(retained));
+        assert!(!model.detail_inventory_is_complete());
+    }
+
+    #[test]
+    fn initial_detail_refresh_failure_never_projects_confirmed_zero() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+                reason: CloudBackupInventoryIncompleteReason::Offline,
+                error: "Drive unavailable".into(),
+            })
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        assert_eq!(
+            configured.detail,
+            CloudBackupDetailState::Failed {
+                reason: CloudBackupInventoryIncompleteReason::Offline,
+                error: "Drive unavailable".into(),
+                retained: None,
+            }
+        );
+        assert_eq!(model.state.detail(), None);
     }
 
     #[test]
@@ -1673,6 +2221,7 @@ mod tests {
                 ),
                 destructive_operation: CloudBackupDestructiveOperationState::Idle,
                 detail: CloudBackupDetailState::NotLoaded,
+                restore_all: CloudBackupRestoreAllState::NotShown,
                 root_prompt: CloudBackupRootPrompt::None,
                 sync_health: CloudSyncHealth::Unknown,
                 verification_presentation: CloudBackupVerificationPresentation::Hidden {
@@ -2135,6 +2684,35 @@ mod tests {
                 &CloudBackupLifecycle::Enabling(CloudBackupEnableFlow::DiscoveringExistingBackup,)
             ),
         );
+    }
+
+    #[test]
+    fn existing_passkey_only_prompt_rejects_create_new() {
+        let context = CloudBackupEnableContext::settings_manual();
+        let intent = CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, None);
+        let mut model = CloudBackupStateReducer::default();
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent.clone()))
+            .unwrap();
+
+        let expected_lifecycle = CloudBackupLifecycle::Enabling(
+            CloudBackupEnableFlow::AwaitingPasskeyChoice(intent.clone()),
+        );
+        assert_eq!(model.snapshot().root_prompt, CloudBackupRootPrompt::PasskeyChoice(intent),);
+        assert_eq!(model.public_state().lifecycle, expected_lifecycle);
+        assert!(model.is_awaiting_enable_prompt());
+
+        let (accepted, effects) =
+            model.accept_enable_prompt(CloudBackupEnablePromptChoice::CreateNew);
+
+        assert_eq!(accepted, None);
+        assert_eq!(effects, CloudBackupStateReducerEffects::default());
+        assert_eq!(model.public_state().lifecycle, expected_lifecycle);
+
+        let (accepted, _) = model.accept_enable_prompt(CloudBackupEnablePromptChoice::UseExisting);
+
+        assert_eq!(accepted, Some(CloudBackupAcceptedEnablePrompt::Enable(context)));
     }
 
     #[test]

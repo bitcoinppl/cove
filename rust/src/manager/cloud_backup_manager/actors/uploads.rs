@@ -14,8 +14,8 @@ use crate::manager::cloud_backup_manager::pending::{
     MAX_PENDING_UPLOAD_VERIFICATION_DELAY, build_pending_upload_backoff,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager, SyncState, WalletId,
-    live_upload_retry_delay_for_attempt,
+    CloudBackupError, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingUploadVerificationState,
+    RustCloudBackupManager, SyncState, WalletId, live_upload_retry_delay_for_attempt,
 };
 
 #[derive(Debug)]
@@ -66,6 +66,7 @@ impl CloudBackupUploadWorker {
     ) {
         self.pending_upload_verifier_running = true;
         self.pending_upload_verifier_blocked_on_authorization = false;
+        let manager = Arc::downgrade(&manager);
         let wakeup = Arc::clone(&self.pending_upload_verifier_wakeup);
         self.addr.send_fut_with(move |addr| async move {
             info!("Pending upload verification: started");
@@ -73,11 +74,15 @@ impl CloudBackupUploadWorker {
             let mut blocked_on_authorization = false;
 
             loop {
-                if manager.cloud_backup_writes_blocked() {
-                    break;
-                }
+                let verification = {
+                    let Some(manager) = manager.upgrade() else { break };
+                    if manager.cloud_backup_writes_blocked() {
+                        break;
+                    }
 
-                match manager.verify_pending_uploads_once().await {
+                    manager.verify_pending_uploads_once().await
+                };
+                match verification {
                     PendingUploadVerificationState::Idle => break,
                     PendingUploadVerificationState::BlockedOnAuthorization => {
                         blocked_on_authorization = true;
@@ -295,7 +300,9 @@ impl CloudBackupUploadWorker {
                 let message = format!("failed to load cloud blob sync states on startup: {error}");
                 error!("{message}");
                 if let Some(manager) = self.manager() {
-                    manager.apply_sync_state(SyncState::Failed(message.clone()));
+                    manager.apply_sync_state(SyncState::Failed(
+                        GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
+                    ));
                 }
                 return Err(CloudBackupError::Internal(message.into()).into());
             }
@@ -499,6 +506,7 @@ mod tests {
             },
             sync: PersistedBackupSyncState { last_sync: None, wallet_count: None },
             pending_verification_completion: None,
+            pending_restore_all: None,
         };
         Database::global()
             .cloud_backup_state

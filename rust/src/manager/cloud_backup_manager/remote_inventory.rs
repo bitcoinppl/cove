@@ -9,7 +9,7 @@ use super::cloud_inventory::RemoteWalletTruth;
 use super::wallets::{WalletBackupLookup, WalletBackupReader};
 use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
-    CloudBackupStore, RustCloudBackupManager, blocking_cloud_error,
+    CloudBackupOtherBackupsState, CloudBackupStore, RustCloudBackupManager, blocking_cloud_error,
 };
 use crate::database::Database;
 
@@ -20,7 +20,9 @@ impl RustCloudBackupManager {
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<CloudBackupDetail, CloudBackupError> {
         let cloud = CloudStorage::global_explicit_client();
-        let other_backups = self.other_backup_state(&cloud).await;
+        let other_backups = CloudBackupOtherBackupsState::Loaded {
+            summary: self.other_backup_summary(&cloud).await?,
+        };
 
         Ok(super::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,

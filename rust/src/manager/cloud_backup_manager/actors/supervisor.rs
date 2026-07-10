@@ -4,11 +4,12 @@
 //! child actors or spawned tasks. Each exclusive operation receives a claim that
 //! every async completion must present before it can update manager state
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::{Duration, Instant};
 
 use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, send};
-use cove_cspp::{backup_data::MASTER_KEY_RECORD_ID, master_key_crypto};
+use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
@@ -24,7 +25,9 @@ use super::write::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
-use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedDisablingCloudBackup};
+use crate::database::cloud_backup::{
+    CloudBackupRecordKey, CloudStorageIssue, PersistedDisablingCloudBackup,
+};
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
@@ -41,21 +44,26 @@ use crate::manager::cloud_backup_manager::wallets::{
     UnpersistedPrfKey, WalletRestoreOutcome, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
-    CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupDetailResult,
+    BlockingCloudStep, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
+    CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
+    CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailInventorySnapshot,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupEnableContext,
     CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
     CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
     CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
-    CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
-    CloudBackupOtherBackupsOutcome, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPreparedCloudWalletDelete, CloudBackupReadyEnableUpload,
-    CloudBackupRegisteredEnablePasskey, CloudBackupRestoreOutcome, CloudBackupRestoreReport,
-    CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation, CloudBackupStatus,
-    CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
-    CloudBackupVerificationSource, CloudBackupWalletItem, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, EnablePasskeyRegistrationFlow,
-    OtherBackupsOperation, PendingEnableSession, PendingUploadVerificationState,
+    CloudBackupInventoryIncompleteReason, CloudBackupKeepEnabledPreparation,
+    CloudBackupNoDiscoveryEnablePreparation, CloudBackupOtherBackupsOutcome,
+    CloudBackupPasskeyChoiceIntent, CloudBackupPreparedCloudWalletDelete,
+    CloudBackupPreparedRestoreAll, CloudBackupReadyEnableUpload,
+    CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
+    CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
+    CloudBackupStatus, CloudBackupStore, CloudBackupUploadedEnableBackup,
+    CloudBackupVerificationPresentation, CloudBackupVerificationSource, CloudBackupWalletItem,
+    CloudBackupWalletStatus, CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport,
+    DeepVerificationResult, EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+    OtherBackupsOperation, PendingEnableJournal, PendingEnableJournalPhase,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
     PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
     RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
     blocking_cloud_error,
@@ -63,11 +71,14 @@ use crate::manager::cloud_backup_manager::{
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
 mod cloud_only;
+mod detail_refresh;
 mod disable;
 mod enable;
 mod verification;
 
 pub(crate) use verification::DeepVerificationContinuation;
+
+use detail_refresh::{DetailRefreshClaim, DetailRefreshCoordinator, DetailRefreshPlan};
 
 mod tests {
     #![cfg(test)]
@@ -133,6 +144,10 @@ fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudB
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::Failed {
+                reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
+                error: error.reader_message(),
+            });
         }
     }
 }
@@ -149,6 +164,10 @@ fn apply_cloud_only_operation_refresh_detail_result(
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::Failed {
+                reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
+                error: error.reader_message(),
+            });
         }
     }
 }
@@ -180,6 +199,17 @@ fn verification_needs_connectivity_retry(
         && should_retry_connectivity_failure(manager.connection_status())
 }
 
+fn restore_all_marker_matches_active_namespace(manager: &RustCloudBackupManager) -> bool {
+    let Ok(state) = Database::global().cloud_backup_state.get() else {
+        return false;
+    };
+    let Some(marker) = state.pending_restore_all() else {
+        return false;
+    };
+
+    manager.current_namespace_id().ok().as_deref() == Some(marker.namespace_id.as_str())
+}
+
 /// Pending disable state held while the write lane drains before namespace delete
 #[derive(Debug)]
 struct PendingDisableWriteDrain {
@@ -203,6 +233,9 @@ pub(crate) struct CloudBackupSupervisor {
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
+    active_restore_all_cancellation: Option<Arc<AtomicBool>>,
+    detail_refresh: DetailRefreshCoordinator,
+    detail_refresh_clock: Instant,
     pending_disable_write_drain: Option<PendingDisableWriteDrain>,
     // runtime-only authorization produced by this app session for the active namespace
     // clearing it when the supervisor is recreated makes detail entry re-check passkey availability
@@ -235,6 +268,9 @@ impl CloudBackupSupervisor {
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
+            active_restore_all_cancellation: None,
+            detail_refresh: DetailRefreshCoordinator::default(),
+            detail_refresh_clock: Instant::now(),
             pending_disable_write_drain: None,
             runtime_passkey_authorization: None,
         }
@@ -517,6 +553,16 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    pub async fn start_restore_all_operation(&mut self, retry: bool) -> ActorResult<()> {
+        self.begin_restore_all_operation(retry);
+        Produces::ok(())
+    }
+
+    pub async fn cancel_restore_all_operation(&mut self) -> ActorResult<()> {
+        self.request_restore_all_cancellation();
+        Produces::ok(())
+    }
+
     pub async fn start_delete_cloud_wallet_operation(
         &mut self,
         record_id: String,
@@ -568,7 +614,7 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_sync_state(SyncState::Failed(error.to_string()));
+                manager.apply_sync_state(SyncState::Failed(error.reader_message()));
                 self.active_sync_request = None;
             }
         }
@@ -599,16 +645,25 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn start_refresh_detail(&mut self) -> ActorResult<()> {
-        self.start_refresh_detail_with_context(DetailRefreshAttempt::Initial).await
-    }
-
-    async fn start_refresh_detail_with_context(
-        &mut self,
-        attempt: DetailRefreshAttempt,
-    ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.schedule_refresh_detail(manager, attempt);
+        self.detail_refresh.open();
+        let plan = self.detail_refresh.request(self.detail_refresh_now());
+        self.handle_detail_refresh_plan(manager, plan);
+
+        Produces::ok(())
+    }
+
+    pub async fn provider_inventory_did_change(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(());
+        };
+
+        let plan = self.detail_refresh.request(self.detail_refresh_now());
+        if !matches!(plan, DetailRefreshPlan::Ignored) {
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+        }
+        self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
     }
@@ -617,28 +672,139 @@ impl CloudBackupSupervisor {
         &self,
         manager: Arc<RustCloudBackupManager>,
         attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
     ) {
         manager.refresh_sync_health();
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.refresh_cloud_backup_detail().await;
-            send!(addr.complete_refresh_detail(result, attempt));
+            let result = manager.load_cloud_backup_detail_inventory_snapshot().await;
+            send!(addr.complete_refresh_detail_snapshot(result, attempt, claim));
         });
+    }
+
+    fn schedule_complete_refresh_detail(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
+        snapshot: CloudBackupDetailInventorySnapshot,
+        attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
+    ) {
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
+            send!(addr.complete_refresh_detail(result, attempt, claim));
+        });
+    }
+
+    fn handle_detail_refresh_plan(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
+        plan: DetailRefreshPlan,
+    ) {
+        match plan {
+            DetailRefreshPlan::Start(claim) => {
+                manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+                self.schedule_refresh_detail(manager, DetailRefreshAttempt::Initial, claim);
+            }
+            DetailRefreshPlan::Wait { owner, delay } => {
+                self.addr.send_fut_with(move |addr| async move {
+                    tokio::time::sleep(delay).await;
+                    send!(addr.resume_rate_limited_detail_refresh(owner));
+                });
+            }
+            DetailRefreshPlan::Queued | DetailRefreshPlan::Ignored => {}
+        }
+    }
+
+    pub async fn resume_rate_limited_detail_refresh(&mut self, owner: u64) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        let plan = self.detail_refresh.timer_elapsed(owner, self.detail_refresh_now());
+        self.handle_detail_refresh_plan(manager, plan);
+
+        Produces::ok(())
     }
 
     pub async fn complete_refresh_detail(
         &mut self,
         result: Option<CloudBackupDetailResult>,
         attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
+        if !self.detail_refresh.is_active(claim) {
+            return Produces::ok(());
+        }
+
         if refresh_detail_needs_connectivity_retry(&manager, attempt, &result) {
-            self.schedule_refresh_detail(manager, DetailRefreshAttempt::AutomaticConnectivityRetry);
+            self.schedule_refresh_detail(
+                manager,
+                DetailRefreshAttempt::AutomaticConnectivityRetry,
+                claim,
+            );
+            return Produces::ok(());
+        }
+
+        let completion = self.detail_refresh.complete(claim, self.detail_refresh_now());
+        if !completion.apply {
             return Produces::ok(());
         }
 
         if let Some(result) = result {
             apply_refresh_detail_result(&manager, &result);
+        }
+
+        self.handle_detail_refresh_plan(manager, completion.next);
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_refresh_detail_snapshot(
+        &mut self,
+        result: Option<CloudBackupDetailInventorySnapshotResult>,
+        attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        if !self.detail_refresh.is_active(claim) {
+            return Produces::ok(());
+        }
+
+        let Some(result) = result else {
+            let completion = self.detail_refresh.complete(claim, self.detail_refresh_now());
+            self.handle_detail_refresh_plan(manager, completion.next);
+            return Produces::ok(());
+        };
+
+        match result {
+            CloudBackupDetailInventorySnapshotResult::Success(snapshot) => {
+                if let Some(provisional_detail) = snapshot.provisional_detail.clone() {
+                    manager.apply_detail_outcome(CloudBackupDetailOutcome::Provisional(
+                        provisional_detail,
+                    ));
+                }
+
+                self.schedule_complete_refresh_detail(manager, snapshot, attempt, claim);
+            }
+            CloudBackupDetailInventorySnapshotResult::AccessError(error) => {
+                let result = Some(CloudBackupDetailResult::AccessError(error));
+                if refresh_detail_needs_connectivity_retry(&manager, attempt, &result) {
+                    self.schedule_refresh_detail(
+                        manager,
+                        DetailRefreshAttempt::AutomaticConnectivityRetry,
+                        claim,
+                    );
+                    return Produces::ok(());
+                }
+
+                let completion = self.detail_refresh.complete(claim, self.detail_refresh_now());
+                if completion.apply
+                    && let Some(result) = result
+                {
+                    apply_refresh_detail_result(&manager, &result);
+                }
+                self.handle_detail_refresh_plan(manager, completion.next);
+            }
         }
 
         Produces::ok(())
@@ -677,6 +843,8 @@ impl CloudBackupSupervisor {
     pub async fn start_enter_detail(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
+        self.detail_refresh.open();
+
         let plan = self.detail_entry_plan(&manager);
         match plan {
             DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
@@ -698,30 +866,29 @@ impl CloudBackupSupervisor {
             DetailEntryPlan::RefreshOnly => {}
         }
 
-        manager.refresh_sync_health();
-        self.addr.send_fut_with(move |addr| async move {
-            let result = manager.refresh_cloud_backup_detail().await;
-            send!(addr.complete_enter_detail(result));
-        });
+        let plan = self.detail_refresh.request(self.detail_refresh_now());
+        self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
     }
 
-    pub async fn complete_enter_detail(
-        &mut self,
-        result: Option<CloudBackupDetailResult>,
-    ) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
-        if let Some(result) = result {
-            apply_refresh_detail_result(&manager, &result);
-        }
+    pub async fn close_detail(&mut self) -> ActorResult<()> {
+        self.detail_refresh.close();
 
         Produces::ok(())
+    }
+
+    fn detail_refresh_now(&self) -> Duration {
+        self.detail_refresh_clock.elapsed()
     }
 
     fn detail_entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
         let state = manager.state.read();
         if !matches!(state.status(), CloudBackupStatus::Enabled) {
+            return DetailEntryPlan::RefreshOnly;
+        }
+
+        if restore_all_marker_matches_active_namespace(manager) {
             return DetailEntryPlan::RefreshOnly;
         }
 
@@ -913,7 +1080,9 @@ impl CloudBackupSupervisor {
                 Err(error) => {
                     error!("restore_from_cloud_backup failed: {error}");
                     operation
-                        .send_event_if_current(CloudBackupRestoreEvent::Failed(error.to_string()))
+                        .send_event_if_current(CloudBackupRestoreEvent::Failed(
+                            error.reader_message(),
+                        ))
                         .await;
                     send!(addr.fail_exclusive_operation(claim, error));
                 }

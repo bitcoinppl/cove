@@ -30,6 +30,7 @@ use crate::manager::cloud_backup_manager::actors::{
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
     supervisor::{DeepVerificationContinuation, VerificationAttempt},
 };
+use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim,
@@ -42,15 +43,17 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDetailResult,
+    CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
     CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
     CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent,
     CloudBackupRootPrompt, CloudBackupVerificationPresentation, CloudBackupVerificationReason,
     CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
+    DeepVerificationReport, DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+    PendingEnableJournal, PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata,
+    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
+    PendingVerificationUpload, RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupStatus, PendingEnableSessionMaterial, UnpersistedPrfKey,
@@ -59,7 +62,8 @@ use crate::manager::cloud_backup_manager::{
     SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
     cspp_exports::cspp_master_key_record_id,
     keychain::{
-        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
+        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PENDING_ENABLE_JOURNAL_KEY,
+        CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
     },
     master_key_wrapper_revision_hash,
 };

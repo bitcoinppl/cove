@@ -1,8 +1,46 @@
 use std::{error::Error as StdError, fmt, ops::Deref};
 
+use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 use cove_device::{cloud_storage::CloudStorageError, passkey::PasskeyError};
 
 use crate::database::cloud_backup::CloudStorageIssue;
+
+const PASSKEY_ACCESS_RECOVERY_MESSAGE: &str = "Cove couldn't access your passkey. Check your connection and passkey account, then try again. If this keeps happening, choose another passkey provider or contact support.";
+const PASSKEY_NOT_FOUND_MESSAGE: &str =
+    "Cove couldn't find the requested passkey. Please try again or choose another passkey.";
+const GENERIC_PASSKEY_ERROR_MESSAGE: &str = "Cove couldn't use this passkey. Please try again.";
+const UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE: &str =
+    "This passkey provider can't protect Cove backups. Choose another passkey provider.";
+pub(crate) const GENERIC_CLOUD_BACKUP_ERROR_MESSAGE: &str =
+    "Cove couldn't complete this cloud backup request. Please try again.";
+pub(crate) const CLOUD_BACKUP_DISABLE_ERROR_MESSAGE: &str =
+    "Cove couldn't disable cloud backup. Please try again.";
+pub(crate) const CLOUD_BACKUP_LABELS_WARNING_MESSAGE: &str =
+    "Cove restored the wallet, but couldn't restore its labels.";
+pub(crate) const CLOUD_BACKUP_RECREATE_MESSAGE: &str =
+    "Some wallet backups are missing from your cloud backup.";
+pub(crate) const CLOUD_BACKUP_REINITIALIZE_MESSAGE: &str =
+    "Cove couldn't verify the key needed to unlock this cloud backup.";
+const CLOUD_BACKUP_AUTHORIZATION_MESSAGE: &str =
+    "Cove couldn't access your cloud backup. Reconnect your cloud account, then try again.";
+const CLOUD_BACKUP_OFFLINE_MESSAGE: &str =
+    "Cove couldn't reach your cloud backup. Reconnect to the internet, then try again.";
+const CLOUD_BACKUP_UNAVAILABLE_MESSAGE: &str =
+    "Your cloud backup is temporarily unavailable. Please try again.";
+const CLOUD_BACKUP_NOT_FOUND_MESSAGE: &str =
+    "Cove couldn't find that cloud backup. Refresh and try again.";
+const CLOUD_BACKUP_QUOTA_MESSAGE: &str =
+    "Your cloud storage is full. Free up space, then try again.";
+const CLOUD_BACKUP_CRYPTO_MESSAGE: &str =
+    "Cove couldn't unlock this cloud backup. Check the selected passkey and try again.";
+pub(crate) const CLOUD_BACKUP_COMPATIBILITY_MESSAGE: &str =
+    "This cloud backup was created by an unsupported version of Cove.";
+const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
+    "This cloud backup contains a wallet this version of Cove can't restore.";
+const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
+    "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. ",
+    "If this keeps happening, update Cove or contact support."
+);
 
 #[derive(Debug)]
 struct CloudBackupErrorSource {
@@ -127,6 +165,12 @@ macro_rules! cloud_backup_source_error {
 cloud_backup_source_error!(CloudBackupPasskeyError);
 cloud_backup_source_error!(CloudBackupCryptoError);
 cloud_backup_source_error!(CloudBackupInternalError);
+
+impl CloudBackupPasskeyError {
+    fn passkey_error(&self) -> Option<&PasskeyError> {
+        self.0.source.as_deref()?.downcast_ref::<PasskeyError>()
+    }
+}
 
 impl CloudBackupCryptoError {
     pub(crate) fn context(
@@ -350,6 +394,55 @@ impl CloudBackupError {
     pub(crate) fn is_cloud_error(&self) -> bool {
         matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
     }
+
+    pub(crate) fn reader_message(&self) -> String {
+        match self {
+            Self::Passkey(error) => match error.passkey_error() {
+                Some(PasskeyError::RequestFailed {
+                    reason:
+                        PasskeyFailureReason::PlatformAuthorizationFailed
+                        | PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
+                    ..
+                }) => PASSKEY_ACCESS_RECOVERY_MESSAGE.into(),
+                Some(PasskeyError::RequestFailed {
+                    operation: PasskeyOperation::Registration,
+                    reason: PasskeyFailureReason::DeviceNotConfigured,
+                }) => ANDROID_PASSKEY_ASSOCIATION_MESSAGE.into(),
+                Some(PasskeyError::UserCancelled) => Self::PasskeyDiscoveryCancelled.to_string(),
+                Some(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
+                Some(PasskeyError::PrfUnsupportedProvider) => {
+                    UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into()
+                }
+                Some(_) | None => GENERIC_PASSKEY_ERROR_MESSAGE.into(),
+            },
+            Self::UnsupportedPasskeyProvider => UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into(),
+            Self::CloudStorage(error) | Self::CloudStorageContext { source: error, .. } => {
+                cloud_storage_reader_message(error).into()
+            }
+            Self::Offline(message) | Self::RecoveryRequired(message) => message.clone(),
+            Self::NotSupported(_) => CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE.into(),
+            Self::Crypto(_) => CLOUD_BACKUP_CRYPTO_MESSAGE.into(),
+            Self::Compatibility(_) => CLOUD_BACKUP_COMPATIBILITY_MESSAGE.into(),
+            Self::Cloud(_) | Self::Deferred(_) | Self::Internal(_) => {
+                GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()
+            }
+            Self::PasskeyMismatch
+            | Self::NoBackupFound
+            | Self::PasskeyDiscoveryCancelled
+            | Self::Cancelled => self.to_string(),
+        }
+    }
+}
+
+fn cloud_storage_reader_message(error: &CloudStorageError) -> &'static str {
+    match CloudStorageIssue::from(error) {
+        CloudStorageIssue::AuthorizationRequired => CLOUD_BACKUP_AUTHORIZATION_MESSAGE,
+        CloudStorageIssue::Offline => CLOUD_BACKUP_OFFLINE_MESSAGE,
+        CloudStorageIssue::Unavailable => CLOUD_BACKUP_UNAVAILABLE_MESSAGE,
+        CloudStorageIssue::NotFound => CLOUD_BACKUP_NOT_FOUND_MESSAGE,
+        CloudStorageIssue::QuotaExceeded => CLOUD_BACKUP_QUOTA_MESSAGE,
+        CloudStorageIssue::Other => GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+    }
 }
 
 impl From<CloudBackupPasskeyError> for CloudBackupError {
@@ -385,5 +478,108 @@ impl From<CloudBackupInternalError> for CloudBackupError {
 impl From<serde_json::Error> for CloudBackupError {
     fn from(error: serde_json::Error) -> Self {
         Self::internal(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_authorization_failures_use_durable_recovery_message() {
+        for reason in [
+            PasskeyFailureReason::PlatformAuthorizationFailed,
+            PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
+        ] {
+            let error = CloudBackupError::from(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::DiscoverAssertion,
+                reason,
+            });
+
+            assert_eq!(error.reader_message(), PASSKEY_ACCESS_RECOVERY_MESSAGE);
+        }
+    }
+
+    #[test]
+    fn raw_passkey_diagnostic_cannot_reach_reader_message() {
+        let diagnostic =
+            "Q8UP8C53Y8 org.bitcoinppl.cove webcredentials:covebitcoinwallet.com credential=secret";
+        let error = CloudBackupError::from(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::DiscoverAssertion,
+            reason: PasskeyFailureReason::Unknown { diagnostic_message: diagnostic.into() },
+        });
+        let message = error.reader_message();
+
+        assert_eq!(message, GENERIC_PASSKEY_ERROR_MESSAGE);
+        for marker in [
+            "Q8UP8C53Y8",
+            "org.bitcoinppl.cove",
+            "covebitcoinwallet.com",
+            "webcredentials",
+            "credential",
+            "secret",
+        ] {
+            assert!(!message.contains(marker));
+        }
+    }
+
+    #[test]
+    fn reader_message_keeps_distinct_passkey_outcomes() {
+        let cancellation = CloudBackupError::from(PasskeyError::UserCancelled).reader_message();
+        let missing = CloudBackupError::from(PasskeyError::NoCredentialFound).reader_message();
+        let unsupported =
+            CloudBackupError::from(PasskeyError::PrfUnsupportedProvider).reader_message();
+
+        assert_eq!(cancellation, CloudBackupError::PasskeyDiscoveryCancelled.to_string());
+        assert_eq!(missing, PASSKEY_NOT_FOUND_MESSAGE);
+        assert_eq!(unsupported, UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE);
+        assert_ne!(cancellation, missing);
+        assert_ne!(missing, unsupported);
+    }
+
+    #[test]
+    fn raw_cloud_and_internal_diagnostics_cannot_reach_reader_messages() {
+        let diagnostic = "account=user@example.com namespace=secret-namespace record=secret-record localized=privado";
+        let errors = [
+            CloudBackupError::Cloud(diagnostic.into()),
+            CloudBackupError::CloudStorage(CloudStorageError::DownloadFailed(diagnostic.into())),
+            CloudBackupError::cloud_storage_context(
+                diagnostic,
+                CloudStorageError::NotAvailable(diagnostic.into()),
+            ),
+            CloudBackupError::Internal(diagnostic.into()),
+            CloudBackupError::Crypto(diagnostic.into()),
+            CloudBackupError::Compatibility(diagnostic.into()),
+            CloudBackupError::NotSupported(diagnostic.into()),
+        ];
+
+        for error in errors {
+            let message = error.reader_message();
+            for marker in ["user@example.com", "secret-namespace", "secret-record", "privado"] {
+                assert!(!message.contains(marker), "reader message leaked {marker}: {message}");
+            }
+        }
+    }
+
+    #[test]
+    fn cloud_storage_reader_messages_preserve_safe_recovery_categories() {
+        let cases = [
+            (
+                CloudStorageError::AuthorizationRequired("raw account".into()),
+                CLOUD_BACKUP_AUTHORIZATION_MESSAGE,
+            ),
+            (CloudStorageError::Offline("localized".into()), CLOUD_BACKUP_OFFLINE_MESSAGE),
+            (CloudStorageError::NotAvailable("localized".into()), CLOUD_BACKUP_UNAVAILABLE_MESSAGE),
+            (CloudStorageError::NotFound("secret record".into()), CLOUD_BACKUP_NOT_FOUND_MESSAGE),
+            (CloudStorageError::QuotaExceeded, CLOUD_BACKUP_QUOTA_MESSAGE),
+            (
+                CloudStorageError::UploadFailed("localized".into()),
+                GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+            ),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(CloudBackupError::from(error).reader_message(), expected);
+        }
     }
 }

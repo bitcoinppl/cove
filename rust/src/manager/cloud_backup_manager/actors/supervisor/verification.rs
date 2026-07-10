@@ -492,8 +492,16 @@ impl CloudBackupSupervisor {
         };
 
         let (result, pending_completion) = completion.into_parts();
-        if let Some(pending_completion) = pending_completion {
-            manager.replace_pending_verification_completion(pending_completion);
+        if let Some(pending_completion) = pending_completion
+            && let Err(error) = manager.replace_pending_verification_completion(pending_completion)
+        {
+            self.finish_deep_verification_continuation_with_error(
+                manager,
+                claim,
+                continuation,
+                error,
+            );
+            return Produces::ok(());
         }
         self.finish_deep_verification_continuation(manager, Some(claim), continuation, result);
         Produces::ok(())
@@ -520,6 +528,16 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
         result: DeepVerificationResult,
     ) {
+        let should_refresh_open_detail =
+            matches!(continuation, DeepVerificationContinuation::Manual { .. })
+                && matches!(
+                    &result,
+                    DeepVerificationResult::Verified(_)
+                        | DeepVerificationResult::AwaitingUploadConfirmation(_)
+                        | DeepVerificationResult::PasskeyConfirmed(_)
+                        | DeepVerificationResult::PasskeyMissing(_)
+                );
+
         if continuation.terminal_policy()
             == DeepVerificationTerminalPolicy::ClearActiveOperationBeforeConnectivityRetry
             && let Some(claim) = claim.take()
@@ -535,6 +553,11 @@ impl CloudBackupSupervisor {
 
         manager.persist_verification_result(&result);
         manager.handle_deep_verification_result(result);
+
+        if should_refresh_open_detail {
+            let plan = self.detail_refresh.request(self.detail_refresh_now());
+            self.handle_detail_refresh_plan(manager.clone(), plan);
+        }
 
         if continuation.terminal_policy()
             == DeepVerificationTerminalPolicy::ClearActiveOperationAfterTerminalHandling
@@ -594,7 +617,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -631,7 +654,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -692,7 +715,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -728,7 +751,7 @@ impl CloudBackupSupervisor {
                 {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
-                        error: error.to_string(),
+                        error: error.reader_message(),
                     });
                     self.active_operation = None;
                     manager.project_exclusive_operation_finished(claim);
@@ -736,7 +759,15 @@ impl CloudBackupSupervisor {
                 }
 
                 self.runtime_passkey_authorization = Some(authorization);
-                manager.finish_passkey_wrapper_repair(uploaded);
+                if let Err(error) = manager.finish_passkey_wrapper_repair(uploaded) {
+                    manager.apply_recovery_state(RecoveryState::Failed {
+                        action: RecoveryAction::RepairPasskey,
+                        error: error.reader_message(),
+                    });
+                    self.active_operation = None;
+                    manager.project_exclusive_operation_finished(claim);
+                    return Produces::ok(());
+                }
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.prepare_passkey_repair_finalization().await;
                     send!(addr.complete_repair_passkey_finalization(claim, result));
@@ -745,7 +776,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);
@@ -780,7 +811,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
                 self.active_operation = None;
                 manager.project_exclusive_operation_finished(claim);

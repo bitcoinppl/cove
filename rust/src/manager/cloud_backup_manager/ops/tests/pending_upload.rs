@@ -198,19 +198,21 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
 
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
-    manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
-        DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
-            detail: None,
-        },
-        namespace_id.clone(),
-        vec![PendingVerificationUpload::master_key_wrapper()],
-    ));
+    manager
+        .replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id.clone(),
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ))
+        .unwrap();
     globals
         .cloud
         .fail_master_key_download_authorization_required(namespace_id, "authorization required");
@@ -291,19 +293,21 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
     let expected_revision = master_key_wrapper_revision_hash(&expected_master_json);
     persist_pending_master_key_confirmation(namespace_id.clone(), expected_revision);
     globals.cloud.set_master_key_backup(namespace_id.clone(), vec![4, 5, 6]);
-    manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
-        DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
-            detail: None,
-        },
-        namespace_id,
-        vec![PendingVerificationUpload::master_key_wrapper()],
-    ));
+    manager
+        .replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id,
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ))
+        .unwrap();
 
     let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
@@ -325,19 +329,21 @@ async fn pending_upload_verification_expires_stale_completion() {
     configure_enabled_cloud_backup(&manager, globals, 0);
 
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
-    manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
-        DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
-            detail: None,
-        },
-        namespace_id,
-        vec![PendingVerificationUpload::master_key_wrapper()],
-    ));
+    manager
+        .replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id,
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        ))
+        .unwrap();
 
     let mut state = RustCloudBackupManager::load_persisted_state();
     match &mut state {
@@ -411,22 +417,24 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
             crate::manager::cloud_backup_manager::current_timestamp(),
         )
         .unwrap();
-    manager.replace_pending_verification_completion(PendingVerificationCompletion::new(
-        DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
-            detail: None,
-        },
-        namespace_id,
-        vec![
-            PendingVerificationUpload::master_key_wrapper(),
-            PendingVerificationUpload::new(record_id, prepared.revision_hash),
-        ],
-    ));
+    manager
+        .replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            namespace_id,
+            vec![
+                PendingVerificationUpload::master_key_wrapper(),
+                PendingVerificationUpload::new(record_id, prepared.revision_hash),
+            ],
+        ))
+        .unwrap();
 
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
 

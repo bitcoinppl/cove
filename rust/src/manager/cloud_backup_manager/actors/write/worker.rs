@@ -15,7 +15,6 @@ use super::supervisor::{CloudBackupWriteCommandContext, CloudBackupWriteSupervis
 pub(crate) enum CloudBackupRemoteWriteCommand {
     UploadWallet { cloud: CloudStorageClient, namespace: String, record_id: String, data: Vec<u8> },
     UploadMasterKey { cloud: CloudStorageClient, namespace: String, data: Vec<u8> },
-    DeleteWallet { cloud: CloudStorageClient, namespace: String, record_id: String },
     DeleteActiveWallet { cloud: CloudStorageClient, namespace: String, record_id: String },
     ListWalletCount { cloud: CloudStorageClient, namespace_id: String, fallback_count: u32 },
     ListWalletCountOptional { cloud: CloudStorageClient, namespace_id: String },
@@ -41,10 +40,6 @@ impl CloudBackupRemoteWriteCommand {
             }
             Self::UploadMasterKey { cloud, namespace, data } => {
                 cloud.upload_master_key_backup(namespace, data).await?;
-                Ok(CloudBackupRemoteWriteResult::None)
-            }
-            Self::DeleteWallet { cloud, namespace, record_id } => {
-                cloud.delete_wallet_backup(namespace, record_id).await?;
                 Ok(CloudBackupRemoteWriteResult::None)
             }
             Self::DeleteActiveWallet { cloud, namespace, record_id } => {

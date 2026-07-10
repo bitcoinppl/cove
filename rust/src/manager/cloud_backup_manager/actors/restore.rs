@@ -15,10 +15,11 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 
 use crate::manager::cloud_backup_manager::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupRestoreFlow,
+    BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
+    CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupError, CloudBackupRestoreFlow,
     CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus, CloudBackupStore,
-    CloudStorageIssue, RustCloudBackupManager, blocking_cloud_error, is_connectivity_related_issue,
-    offline_error_for_step,
+    CloudStorageIssue, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager,
+    blocking_cloud_error, is_connectivity_related_issue, offline_error_for_step,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -321,7 +322,9 @@ impl RestoreOperation {
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {
                         report.labels_failed_wallet_names.push(warning.wallet_name);
-                        report.labels_failed_errors.push(warning.error);
+                        report
+                            .labels_failed_errors
+                            .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                     }
                 }
                 Ok(WalletRestoreOutcome::SkippedDuplicate) => {
@@ -332,7 +335,7 @@ impl RestoreOperation {
                 Err(error) => {
                     warn!("Failed to restore wallet backup: {error}");
                     report.wallets_failed += 1;
-                    report.failed_wallet_errors.push(error.to_string());
+                    report.failed_wallet_errors.push(error.reader_message());
                 }
             }
 
@@ -458,14 +461,14 @@ impl RestoreOperation {
                     downloaded_wallets.push((record_name.clone(), wallet));
                 }
                 Ok(WalletBackupLookup::NotFound) => {
-                    let error = "wallet was listed but missing from cloud backup".to_string();
+                    let error = CloudBackupError::NoBackupFound.reader_message();
                     warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error);
                 }
                 Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
-                    let error = format!("wallet uses unsupported wallet backup version {version}");
-                    warn!("Failed to download wallet backup: {error}");
+                    warn!("Failed to download wallet backup: unsupported version {version}");
+                    let error = CLOUD_BACKUP_COMPATIBILITY_MESSAGE.to_string();
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error);
                 }
@@ -473,7 +476,7 @@ impl RestoreOperation {
                     if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
-                    let error = "wallet backup could not be read".to_string();
+                    let error = GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.to_string();
                     warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error);

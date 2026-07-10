@@ -6,7 +6,8 @@ use futures::TryStreamExt as _;
 use futures::stream::{self, StreamExt as _};
 
 use super::{
-    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupStore, RustCloudBackupManager,
+    CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupStore,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -14,7 +15,7 @@ use crate::database::cloud_backup::{
 };
 
 pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
-    "master key backup is missing from cloud storage";
+    "Cove couldn't confirm the key for this cloud backup. Try syncing again.";
 
 impl RustCloudBackupManager {
     pub(crate) async fn compute_sync_health(&self) -> CloudSyncHealth {
@@ -31,11 +32,11 @@ impl RustCloudBackupManager {
 
         let namespace = match self.current_namespace_id() {
             Ok(namespace) => namespace,
-            Err(error) => return CloudSyncHealth::Failed(error.to_string()),
+            Err(error) => return CloudSyncHealth::Failed(error.reader_message()),
         };
         let expected_wallet_record_ids = match self.expected_wallet_record_ids().await {
             Ok(record_ids) => record_ids,
-            Err(error) => return CloudSyncHealth::Failed(error.to_string()),
+            Err(error) => return CloudSyncHealth::Failed(error.reader_message()),
         };
         let sync_states = match Database::global().cloud_blob_sync_states.list() {
             Ok(states) => {
@@ -53,9 +54,8 @@ impl RustCloudBackupManager {
                     .collect::<Vec<_>>()
             }
             Err(error) => {
-                return CloudSyncHealth::Failed(format!(
-                    "failed to read cloud backup sync states: {error}",
-                ));
+                tracing::error!("Failed to read cloud backup sync states: {error}");
+                return CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into());
             }
         };
 
@@ -141,9 +141,8 @@ impl RustCloudBackupManager {
             };
 
             if failed_state.issue == Some(CloudStorageIssue::AuthorizationRequired) {
-                return Some(CloudSyncHealth::AuthorizationRequired(sync_health_failed_message(
-                    sync_state,
-                    failed_state,
+                return Some(CloudSyncHealth::AuthorizationRequired(sync_health_reader_message(
+                    failed_state.issue,
                 )));
             }
 
@@ -157,7 +156,7 @@ impl RustCloudBackupManager {
                 return None;
             };
 
-            Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
+            Some(CloudSyncHealth::Failed(sync_health_reader_message(failed_state.issue)))
         })
     }
 
@@ -170,12 +169,10 @@ impl RustCloudBackupManager {
             }
 
             let PersistedCloudBlobState::Failed(failed_state) = &sync_state.state else {
-                return Some(CloudSyncHealth::Failed(
-                    "cloud backup sync state could not be decoded".into(),
-                ));
+                return Some(CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()));
             };
 
-            Some(CloudSyncHealth::Failed(sync_health_failed_message(sync_state, failed_state)))
+            Some(CloudSyncHealth::Failed(sync_health_reader_message(failed_state.issue)))
         })
     }
 
@@ -207,32 +204,35 @@ impl RustCloudBackupManager {
     }
 
     fn sync_health_from_cloud_error(error: CloudStorageError) -> CloudSyncHealth {
-        match error {
-            CloudStorageError::AuthorizationRequired(message) => {
-                CloudSyncHealth::AuthorizationRequired(message)
-            }
-            CloudStorageError::NotAvailable(_) => CloudSyncHealth::Unavailable,
-            CloudStorageError::Offline(message) => CloudSyncHealth::Failed(message),
-            CloudStorageError::QuotaExceeded => {
-                CloudSyncHealth::Failed("cloud storage quota was exceeded".into())
-            }
-            CloudStorageError::UploadFailed(message)
-            | CloudStorageError::DownloadFailed(message)
-            | CloudStorageError::NotFound(message)
-            | CloudStorageError::InvalidNamespace(message) => CloudSyncHealth::Failed(message),
+        let authorization_required = matches!(error, CloudStorageError::AuthorizationRequired(_));
+        let unavailable = matches!(error, CloudStorageError::NotAvailable(_));
+        let message = CloudBackupError::from(error).reader_message();
+
+        if authorization_required {
+            CloudSyncHealth::AuthorizationRequired(message)
+        } else if unavailable {
+            CloudSyncHealth::Unavailable
+        } else {
+            CloudSyncHealth::Failed(message)
         }
     }
 }
 
-fn sync_health_failed_message(
-    sync_state: &PersistedCloudBlobSyncState,
-    failed_state: &crate::database::cloud_backup::CloudBlobFailedState,
-) -> String {
-    if failed_state.error.is_empty() {
-        return format!("cloud backup upload failed for record_id={}", sync_state.record_id());
-    }
+fn sync_health_reader_message(issue: Option<CloudStorageIssue>) -> String {
+    let error = match issue {
+        Some(CloudStorageIssue::AuthorizationRequired) => {
+            CloudStorageError::AuthorizationRequired(String::new())
+        }
+        Some(CloudStorageIssue::Offline) => CloudStorageError::Offline(String::new()),
+        Some(CloudStorageIssue::Unavailable) => CloudStorageError::NotAvailable(String::new()),
+        Some(CloudStorageIssue::NotFound) => CloudStorageError::NotFound(String::new()),
+        Some(CloudStorageIssue::QuotaExceeded) => CloudStorageError::QuotaExceeded,
+        Some(CloudStorageIssue::Other) | None => {
+            return GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into();
+        }
+    };
 
-    failed_state.error.clone()
+    CloudBackupError::from(error).reader_message()
 }
 
 fn sync_health_missing_wallet_message(missing_wallet_count: usize) -> String {
@@ -280,7 +280,37 @@ mod tests {
                 generic_failure,
                 authorization_failure
             ]),
-            Some(CloudSyncHealth::AuthorizationRequired("authorization required".into())),
+            Some(CloudSyncHealth::AuthorizationRequired(sync_health_reader_message(Some(
+                CloudStorageIssue::AuthorizationRequired
+            )),)),
+        );
+    }
+
+    #[test]
+    fn sync_health_does_not_publish_persisted_or_provider_diagnostics() {
+        let diagnostic = "account=user@example.com namespace=secret record_id=private";
+        let failed = PersistedCloudBlobSyncState::wallet(
+            "secret".into(),
+            "private".into(),
+            "wallet".into(),
+            PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                revision_hash: None,
+                retryable: true,
+                error: diagnostic.into(),
+                issue: None,
+                failed_at: 1,
+            }),
+        );
+
+        assert_eq!(
+            RustCloudBackupManager::sync_health_from_local_failures(&[failed]),
+            Some(CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()))
+        );
+        assert_eq!(
+            RustCloudBackupManager::sync_health_from_cloud_error(
+                CloudStorageError::DownloadFailed(diagnostic.into())
+            ),
+            CloudSyncHealth::Failed(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into())
         );
     }
 }

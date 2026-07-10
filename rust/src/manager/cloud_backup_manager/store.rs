@@ -10,9 +10,12 @@ use strum::IntoEnumIterator as _;
 use super::actors::CloudBackupWriteClient;
 use super::cloud_inventory::LocalWalletSnapshot;
 use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
-use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, LocalWalletMode};
+use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupProgress, LocalWalletMode};
 use crate::database::Database;
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBlobSyncState};
+use crate::database::cloud_backup::{
+    PersistedCloudBackupState, PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion,
+    PersistedRestoreAllMarker,
+};
 use crate::wallet::metadata::WalletMetadata;
 
 #[derive(Clone)]
@@ -31,19 +34,21 @@ impl CloudBackupStore {
         self.persist_enabled_preserving_verification(wallet_count)
     }
 
-    pub(crate) fn persist_enabled_reset_verification(
+    pub(crate) fn persist_enabled_reset_verification_with_pending_completion(
         &self,
         wallet_count: u32,
+        completion: PersistedPendingVerificationCompletion,
     ) -> Result<(), CloudBackupError> {
-        self.0
-            .cloud_backup_state
-            .set(&PersistedCloudBackupState::mark_enabled_reset_verification(
-                crate::manager::cloud_backup_manager::current_timestamp(),
-                wallet_count,
-            ))
-            .map_err(|source| {
-                CloudBackupError::internal_context("persist cloud backup state", source)
-            })
+        let mut state = PersistedCloudBackupState::mark_enabled_reset_verification(
+            crate::manager::cloud_backup_manager::current_timestamp(),
+            wallet_count,
+        );
+        let replaced = state.replace_pending_verification_completion(completion);
+        debug_assert!(replaced);
+
+        self.0.cloud_backup_state.set(&state).map_err(|source| {
+            CloudBackupError::internal_context("persist cloud backup state", source)
+        })
     }
 
     pub(crate) fn last_sync(&self) -> Option<u64> {
@@ -65,6 +70,39 @@ impl CloudBackupStore {
         Ok(self.all_wallets()?.len() as u32)
     }
 
+    pub(crate) fn persist_restore_all_marker(
+        &self,
+        namespace_id: String,
+    ) -> Result<(), CloudBackupError> {
+        let mut state = self.0.cloud_backup_state.get().map_err(|source| {
+            CloudBackupError::internal_context("read cloud backup state", source)
+        })?;
+        if !state.replace_pending_restore_all(PersistedRestoreAllMarker { namespace_id }) {
+            return Err(CloudBackupError::Internal(
+                "cannot start Restore All while Cloud Backup is not configured".into(),
+            ));
+        }
+
+        self.0.cloud_backup_state.set(&state).map_err(|source| {
+            CloudBackupError::internal_context("persist Restore All marker", source)
+        })
+    }
+
+    pub(crate) fn clear_restore_all_marker(&self) -> Result<bool, CloudBackupError> {
+        let mut state = self.0.cloud_backup_state.get().map_err(|source| {
+            CloudBackupError::internal_context("read cloud backup state", source)
+        })?;
+        if !state.clear_pending_restore_all() {
+            return Ok(false);
+        }
+
+        self.0.cloud_backup_state.set(&state).map_err(|source| {
+            CloudBackupError::internal_context("clear Restore All marker", source)
+        })?;
+
+        Ok(true)
+    }
+
     pub(crate) async fn upload_all_wallets(
         &self,
         writes: &CloudBackupWriteClient,
@@ -72,9 +110,28 @@ impl CloudBackupStore {
         namespace: &str,
         critical_key: &[u8; 32],
     ) -> Result<Vec<PreparedWalletBackup>, CloudBackupError> {
-        let mut uploaded_wallets = Vec::new();
+        self.upload_all_wallets_with_progress(writes, cloud, namespace, critical_key, 0, |_| {})
+            .await
+    }
 
-        for metadata in self.all_wallets()? {
+    pub(crate) async fn upload_all_wallets_with_progress<F>(
+        &self,
+        writes: &CloudBackupWriteClient,
+        cloud: &CloudStorageClient,
+        namespace: &str,
+        critical_key: &[u8; 32],
+        completed_before_wallets: u32,
+        mut report_progress: F,
+    ) -> Result<Vec<PreparedWalletBackup>, CloudBackupError>
+    where
+        F: FnMut(CloudBackupProgress),
+    {
+        let wallets = self.all_wallets()?;
+        let total = completed_before_wallets.saturating_add(wallets.len() as u32);
+        let mut uploaded_wallets = Vec::new();
+        report_progress(CloudBackupProgress { completed: completed_before_wallets, total });
+
+        for metadata in wallets {
             let prepared = prepare_wallet_backup(&metadata, metadata.wallet_mode).await?;
             let remote_metadata = RemotePayloadMetadata::wallet(
                 namespace,
@@ -101,6 +158,10 @@ impl CloudBackupStore {
                 .await?;
 
             uploaded_wallets.push(prepared);
+            report_progress(CloudBackupProgress {
+                completed: completed_before_wallets.saturating_add(uploaded_wallets.len() as u32),
+                total,
+            });
         }
 
         Ok(uploaded_wallets)
@@ -181,6 +242,9 @@ mod tests {
         PersistedConfiguredCloudBackup, PersistedPasskeyState,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+    use crate::manager::cloud_backup_manager::{
+        DeepVerificationReport, PendingVerificationCompletion, PendingVerificationUpload,
+    };
 
     fn setup_database_test() -> tokio::sync::MutexGuard<'static, ()> {
         let guard = test_lock().lock();
@@ -198,7 +262,24 @@ mod tests {
             },
             sync: PersistedBackupSyncState { last_sync: Some(10), wallet_count: Some(2) },
             pending_verification_completion: None,
+            pending_restore_all: None,
         })
+    }
+
+    fn pending_completion() -> PendingVerificationCompletion {
+        PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            "namespace".into(),
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        )
     }
 
     #[test]
@@ -226,7 +307,9 @@ mod tests {
         let _ = db.cloud_backup_state.delete();
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
 
-        CloudBackupStore::new(&db).persist_enabled_reset_verification(7).unwrap();
+        CloudBackupStore::new(&db)
+            .persist_enabled_reset_verification_with_pending_completion(7, pending_completion())
+            .unwrap();
 
         let state = db.cloud_backup_state.get().unwrap();
         assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
@@ -254,6 +337,24 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(12));
         assert_eq!(state.last_verification_dismissed_at(), Some(13));
+        let _ = db.cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn reset_verification_persists_pending_completion_in_enabled_state_write() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+        let completion = pending_completion();
+
+        CloudBackupStore::new(&db)
+            .persist_enabled_reset_verification_with_pending_completion(3, completion.clone())
+            .unwrap();
+
+        let state = db.cloud_backup_state.get().unwrap();
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
+        assert_eq!(state.wallet_count(), Some(3));
+        assert_eq!(state.pending_verification_completion(), Some(&completion));
         let _ = db.cloud_backup_state.delete();
     }
 }

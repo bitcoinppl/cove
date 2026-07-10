@@ -95,6 +95,7 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
                 wallet_count: state.wallet_count,
             },
             pending_verification_completion: state.pending_verification_completion,
+            pending_restore_all: None,
         })
     }
 }
@@ -424,6 +425,7 @@ mod tests {
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
         PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
         PersistedConfiguredCloudBackup, PersistedPasskeyState, PersistedPendingVerificationUpload,
+        PersistedRestoreAllMarker,
     };
 
     fn configured_state(
@@ -437,6 +439,7 @@ mod tests {
             verification,
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
+            pending_restore_all: None,
         })
     }
 
@@ -458,6 +461,7 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(20));
         assert_eq!(state.last_verification_dismissed_at(), Some(12));
+        assert!(state.pending_restore_all().is_none());
         assert!(state.should_prompt_verification());
     }
 
@@ -482,8 +486,32 @@ mod tests {
         assert_eq!(encoded["backup"]["data"]["verification"]["state"], "Verified");
         assert_eq!(encoded["backup"]["data"]["sync"]["last_sync"], 10);
         assert_eq!(encoded["backup"]["data"]["sync"]["wallet_count"], 2);
+        assert!(encoded["backup"]["data"].get("pending_restore_all").is_none());
         assert!(encoded.get("status").is_none());
         assert!(encoded.get("last_sync").is_none());
+    }
+
+    #[test]
+    fn cloud_backup_state_v2_roundtrips_pending_restore_all_marker() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            Some(10),
+            Some(2),
+        );
+        let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
+        assert!(state.replace_pending_restore_all(marker.clone()));
+
+        let encoded = serde_json::to_value(&state).unwrap();
+
+        assert_eq!(encoded["version"], 2);
+        assert_eq!(encoded["backup"]["data"]["pending_restore_all"]["namespace_id"], "namespace-1");
+
+        let decoded: PersistedCloudBackupState = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.pending_restore_all(), Some(&marker));
     }
 
     #[test]
@@ -545,6 +573,33 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(20));
         assert_eq!(state.last_verification_dismissed_at(), Some(12));
+        assert!(state.pending_restore_all().is_none());
+    }
+
+    #[test]
+    fn cloud_backup_state_accepts_v2_configured_json_without_restore_marker() {
+        let state: PersistedCloudBackupState = serde_json::from_value(serde_json::json!({
+            "version": 2,
+            "backup": {
+                "state": "Configured",
+                "data": {
+                    "passkey": "Available",
+                    "verification": {
+                        "state": "NotVerified",
+                        "data": {}
+                    },
+                    "sync": {
+                        "last_sync": 10,
+                        "wallet_count": 2
+                    }
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Enabled);
+        assert_eq!(state.wallet_count(), Some(2));
+        assert!(state.pending_restore_all().is_none());
     }
 
     #[test]
