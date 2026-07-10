@@ -74,7 +74,7 @@ impl RustSendFlowManager {
         address: Option<Address>,
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
-        trace!("build_psbt_for_utxo_list");
+        trace!("build_psbt_for_coin_control");
 
         let (address, amount) = {
             let state = self.state.lock();
