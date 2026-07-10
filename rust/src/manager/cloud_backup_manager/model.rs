@@ -218,6 +218,7 @@ impl CloudBackupReducerState {
 
         match &self.restore_all {
             CloudBackupRestoreAllRuntimeState::Running {
+                claim: _,
                 completed,
                 total,
                 current_wallet_name,
@@ -656,8 +657,18 @@ impl CloudBackupReducerState {
         }
     }
 
-    fn start_restore_all(&mut self, total: u32) {
+    fn start_restore_all(&mut self, claim: CloudBackupExclusiveOperationClaim, total: u32) {
+        if total == 0 || self.active_operation.is_some_and(|active| active != claim) {
+            return;
+        }
+
+        if self.active_operation.is_none() {
+            self.active_operation = Some(claim);
+            self.apply_exclusive_operation_start(claim.operation());
+        }
+
         self.restore_all = CloudBackupRestoreAllRuntimeState::Running {
+            claim,
             completed: 0,
             total,
             current_wallet_name: None,
@@ -665,8 +676,14 @@ impl CloudBackupReducerState {
         };
     }
 
-    fn report_restore_all_progress(&mut self, completed: u32, current_wallet_name: Option<String>) {
+    fn report_restore_all_progress(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        completed: u32,
+        current_wallet_name: Option<String>,
+    ) {
         let CloudBackupRestoreAllRuntimeState::Running {
+            claim: active_claim,
             completed: current_completed,
             total,
             current_wallet_name: current_name,
@@ -675,19 +692,50 @@ impl CloudBackupReducerState {
         else {
             return;
         };
+        if *active_claim != claim || completed < *current_completed || completed > *total {
+            return;
+        }
 
-        *current_completed = completed.min(*total);
+        *current_completed = completed;
         *current_name = current_wallet_name;
     }
 
-    fn request_restore_all_cancellation(&mut self) {
-        let CloudBackupRestoreAllRuntimeState::Running { cancellation_requested, .. } =
-            &mut self.restore_all
+    fn request_restore_all_cancellation(&mut self, claim: CloudBackupExclusiveOperationClaim) {
+        let CloudBackupRestoreAllRuntimeState::Running {
+            claim: active_claim,
+            cancellation_requested,
+            ..
+        } = &mut self.restore_all
         else {
             return;
         };
+        if *active_claim != claim {
+            return;
+        }
 
         *cancellation_requested = true;
+    }
+
+    fn finish_restore_all(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+        retry_remaining: bool,
+    ) {
+        let CloudBackupRestoreAllRuntimeState::Running { claim: active_claim, .. } =
+            &self.restore_all
+        else {
+            return;
+        };
+        if *active_claim != claim || self.active_operation != Some(claim) {
+            return;
+        }
+
+        self.active_operation = None;
+        self.restore_all = if retry_remaining {
+            CloudBackupRestoreAllRuntimeState::RetryRemaining
+        } else {
+            CloudBackupRestoreAllRuntimeState::Idle
+        };
     }
 
     fn apply_status(&mut self, status: CloudBackupStatus) {
@@ -1268,23 +1316,37 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::RestoreProgressReported(progress) => {
                 self.state.report_restore_progress(progress);
             }
-            CloudBackupStateReducerEvent::RestoreAllStarted { total } => {
-                self.state.start_restore_all(total);
+            CloudBackupStateReducerEvent::RestoreAllStarted { claim, total } => {
+                self.state.start_restore_all(claim, total);
             }
             CloudBackupStateReducerEvent::RestoreAllProgressed {
+                claim,
                 completed,
                 current_wallet_name,
             } => {
-                self.state.report_restore_all_progress(completed, current_wallet_name);
+                self.state.report_restore_all_progress(claim, completed, current_wallet_name);
             }
-            CloudBackupStateReducerEvent::RestoreAllCancellationRequested => {
-                self.state.request_restore_all_cancellation();
+            CloudBackupStateReducerEvent::RestoreAllCancellationRequested(claim) => {
+                self.state.request_restore_all_cancellation(claim);
+            }
+            CloudBackupStateReducerEvent::RestoreAllFinished { claim, retry_remaining } => {
+                self.state.finish_restore_all(claim, retry_remaining);
             }
             CloudBackupStateReducerEvent::RestoreAllRetryRequired => {
-                self.state.restore_all = CloudBackupRestoreAllRuntimeState::RetryRemaining;
+                if !matches!(
+                    self.state.restore_all,
+                    CloudBackupRestoreAllRuntimeState::Running { .. }
+                ) {
+                    self.state.restore_all = CloudBackupRestoreAllRuntimeState::RetryRemaining;
+                }
             }
             CloudBackupStateReducerEvent::RestoreAllReset => {
-                self.state.restore_all = CloudBackupRestoreAllRuntimeState::Idle;
+                if !matches!(
+                    self.state.restore_all,
+                    CloudBackupRestoreAllRuntimeState::Running { .. }
+                ) {
+                    self.state.restore_all = CloudBackupRestoreAllRuntimeState::Idle;
+                }
             }
             CloudBackupStateReducerEvent::SyncHealthObserved(sync_health) => {
                 self.state.sync_health = sync_health;
@@ -1710,15 +1772,46 @@ mod tests {
             cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ]);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
+            1,
+        );
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim)).unwrap();
 
-        model.apply_event(CloudBackupStateReducerEvent::RestoreAllStarted { total: 2 }).unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllStarted { claim, total: 2 })
+            .unwrap();
         model
             .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+                claim,
                 completed: 1,
                 current_wallet_name: Some("Savings".into()),
             })
             .unwrap();
-        model.apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested).unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+                claim,
+                completed: 0,
+                current_wallet_name: Some("Regressed".into()),
+            })
+            .unwrap();
+        let stale_claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
+            0,
+        );
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+                claim: stale_claim,
+                completed: 2,
+                current_wallet_name: Some("Stale".into()),
+            })
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(stale_claim))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(claim))
+            .unwrap();
 
         assert_eq!(
             restore_all_state(&model),
@@ -1730,7 +1823,12 @@ mod tests {
             },
         );
 
-        model.apply_event(CloudBackupStateReducerEvent::RestoreAllReset).unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::RestoreAllFinished {
+                claim,
+                retry_remaining: false,
+            })
+            .unwrap();
         assert_eq!(
             restore_all_state(&model),
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },

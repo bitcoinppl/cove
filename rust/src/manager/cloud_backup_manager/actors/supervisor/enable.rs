@@ -97,7 +97,7 @@ impl CloudBackupSupervisor {
         manager.apply_enable_state(CloudBackupEnableState::Idle);
         manager
             .reconcile_runtime_status(RustCloudBackupManager::status_for_operation_error(&error));
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -129,7 +129,7 @@ impl CloudBackupSupervisor {
             }
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -155,7 +155,7 @@ impl CloudBackupSupervisor {
             }
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 }

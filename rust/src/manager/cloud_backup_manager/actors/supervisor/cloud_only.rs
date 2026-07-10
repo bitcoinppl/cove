@@ -93,11 +93,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -116,7 +116,7 @@ impl CloudBackupSupervisor {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
                     error.reader_message(),
                 ));
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -130,11 +130,11 @@ impl CloudBackupSupervisor {
         record_id: String,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -154,7 +154,7 @@ impl CloudBackupSupervisor {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
                     error.reader_message(),
                 ));
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -168,12 +168,12 @@ impl CloudBackupSupervisor {
         record_id: String,
         result: Result<WalletRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -210,7 +210,7 @@ impl CloudBackupSupervisor {
                         error: error.reader_message(),
                     },
                 );
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }

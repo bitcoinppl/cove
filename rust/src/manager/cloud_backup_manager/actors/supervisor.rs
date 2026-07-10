@@ -211,6 +211,66 @@ struct PendingDisableWriteDrain {
     disabling: PersistedDisablingCloudBackup,
 }
 
+#[derive(Debug)]
+struct RestoreAllRun {
+    claim: CloudBackupExclusiveOperationClaim,
+    cancellation: Arc<AtomicBool>,
+}
+
+#[derive(Debug)]
+enum ActiveOperationRun {
+    Standard(CloudBackupExclusiveOperationClaim),
+    RestoreAll(RestoreAllRun),
+}
+
+#[derive(Debug, Default)]
+struct ActiveOperation(Option<ActiveOperationRun>);
+
+impl ActiveOperation {
+    fn is_some(&self) -> bool {
+        self.0.is_some()
+    }
+
+    fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
+        match self.0.as_ref()? {
+            ActiveOperationRun::Standard(claim) => Some(*claim),
+            ActiveOperationRun::RestoreAll(run) => Some(run.claim),
+        }
+    }
+
+    fn start_standard(&mut self, claim: CloudBackupExclusiveOperationClaim) {
+        self.0 = Some(ActiveOperationRun::Standard(claim));
+    }
+
+    fn start_restore_all(&mut self, run: RestoreAllRun) {
+        self.0 = Some(ActiveOperationRun::RestoreAll(run));
+    }
+
+    fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreAllRun> {
+        match self.0.as_ref()? {
+            ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
+            ActiveOperationRun::Standard(_) | ActiveOperationRun::RestoreAll(_) => None,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    #[cfg(test)]
+    fn take_claim(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
+        let claim = self.claim();
+        self.clear();
+        claim
+    }
+}
+
+impl PartialEq<Option<CloudBackupExclusiveOperationClaim>> for ActiveOperation {
+    fn eq(&self, other: &Option<CloudBackupExclusiveOperationClaim>) -> bool {
+        self.claim() == *other
+    }
+}
+
 /// Actor that owns Cloud Backup operation exclusivity and async completions
 #[derive(Debug)]
 pub(crate) struct CloudBackupSupervisor {
@@ -220,12 +280,11 @@ pub(crate) struct CloudBackupSupervisor {
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
     write: Addr<CloudBackupWriteSupervisor>,
-    active_operation: Option<CloudBackupExclusiveOperationClaim>,
+    active_operation: ActiveOperation,
     pending_enable_session: Option<PendingEnableSession>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
-    active_restore_all_cancellation: Option<Arc<AtomicBool>>,
     detail_workflow: DetailWorkflow,
     pending_disable_write_drain: Option<PendingDisableWriteDrain>,
 }
@@ -250,12 +309,11 @@ impl CloudBackupSupervisor {
             uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
             write: cloud_writes,
             manager,
-            active_operation: None,
+            active_operation: ActiveOperation::default(),
             pending_enable_session: None,
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
-            active_restore_all_cancellation: None,
             detail_workflow: DetailWorkflow::default(),
             pending_disable_write_drain: None,
         }
@@ -327,7 +385,25 @@ impl CloudBackupSupervisor {
         let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         let claim = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
         manager.project_exclusive_operation_started(claim);
-        self.active_operation = Some(claim);
+        self.active_operation.start_standard(claim);
+        Some(claim)
+    }
+
+    fn begin_restore_all_exclusive_operation(
+        &mut self,
+    ) -> Option<CloudBackupExclusiveOperationClaim> {
+        if self.active_operation.is_some() {
+            return None;
+        }
+
+        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
+            operation_id,
+        );
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.active_operation.start_restore_all(RestoreAllRun { claim, cancellation });
+
         Some(claim)
     }
 
@@ -341,11 +417,11 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
             if claim.operation() == CloudBackupExclusiveOperation::Restore
@@ -364,11 +440,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_failed(claim, &error);
         }
@@ -377,7 +453,7 @@ impl CloudBackupSupervisor {
     }
 
     fn restore_operation_is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        self.active_operation == Some(claim)
+        self.active_operation.claim() == Some(claim)
             && claim.operation() == CloudBackupExclusiveOperation::Restore
     }
 
@@ -815,11 +891,11 @@ impl CloudBackupSupervisor {
         detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -837,7 +913,7 @@ impl CloudBackupSupervisor {
             }
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }
@@ -1042,7 +1118,7 @@ impl CloudBackupSupervisor {
 
     pub async fn cancel_restore(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let Some(claim) = self.active_operation else {
+        let Some(claim) = self.active_operation.claim() else {
             return Produces::ok(());
         };
         if claim.operation() != CloudBackupExclusiveOperation::Restore {
@@ -1054,7 +1130,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
         manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
@@ -1091,7 +1167,7 @@ pub(crate) mod test_support {
         pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
             let manager = self.manager().expect("cloud backup manager exists");
             let addr = self.addr().expect("cloud backup supervisor address exists");
-            if let Some(claim) = self.active_operation.take() {
+            if let Some(claim) = self.active_operation.take_claim() {
                 manager.project_exclusive_operation_finished(claim);
             }
             let claim = self

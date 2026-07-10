@@ -6,11 +6,12 @@ use tracing::error;
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
-    CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupInventoryIncompleteReason,
-    CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreAllState,
-    CloudBackupRestoreFlow, CloudBackupStateReducerEvent, CloudBackupWalletItem,
-    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupExclusiveOperationClaim,
+    CloudBackupInventoryIncompleteReason, CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent,
+    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
+    CloudBackupWalletItem, CloudBackupWalletRestoreFailure, CloudBackupWalletStatus,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
+    RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
@@ -643,27 +644,49 @@ impl RustCloudBackupManager {
             .collect()
     }
 
-    pub(crate) fn apply_restore_all_started(&self, total: u32) {
-        self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllStarted { total });
+    pub(crate) fn apply_restore_all_started(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+        total: u32,
+    ) {
+        self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllStarted { claim, total });
     }
 
     pub(crate) fn apply_restore_all_progress(
         &self,
+        claim: CloudBackupExclusiveOperationClaim,
         completed: u32,
         current_wallet_name: Option<String>,
     ) {
         self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+            claim,
             completed,
             current_wallet_name,
         });
     }
 
-    pub(crate) fn apply_restore_all_cancellation_requested(&self) {
-        self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested);
+    pub(crate) fn apply_restore_all_cancellation_requested(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(
+            claim,
+        ));
     }
 
     pub(crate) fn apply_restore_all_retry_required(&self) {
         self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllRetryRequired);
+    }
+
+    pub(crate) fn finish_restore_all_run(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+        retry_remaining: bool,
+    ) {
+        self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllFinished {
+            claim,
+            retry_remaining,
+        });
     }
 
     pub(crate) fn reset_restore_all(&self) {

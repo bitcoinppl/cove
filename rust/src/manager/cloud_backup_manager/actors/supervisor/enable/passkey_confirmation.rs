@@ -18,7 +18,7 @@ impl CloudBackupSupervisor {
         };
 
         if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
-            self.active_operation = None;
+            self.active_operation.clear();
             manager.project_exclusive_operation_finished(claim);
         }
 
@@ -30,11 +30,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: CloudBackupSavedPasskeyConfirmation,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -56,7 +56,7 @@ impl CloudBackupSupervisor {
                         SavedPasskeyConfirmationMode::Manual,
                     ),
                 );
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             CloudBackupSavedPasskeyConfirmation::Failed(error) => {
@@ -122,11 +122,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         retry: SavedPasskeyConfirmationRetry,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 

@@ -21,11 +21,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupDisablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -75,11 +75,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             self.pending_disable_write_drain = None;
             return Produces::ok(());
         };
@@ -107,7 +107,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
@@ -158,11 +158,11 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
         let Some(disabling) = manager.current_disabling_if_current(&disabling) else {
@@ -225,11 +225,11 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -276,11 +276,11 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -310,7 +310,7 @@ impl CloudBackupSupervisor {
             warn!("Failed to lift cloud backup disable fence: {error}");
         }
 
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
@@ -371,7 +371,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         self.pending_disable_write_drain = None;
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -436,7 +436,7 @@ impl CloudBackupSupervisor {
                 }
                 manager.refresh_sync_health();
 
-                if let Some(claim) = self.active_operation
+                if let Some(claim) = self.active_operation.claim()
                     && claim.operation() == CloudBackupExclusiveOperation::Disable
                 {
                     self.finish_disable_operation(&manager, claim);

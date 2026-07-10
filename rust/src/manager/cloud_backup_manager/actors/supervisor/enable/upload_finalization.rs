@@ -6,11 +6,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -69,11 +69,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -111,11 +111,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupNoDiscoveryEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -135,7 +135,7 @@ impl CloudBackupSupervisor {
             }) => {
                 manager.present_existing_backup_found_prompt(context, passkey_hint);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -170,11 +170,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyRegistration, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -187,7 +187,7 @@ impl CloudBackupSupervisor {
                     context, None,
                 ));
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -237,7 +237,7 @@ impl CloudBackupSupervisor {
             manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                 SavedPasskeyConfirmationMode::Manual,
             ));
-            self.active_operation = None;
+            self.active_operation.clear();
             manager.project_exclusive_operation_finished(claim);
         }
     }
@@ -304,11 +304,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupUploadedEnableBackup, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -412,11 +412,11 @@ impl CloudBackupSupervisor {
         finalization: EnableUploadFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 

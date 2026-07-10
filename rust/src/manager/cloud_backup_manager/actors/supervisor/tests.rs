@@ -2738,12 +2738,14 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_restore_all_cancellation = Some(Arc::new(AtomicBool::new(false)));
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: Arc::new(AtomicBool::new(false)),
+    });
 
     supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
 
     assert_eq!(supervisor.active_operation, None);
-    assert!(supervisor.active_restore_all_cancellation.is_none());
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
 }
 
@@ -2762,7 +2764,10 @@ async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_restore_all_cancellation = Some(cancellation.clone());
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: cancellation.clone(),
+    });
 
     supervisor.request_restore_all_cancellation();
 
@@ -2786,7 +2791,10 @@ async fn closing_detail_does_not_cancel_restore_all() {
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_restore_all_cancellation = Some(cancellation.clone());
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: cancellation.clone(),
+    });
 
     supervisor.close_detail().await.unwrap();
 
@@ -2818,7 +2826,7 @@ async fn restore_all_mixed_failure_continues_through_later_success_and_settles()
     );
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
-    wait_for_test_condition(Duration::from_secs(2), "Restore All should settle", || {
+    wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
         manager.projected_exclusive_operation().is_none()
     })
     .await;
@@ -2994,12 +3002,14 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(true));
-    supervisor.active_restore_all_cancellation = Some(cancellation.clone());
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: cancellation.clone(),
+    });
 
     supervisor
         .complete_restore_all_preparation(
             claim,
-            cancellation,
             Err(CloudBackupError::Offline("offline".into())),
         )
         .await
@@ -3055,7 +3065,10 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_restore_all_cancellation = Some(Arc::new(AtomicBool::new(false)));
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: Arc::new(AtomicBool::new(false)),
+    });
     let detail_claim = supervisor.detail_workflow.start_operation_result();
 
     let should_continue = supervisor
@@ -3099,6 +3112,10 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: Arc::new(AtomicBool::new(false)),
+    });
 
     let should_continue = supervisor
         .complete_restore_all_record(

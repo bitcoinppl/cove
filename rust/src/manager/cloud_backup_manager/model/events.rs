@@ -41,6 +41,7 @@ pub(crate) enum CloudBackupRestoreAllRuntimeState {
     #[default]
     Idle,
     Running {
+        claim: CloudBackupExclusiveOperationClaim,
         completed: u32,
         total: u32,
         current_wallet_name: Option<String>,
@@ -89,13 +90,19 @@ pub(crate) enum CloudBackupStateReducerEvent {
     EnableProgressReported(Option<CloudBackupProgress>),
     RestoreProgressReported(CloudBackupRestoreFlow),
     RestoreAllStarted {
+        claim: CloudBackupExclusiveOperationClaim,
         total: u32,
     },
     RestoreAllProgressed {
+        claim: CloudBackupExclusiveOperationClaim,
         completed: u32,
         current_wallet_name: Option<String>,
     },
-    RestoreAllCancellationRequested,
+    RestoreAllCancellationRequested(CloudBackupExclusiveOperationClaim),
+    RestoreAllFinished {
+        claim: CloudBackupExclusiveOperationClaim,
+        retry_remaining: bool,
+    },
     RestoreAllRetryRequired,
     RestoreAllReset,
     SyncHealthObserved(CloudSyncHealth),

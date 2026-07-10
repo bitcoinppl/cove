@@ -58,10 +58,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        let Some(claim) = self.begin_exclusive_operation(
-            &manager,
-            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
-        ) else {
+        let Some(claim) = self.begin_restore_all_exclusive_operation() else {
             return;
         };
 
@@ -77,32 +74,28 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        let cancellation = Arc::new(AtomicBool::new(false));
-        self.active_restore_all_cancellation = Some(cancellation.clone());
         manager.clear_cloud_only_restore_failures(
             &frozen_wallets.iter().map(|wallet| wallet.record_id.clone()).collect::<Vec<_>>(),
         );
         manager.apply_cloud_only_operation(CloudOnlyOperation::Idle);
-        manager.apply_restore_all_started(frozen_count);
+        manager.apply_restore_all_started(claim, frozen_count);
 
         addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_restore_all_cloud_wallets(frozen_wallets).await;
-            send!(addr.complete_restore_all_preparation(claim, cancellation, result));
+            send!(addr.complete_restore_all_preparation(claim, result));
         });
     }
 
     pub(crate) fn request_restore_all_cancellation(&mut self) {
-        let Some(claim) = self.active_operation else { return };
-        if claim.operation() != CloudBackupExclusiveOperation::RestoreAllCloudWallets {
-            return;
-        }
-        let Some(cancellation) = &self.active_restore_all_cancellation else { return };
+        let Some(claim) = self.active_operation.claim() else { return };
+        let Some(run) = self.active_operation.restore_all(claim) else { return };
+        let cancellation = &run.cancellation;
         if cancellation.swap(true, Ordering::AcqRel) {
             return;
         }
 
         if let Some(manager) = self.manager() {
-            manager.apply_restore_all_cancellation_requested();
+            manager.apply_restore_all_cancellation_requested(claim);
         }
     }
 
@@ -117,28 +110,22 @@ impl CloudBackupSupervisor {
             error: error.reader_message(),
         });
         manager.reset_restore_all();
-        self.active_operation = None;
-        self.active_restore_all_cancellation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
     pub async fn complete_restore_all_preparation(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        cancellation: Arc<AtomicBool>,
         result: Result<CloudBackupPreparedRestoreAll, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim)
-            || self
-                .active_restore_all_cancellation
-                .as_ref()
-                .is_none_or(|active| !Arc::ptr_eq(active, &cancellation))
-        {
+        let Some(cancellation) =
+            self.active_operation.restore_all(claim).map(|run| run.cancellation.clone())
+        else {
             return Produces::ok(());
-        }
+        };
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
         if cancellation.load(Ordering::Acquire) {
@@ -163,7 +150,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        manager.apply_restore_all_started(ordered_queue.len() as u32);
+        manager.apply_restore_all_started(claim, ordered_queue.len() as u32);
         let addr = self.addr.clone();
         addr.send_fut_with(move |addr| async move {
             run_restore_all_queue(addr, manager, claim, cancellation, &mut prepared, ordered_queue)
@@ -179,17 +166,16 @@ impl CloudBackupSupervisor {
         completed: u32,
         wallet: CloudBackupWalletItem,
     ) -> ActorResult<bool> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(false);
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(false);
         };
 
         manager.clear_cloud_only_restore_failures(std::slice::from_ref(&wallet.record_id));
-        manager.apply_restore_all_progress(completed, Some(wallet.name));
+        manager.apply_restore_all_progress(claim, completed, Some(wallet.name));
         Produces::ok(true)
     }
 
@@ -200,12 +186,11 @@ impl CloudBackupSupervisor {
         wallet: CloudBackupWalletItem,
         result: Result<WalletRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<bool> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(false);
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(false);
         };
 
@@ -234,7 +219,7 @@ impl CloudBackupSupervisor {
             }
         }
 
-        manager.apply_restore_all_progress(completed, None);
+        manager.apply_restore_all_progress(claim, completed, None);
         Produces::ok(true)
     }
 
@@ -244,12 +229,11 @@ impl CloudBackupSupervisor {
         detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<bool> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(false);
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(false);
         };
 
@@ -274,16 +258,15 @@ impl CloudBackupSupervisor {
         completed: u32,
         error: CloudBackupError,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
-        manager.apply_restore_all_progress(completed, None);
+        manager.apply_restore_all_progress(claim, completed, None);
         self.finish_restore_all_retry_required(&manager, claim, error);
         Produces::ok(())
     }
@@ -292,12 +275,11 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -309,12 +291,11 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
-            self.active_restore_all_cancellation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -336,8 +317,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        manager.reset_restore_all();
-        self.finish_restore_all_claim(manager, claim);
+        self.finish_restore_all_claim(manager, claim, false);
     }
 
     fn finish_restore_all_retry_required(
@@ -350,8 +330,7 @@ impl CloudBackupSupervisor {
         manager.apply_cloud_only_operation(CloudOnlyOperation::Failed {
             error: error.reader_message(),
         });
-        manager.apply_restore_all_retry_required();
-        self.finish_restore_all_claim(manager, claim);
+        self.finish_restore_all_claim(manager, claim, true);
     }
 
     fn finish_restore_all_retry_remaining(
@@ -359,18 +338,17 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        manager.apply_restore_all_retry_required();
-        self.finish_restore_all_claim(manager, claim);
+        self.finish_restore_all_claim(manager, claim, true);
     }
 
     fn finish_restore_all_claim(
         &mut self,
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
+        retry_remaining: bool,
     ) {
-        self.active_operation = None;
-        self.active_restore_all_cancellation = None;
-        manager.project_exclusive_operation_finished(claim);
+        self.active_operation.clear();
+        manager.finish_restore_all_run(claim, retry_remaining);
     }
 }
 

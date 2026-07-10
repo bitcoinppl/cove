@@ -120,10 +120,13 @@ Rust freezes the visible order, refetches authoritative active-namespace
 inventory, and intersects the two sets. Newly appeared, stale, unsupported, or
 already-local rows are not added to the run.
 
-The manager owns inline progress, the current wallet name, cancellation, and row
-outcomes. Each success is reconciled immediately so the wallet moves to its
-network section. An ordinary wallet-local failure stays on its row and the batch
-continues; retrying that row or Retry Remaining clears its prior error. A
+The supervisor represents a live batch as one typed Restore All run containing
+its exclusive claim and cancellation token. Claim-tagged reducer events own
+progress, the current wallet name, cancellation, and terminal projection, and
+reject stale or regressive updates. Each success is reconciled immediately so
+the wallet moves to its network section. An ordinary wallet-local failure stays
+on its row and the batch continues; retrying that row or Retry Remaining clears
+its prior error. A
 provider, authorization, or offline failure stops before scheduling the next
 wallet and leaves Retry Remaining available after inventory is complete.
 
