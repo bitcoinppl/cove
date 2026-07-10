@@ -24,6 +24,15 @@
 		C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */; };
 		C0B0001C2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */; };
 		C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */; };
+		C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */; };
+		C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */; };
+		C0D000012F20000000000001 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
+		C0D000022F20000000000001 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
+		C0D000032F20000000000001 /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
+		C0D000042F20000000000001 /* MijickPopups in Frameworks */ = {isa = PBXBuildFile; productRef = ACC61E2E2ECBD8BE00D13947 /* MijickPopups */; };
+		C0D000052F20000000000001 /* SwiftUIIntrospect in Frameworks */ = {isa = PBXBuildFile; productRef = AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */; };
+		C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
+		C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +49,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = D0245F4B2C0F7B4E0042B447;
 			remoteInfo = Cove;
+		};
+		C0E000032F20000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0245F442C0F7B4E0042B447 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0D0000D2F20000000000001;
+			remoteInfo = CoveCloudBackupUITestHost;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -72,6 +88,11 @@
 		C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateScreenLayoutTests.swift; sourceTree = "<group>"; };
 		C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLogStoreTests.swift; sourceTree = "<group>"; };
+		C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupIOSSafetyHelpersTests.swift; sourceTree = "<group>"; };
+		C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyProviderImplTests.swift; sourceTree = "<group>"; };
+		C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoveCloudBackupUITestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveCloudBackupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupInventoryFullAppUITests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -83,11 +104,20 @@
 			);
 			target = D0245F4B2C0F7B4E0042B447 /* Cove */;
 		};
+		C0D000072F20000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CoveProductionApp.swift,
+				Info.plist,
+			);
+			target = C0D0000D2F20000000000001 /* CoveCloudBackupUITestHost */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AC8CF6022CF8C7D300F02F5C /* Cove */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (ACF539D02DB46DEF00755A33 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Cove; sourceTree = "<group>"; };
+		AC8CF6022CF8C7D300F02F5C /* Cove */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (ACF539D02DB46DEF00755A33 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, C0D000072F20000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Cove; sourceTree = "<group>"; };
 		AC8CF66C2CF8C86600F02F5C /* CodeScanner */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CodeScanner; sourceTree = "<group>"; };
+		C0D000082F20000000000001 /* CoveCloudBackupUITestHost */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CoveCloudBackupUITestHost; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +129,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C0B000092F00000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0D000092F20000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0D000022F20000000000001 /* CoveCore in Frameworks */,
+				C0D000032F20000000000001 /* KeychainSwift in Frameworks */,
+				C0D000042F20000000000001 /* MijickPopups in Frameworks */,
+				C0D000052F20000000000001 /* SwiftUIIntrospect in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0E000042F20000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,6 +170,7 @@
 		C0A000032EF0000000000001 /* CoveUITests */ = {
 			isa = PBXGroup;
 			children = (
+				C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */,
 				C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */,
 			);
 			path = CoveUITests;
@@ -131,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				C0B000182F10000000000001 /* AmountFormatterTests.swift */,
+				C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */,
 				C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */,
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
 				C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */,
@@ -139,6 +189,7 @@
 				C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */,
 				C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */,
 				C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */,
+				C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
 				C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */,
 			);
@@ -151,6 +202,7 @@
 				AC9AB5782C34956C00BAE3BE /* Logger.swift */,
 				AC8CF66C2CF8C86600F02F5C /* CodeScanner */,
 				AC8CF6022CF8C7D300F02F5C /* Cove */,
+				C0D000082F20000000000001 /* CoveCloudBackupUITestHost */,
 				C0B000062F00000000000001 /* CoveTests */,
 				C0A000032EF0000000000001 /* CoveUITests */,
 				D0245F4D2C0F7B4E0042B447 /* Products */,
@@ -161,6 +213,8 @@
 			isa = PBXGroup;
 			children = (
 				D0245F4C2C0F7B4E0042B447 /* Cove.app */,
+				C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */,
+				C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */,
 				C0B000052F00000000000001 /* CoveTests.xctest */,
 				C0A000022EF0000000000001 /* CoveUITests.xctest */,
 			);
@@ -205,6 +259,52 @@
 			productName = CoveTests;
 			productReference = C0B000052F00000000000001 /* CoveTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C0D0000D2F20000000000001 /* CoveCloudBackupUITestHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0D000102F20000000000001 /* Build configuration list for PBXNativeTarget "CoveCloudBackupUITestHost" */;
+			buildPhases = (
+				C0D0000B2F20000000000001 /* Sources */,
+				C0D000092F20000000000001 /* Frameworks */,
+				C0D0000A2F20000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AC8CF6022CF8C7D300F02F5C /* Cove */,
+				AC8CF66C2CF8C86600F02F5C /* CodeScanner */,
+				C0D000082F20000000000001 /* CoveCloudBackupUITestHost */,
+			);
+			name = CoveCloudBackupUITestHost;
+			packageProductDependencies = (
+				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
+				ACD0053B2DB5309A003DC493 /* CoveCore */,
+				ACC61E2E2ECBD8BE00D13947 /* MijickPopups */,
+				AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */,
+			);
+			productName = CoveCloudBackupUITestHost;
+			productReference = C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C0E000052F20000000000001 /* CoveCloudBackupUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0E0000B2F20000000000001 /* Build configuration list for PBXNativeTarget "CoveCloudBackupUITests" */;
+			buildPhases = (
+				C0E000082F20000000000001 /* Sources */,
+				C0E000042F20000000000001 /* Frameworks */,
+				C0E000072F20000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C0E000062F20000000000001 /* PBXTargetDependency */,
+			);
+			name = CoveCloudBackupUITests;
+			productName = CoveCloudBackupUITests;
+			productReference = C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		D0245F4B2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXNativeTarget;
@@ -252,6 +352,13 @@
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = D0245F4B2C0F7B4E0042B447;
 					};
+					C0D0000D2F20000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					C0E000052F20000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = C0D0000D2F20000000000001;
+					};
 					D0245F4B2C0F7B4E0042B447 = {
 						CreatedOnToolsVersion = 15.0.1;
 					};
@@ -277,6 +384,8 @@
 			projectRoot = "";
 			targets = (
 				D0245F4B2C0F7B4E0042B447 /* Cove */,
+				C0D0000D2F20000000000001 /* CoveCloudBackupUITestHost */,
+				C0E000052F20000000000001 /* CoveCloudBackupUITests */,
 				C0B000072F00000000000001 /* CoveTests */,
 				C0A000052EF0000000000001 /* CoveUITests */,
 			);
@@ -296,6 +405,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0D0000A2F20000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0E000072F20000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,6 +444,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */,
 				C0B000192F10000000000001 /* AmountFormatterTests.swift in Sources */,
 				C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */,
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,
@@ -330,7 +454,25 @@
 				C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */,
 				C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */,
 				C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */,
+				C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0D0000B2F20000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0D000012F20000000000001 /* Logger.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0E000082F20000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */,
+				C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,6 +496,11 @@
 			isa = PBXTargetDependency;
 			target = D0245F4B2C0F7B4E0042B447 /* Cove */;
 			targetProxy = C0B0000B2F00000000000001 /* PBXContainerItemProxy */;
+		};
+		C0E000062F20000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0D0000D2F20000000000001 /* CoveCloudBackupUITestHost */;
+			targetProxy = C0E000032F20000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -681,6 +828,146 @@
 			};
 			name = Release;
 		};
+		C0D0000E2F20000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 105;
+				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Cove/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cove Cloud Backup UI Test Host";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read info from your hardware wallet";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "We need access to your documents folder to read the wallet export file";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Allow Face ID to securely authenticate access to your wallets";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		C0D0000F2F20000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 105;
+				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Cove/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cove Cloud Backup UI Test Host";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read info from your hardware wallet";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "We need access to your documents folder to read the wallet export file";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Allow Face ID to securely authenticate access to your wallets";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		C0E000092F20000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 105;
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.coveCloudBackupUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = CoveCloudBackupUITestHost;
+			};
+			name = Debug;
+		};
+		C0E0000A2F20000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 105;
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.coveCloudBackupUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = CoveCloudBackupUITestHost;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -698,6 +985,24 @@
 			buildConfigurations = (
 				C0B0000E2F00000000000001 /* Debug */,
 				C0B0000F2F00000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0D000102F20000000000001 /* Build configuration list for PBXNativeTarget "CoveCloudBackupUITestHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0D0000E2F20000000000001 /* Debug */,
+				C0D0000F2F20000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0E0000B2F20000000000001 /* Build configuration list for PBXNativeTarget "CoveCloudBackupUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0E000092F20000000000001 /* Debug */,
+				C0E0000A2F20000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

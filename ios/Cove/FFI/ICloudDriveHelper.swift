@@ -1,12 +1,35 @@
 import CoveCore
 import Foundation
 
+enum ICloudInventoryUnion {
+    static func load(
+        localSnapshot: () throws -> [String],
+        authoritativeInventory: () throws -> [String]
+    ) throws -> [String] {
+        let localNames = (try? localSnapshot()) ?? []
+        let authoritativeNames = try authoritativeInventory()
+
+        return normalizedNames(localNames + authoritativeNames)
+    }
+
+    static func normalizedNames(_ names: [String]) -> [String] {
+        Set(names.map(normalizedName)).sorted()
+    }
+
+    private static func normalizedName(_ name: String) -> String {
+        guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return name }
+
+        return String(name.dropFirst().dropLast(".icloud".count))
+    }
+}
+
 final class ICloudDriveHelper: Sendable {
     static let shared = ICloudDriveHelper()
 
     private let containerIdentifier = "iCloud.com.covebitcoinwallet"
     let defaultTimeout: TimeInterval = 60
     let metadataSettleInterval: TimeInterval = 0.5
+    let metadataListingTimeout: TimeInterval = 5
 
     private let fileCoordinationClient = FileCoordinationClient()
     private let stateMachine = UploadDownloadStateMachine()
@@ -285,37 +308,53 @@ final class ICloudDriveHelper: Sendable {
 
     /// Lists immediate subdirectory names within a parent path
     ///
-    /// Tries FileManager first (fast, sees .icloud stubs and dataless files),
-    /// falls back to metadata query only if FileManager finds nothing
-    func listSubdirectories(parentPath: String) throws -> [String] {
+    /// Uses FileManager for a fast local snapshot, then always unions the
+    /// authoritative metadata result so evicted or late-visible items survive
+    func listSubdirectories(
+        parentPath: String,
+        metadataTimeout: TimeInterval? = nil
+    ) throws -> [String] {
         let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
 
-        if let names = try? fileCoordinationClient.listSubdirectoriesViaFileManager(
-            parentURL: parentURL
-        ), !names.isEmpty {
-            return names.sorted()
+        return try ICloudInventoryUnion.load {
+            try localSubdirectorySnapshot(parentPath: parentPath)
+        } authoritativeInventory: {
+            try metadataSubdirectoryNames(
+                parentDirectoryURL: parentURL,
+                timeout: metadataTimeout ?? metadataListingTimeout
+            )
         }
-
-        Log.info("listSubdirectories: FileManager found nothing, falling back to metadata query")
-        return try metadataSubdirectoryNames(parentDirectoryURL: parentURL)
     }
 
     /// Lists filenames matching a prefix within a namespace directory
     ///
-    /// Tries FileManager first (fast, sees .icloud stubs and dataless files),
-    /// falls back to metadata query only if FileManager finds nothing
+    /// Uses FileManager for a fast local snapshot, then always unions the
+    /// authoritative metadata result so evicted or late-visible items survive
     func listFiles(namespacePath: String, prefix: String) throws -> [String] {
         let dirURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
 
-        if let names = try? fileCoordinationClient.listFilesViaFileManager(
+        return try ICloudInventoryUnion.load {
+            try localFileSnapshot(namespacePath: namespacePath, prefix: prefix)
+        } authoritativeInventory: {
+            try metadataFileNames(parentDirectoryURL: dirURL, prefix: prefix)
+        }
+    }
+
+    func localSubdirectorySnapshot(parentPath: String) throws -> [String] {
+        let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
+        let names = try fileCoordinationClient.listSubdirectoriesViaFileManager(parentURL: parentURL)
+
+        return ICloudInventoryUnion.normalizedNames(names)
+    }
+
+    func localFileSnapshot(namespacePath: String, prefix: String) throws -> [String] {
+        let dirURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
+        let names = try fileCoordinationClient.listFilesViaFileManager(
             dirURL: dirURL,
             prefix: prefix
-        ), !names.isEmpty {
-            return names.sorted()
-        }
+        )
 
-        Log.info("listFiles: FileManager found nothing, falling back to metadata query prefix=\(prefix)")
-        return try metadataFileNames(parentDirectoryURL: dirURL, prefix: prefix)
+        return ICloudInventoryUnion.normalizedNames(names)
     }
 
     // MARK: - Upload status for UI
@@ -323,7 +362,7 @@ final class ICloudDriveHelper: Sendable {
     enum UploadStatus {
         case uploaded
         case uploading
-        case failed(String)
+        case failed
         case unknown
     }
 
@@ -332,7 +371,7 @@ final class ICloudDriveHelper: Sendable {
 
         switch uploadState(for: url) {
         case .uploaded: return .uploaded
-        case let .failed(error): return .failed(error.localizedDescription)
+        case .failed: return .failed
         case .uploading, .notUbiquitous, .unknown: return .uploading
         }
     }
@@ -421,20 +460,27 @@ final class ICloudDriveHelper: Sendable {
         }
     }
 
-    private func hasUploadedState(for file: URL) -> (hasFile: Bool, allUploaded: Bool, failed: String?) {
+    private func hasUploadedState(for file: URL) -> (hasFile: Bool, allUploaded: Bool, failed: Bool) {
         let status = uploadStatus(for: file)
         switch status {
         case .uploaded:
-            return (true, true, nil)
+            return (true, true, false)
         case .uploading, .unknown:
-            return (true, false, nil)
-        case let .failed(message):
-            return (true, false, message)
+            return (true, false, false)
+        case .failed:
+            return (true, false, true)
         }
     }
 
     static func isValidNamespaceDirectory(_ url: URL) -> Bool {
         ICloudPaths.isValidNamespaceDirectory(url)
+    }
+
+    static func syncHealth(hasFiles: Bool, allUploaded: Bool, anyFailed: Bool) -> CloudSyncHealth {
+        if !hasFiles { return .noFiles }
+        if anyFailed { return .failed("Some backups couldn't finish syncing to iCloud. Please try again.") }
+        if allUploaded { return .allUploaded }
+        return .uploading
     }
 
     /// Checks sync health of all files in namespace directories
@@ -453,23 +499,20 @@ final class ICloudDriveHelper: Sendable {
         var hasFiles = false
         var allUploaded = true
         var anyFailed = false
-        var failureMessage: String?
 
         for nsDir in namespaceDirs where Self.isValidNamespaceDirectory(nsDir) {
             for file in allBackupFiles(in: nsDir) {
                 let state = hasUploadedState(for: file)
                 hasFiles = hasFiles || state.hasFile
                 allUploaded = allUploaded && state.allUploaded
-                if let failed = state.failed {
-                    anyFailed = true
-                    failureMessage = failed
-                }
+                anyFailed = anyFailed || state.failed
             }
         }
 
-        if !hasFiles { return .noFiles }
-        if anyFailed { return .failed(failureMessage ?? "upload error") }
-        if allUploaded { return .allUploaded }
-        return .uploading
+        return Self.syncHealth(
+            hasFiles: hasFiles,
+            allUploaded: allUploaded,
+            anyFailed: anyFailed
+        )
     }
 }

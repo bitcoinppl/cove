@@ -68,15 +68,17 @@ struct MainSettingsCloudBackupEnabledRow: View {
     let onOpenDetail: () -> Void
 
     var body: some View {
-        HStack {
-            MainSettingsCloudBackupEnabledStatus(status: status)
-            Spacer()
-            settingsChevron
+        Button(action: onOpenDetail) {
+            HStack {
+                MainSettingsCloudBackupEnabledStatus(status: status)
+                Spacer()
+                settingsChevron
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onOpenDetail()
-        }
+        .buttonStyle(.plain)
+        .frame(minHeight: 44)
+        .accessibilityHint("Opens Cloud Backup details")
     }
 
     private var settingsChevron: some View {
@@ -211,7 +213,7 @@ struct MainSettingsCloudBackupEnabledStatus: View {
                 Text(message)
                     .font(.caption2)
                     .foregroundStyle(color)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -5,15 +5,6 @@ enum AboutAlertState: Equatable {
     case confirmBetaDisable
     case betaEnabled
     case betaError(String)
-    case confirmWipeCloud
-    case wipeCloudResult(WipeCloudResult)
-    case confirmResetLocalState
-    case resetLocalStateResult(String)
-}
-
-struct WipeCloudResult: Equatable {
-    let succeeded: Bool
-    let message: String
 }
 
 struct AboutScreen: View {
@@ -41,8 +32,7 @@ struct AboutScreen: View {
         AboutPresentationContext(
             alertState: $alertState,
             isBetaEnabled: $isBetaEnabled,
-            dismiss: { dismiss() },
-            wipeCloudBackup: Self.debugWipeCloudBackup
+            dismiss: { dismiss() }
         )
     }
 
@@ -136,22 +126,6 @@ struct AboutScreen: View {
                     }
                 }
             }
-
-            #if DEBUG
-                Section("Debug") {
-                    Button(role: .destructive) {
-                        alertState = .init(.confirmWipeCloud)
-                    } label: {
-                        Text("Wipe Cloud Backup")
-                    }
-
-                    Button {
-                        alertState = .init(.confirmResetLocalState)
-                    } label: {
-                        Text("Reset Local Backup State")
-                    }
-                }
-            #endif
         }
         .navigationTitle("About")
         .task { refreshSubmittedDiagnostics() }
@@ -193,25 +167,6 @@ struct AboutScreen: View {
 
             submittedDiagnosticsLoadState = loadState
         }
-    }
-
-    private nonisolated static func debugWipeCloudBackup() -> WipeCloudResult {
-        let helper = ICloudDriveHelper.shared
-
-        do {
-            let dataDir = try helper.dataDirectoryURL()
-            if FileManager.default.fileExists(atPath: dataDir.path) {
-                try FileManager.default.removeItem(at: dataDir)
-            }
-        } catch {
-            return WipeCloudResult(
-                succeeded: false,
-                message: "iCloud wipe failed: \(error.localizedDescription)"
-            )
-        }
-
-        RustCloudBackupManager().debugResetCloudBackupState()
-        return WipeCloudResult(succeeded: true, message: "All cloud backup data deleted and local state reset")
     }
 }
 

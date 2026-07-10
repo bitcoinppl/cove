@@ -73,6 +73,7 @@ struct CoveMainView: View {
                                         )
                                 }
                                 .contentShape(Rectangle())
+                                .accessibilityIdentifier("app.sidebar.open")
                             }
                         }
                 }

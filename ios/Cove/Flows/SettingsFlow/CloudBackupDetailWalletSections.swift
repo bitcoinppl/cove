@@ -24,6 +24,12 @@ struct WalletSections: View {
 
 struct WalletItemRow: View {
     let item: CloudBackupWalletItem
+    var accessibilityAction: String?
+
+    init(item: CloudBackupWalletItem, accessibilityAction: String? = nil) {
+        self.item = item
+        self.accessibilityAction = accessibilityAction
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -58,14 +64,50 @@ struct WalletItemRow: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+
+            if let failure = item.restoreFailure {
+                Label(failure.message, systemImage: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(Color.statusError)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(cloudBackupWalletAccessibilityLabel(
+            item: item,
+            action: accessibilityAction
+        ))
+        .accessibilityIdentifier("cloudBackup.wallet.\(item.recordId)")
     }
 
     private func formatDate(_ timestamp: UInt64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
         return date.formatted(date: .abbreviated, time: .shortened)
     }
+}
+
+func cloudBackupWalletAccessibilityLabel(
+    item: CloudBackupWalletItem,
+    action: String? = nil
+) -> String {
+    var components = [item.name]
+
+    if let network = item.network {
+        components.append(network.displayName())
+    }
+
+    components.append(item.syncStatus.accessibilityLabel)
+
+    if let failure = item.restoreFailure {
+        components.append("Restore failed: \(failure.message)")
+    }
+
+    if let action {
+        components.append(action)
+    }
+
+    return components.joined(separator: ", ")
 }
 
 private struct GroupedWalletSections {
@@ -94,19 +136,6 @@ private struct GroupedWalletSections {
 private struct StatusBadge: View {
     let status: CloudBackupWalletStatus
 
-    private var label: String {
-        switch status {
-        case .dirty: "Dirty"
-        case .uploading: "Uploading"
-        case .uploadedPendingConfirmation: "Uploaded, confirming"
-        case .confirmed: "Confirmed"
-        case .failed: "Failed"
-        case .deletedFromDevice: "Not on device"
-        case .unsupportedVersion: "Unsupported"
-        case .remoteStateUnknown: "Unknown"
-        }
-    }
-
     private var color: Color {
         switch status {
         case .dirty: .statusWarning
@@ -119,13 +148,28 @@ private struct StatusBadge: View {
     }
 
     var body: some View {
-        Text(label)
+        Text(status.accessibilityLabel)
             .font(.caption)
             .fontWeight(.medium)
             .foregroundColor(color)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(color.opacity(0.15), in: Capsule())
+    }
+}
+
+private extension CloudBackupWalletStatus {
+    var accessibilityLabel: String {
+        switch self {
+        case .dirty: "Dirty"
+        case .uploading: "Uploading"
+        case .uploadedPendingConfirmation: "Uploaded, confirming"
+        case .confirmed: "Confirmed"
+        case .failed: "Failed"
+        case .deletedFromDevice: "Not on device"
+        case .unsupportedVersion: "Unsupported, requires a newer version of Cove"
+        case .remoteStateUnknown: "Unknown"
+        }
     }
 }
 

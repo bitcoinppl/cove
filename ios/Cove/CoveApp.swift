@@ -32,9 +32,33 @@ public extension EnvironmentValues {
     }
 }
 
-@main
-struct CoveApp: App {
-    @UIApplicationDelegateAdaptor(CoveAppDelegate.self) var appDelegate
+struct CoveApplicationDependencies {
+    let keychain: KeychainAccess
+    let device: DeviceAccess
+    let connectivity: ConnectivityAccess
+    let passkey: PasskeyProvider
+    let cloudStorage: CloudStorageAccess
+
+    static func production() -> Self {
+        Self(
+            keychain: KeychainAccessor(),
+            device: DeviceAccesor(),
+            connectivity: CloudConnectivityMonitor.shared,
+            passkey: PasskeyProviderImpl(),
+            cloudStorage: CloudStorageAccessImpl()
+        )
+    }
+
+    func install() {
+        _ = Keychain(keychain: keychain)
+        _ = Device(device: device)
+        _ = Connectivity(connectivity: connectivity)
+        _ = PasskeyAccess(provider: passkey)
+        _ = CloudStorage(cloudStorage: cloudStorage)
+    }
+}
+
+struct CoveApplicationRoot: View {
     enum StartupState {
         case loading
         case ready(AppManager, AuthManager)
@@ -47,12 +71,8 @@ struct CoveApp: App {
     @State private var bdkMigrationWarning: String?
     @State private var bootstrapRequestID = 0
 
-    init() {
-        _ = Keychain(keychain: KeychainAccessor())
-        _ = Device(device: DeviceAccesor())
-        _ = Connectivity(connectivity: CloudConnectivityMonitor.shared)
-        _ = PasskeyAccess(provider: PasskeyProviderImpl())
-        _ = CloudStorage(cloudStorage: CloudStorageAccessImpl())
+    init(dependencies: CoveApplicationDependencies) {
+        dependencies.install()
         Self.excludeDataDirFromBackup(logFailure: false)
     }
 
@@ -70,30 +90,28 @@ struct CoveApp: App {
         }
     }
 
-    var body: some Scene {
-        WindowGroup {
-            startupContent
-                .task(id: bootstrapRequestID) {
-                    await runBootstrap()
-                }
-                .alert(
-                    "Encryption Migration Issue",
-                    isPresented: Binding(
-                        get: { bdkMigrationWarning != nil },
-                        set: { if !$0 { bdkMigrationWarning = nil } }
-                    )
-                ) {
-                    Button("OK") { bdkMigrationWarning = nil }
-                } message: {
-                    Text(
-                        "Some wallet databases couldn't be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
-                    )
-                }
-        }
+    var body: some View {
+        startupContent
+            .task(id: bootstrapRequestID) {
+                await runBootstrap()
+            }
+            .alert(
+                "Encryption Migration Issue",
+                isPresented: Binding(
+                    get: { bdkMigrationWarning != nil },
+                    set: { if !$0 { bdkMigrationWarning = nil } }
+                )
+            ) {
+                Button("OK") { bdkMigrationWarning = nil }
+            } message: {
+                Text(
+                    "Some wallet databases couldn't be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+                )
+            }
     }
 }
 
-extension CoveApp {
+extension CoveApplicationRoot {
     @MainActor
     private func runBootstrap() async {
         do {

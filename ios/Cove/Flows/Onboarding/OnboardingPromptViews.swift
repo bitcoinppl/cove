@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct CloudCheckContent: View {
+    let onContinue: () -> Void
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -28,6 +30,10 @@ struct CloudCheckContent: View {
             .padding(.horizontal, 24)
 
             Spacer(minLength: 0)
+
+            Button("Continue Setup", action: onContinue)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+                .padding(.horizontal, 24)
         }
         .padding(.horizontal, 28)
         .padding(.top, 18)
@@ -59,6 +65,7 @@ struct OnboardingWelcomeScreen: View {
 
 struct OnboardingBitcoinChoiceScreen: View {
     let errorMessage: String?
+    let onRestoreFromCoveBackup: () -> Void
     let onNewHere: () -> Void
     let onHasBitcoin: () -> Void
 
@@ -88,26 +95,40 @@ struct OnboardingBitcoinChoiceScreen: View {
                 ) {
                     onHasBitcoin()
                 }
+
+                Divider()
+                    .overlay(Color.coveLightGray.opacity(0.16))
+
+                OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
             }
         }
     }
 }
 
 struct OnboardingRestoreUnavailableScreen: View {
+    let onCheckAgain: () -> Void
     let onContinue: () -> Void
     let onBack: () -> Void
 
     var body: some View {
         OnboardingPromptScreen(
             icon: "icloud.slash",
-            title: "No iCloud Backup Found",
-            subtitle: "We couldn't find a Cove backup in iCloud for this account. You can continue without cloud restore or go back."
+            title: "Nothing visible yet",
+            subtitle: "On a new iPhone, your Cove backup may take time to become visible in iCloud. Make sure you’re signed in to the same iCloud account and can use the same passkey provider, then check again."
         ) {
-            Button("Continue Without Cloud Restore", action: onContinue)
+            Button("Check Again", action: onCheckAgain)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
 
-            Button("Back", action: onBack)
+            Button("Continue Setup", action: onContinue)
                 .buttonStyle(OnboardingSecondaryButtonStyle())
+
+            Button("Back", action: onBack)
+                .font(OnboardingRecoveryTypography.bodySemibold)
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
         }
     }
 }
@@ -133,7 +154,7 @@ struct OnboardingRestoreOfflineScreen: View {
 
 struct OnboardingStorageChoiceScreen: View {
     let errorMessage: String?
-    let onRestoreFromCoveBackup: (() -> Void)?
+    let onRestoreFromCoveBackup: () -> Void
     let onSelectStorage: (OnboardingStorageSelection) -> Void
     let onBack: () -> Void
 
@@ -148,9 +169,7 @@ struct OnboardingStorageChoiceScreen: View {
             }
 
             VStack(spacing: 14) {
-                if let onRestoreFromCoveBackup {
-                    OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
-                }
+                OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
 
                 OnboardingChoiceCard(
                     title: "On an exchange",
@@ -385,7 +404,7 @@ struct OnboardingInlineMessage: View {
 }
 
 #Preview("Cloud Check") {
-    CloudCheckContent()
+    CloudCheckContent(onContinue: {})
 }
 
 #Preview("Restore Offline") {

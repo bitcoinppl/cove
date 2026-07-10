@@ -34,6 +34,8 @@ struct OtherBackupsSection: View {
                 .foregroundStyle(.secondary)
 
             Button {
+                guard manager.isDetailInventoryComplete else { return }
+
                 showingRecoverConfirmation = true
             } label: {
                 operationLabel(
@@ -42,9 +44,11 @@ struct OtherBackupsSection: View {
                     isLoading: isRecovering
                 )
             }
-            .disabled(isOperating)
+            .disabled(isOperating || !manager.isDetailInventoryComplete)
 
             Button(role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 showingDeleteConfirmation = true
             } label: {
                 operationLabel(
@@ -53,7 +57,7 @@ struct OtherBackupsSection: View {
                     isLoading: isDeleting
                 )
             }
-            .disabled(isOperating)
+            .disabled(isOperating || !manager.isDetailInventoryComplete)
 
             if let failure {
                 Text(failure)
@@ -67,8 +71,12 @@ struct OtherBackupsSection: View {
             titleVisibility: .visible
         ) {
             Button("Try Passkey") {
+                guard manager.isDetailInventoryComplete else { return }
+
                 manager.dispatch(action: .recoverOtherBackups)
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
@@ -91,16 +99,24 @@ struct OtherBackupsSection: View {
         }
         .alert("Delete Other Cloud Backups?", isPresented: $showingDeleteConfirmation) {
             Button("Continue", role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 showingFinalDeleteConfirmation = true
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will permanently remove these other backups from iCloud.")
         }
         .alert("This Cannot Be Undone", isPresented: $showingFinalDeleteConfirmation) {
             Button("Delete", role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 manager.dispatch(action: .deleteOtherBackups)
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(

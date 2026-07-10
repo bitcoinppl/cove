@@ -11,6 +11,7 @@ struct CloudBackupEnableCancelButton: View {
             Button("Cancel", action: onCancel)
                 .foregroundStyle(.white)
                 .font(.headline)
+                .frame(minWidth: 44, minHeight: 44)
                 .disabled(isBusy)
         }
         .padding(.horizontal)
@@ -52,7 +53,7 @@ struct CloudBackupEnableTitleSection: View {
         VStack(spacing: 12) {
             HStack {
                 Text("Cloud Backup")
-                    .font(.system(size: 38, weight: .semibold))
+                    .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(.white)
 
                 Spacer()
@@ -141,6 +142,8 @@ struct CloudBackupEnableCheckboxSection: View {
 }
 
 struct CloudBackupEnableButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let title: String
     let allChecked: Bool
     let isBusy: Bool
@@ -154,7 +157,7 @@ struct CloudBackupEnableButton: View {
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
         .disabled(!allChecked || isBusy)
-        .animation(.easeInOut(duration: 0.2), value: allChecked)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: allChecked)
     }
 }
 
@@ -263,36 +266,24 @@ struct CloudBackupEnableConfirmationView: View {
 
 struct CloudBackupEnableBusyOverlay: View {
     let enableFlow: CloudBackupEnableFlow?
-    var titleOverride: String?
-    var subtitleOverride: String?
+    var verificationPresentation: CloudBackupVerificationPresentation = .hidden(source: nil)
 
-    private var title: String {
-        if let titleOverride { return titleOverride }
-
-        return switch enableFlow {
-        case .creatingPasskey:
-            "Creating your passkey..."
-        case .waitingForPasskeyAvailability:
-            "Checking that your passkey is available..."
-        case .awaitingSavedPasskeyConfirmation:
-            "Checking that your passkey is available..."
-        case .confirmingSavedPasskey:
-            "Confirming your passkey..."
-        case .uploadingInitialBackup, .retryingUploadWithStagedMaterial:
-            "Creating your encrypted backup..."
-        case nil, .discoveringExistingBackup, .awaitingForceNewConfirmation, .awaitingPasskeyChoice:
-            "Creating your encrypted backup..."
-        }
+    private var copy: CloudBackupEnableBusyCopy {
+        cloudBackupEnableBusyCopy(
+            enableFlow: enableFlow,
+            verificationPresentation: verificationPresentation
+        )
     }
 
-    private var subtitle: String {
-        if let subtitleOverride { return subtitleOverride }
-
-        return switch enableFlow {
-        case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
-            "This can take a few seconds after saving it in your passkey/password manager app"
-        default:
-            "Cloud Backup will continue automatically"
+    @ViewBuilder
+    private var progressIndicator: some View {
+        if let progress = copy.progress, progress.total > 0 {
+            ProgressView(value: Double(progress.completed), total: Double(progress.total))
+                .accessibilityLabel("Cloud Backup progress")
+                .accessibilityValue("Completed \(progress.completed) of \(progress.total)")
+        } else {
+            ProgressView()
+                .accessibilityLabel(copy.title)
         }
     }
 
@@ -302,13 +293,13 @@ struct CloudBackupEnableBusyOverlay: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 14) {
-                ProgressView()
+                progressIndicator
                     .tint(.white)
-                Text(title)
+                Text(copy.title)
                     .font(.headline)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
-                Text(subtitle)
+                Text(copy.subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.coveLightGray)
                     .multilineTextAlignment(.center)
@@ -326,5 +317,58 @@ struct CloudBackupEnableBusyOverlay: View {
             )
             .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
         }
+    }
+}
+
+struct CloudBackupEnableBusyCopy: Equatable {
+    let title: String
+    let subtitle: String
+    let progress: CloudBackupProgress?
+}
+
+func cloudBackupEnableBusyCopy(
+    enableFlow: CloudBackupEnableFlow?,
+    verificationPresentation: CloudBackupVerificationPresentation
+) -> CloudBackupEnableBusyCopy {
+    if case .backgroundConfirming = verificationPresentation {
+        return CloudBackupEnableBusyCopy(
+            title: "Confirming your encrypted backup...",
+            subtitle: "Cove is still confirming that your encrypted backup is visible in iCloud. You can leave this screen while confirmation continues in the background.",
+            progress: nil
+        )
+    }
+
+    return switch enableFlow {
+    case .creatingPasskey:
+        CloudBackupEnableBusyCopy(
+            title: "Creating your passkey...",
+            subtitle: "Cloud Backup will continue automatically",
+            progress: nil
+        )
+    case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
+        CloudBackupEnableBusyCopy(
+            title: "Checking that your passkey is available...",
+            subtitle: "This can take a few seconds after saving it in your passkey/password manager app",
+            progress: nil
+        )
+    case .confirmingSavedPasskey:
+        CloudBackupEnableBusyCopy(
+            title: "Confirming your passkey...",
+            subtitle: "Cloud Backup will continue automatically",
+            progress: nil
+        )
+    case let .uploadingInitialBackup(progress), let .retryingUploadWithStagedMaterial(progress):
+        CloudBackupEnableBusyCopy(
+            title: "Creating your encrypted backup...",
+            subtitle: progress.map { "Completed \($0.completed) of \($0.total)" }
+                ?? "Cloud Backup will continue automatically",
+            progress: progress
+        )
+    case nil, .discoveringExistingBackup, .awaitingForceNewConfirmation, .awaitingPasskeyChoice:
+        CloudBackupEnableBusyCopy(
+            title: "Creating your encrypted backup...",
+            subtitle: "Cloud Backup will continue automatically",
+            progress: nil
+        )
     }
 }

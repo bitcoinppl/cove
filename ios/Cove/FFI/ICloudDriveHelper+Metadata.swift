@@ -1,11 +1,37 @@
 import CoveCore
 import Foundation
 
+final class MetadataSettleScheduler {
+    typealias Enqueue = (_ delay: TimeInterval, _ workItem: DispatchWorkItem) -> Void
+
+    private let enqueue: Enqueue
+    private var workItem: DispatchWorkItem?
+
+    init(enqueue: @escaping Enqueue = { delay, workItem in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }) {
+        self.enqueue = enqueue
+    }
+
+    func schedule(after delay: TimeInterval, action: @escaping () -> Void) {
+        workItem?.cancel()
+
+        let workItem = DispatchWorkItem(block: action)
+        self.workItem = workItem
+        enqueue(delay, workItem)
+    }
+
+    func cancel() {
+        workItem?.cancel()
+        workItem = nil
+    }
+}
+
 private final class MetadataQuerySession<Value> {
     let query = NSMetadataQuery()
     let box = ICloudDriveHelper.ObserverBox()
     let semaphore = DispatchSemaphore(value: 0)
-    var finalizeWorkItem: DispatchWorkItem?
+    let settleScheduler = MetadataSettleScheduler()
 
     private(set) var value: Value?
     private var didSignal = false
@@ -13,7 +39,7 @@ private final class MetadataQuerySession<Value> {
     func finish(_ value: Value, disableUpdates: Bool = false) {
         guard !didSignal else { return }
         didSignal = true
-        finalizeWorkItem?.cancel()
+        settleScheduler.cancel()
         if disableUpdates { query.disableUpdates() }
         self.value = value
         query.stop()
@@ -42,7 +68,7 @@ final class SyncHealthObserver {
     private let box = ICloudDriveHelper.ObserverBox()
     private let settleInterval: TimeInterval
     private let onChange: @Sendable () -> Void
-    private var notifyWorkItem: DispatchWorkItem?
+    private let settleScheduler = MetadataSettleScheduler()
 
     init(settleInterval: TimeInterval, onChange: @escaping @Sendable () -> Void) {
         self.settleInterval = settleInterval
@@ -94,17 +120,13 @@ final class SyncHealthObserver {
     }
 
     private func scheduleNotify() {
-        notifyWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [onChange] in
+        settleScheduler.schedule(after: settleInterval) { [onChange] in
             onChange()
         }
-        notifyWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + settleInterval, execute: workItem)
     }
 
     private func stopOnMain() {
-        notifyWorkItem?.cancel()
-        notifyWorkItem = nil
+        settleScheduler.cancel()
         query.stop()
         box.removeAll()
     }
@@ -279,18 +301,9 @@ extension ICloudDriveHelper {
         reason: String
     ) {
         DispatchQueue.main.async {
-            let scheduleFinalize = { (reason: String) in
-                session.finalizeWorkItem?.cancel()
-                let workItem = DispatchWorkItem {
-                    finishQuery(session, reason)
-                }
-                session.finalizeWorkItem = workItem
-                DispatchQueue.main.asyncAfter(
-                    deadline: .now() + self.metadataSettleInterval,
-                    execute: workItem
-                )
+            session.settleScheduler.schedule(after: self.metadataSettleInterval) {
+                finishQuery(session, reason)
             }
-            scheduleFinalize(reason)
         }
     }
 
@@ -554,13 +567,14 @@ extension ICloudDriveHelper {
 
     private func metadataNames(
         parentDirectoryURL: URL,
+        timeout: TimeInterval,
         transform: (String) -> String?
     ) throws -> [String] {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
         let pathPrefix = resolvedParent + "/"
         let items = try metadataQuery(
             predicate: NSPredicate(value: true),
-            timeout: 5
+            timeout: timeout
         )
         var names = Set<String>()
 
@@ -576,15 +590,21 @@ extension ICloudDriveHelper {
         return names.sorted()
     }
 
-    func metadataSubdirectoryNames(parentDirectoryURL: URL) throws -> [String] {
-        try metadataNames(parentDirectoryURL: parentDirectoryURL) { relativePath in
+    func metadataSubdirectoryNames(
+        parentDirectoryURL: URL,
+        timeout: TimeInterval
+    ) throws -> [String] {
+        try metadataNames(parentDirectoryURL: parentDirectoryURL, timeout: timeout) { relativePath in
             guard let firstComponent = relativePath.split(separator: "/").first else { return nil }
             return String(firstComponent)
         }
     }
 
     func metadataFileNames(parentDirectoryURL: URL, prefix: String) throws -> [String] {
-        try metadataNames(parentDirectoryURL: parentDirectoryURL) { relativePath in
+        try metadataNames(
+            parentDirectoryURL: parentDirectoryURL,
+            timeout: metadataListingTimeout
+        ) { relativePath in
             guard !relativePath.contains("/") else { return nil }
             let name = URL(fileURLWithPath: relativePath).lastPathComponent
             guard name.hasPrefix(prefix) else { return nil }

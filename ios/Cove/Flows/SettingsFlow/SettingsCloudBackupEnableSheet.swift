@@ -50,12 +50,16 @@ struct SettingsCloudBackupEnableSheet: View {
         )
     }
 
-    private var passkeyChoiceHint: CloudBackupPasskeyHint? {
-        guard case let .passkeyChoice(.enable(_, passkeyHint)) = manager.rootPrompt else {
-            return nil
-        }
+    private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
+        guard case let .passkeyChoice(intent) = manager.rootPrompt else { return nil }
 
-        return passkeyHint
+        return intent
+    }
+
+    private var passkeyChoicePresentation: CloudBackupPasskeyChoicePresentation? {
+        guard let passkeyChoiceIntent else { return nil }
+
+        return CloudBackupPasskeyChoicePresentation(intent: passkeyChoiceIntent)
     }
 
     private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
@@ -68,8 +72,13 @@ struct SettingsCloudBackupEnableSheet: View {
 
     private func isEnablePasskeyChoice(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
         guard case let .passkeyChoice(intent) = rootPrompt else { return false }
-        if case .enable = intent { return true }
-        return false
+
+        switch intent {
+        case .enable, .enableExistingPasskeyOnly:
+            return true
+        case .repairPasskey:
+            return false
+        }
     }
 
     private func isAwaitingEnablePrompt(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
@@ -99,7 +108,7 @@ struct SettingsCloudBackupEnableSheet: View {
         switch manager.rootPrompt {
         case .existingBackupFound:
             manager.dispatch(action: .discardPendingEnableCloudBackup)
-        case .passkeyChoice(.enable):
+        case .passkeyChoice(.enable), .passkeyChoice(.enableExistingPasskeyOnly):
             manager.dispatch(action: .dismissPasskeyChoicePrompt)
         case .none, .missingPasskeyReminder, .passkeyChoice(.repairPasskey), .verification:
             break
@@ -107,8 +116,9 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private func completeIfReady(_ completion: TaggedItem<CloudBackupEnableContext>?) {
-        guard completion?.item.verificationSource == .settings else { return }
+        guard let completion, completion.item.verificationSource == .settings else { return }
 
+        manager.consumeEnableCompletion(completion)
         onComplete()
     }
 
@@ -147,10 +157,13 @@ struct SettingsCloudBackupEnableSheet: View {
             }
 
             if isBusy {
-                CloudBackupEnableBusyOverlay(enableFlow: manager.enableFlow)
+                CloudBackupEnableBusyOverlay(
+                    enableFlow: manager.enableFlow,
+                    verificationPresentation: manager.verificationPresentation
+                )
             }
         }
-        .onChange(of: manager.enableCompletion) { _, completion in
+        .onChange(of: manager.enableCompletion, initial: true) { _, completion in
             completeIfReady(completion)
         }
         .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
@@ -162,17 +175,19 @@ struct SettingsCloudBackupEnableSheet: View {
             "Passkey Options",
             isPresented: showingPasskeyChoice
         ) {
-            Button(existingPasskeyButtonTitle(for: passkeyChoiceHint)) {
+            Button(existingPasskeyButtonTitle(for: passkeyChoicePresentation?.passkeyHint)) {
                 dispatchPromptAction(.acceptEnablePrompt(.useExisting))
             }
-            Button("Create New Passkey") {
-                dispatchPromptAction(.acceptEnablePrompt(.createNew))
+            if let secondaryActionTitle = passkeyChoicePresentation?.secondaryActionTitle {
+                Button(secondaryActionTitle) {
+                    dispatchPromptAction(.acceptEnablePrompt(.createNew))
+                }
             }
             Button("Cancel", role: .cancel) {
                 dispatchPromptAction(.dismissPasskeyChoicePrompt)
             }
         } message: {
-            Text("Would you like to use an existing passkey or create a new one?")
+            Text(passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.")
         }
         .alert(
             "Existing Cloud Backup Found",

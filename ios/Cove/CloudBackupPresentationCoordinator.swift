@@ -1,5 +1,6 @@
 import MijickPopups
 import SwiftUI
+import UIKit
 
 @_exported import CoveCore
 
@@ -84,6 +85,29 @@ func isCloudBackupPresentationPresentable(
 enum CloudBackupVerificationFeedback: Equatable {
     case successFloater(String)
     case failureAlert(title: String, message: String)
+}
+
+struct CloudBackupPasskeyChoicePresentation: Equatable {
+    let passkeyHint: CloudBackupPasskeyHint?
+    let message: String
+    let secondaryActionTitle: String?
+
+    init(intent: CloudBackupPasskeyChoiceIntent) {
+        switch intent {
+        case let .enable(_, passkeyHint):
+            self.passkeyHint = passkeyHint
+            message = "Would you like to use an existing passkey or start a new backup?"
+            secondaryActionTitle = "Start a New Backup"
+        case let .enableExistingPasskeyOnly(_, passkeyHint):
+            self.passkeyHint = passkeyHint
+            message = "Cloud Backup may already exist. Use your existing passkey to continue, or cancel and try again later."
+            secondaryActionTitle = nil
+        case .repairPasskey:
+            passkeyHint = nil
+            message = "Would you like to use an existing passkey or create a new one?"
+            secondaryActionTitle = "Create New Passkey"
+        }
+    }
 }
 
 private struct CloudBackupSuccessFloater: Identifiable, Equatable {
@@ -279,6 +303,7 @@ final class CloudBackupPresentationCoordinator {
 }
 
 struct CloudBackupPresentationHost<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     let app: AppManager
@@ -372,13 +397,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
         return nil
     }
 
-    private var passkeyChoiceHint: CloudBackupPasskeyHint? {
+    private var passkeyChoicePresentation: CloudBackupPasskeyChoicePresentation? {
         guard let passkeyChoiceIntent else { return nil }
-        if case let .enable(_, passkeyHint) = passkeyChoiceIntent {
-            return passkeyHint
-        }
-
-        return nil
+        return CloudBackupPasskeyChoicePresentation(intent: passkeyChoiceIntent)
     }
 
     private var presentationContext: CloudBackupPresentationContext {
@@ -403,6 +424,10 @@ struct CloudBackupPresentationHost<Content: View>: View {
             manager.dispatch(action: .acceptEnablePrompt(.useExisting))
         case (.enable, false):
             manager.dispatch(action: .acceptEnablePrompt(.createNew))
+        case (.enableExistingPasskeyOnly, true):
+            manager.dispatch(action: .acceptEnablePrompt(.useExisting))
+        case (.enableExistingPasskeyOnly, false):
+            return
         case (.repairPasskey, true):
             manager.dispatch(action: .repairPasskey)
         case (.repairPasskey, false):
@@ -439,6 +464,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
         let floater = CloudBackupSuccessFloater(text: text)
         successFloater = floater
+        UIAccessibility.post(notification: .announcement, argument: text)
         successFloaterDismissTask = Task {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
@@ -472,7 +498,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
                             }
                         }
                 )
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(reduceMotion ? .identity : .move(edge: .top).combined(with: .opacity))
                 .zIndex(1)
         }
     }
@@ -493,7 +519,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .overlay(alignment: .top) {
                 successFloaterOverlay
             }
-            .animation(.easeInOut(duration: 0.2), value: successFloater)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: successFloater)
             .environment(coordinator)
             .onChange(of: presentationContext, initial: true) { _, context in
                 coordinator.update(context: context)
@@ -533,18 +559,20 @@ struct CloudBackupPresentationHost<Content: View>: View {
                 "Passkey Options",
                 isPresented: showingPasskeyChoicePrompt
             ) {
-                Button(existingPasskeyButtonTitle(for: passkeyChoiceHint)) {
+                Button(existingPasskeyButtonTitle(for: passkeyChoicePresentation?.passkeyHint)) {
                     handlePasskeyChoice(existing: true)
                 }
-                Button("Create New Passkey") {
-                    handlePasskeyChoice(existing: false)
+                if let secondaryActionTitle = passkeyChoicePresentation?.secondaryActionTitle {
+                    Button(secondaryActionTitle) {
+                        handlePasskeyChoice(existing: false)
+                    }
                 }
                 Button("Cancel", role: .cancel) {
                     coordinator.dismissCurrentPresentation()
                     manager.dispatch(action: .dismissPasskeyChoicePrompt)
                 }
             } message: {
-                Text("Would you like to use an existing passkey or create a new one?")
+                Text(passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.")
             }
             .alert(
                 "Cloud Backup Passkey Missing",
