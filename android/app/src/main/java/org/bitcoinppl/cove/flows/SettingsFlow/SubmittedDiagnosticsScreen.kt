@@ -76,7 +76,7 @@ fun SubmittedDiagnosticsScreen(
     var showClearConfirmation by remember { mutableStateOf(false) }
     var actionError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(ioDispatcher) {
         loadState = loadSubmittedDiagnosticsRecords(ioDispatcher)
     }
 

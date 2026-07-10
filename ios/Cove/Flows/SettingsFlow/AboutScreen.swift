@@ -46,29 +46,6 @@ struct AboutScreen: View {
         )
     }
 
-    private var shouldShowSubmittedDiagnostics: Bool {
-        switch submittedDiagnosticsLoadState {
-        case .loading:
-            false
-        case let .loaded(records):
-            !records.isEmpty
-        case .failed:
-            true
-        }
-    }
-
-    private var submittedDiagnosticsSummary: String {
-        switch submittedDiagnosticsLoadState {
-        case .loading:
-            return "Loading"
-        case let .loaded(records):
-            let count = records.count
-            return count == 1 ? "1 report" : "\(count) reports"
-        case .failed:
-            return "Unavailable"
-        }
-    }
-
     var body: some View {
         Form {
             Section {
@@ -143,7 +120,7 @@ struct AboutScreen: View {
                         }
                     }
 
-                    if shouldShowSubmittedDiagnostics {
+                    if submittedDiagnosticsLoadState.shouldShowSubmittedDiagnostics {
                         Button {
                             isSubmittedDiagnosticsPresented = true
                         } label: {
@@ -151,7 +128,7 @@ struct AboutScreen: View {
                                 Text("Submitted Diagnostics")
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text(submittedDiagnosticsSummary)
+                                Text(submittedDiagnosticsLoadState.submittedDiagnosticsSummary)
                                     .foregroundStyle(.secondary)
                                     .font(.footnote)
                             }

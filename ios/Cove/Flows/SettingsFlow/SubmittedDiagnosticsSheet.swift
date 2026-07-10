@@ -25,6 +25,21 @@ enum SubmittedDiagnosticsLoadState: Equatable {
             true
         }
     }
+
+    var shouldShowSubmittedDiagnostics: Bool {
+        canClear
+    }
+
+    var submittedDiagnosticsSummary: String {
+        switch self {
+        case .loading:
+            "Loading"
+        case let .loaded(records):
+            records.count == 1 ? "1 report" : "\(records.count) reports"
+        case .failed:
+            "Unavailable"
+        }
+    }
 }
 
 func loadSubmittedDiagnosticsHistory() async -> SubmittedDiagnosticsLoadState {

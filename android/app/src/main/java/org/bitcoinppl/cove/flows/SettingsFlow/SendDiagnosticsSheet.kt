@@ -83,7 +83,7 @@ fun SendDiagnosticsSheet(
     }
     val currentOnSubmittingChange by rememberUpdatedState(onSubmittingChange)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(context) {
         state.rebuildReport(context, clearStoredLogs = false)
     }
 
@@ -344,7 +344,9 @@ private class SendDiagnosticsSheetState(
     }
 
     suspend fun share(context: Context) {
+        actionError = null
         val content = report?.previewTextForDescription(description) ?: previewText
+
         try {
             shareDiagnosticsFile(context, content, ioDispatcher)
         } catch (error: CancellationException) {
