@@ -32,6 +32,32 @@ fn assert_retained_active_master(
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn fresh_enable_retains_unowned_staged_master_key() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged = cove_cspp::master_key::MasterKey::generate();
+    let staged_bytes = *staged.as_bytes();
+    cspp.save_staged_master_key(&staged).unwrap();
+
+    let Err(error) = manager
+        .pending_enable
+        .stage_fresh_enable_master(CloudBackupEnableContext::settings_manual())
+    else {
+        panic!("expected unowned staged material to block enable");
+    };
+
+    assert!(matches!(error, CloudBackupError::Internal(_)));
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
+    assert_eq!(cspp.load_staged_master_key().unwrap().unwrap().as_bytes(), &staged_bytes);
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -55,7 +81,15 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
         .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
         .await
         .unwrap();
-    manager.pending_enable.save_enable_recovery_master_key(&preparation).unwrap();
+    manager
+        .pending_enable
+        .save_enable_recovery_master_key(
+            preparation.context,
+            &preparation.active_namespace_id,
+            &preparation.active_master_key,
+            preparation.recovered_passkey_metadata(),
+        )
+        .unwrap();
     let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
     manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);
@@ -145,7 +179,15 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
         .await
         .unwrap();
-    manager.pending_enable.save_enable_recovery_master_key(&preparation).unwrap();
+    manager
+        .pending_enable
+        .save_enable_recovery_master_key(
+            preparation.context,
+            &preparation.active_namespace_id,
+            &preparation.active_master_key,
+            preparation.recovered_passkey_metadata(),
+        )
+        .unwrap();
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         &prior_master_key_bytes

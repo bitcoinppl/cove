@@ -82,7 +82,10 @@ impl RustCloudBackupManager {
             );
         }
 
-        self.pending_enable.mark_enable_recovery_remote_writes_started(&preparation)?;
+        self.pending_enable.mark_enable_recovery_remote_writes_started(
+            &preparation.active_namespace_id,
+            preparation.recovered_passkey_metadata(),
+        )?;
         let active_critical_key = preparation.active_critical_key;
         let uploaded_wallets = CloudBackupStore::global()
             .upload_all_wallets_with_progress(

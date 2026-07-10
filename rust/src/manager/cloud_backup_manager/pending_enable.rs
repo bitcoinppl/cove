@@ -18,6 +18,26 @@ pub(crate) struct PendingEnablePasskeyMetadata {
     pub(crate) provider_hint: Option<PasskeyProviderHint>,
 }
 
+impl From<&StagedPrfKey> for PendingEnablePasskeyMetadata {
+    fn from(passkey: &StagedPrfKey) -> Self {
+        Self {
+            credential_id: passkey.credential_id.clone(),
+            prf_salt: passkey.prf_salt,
+            provider_hint: passkey.provider_hint.clone(),
+        }
+    }
+}
+
+impl From<&UnpersistedPrfKey> for PendingEnablePasskeyMetadata {
+    fn from(passkey: &UnpersistedPrfKey) -> Self {
+        Self {
+            credential_id: passkey.credential_id.clone(),
+            prf_salt: passkey.prf_salt,
+            provider_hint: passkey.provider_hint.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum PendingEnableJournalPhase {
     Staged,

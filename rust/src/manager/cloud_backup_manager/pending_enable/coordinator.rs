@@ -1,12 +1,11 @@
-use cove_cspp::{MasterKeyPromotionStatus, master_key::MasterKey};
+use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus, master_key::MasterKey};
 use cove_device::keychain::Keychain;
 use tracing::warn;
 
 use crate::manager::cloud_backup_manager::wallets::{StagedPrfKey, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupEnableRecoveryPreparation, CloudBackupError,
-    CloudBackupKeychain, PendingEnableJournal, PendingEnableJournalPhase,
-    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata,
+    CloudBackupEnableContext, CloudBackupError, CloudBackupKeychain, PendingEnableJournal,
+    PendingEnableJournalPhase, PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata,
 };
 
 #[derive(Clone, Debug)]
@@ -27,11 +26,13 @@ impl PendingEnableCoordinator {
 
     pub(crate) fn save_enable_recovery_master_key(
         &self,
-        preparation: &CloudBackupEnableRecoveryPreparation,
+        context: CloudBackupEnableContext,
+        namespace_id: &str,
+        master_key: &MasterKey,
+        recovered_passkey: PendingEnablePasskeyMetadata,
     ) -> Result<(), CloudBackupError> {
         let cloud_keychain = self.cloud_keychain();
         let cspp = self.cspp();
-        let recovered_passkey = preparation.recovered_passkey_metadata();
 
         if let Some(mut journal) = cloud_keychain
             .load_pending_enable_journal()
@@ -42,12 +43,11 @@ impl PendingEnableCoordinator {
             })?;
             let is_matching_recovery = journal.namespace_ownership()
                 == PendingEnableNamespaceOwnership::RecoveredExisting
-                && journal.namespace_id() == preparation.active_namespace_id
-                && journal.context() == preparation.context
-                && staged.as_ref().is_some_and(|master_key| {
-                    master_key.as_bytes() == preparation.active_master_key.as_bytes()
-                });
+                && journal.namespace_id() == namespace_id
+                && journal.context() == context
+                && staged.as_ref().is_some_and(|staged| staged.as_bytes() == master_key.as_bytes());
             if !is_matching_recovery
+                || !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])?
                 || matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_))
                 || !journal.register_passkey(recovered_passkey)
             {
@@ -66,12 +66,10 @@ impl PendingEnableCoordinator {
         })? {
             MasterKeyPromotionStatus::None => {}
             MasterKeyPromotionStatus::Staged => {
-                cspp.discard_staged_master_key().map_err(|source| {
-                    CloudBackupError::internal_context(
-                        "discard unowned staged recovered master key",
-                        source,
-                    )
-                })?;
+                return Err(CloudBackupError::Internal(
+                    "unowned staged master key must be recovered before enabling Cloud Backup"
+                        .into(),
+                ));
             }
             MasterKeyPromotionStatus::Pending(_) => {
                 return Err(CloudBackupError::Internal(
@@ -80,12 +78,12 @@ impl PendingEnableCoordinator {
             }
         }
 
-        cspp.save_staged_master_key(&preparation.active_master_key).map_err(|source| {
+        cspp.save_staged_master_key(master_key).map_err(|source| {
             CloudBackupError::internal_context("stage recovered master key", source)
         })?;
         let mut journal = PendingEnableJournal::staged(
-            preparation.context,
-            preparation.active_namespace_id.clone(),
+            context,
+            namespace_id.to_owned(),
             PendingEnableNamespaceOwnership::RecoveredExisting,
             cloud_keychain.snapshot_passkey_metadata(),
         );
@@ -122,6 +120,21 @@ impl PendingEnableCoordinator {
                 "refusing to roll back a non-recovery pending enable as recovered state".into(),
             ));
         }
+        if !matches!(
+            journal.phase(),
+            PendingEnableJournalPhase::PasskeyRegistered(_)
+                | PendingEnableJournalPhase::RemoteWritesStarted(_)
+        ) || !self.has_staged_namespace(journal.namespace_id())?
+            || !matches!(
+                self.promotion_status()?,
+                MasterKeyPromotionStatus::Staged
+                    | MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
+            )
+        {
+            return Err(CloudBackupError::Internal(
+                "refusing to roll back mismatched recovered Cloud Backup evidence".into(),
+            ));
+        }
 
         self.cspp().rollback_master_key_promotion().map_err(|source| {
             CloudBackupError::internal_context("roll back recovered master key", source)
@@ -139,10 +152,10 @@ impl PendingEnableCoordinator {
 
     pub(crate) fn mark_enable_recovery_remote_writes_started(
         &self,
-        preparation: &CloudBackupEnableRecoveryPreparation,
+        namespace_id: &str,
+        expected_passkey: PendingEnablePasskeyMetadata,
     ) -> Result<(), CloudBackupError> {
         let cloud_keychain = self.cloud_keychain();
-        let expected_passkey = preparation.recovered_passkey_metadata();
         let mut journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -150,8 +163,10 @@ impl PendingEnableCoordinator {
                 CloudBackupError::Internal("pending recovered Cloud Backup state is missing".into())
             })?;
         if journal.namespace_ownership() != PendingEnableNamespaceOwnership::RecoveredExisting
-            || journal.namespace_id() != preparation.active_namespace_id
+            || journal.namespace_id() != namespace_id
             || journal.passkey() != Some(&expected_passkey)
+            || !self.has_staged_namespace(namespace_id)?
+            || !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])?
             || !journal.mark_remote_writes_started()
         {
             return Err(CloudBackupError::Internal(
@@ -203,6 +218,11 @@ impl PendingEnableCoordinator {
                     "pending Cloud Backup enable has mismatched staged ownership".into(),
                 ));
             }
+            if !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])? {
+                return Err(CloudBackupError::Internal(
+                    "pending Cloud Backup enable has mismatched promotion state".into(),
+                ));
+            }
 
             return Ok((staged, journal.context()));
         }
@@ -212,9 +232,10 @@ impl PendingEnableCoordinator {
         })? {
             MasterKeyPromotionStatus::None => {}
             MasterKeyPromotionStatus::Staged => {
-                cspp.discard_staged_master_key().map_err(|source| {
-                    CloudBackupError::internal_context("discard unowned staged master key", source)
-                })?;
+                return Err(CloudBackupError::Internal(
+                    "unowned staged master key must be recovered before enabling Cloud Backup"
+                        .into(),
+                ));
             }
             MasterKeyPromotionStatus::Pending(_) => {
                 return Err(CloudBackupError::Internal(
@@ -246,14 +267,7 @@ impl PendingEnableCoordinator {
         master_key: &MasterKey,
         passkey: &StagedPrfKey,
     ) -> Result<(), CloudBackupError> {
-        self.record_pending_enable_passkey_metadata(
-            master_key,
-            PendingEnablePasskeyMetadata {
-                credential_id: passkey.credential_id.clone(),
-                prf_salt: passkey.prf_salt,
-                provider_hint: passkey.provider_hint.clone(),
-            },
-        )
+        self.record_pending_enable_passkey_metadata(master_key, passkey.into())
     }
 
     pub(crate) fn record_pending_enable_passkey(
@@ -261,14 +275,7 @@ impl PendingEnableCoordinator {
         master_key: &MasterKey,
         passkey: &UnpersistedPrfKey,
     ) -> Result<(), CloudBackupError> {
-        self.record_pending_enable_passkey_metadata(
-            master_key,
-            PendingEnablePasskeyMetadata {
-                credential_id: passkey.credential_id.clone(),
-                prf_salt: passkey.prf_salt,
-                provider_hint: passkey.provider_hint.clone(),
-            },
-        )
+        self.record_pending_enable_passkey_metadata(master_key, passkey.into())
     }
 
     fn record_pending_enable_passkey_metadata(
@@ -286,6 +293,13 @@ impl PendingEnableCoordinator {
         if journal.namespace_id() != master_key.namespace_id() {
             return Err(CloudBackupError::Internal(
                 "pending Cloud Backup enable has mismatched passkey ownership".into(),
+            ));
+        }
+        if !self.has_staged_namespace(journal.namespace_id())?
+            || !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])?
+        {
+            return Err(CloudBackupError::Internal(
+                "pending Cloud Backup enable passkey has mismatched staged material".into(),
             ));
         }
         if !journal.register_passkey(passkey) {
@@ -333,11 +347,7 @@ impl PendingEnableCoordinator {
         self.begin_pending_enable_local_promotion_with_metadata(
             &master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
-            PendingEnablePasskeyMetadata {
-                credential_id: passkey.credential_id.clone(),
-                prf_salt: passkey.prf_salt,
-                provider_hint: passkey.provider_hint.clone(),
-            },
+            passkey.into(),
         )
     }
 
@@ -371,6 +381,14 @@ impl PendingEnableCoordinator {
         if staged.as_ref().is_none_or(|master_key| master_key.namespace_id() != namespace_id) {
             return Err(CloudBackupError::Internal(
                 "pending Cloud Backup enable has mismatched staged master key ownership".into(),
+            ));
+        }
+        if !self.has_promotion_status(&[
+            MasterKeyPromotionStatus::Staged,
+            MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior),
+        ])? {
+            return Err(CloudBackupError::Internal(
+                "pending Cloud Backup enable has mismatched promotion state".into(),
             ));
         }
 
@@ -428,6 +446,17 @@ impl PendingEnableCoordinator {
             ));
         }
 
+        if !self.has_staged_namespace(journal.namespace_id())?
+            || !matches!(
+                self.promotion_status()?,
+                MasterKeyPromotionStatus::Pending(_) | MasterKeyPromotionStatus::Staged
+            )
+        {
+            return Err(CloudBackupError::Internal(
+                "pending Cloud Backup enable cannot restore mismatched promotion state".into(),
+            ));
+        }
+
         let cspp = self.cspp();
         cspp.restore_prior_master_key_for_retry().map_err(|source| {
             CloudBackupError::internal_context("restore prior master key for retry", source)
@@ -456,6 +485,15 @@ impl PendingEnableCoordinator {
                 "pending Cloud Backup enable local promotion is not ready to commit".into(),
             ));
         }
+        if !self.has_staged_namespace(journal.namespace_id())?
+            || !self.has_promotion_status(&[MasterKeyPromotionStatus::Pending(
+                MasterKeyPromotionActiveState::Staged,
+            )])?
+        {
+            return Err(CloudBackupError::Internal(
+                "pending Cloud Backup enable cannot commit mismatched promotion state".into(),
+            ));
+        }
 
         self.cspp().commit_master_key_promotion().map_err(|source| {
             CloudBackupError::internal_context("commit staged master key promotion", source)
@@ -469,9 +507,27 @@ impl PendingEnableCoordinator {
         &self,
         journal: &PendingEnableJournal,
     ) -> Result<(), CloudBackupError> {
+        let persisted = self
+            .cloud_keychain()
+            .load_pending_enable_journal()
+            .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
+            .ok_or_else(|| {
+                CloudBackupError::Internal("pending Cloud Backup enable state is missing".into())
+            })?;
+        if &persisted != journal || !self.has_staged_namespace(journal.namespace_id())? {
+            return Err(CloudBackupError::Internal(
+                "refusing to discard mismatched pending Cloud Backup evidence".into(),
+            ));
+        }
+
         let cspp = self.cspp();
         match journal.phase() {
             PendingEnableJournalPhase::LocalPromotionStarted(_) => {
+                if !matches!(self.promotion_status()?, MasterKeyPromotionStatus::Pending(_)) {
+                    return Err(CloudBackupError::Internal(
+                        "refusing to roll back mismatched pending Cloud Backup promotion".into(),
+                    ));
+                }
                 cspp.rollback_master_key_promotion().map_err(|error| {
                     CloudBackupError::internal_context(
                         "roll back pending Cloud Backup master key promotion",
@@ -482,6 +538,11 @@ impl PendingEnableCoordinator {
             PendingEnableJournalPhase::Staged
             | PendingEnableJournalPhase::PasskeyRegistered(_)
             | PendingEnableJournalPhase::RemoteWritesStarted(_) => {
+                if !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])? {
+                    return Err(CloudBackupError::Internal(
+                        "refusing to discard mismatched pending Cloud Backup stage".into(),
+                    ));
+                }
                 cspp.discard_staged_master_key().map_err(|error| {
                     CloudBackupError::internal_context(
                         "discard pending Cloud Backup staged master key",
@@ -505,6 +566,22 @@ impl PendingEnableCoordinator {
         context: &str,
     ) -> Result<(), CloudBackupError> {
         warn!("{context}: discarding isolated staged master key");
+        let journal = self
+            .cloud_keychain()
+            .load_pending_enable_journal()
+            .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
+            .ok_or_else(|| {
+                CloudBackupError::Internal("pending Cloud Backup enable state is missing".into())
+            })?;
+        if !matches!(journal.phase(), PendingEnableJournalPhase::Staged)
+            || !self.has_staged_namespace(journal.namespace_id())?
+            || !self.has_promotion_status(&[MasterKeyPromotionStatus::Staged])?
+        {
+            return Err(CloudBackupError::Internal(
+                "refusing to discard mismatched pending Cloud Backup stage".into(),
+            ));
+        }
+
         let cspp = self.cspp();
         cspp.discard_staged_master_key().map_err(|source| {
             CloudBackupError::internal_context("discard staged master key", source)
@@ -512,5 +589,29 @@ impl PendingEnableCoordinator {
         self.cloud_keychain().delete_pending_enable_journal().map_err(|source| {
             CloudBackupError::internal_context("clear pending enable state", source)
         })
+    }
+
+    fn has_staged_namespace(&self, namespace_id: &str) -> Result<bool, CloudBackupError> {
+        self.cspp()
+            .load_staged_master_key()
+            .map(|staged| {
+                staged.is_some_and(|master_key| master_key.namespace_id() == namespace_id)
+            })
+            .map_err(|source| {
+                CloudBackupError::internal_context("inspect staged master key", source)
+            })
+    }
+
+    fn promotion_status(&self) -> Result<MasterKeyPromotionStatus, CloudBackupError> {
+        self.cspp().master_key_promotion_status().map_err(|source| {
+            CloudBackupError::internal_context("inspect master key promotion", source)
+        })
+    }
+
+    fn has_promotion_status(
+        &self,
+        expected: &[MasterKeyPromotionStatus],
+    ) -> Result<bool, CloudBackupError> {
+        Ok(expected.contains(&self.promotion_status()?))
     }
 }

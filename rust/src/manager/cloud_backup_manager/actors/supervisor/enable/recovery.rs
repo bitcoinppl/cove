@@ -44,9 +44,12 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(preparation) => {
-                if let Err(error) =
-                    manager.pending_enable.save_enable_recovery_master_key(&preparation)
-                {
+                if let Err(error) = manager.pending_enable.save_enable_recovery_master_key(
+                    preparation.context,
+                    &preparation.active_namespace_id,
+                    &preparation.active_master_key,
+                    preparation.recovered_passkey_metadata(),
+                ) {
                     self.fail_enable_operation(&manager, claim, error);
                     return Produces::ok(());
                 }
