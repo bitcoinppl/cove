@@ -1,3 +1,11 @@
+## Command Execution
+
+- Use the runtime tags in `just --list` to choose how to wait for recipes; allow for cold caches
+- For a quick or bounded command that returns a session ID, use one empty `write_stdin` call with `yield_time_ms: 300000` instead of frequent short polls
+- Keep straightforward command monitoring in the primary agent and never have multiple agents monitor the same process
+- Delegate monitoring only when the primary agent has independent work; use one non-forked, low-effort `gpt-5.6-luna` agent with a self-contained prompt, bounded responsibility, and instructions not to modify files or spawn agents
+- Prefer mailbox notifications over repeated `wait_agent` calls; call `wait_agent` with the longest useful wait only when no other work remains
+
 ## Rust Rules
 
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing Rust actors, async manager methods, worker tasks, Rust closure-based orchestration, reconciliation, shared state, locks, dispatch, or UniFFI manager boundaries
