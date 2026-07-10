@@ -343,8 +343,9 @@ impl CloudBackupSupervisor {
         let manager = self
             .manager()
             .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
-        if let Err(error) =
-            manager.begin_pending_enable_local_promotion(&upload.master_key, &upload.passkey)
+        if let Err(error) = manager
+            .pending_enable
+            .begin_pending_enable_local_promotion(&upload.master_key, &upload.passkey)
         {
             self.retain_pending_enable_upload(&upload.master_key, &upload.passkey, upload.context);
 
@@ -434,7 +435,9 @@ impl CloudBackupSupervisor {
         match (result, activation) {
             (Err(error), Err(_)) => {
                 self.retain_pending_enable_upload(&master_key, &passkey, context);
-                if let Err(rollback) = manager.restore_pending_enable_local_promotion_for_retry() {
+                if let Err(rollback) =
+                    manager.pending_enable.restore_pending_enable_local_promotion_for_retry()
+                {
                     self.fail_enable_operation(
                         &manager,
                         claim,
@@ -465,7 +468,7 @@ impl CloudBackupSupervisor {
 
         // reset verification while the pending-enable journal still owns completion
         manager.apply_verification_state(VerificationState::Idle);
-        if let Err(error) = manager.commit_pending_enable_local_promotion() {
+        if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
             self.retain_pending_enable_upload(&master_key, &passkey, context);
             self.fail_enable_operation(&manager, claim, error);
             return Produces::ok(());

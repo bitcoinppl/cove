@@ -205,6 +205,7 @@ fn prepare_test_enable_local_promotion(
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
 
     manager
+        .pending_enable
         .begin_pending_enable_local_promotion(master_key, &finalization.passkey)
         .unwrap();
 }
@@ -249,6 +250,7 @@ fn prepare_test_enable_recovery_local_promotion(
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
 
     manager
+        .pending_enable
         .begin_enable_recovery_local_promotion(
             &finalization.namespace_id,
             &finalization.credential_id,

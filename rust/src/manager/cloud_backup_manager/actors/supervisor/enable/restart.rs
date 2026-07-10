@@ -198,7 +198,7 @@ impl CloudBackupSupervisor {
                     );
                 }
 
-                manager.restore_pending_enable_local_promotion_for_retry()?;
+                manager.pending_enable.restore_pending_enable_local_promotion_for_retry()?;
                 let journal = cloud_keychain
                     .load_pending_enable_journal()
                     .map_err(|source| {

@@ -660,6 +660,7 @@ async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
     let fixture =
         prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
     manager
+        .pending_enable
         .begin_pending_enable_local_promotion(
             &cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
             &fixture.passkey,
@@ -696,6 +697,7 @@ async fn discard_pending_enable_durable_completion_commits_without_remote_delete
     let fixture =
         prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
     manager
+        .pending_enable
         .begin_pending_enable_local_promotion(
             &cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
             &fixture.passkey,

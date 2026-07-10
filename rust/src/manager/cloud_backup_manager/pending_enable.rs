@@ -5,6 +5,10 @@ use zeroize::Zeroizing;
 use super::wallets::{StagedPrfKey, UnpersistedPrfKey};
 use super::{CloudBackupEnableContext, CloudBackupError};
 
+mod coordinator;
+
+pub(crate) use coordinator::PendingEnableCoordinator;
+
 pub(crate) const PENDING_ENABLE_JOURNAL_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

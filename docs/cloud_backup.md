@@ -17,6 +17,11 @@ snapshots and reconcile messages, and forwards long-running work to
 public UniFFI state. It also filters stale exclusive-operation completions so an
 older async path cannot erase a newer operation.
 
+`PendingEnableCoordinator` owns the local keychain transaction for fresh and
+recovered enables. It keeps CSPP staging and promotion ordered with the durable
+pending-enable journal while the manager and supervisor retain cloud writes,
+operation claims, and UI reconciliation.
+
 `CloudBackupSupervisor` is the top-level operation owner. It starts enable,
 restore, disable, repair, verification, sync, and cloud-only flows, then applies
 typed completions back through the manager. Exclusive operations carry a

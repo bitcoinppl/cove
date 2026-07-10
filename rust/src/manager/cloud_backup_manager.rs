@@ -100,8 +100,8 @@ pub(crate) use self::ops::{
 #[cfg(test)]
 pub(crate) use self::pending_enable::PendingEnableSessionMaterial;
 pub(crate) use self::pending_enable::{
-    PENDING_ENABLE_JOURNAL_VERSION, PendingEnableJournal, PendingEnableJournalPhase,
-    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
+    PENDING_ENABLE_JOURNAL_VERSION, PendingEnableCoordinator, PendingEnableJournal,
+    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
     PendingEnablePasskeyMetadata, PendingEnableSession,
 };
 pub(crate) use self::pending_verification::{
@@ -220,6 +220,7 @@ pub struct RustCloudBackupManager {
     pub(crate) state: Arc<RwLock<CloudBackupStateReducer>>,
     pub(crate) reconciler: ReconcileChannel<Message>,
     cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
+    pub(crate) pending_enable: PendingEnableCoordinator,
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
 }
@@ -393,6 +394,7 @@ impl RustCloudBackupManager {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
                 reconciler: ReconcileChannel::new(1000),
                 cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
+                pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
                 cloud_writes: cloud_writes.clone(),
                 supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone(), cloud_writes)),
             }

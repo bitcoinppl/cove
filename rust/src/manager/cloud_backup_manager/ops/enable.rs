@@ -1,4 +1,3 @@
-mod promotion;
 mod recovery;
 mod types;
 
@@ -142,14 +141,14 @@ impl RustCloudBackupManager {
         let passkey_access = PasskeyAccess::global();
 
         info!("Enable: staging fresh master key");
-        let (master_key, context) = self.stage_fresh_enable_master(context)?;
+        let (master_key, context) = self.pending_enable.stage_fresh_enable_master(context)?;
 
         let namespace_id = master_key.namespace_id();
         info!("Enable: namespace_id={namespace_id}, getting passkey");
         let acquirer = PasskeyMaterialAcquirer::new(passkey_access);
         match acquirer.discover_or_register_for_enable().await {
             Ok(PasskeyMaterialOutcome::Authenticated(passkey)) => {
-                self.record_pending_enable_passkey(&master_key, &passkey)?;
+                self.pending_enable.record_pending_enable_passkey(&master_key, &passkey)?;
                 Ok(CloudBackupEnablePasskeyPreparation::Ready(CloudBackupReadyEnableUpload {
                     master_key: Zeroizing::new(master_key),
                     passkey: Zeroizing::new(passkey),
@@ -157,7 +156,7 @@ impl RustCloudBackupManager {
                 }))
             }
             Ok(PasskeyMaterialOutcome::RegisteredForConfirmation(passkey)) => {
-                self.record_pending_enable_staged_passkey(&master_key, &passkey)?;
+                self.pending_enable.record_pending_enable_staged_passkey(&master_key, &passkey)?;
                 Ok(CloudBackupEnablePasskeyPreparation::Registered(
                     CloudBackupRegisteredEnablePasskey {
                         master_key: Zeroizing::new(master_key),
@@ -167,13 +166,13 @@ impl RustCloudBackupManager {
                 ))
             }
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
-                self.discard_unpromoted_enable_stage(
+                self.pending_enable.discard_unpromoted_enable_stage(
                     "Enable cancelled before passkey setup finished",
                 )?;
                 Ok(CloudBackupEnablePasskeyPreparation::Cancelled { context })
             }
             Err(error) => {
-                self.discard_unpromoted_enable_stage(
+                self.pending_enable.discard_unpromoted_enable_stage(
                     "Enable failed before passkey setup finished",
                 )?;
                 Err(error)
@@ -236,7 +235,7 @@ impl RustCloudBackupManager {
         let passkey_access = PasskeyAccess::global();
 
         info!("{log_context}: staging fresh master key");
-        let (master_key, context) = self.stage_fresh_enable_master(context)?;
+        let (master_key, context) = self.pending_enable.stage_fresh_enable_master(context)?;
 
         let namespace_id = master_key.namespace_id();
         info!("{log_context}: namespace_id={namespace_id}, creating passkey");
@@ -248,18 +247,20 @@ impl RustCloudBackupManager {
             .await;
         let passkey = match acquisition {
             Err(error) => {
-                self.discard_unpromoted_enable_stage(failed_context)?;
+                self.pending_enable.discard_unpromoted_enable_stage(failed_context)?;
                 return Err(error);
             }
             Ok(EnablePasskeyAcquisition::Ready(passkey)) => passkey,
             Ok(EnablePasskeyAcquisition::Cancelled) => {
-                self.discard_unpromoted_enable_stage(cancelled_context)?;
+                self.pending_enable.discard_unpromoted_enable_stage(cancelled_context)?;
                 return Ok(CloudBackupEnablePasskeyRegistration::Cancelled { context });
             }
         };
 
-        if let Err(error) = self.record_pending_enable_staged_passkey(&master_key, &passkey) {
-            self.discard_unpromoted_enable_stage(failed_context)?;
+        if let Err(error) =
+            self.pending_enable.record_pending_enable_staged_passkey(&master_key, &passkey)
+        {
+            self.pending_enable.discard_unpromoted_enable_stage(failed_context)?;
             return Err(error);
         }
 
@@ -326,7 +327,8 @@ impl RustCloudBackupManager {
         writes: CloudBackupWriteClient,
     ) -> Result<CloudBackupUploadedEnableBackup, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::Enable)?;
-        self.mark_pending_enable_remote_writes_started(&ready.master_key, &ready.passkey)?;
+        self.pending_enable
+            .mark_pending_enable_remote_writes_started(&ready.master_key, &ready.passkey)?;
         let namespace_id = ready.master_key.namespace_id();
         let cloud = CloudStorage::global_explicit_client();
         let store = CloudBackupStore::global();

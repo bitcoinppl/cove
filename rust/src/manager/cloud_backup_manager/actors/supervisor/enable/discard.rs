@@ -80,7 +80,7 @@ impl CloudBackupSupervisor {
             }
         };
         if committed {
-            if let Err(error) = manager.commit_pending_enable_local_promotion() {
+            if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
                 self.fail_pending_enable_discard(pending, error);
                 return Produces::ok(());
             }
@@ -98,7 +98,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if let Err(error) = Self::discard_pending_enable_local_state(&journal) {
+        if let Err(error) = manager.pending_enable.discard_pending_enable_local_state(&journal) {
             self.fail_pending_enable_discard(pending, error);
             return Produces::ok(());
         }
@@ -147,40 +147,6 @@ impl CloudBackupSupervisor {
                 CloudBackupError::CloudStorage(CloudStorageError::NotFound(_)) => Ok(()),
                 error => Err(error),
             })
-    }
-
-    fn discard_pending_enable_local_state(
-        journal: &PendingEnableJournal,
-    ) -> Result<(), CloudBackupError> {
-        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        match journal.phase() {
-            PendingEnableJournalPhase::LocalPromotionStarted(_) => {
-                cspp.rollback_master_key_promotion().map_err(|error| {
-                    CloudBackupError::internal_context(
-                        "roll back pending Cloud Backup master key promotion",
-                        error,
-                    )
-                })?;
-            }
-            PendingEnableJournalPhase::Staged
-            | PendingEnableJournalPhase::PasskeyRegistered(_)
-            | PendingEnableJournalPhase::RemoteWritesStarted(_) => {
-                cspp.discard_staged_master_key().map_err(|error| {
-                    CloudBackupError::internal_context(
-                        "discard pending Cloud Backup staged master key",
-                        error,
-                    )
-                })?;
-            }
-        }
-
-        let cloud_keychain = CloudBackupKeychain::global();
-        cloud_keychain.restore_passkey_metadata(journal.previous_metadata()).map_err(|error| {
-            CloudBackupError::internal_context("restore prior Cloud Backup passkey metadata", error)
-        })?;
-        cloud_keychain.delete_pending_enable_journal().map_err(|error| {
-            CloudBackupError::internal_context("clear pending Cloud Backup enable state", error)
-        })
     }
 
     fn finish_pending_enable_discard(&mut self) {

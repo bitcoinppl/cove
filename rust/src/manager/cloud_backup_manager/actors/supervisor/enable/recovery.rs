@@ -44,7 +44,9 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(preparation) => {
-                if let Err(error) = manager.save_enable_recovery_master_key(&preparation) {
+                if let Err(error) =
+                    manager.pending_enable.save_enable_recovery_master_key(&preparation)
+                {
                     self.fail_enable_operation(&manager, claim, error);
                     return Produces::ok(());
                 }
@@ -95,7 +97,11 @@ impl CloudBackupSupervisor {
         let manager = self
             .manager()
             .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
-        manager.begin_enable_recovery_local_promotion(&namespace_id, &credential_id, prf_salt)?;
+        manager.pending_enable.begin_enable_recovery_local_promotion(
+            &namespace_id,
+            &credential_id,
+            prf_salt,
+        )?;
 
         let pending_completion =
             enable_pending_verification_completion(namespace_id.clone(), pending_uploads);
@@ -156,7 +162,9 @@ impl CloudBackupSupervisor {
         );
         match (result, activation) {
             (Err(error), Err(_)) => {
-                if let Err(rollback) = manager.restore_pending_enable_local_promotion_for_retry() {
+                if let Err(rollback) =
+                    manager.pending_enable.restore_pending_enable_local_promotion_for_retry()
+                {
                     self.fail_enable_operation(
                         &manager,
                         claim,
@@ -186,7 +194,7 @@ impl CloudBackupSupervisor {
 
         // reset verification while the pending-enable journal still owns completion
         manager.apply_verification_state(VerificationState::Idle);
-        if let Err(error) = manager.commit_pending_enable_local_promotion() {
+        if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
             self.fail_enable_operation(&manager, claim, error);
             return Produces::ok(());
         }
@@ -228,7 +236,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) {
-        match manager.rollback_enable_recovery_master_key() {
+        match manager.pending_enable.rollback_enable_recovery_master_key() {
             Ok(()) => self.fail_enable_operation(manager, claim, error),
             Err(rollback) => self.fail_enable_operation(
                 manager,

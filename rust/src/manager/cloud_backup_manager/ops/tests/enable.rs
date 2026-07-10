@@ -55,7 +55,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
         .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
         .await
         .unwrap();
-    manager.save_enable_recovery_master_key(&preparation).unwrap();
+    manager.pending_enable.save_enable_recovery_master_key(&preparation).unwrap();
     let claim = CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 42);
     manager.project_exclusive_operation_started(claim);
     let writes = operation_write_client_for_test(&manager, claim);
@@ -72,7 +72,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
             provider_hint: None,
         })
     );
-    manager.rollback_enable_recovery_master_key().unwrap();
+    manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
 
     assert!(matches!(error, CloudBackupError::CloudStorage(_)));
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
@@ -145,7 +145,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
         .await
         .unwrap();
-    manager.save_enable_recovery_master_key(&preparation).unwrap();
+    manager.pending_enable.save_enable_recovery_master_key(&preparation).unwrap();
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         &prior_master_key_bytes
@@ -165,6 +165,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     manager.project_exclusive_operation_finished(claim);
     globals.keychain.fail_save_at(7);
     let error = manager
+        .pending_enable
         .begin_enable_recovery_local_promotion(
             &completion.namespace_id,
             &completion.credential_id,
@@ -187,7 +188,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::RecoveredExisting);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 
-    manager.rollback_enable_recovery_master_key().unwrap();
+    manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
     assert_eq!(cloud_keychain.snapshot_passkey_metadata(), prior_metadata);
 }
 

@@ -2,22 +2,35 @@ use cove_cspp::{MasterKeyPromotionStatus, master_key::MasterKey};
 use cove_device::keychain::Keychain;
 use tracing::warn;
 
-use super::RustCloudBackupManager;
-use super::types::CloudBackupEnableRecoveryPreparation;
 use crate::manager::cloud_backup_manager::wallets::{StagedPrfKey, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupError, CloudBackupKeychain, PendingEnableJournal,
-    PendingEnableJournalPhase, PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata,
+    CloudBackupEnableContext, CloudBackupEnableRecoveryPreparation, CloudBackupError,
+    CloudBackupKeychain, PendingEnableJournal, PendingEnableJournalPhase,
+    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata,
 };
 
-impl RustCloudBackupManager {
+#[derive(Clone, Debug)]
+pub(crate) struct PendingEnableCoordinator(Keychain);
+
+impl PendingEnableCoordinator {
+    pub(crate) fn new(keychain: Keychain) -> Self {
+        Self(keychain)
+    }
+
+    fn cspp(&self) -> cove_cspp::Cspp<Keychain> {
+        cove_cspp::Cspp::new(self.0.clone())
+    }
+
+    fn cloud_keychain(&self) -> CloudBackupKeychain {
+        CloudBackupKeychain::new(self.0.clone())
+    }
+
     pub(crate) fn save_enable_recovery_master_key(
         &self,
         preparation: &CloudBackupEnableRecoveryPreparation,
     ) -> Result<(), CloudBackupError> {
-        let keychain = Keychain::global().clone();
-        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-        let cspp = cove_cspp::Cspp::new(keychain);
+        let cloud_keychain = self.cloud_keychain();
+        let cspp = self.cspp();
         let recovered_passkey = preparation.recovered_passkey_metadata();
 
         if let Some(mut journal) = cloud_keychain
@@ -97,7 +110,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn rollback_enable_recovery_master_key(&self) -> Result<(), CloudBackupError> {
         warn!("Enable: rolling back recovered local master key after recovery failure");
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -110,9 +123,9 @@ impl RustCloudBackupManager {
             ));
         }
 
-        cove_cspp::Cspp::new(Keychain::global().clone()).rollback_master_key_promotion().map_err(
-            |source| CloudBackupError::internal_context("roll back recovered master key", source),
-        )?;
+        self.cspp().rollback_master_key_promotion().map_err(|source| {
+            CloudBackupError::internal_context("roll back recovered master key", source)
+        })?;
         cloud_keychain.restore_passkey_metadata(journal.previous_metadata()).map_err(|source| {
             CloudBackupError::internal_context(
                 "restore prior Cloud Backup passkey metadata",
@@ -128,7 +141,7 @@ impl RustCloudBackupManager {
         &self,
         preparation: &CloudBackupEnableRecoveryPreparation,
     ) -> Result<(), CloudBackupError> {
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let expected_passkey = preparation.recovered_passkey_metadata();
         let mut journal = cloud_keychain
             .load_pending_enable_journal()
@@ -158,9 +171,8 @@ impl RustCloudBackupManager {
         &self,
         context: CloudBackupEnableContext,
     ) -> Result<(MasterKey, CloudBackupEnableContext), CloudBackupError> {
-        let keychain = Keychain::global().clone();
-        let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-        let cspp = cove_cspp::Cspp::new(keychain);
+        let cloud_keychain = self.cloud_keychain();
+        let cspp = self.cspp();
 
         if let Some(journal) = cloud_keychain
             .load_pending_enable_journal()
@@ -264,7 +276,7 @@ impl RustCloudBackupManager {
         master_key: &MasterKey,
         passkey: PendingEnablePasskeyMetadata,
     ) -> Result<(), CloudBackupError> {
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let mut journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -294,7 +306,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         self.record_pending_enable_passkey(master_key, passkey)?;
 
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let mut journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -352,7 +364,7 @@ impl RustCloudBackupManager {
         namespace_ownership: PendingEnableNamespaceOwnership,
         expected_passkey: PendingEnablePasskeyMetadata,
     ) -> Result<(), CloudBackupError> {
-        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        let cspp = self.cspp();
         let staged = cspp.load_staged_master_key().map_err(|source| {
             CloudBackupError::internal_context("load staged master key for promotion", source)
         })?;
@@ -362,7 +374,7 @@ impl RustCloudBackupManager {
             ));
         }
 
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let mut journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -403,7 +415,7 @@ impl RustCloudBackupManager {
     pub(crate) fn restore_pending_enable_local_promotion_for_retry(
         &self,
     ) -> Result<(), CloudBackupError> {
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let mut journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -416,7 +428,7 @@ impl RustCloudBackupManager {
             ));
         }
 
-        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        let cspp = self.cspp();
         cspp.restore_prior_master_key_for_retry().map_err(|source| {
             CloudBackupError::internal_context("restore prior master key for retry", source)
         })?;
@@ -432,7 +444,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn commit_pending_enable_local_promotion(&self) -> Result<(), CloudBackupError> {
-        let cloud_keychain = CloudBackupKeychain::global();
+        let cloud_keychain = self.cloud_keychain();
         let journal = cloud_keychain
             .load_pending_enable_journal()
             .map_err(|source| CloudBackupError::internal_context("load pending enable", source))?
@@ -445,13 +457,46 @@ impl RustCloudBackupManager {
             ));
         }
 
-        cove_cspp::Cspp::new(Keychain::global().clone()).commit_master_key_promotion().map_err(
-            |source| {
-                CloudBackupError::internal_context("commit staged master key promotion", source)
-            },
-        )?;
+        self.cspp().commit_master_key_promotion().map_err(|source| {
+            CloudBackupError::internal_context("commit staged master key promotion", source)
+        })?;
         cloud_keychain.delete_pending_enable_journal().map_err(|source| {
             CloudBackupError::internal_context("clear committed pending enable state", source)
+        })
+    }
+
+    pub(crate) fn discard_pending_enable_local_state(
+        &self,
+        journal: &PendingEnableJournal,
+    ) -> Result<(), CloudBackupError> {
+        let cspp = self.cspp();
+        match journal.phase() {
+            PendingEnableJournalPhase::LocalPromotionStarted(_) => {
+                cspp.rollback_master_key_promotion().map_err(|error| {
+                    CloudBackupError::internal_context(
+                        "roll back pending Cloud Backup master key promotion",
+                        error,
+                    )
+                })?;
+            }
+            PendingEnableJournalPhase::Staged
+            | PendingEnableJournalPhase::PasskeyRegistered(_)
+            | PendingEnableJournalPhase::RemoteWritesStarted(_) => {
+                cspp.discard_staged_master_key().map_err(|error| {
+                    CloudBackupError::internal_context(
+                        "discard pending Cloud Backup staged master key",
+                        error,
+                    )
+                })?;
+            }
+        }
+
+        let cloud_keychain = self.cloud_keychain();
+        cloud_keychain.restore_passkey_metadata(journal.previous_metadata()).map_err(|error| {
+            CloudBackupError::internal_context("restore prior Cloud Backup passkey metadata", error)
+        })?;
+        cloud_keychain.delete_pending_enable_journal().map_err(|error| {
+            CloudBackupError::internal_context("clear pending Cloud Backup enable state", error)
         })
     }
 
@@ -460,11 +505,11 @@ impl RustCloudBackupManager {
         context: &str,
     ) -> Result<(), CloudBackupError> {
         warn!("{context}: discarding isolated staged master key");
-        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        let cspp = self.cspp();
         cspp.discard_staged_master_key().map_err(|source| {
             CloudBackupError::internal_context("discard staged master key", source)
         })?;
-        CloudBackupKeychain::global().delete_pending_enable_journal().map_err(|source| {
+        self.cloud_keychain().delete_pending_enable_journal().map_err(|source| {
             CloudBackupError::internal_context("clear pending enable state", source)
         })
     }
