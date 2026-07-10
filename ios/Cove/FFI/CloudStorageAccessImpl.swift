@@ -81,6 +81,46 @@ final class CancellableDispatchOperation<Value: Sendable>: @unchecked Sendable {
     }
 }
 
+enum SilentCloudRecoveryDeadline {
+    typealias Watchdog = @Sendable () async throws -> Void
+
+    private enum Outcome<Value: Sendable>: Sendable {
+        case completed(Value)
+        case timedOut
+    }
+
+    static func run<Value: Sendable>(
+        watchdog: @escaping Watchdog = {
+            try await Task.sleep(for: .seconds(SilentNamespaceRecoveryProbe.maximumDuration))
+        },
+        operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await withThrowingTaskGroup(of: Outcome<Value>.self) { group in
+            group.addTask {
+                try await .completed(operation())
+            }
+            group.addTask {
+                try await watchdog()
+                return .timedOut
+            }
+
+            defer { group.cancelAll() }
+
+            guard let outcome = try await group.next() else {
+                throw CloudStorageError.NotAvailable("iCloud namespace lookup did not complete")
+            }
+
+            switch outcome {
+            case let .completed(value):
+                try Task.checkCancellation()
+                return value
+            case .timedOut:
+                throw CloudStorageError.NotAvailable("iCloud namespace lookup timed out")
+            }
+        }
+    }
+}
+
 enum SilentNamespaceRecoveryProbe {
     typealias Inspection = @Sendable (_ metadataTimeout: TimeInterval) async throws -> [String]
     typealias MonotonicNow = @Sendable () -> TimeInterval
@@ -270,21 +310,23 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     func listNamespaces(policy: CloudAccessPolicy) async throws -> [String] {
         switch policy {
         case .consentAllowed:
-            return try await run {
+            try await run {
                 let namespacesRoot = try self.helper.namespacesRootURL()
                 return try self.helper.listSubdirectories(parentPath: namespacesRoot.path)
             }
         case .silent:
-            let namespacesRoot = try await runCancellable {
-                try self.helper.namespacesRootReadURL()
-            }
+            try await SilentCloudRecoveryDeadline.run {
+                let namespacesRoot = try await self.runCancellable {
+                    try self.helper.namespacesRootReadURL()
+                }
 
-            return try await SilentNamespaceRecoveryProbe.run { metadataTimeout in
-                try await self.runCancellable {
-                    try self.helper.listSubdirectories(
-                        parentPath: namespacesRoot.path,
-                        metadataTimeout: metadataTimeout
-                    )
+                return try await SilentNamespaceRecoveryProbe.run { metadataTimeout in
+                    try await self.runCancellable {
+                        try self.helper.listSubdirectories(
+                            parentPath: namespacesRoot.path,
+                            metadataTimeout: metadataTimeout
+                        )
+                    }
                 }
             }
         }

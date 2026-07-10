@@ -249,6 +249,86 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertFalse(gate.operationStarted)
     }
 
+    func testSilentCloudRecoveryDeadlineIncludesBlockedContainerLookup() async {
+        let gate = CancellableDispatchOperationTestGate()
+        let queue = DispatchQueue(label: "cove.tests.cloud-recovery-deadline")
+
+        do {
+            _ = try await SilentCloudRecoveryDeadline.run(
+                watchdog: {
+                    await gate.waitUntilStarted()
+                },
+                operation: {
+                    try await CancellableDispatchOperation<[String]>.run(on: queue) {
+                        gate.waitUntilReleased()
+                        return ["late namespace"]
+                    }
+                }
+            )
+            XCTFail("expected timeout")
+        } catch let error as CloudStorageError {
+            XCTAssertEqual(
+                error,
+                CloudStorageError.NotAvailable("iCloud namespace lookup timed out")
+            )
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertFalse(gate.didFinish)
+        gate.release()
+        let didFinish = await gate.waitUntilFinished()
+        XCTAssertTrue(didFinish)
+    }
+
+    func testSilentCloudRecoveryDeadlineReturnsCompletedOperation() async throws {
+        let namespaces = try await SilentCloudRecoveryDeadline.run(
+            watchdog: {
+                try await Task.sleep(for: .seconds(60))
+            },
+            operation: {
+                ["namespace"]
+            }
+        )
+
+        XCTAssertEqual(namespaces, ["namespace"])
+    }
+
+    func testSilentCloudRecoveryDeadlinePropagatesParentCancellation() async {
+        let gate = CancellableDispatchOperationTestGate()
+        let queue = DispatchQueue(label: "cove.tests.cancelled-cloud-recovery-deadline")
+        let task = Task {
+            try await SilentCloudRecoveryDeadline.run(
+                watchdog: {
+                    try await Task.sleep(for: .seconds(60))
+                },
+                operation: {
+                    try await CancellableDispatchOperation<[String]>.run(on: queue) {
+                        gate.waitUntilReleased()
+                        return ["late namespace"]
+                    }
+                }
+            )
+        }
+
+        await gate.waitUntilStarted()
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("expected cancellation")
+        } catch is CancellationError {
+            // expected
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        XCTAssertFalse(gate.didFinish)
+        gate.release()
+        let didFinish = await gate.waitUntilFinished()
+        XCTAssertTrue(didFinish)
+    }
+
     private func runSilentNamespaceProbe(
         with state: SilentNamespaceProbeTestState
     ) async throws -> [String] {

@@ -3,18 +3,16 @@ use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::passkey::PasskeyAccess;
-use cove_tokio::unblock;
 use cove_util::ResultExt as _;
 use rand::RngExt as _;
 use tracing::info;
 use zeroize::Zeroizing;
 
 use crate::manager::cloud_backup_manager::wallets::{
-    PasskeyMaterialAcquirer, WalletBackupLookup, WalletBackupReader,
+    PasskeyMaterialAcquirer, PlatformAuthorizationRetrier, WalletBackupLookup, WalletBackupReader,
+    map_wrapper_repair_passkey_error,
 };
-use crate::manager::cloud_backup_manager::{
-    CloudBackupError, PASSKEY_RP_ID, master_key_wrapper_revision_hash,
-};
+use crate::manager::cloud_backup_manager::{CloudBackupError, master_key_wrapper_revision_hash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalKeyProof {
@@ -309,18 +307,10 @@ impl WrapperRepairOperation {
 
             WrapperRepairStrategy::ReuseExisting(credential_id) => {
                 let prf_salt: [u8; 32] = rand::rng().random();
-                let passkey = self.passkey.clone();
-                let auth_credential_id = credential_id.clone();
-                let prf_output = unblock::run_blocking(move || {
-                    passkey.authenticate_with_prf(
-                        PASSKEY_RP_ID.to_owned(),
-                        auth_credential_id,
-                        prf_salt.to_vec(),
-                        rand::rng().random::<[u8; 32]>().to_vec(),
-                    )
-                })
-                .await
-                .map_err(CloudBackupError::Passkey)?;
+                let prf_output = PlatformAuthorizationRetrier::new()
+                    .authenticate(&self.passkey, &credential_id, prf_salt)
+                    .await
+                    .map_err(map_wrapper_repair_passkey_error)?;
 
                 let prf_key: [u8; 32] = prf_output
                     .try_into()

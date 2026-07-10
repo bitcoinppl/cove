@@ -19,7 +19,7 @@ final class PasskeyProviderImplTests: XCTestCase {
         }
     }
 
-    func testFailedAfterPresentationIsNotRetryablePlatformFailure() {
+    func testFailedAfterPresentationPreservesPlatformFailureSemantics() {
         let failure = passkeyAuthorizationFailure(
             for: .failed,
             didRequestPresentationAnchor: true,
@@ -27,9 +27,9 @@ final class PasskeyProviderImplTests: XCTestCase {
         )
 
         guard case let .requestFailed(reason) = failure,
-              case .invalidResponse = reason
+              case .platformAuthorizationFailedAfterPresentation = reason
         else {
-            XCTFail("expected post-presentation invalid response")
+            XCTFail("expected post-presentation platform authorization failure")
             return
         }
     }

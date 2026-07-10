@@ -1,10 +1,9 @@
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
-use cove_tokio::unblock;
-use rand::RngExt as _;
 use tracing::info;
 
 use super::session::VerificationSession;
-use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain, PASSKEY_RP_ID};
+use crate::manager::cloud_backup_manager::wallets::PlatformAuthorizationRetrier;
+use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain};
 
 #[derive(PartialEq)]
 pub(crate) struct AuthenticatedPasskey {
@@ -62,12 +61,18 @@ impl PasskeyAuthenticator {
         prf_salt: &[u8; 32],
         policy: PasskeyAuthPolicy,
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
+        let retrier = PlatformAuthorizationRetrier::new();
+
         match policy {
-            PasskeyAuthPolicy::StoredOnly => self.authenticate_stored_only(prf_salt).await,
-            PasskeyAuthPolicy::DiscoverOnly => self.authenticate_by_discovery(prf_salt).await,
+            PasskeyAuthPolicy::StoredOnly => {
+                self.authenticate_stored_only(prf_salt, &retrier).await
+            }
+            PasskeyAuthPolicy::DiscoverOnly => {
+                self.authenticate_by_discovery(prf_salt, &retrier).await
+            }
 
             PasskeyAuthPolicy::StoredThenDiscover => {
-                self.authenticate_stored_then_discover(prf_salt).await
+                self.authenticate_stored_then_discover(prf_salt, &retrier).await
             }
         }
     }
@@ -75,9 +80,10 @@ impl PasskeyAuthenticator {
     async fn authenticate_stored_only(
         &self,
         prf_salt: &[u8; 32],
+        retrier: &PlatformAuthorizationRetrier,
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
         // try the known credential first so normal restores do not show an account picker
-        let stored_outcome = self.authenticate_by_stored_credential(prf_salt).await?;
+        let stored_outcome = self.authenticate_by_stored_credential(prf_salt, retrier).await?;
         match stored_outcome {
             StoredPasskeyAuthOutcome::Authenticated(authenticated) => {
                 Ok(PasskeyAuthOutcome::Authenticated(authenticated))
@@ -103,9 +109,10 @@ impl PasskeyAuthenticator {
     async fn authenticate_stored_then_discover(
         &self,
         prf_salt: &[u8; 32],
+        retrier: &PlatformAuthorizationRetrier,
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
         // try the known credential first so normal restores do not show an account picker
-        let stored_outcome = self.authenticate_by_stored_credential(prf_salt).await?;
+        let stored_outcome = self.authenticate_by_stored_credential(prf_salt, retrier).await?;
         match stored_outcome {
             StoredPasskeyAuthOutcome::Authenticated(authenticated) => {
                 Ok(PasskeyAuthOutcome::Authenticated(authenticated))
@@ -116,7 +123,7 @@ impl PasskeyAuthenticator {
             // stored-then-discover falls back when the stored credential is missing
             StoredPasskeyAuthOutcome::NoCredentialFound => {
                 info!("Trying discovery after stored credential auth failed");
-                self.authenticate_by_discovery(prf_salt).await
+                self.authenticate_by_discovery(prf_salt, retrier).await
             }
 
             StoredPasskeyAuthOutcome::Failed(error) => {
@@ -126,7 +133,7 @@ impl PasskeyAuthenticator {
 
                 info!("Stored credential auth failed ({error})");
                 info!("Trying discovery after stored credential auth failed");
-                self.authenticate_by_discovery(prf_salt).await
+                self.authenticate_by_discovery(prf_salt, retrier).await
             }
         }
     }
@@ -134,23 +141,13 @@ impl PasskeyAuthenticator {
     async fn authenticate_by_stored_credential(
         &self,
         prf_salt: &[u8; 32],
+        retrier: &PlatformAuthorizationRetrier,
     ) -> Result<StoredPasskeyAuthOutcome, CloudBackupError> {
         let Some(credential_id) = self.keychain.load_credential_id() else {
             return Ok(StoredPasskeyAuthOutcome::NoCredentialFound);
         };
 
-        let passkey = self.passkey.clone();
-        let auth_credential_id = credential_id.clone();
-        let prf_salt = *prf_salt;
-        let auth_result = unblock::run_blocking(move || {
-            passkey.authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                auth_credential_id,
-                prf_salt.to_vec(),
-                rand::rng().random::<[u8; 32]>().to_vec(),
-            )
-        })
-        .await;
+        let auth_result = retrier.authenticate(&self.passkey, &credential_id, *prf_salt).await;
 
         let prf_output = match auth_result {
             Ok(prf_output) => prf_output,
@@ -172,17 +169,9 @@ impl PasskeyAuthenticator {
     async fn authenticate_by_discovery(
         &self,
         prf_salt: &[u8; 32],
+        retrier: &PlatformAuthorizationRetrier,
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
-        let passkey = self.passkey.clone();
-        let prf_salt = *prf_salt;
-        let discovered_result = unblock::run_blocking(move || {
-            passkey.discover_and_authenticate_with_prf(
-                PASSKEY_RP_ID.to_string(),
-                prf_salt.to_vec(),
-                rand::rng().random::<[u8; 32]>().to_vec(),
-            )
-        })
-        .await;
+        let discovered_result = retrier.discover(&self.passkey, *prf_salt).await;
 
         let discovered = match discovered_result {
             Ok(discovered) => discovered,

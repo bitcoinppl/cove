@@ -1144,7 +1144,9 @@ impl CloudBackupError {
     pub(crate) fn reader_message(&self) -> String {
         match self {
             Self::Passkey(PasskeyError::RequestFailed {
-                reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+                reason:
+                    PasskeyFailureReason::PlatformAuthorizationFailed
+                    | PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
                 ..
             }) => PASSKEY_ACCESS_RECOVERY_MESSAGE.into(),
             Self::Passkey(PasskeyError::RequestFailed {
@@ -3679,16 +3681,21 @@ mod tests {
 
     #[test]
     fn platform_authorization_failure_uses_durable_recovery_message() {
-        let error = CloudBackupError::Passkey(PasskeyError::RequestFailed {
-            operation: PasskeyOperation::DiscoverAssertion,
-            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
-        });
+        for reason in [
+            PasskeyFailureReason::PlatformAuthorizationFailed,
+            PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
+        ] {
+            let error = CloudBackupError::Passkey(PasskeyError::RequestFailed {
+                operation: PasskeyOperation::DiscoverAssertion,
+                reason,
+            });
 
-        assert_eq!(error.reader_message(), PASSKEY_ACCESS_RECOVERY_MESSAGE);
-        assert_eq!(
-            RustCloudBackupManager::status_for_operation_error(&error),
-            CloudBackupStatus::Error(PASSKEY_ACCESS_RECOVERY_MESSAGE.into())
-        );
+            assert_eq!(error.reader_message(), PASSKEY_ACCESS_RECOVERY_MESSAGE);
+            assert_eq!(
+                RustCloudBackupManager::status_for_operation_error(&error),
+                CloudBackupStatus::Error(PASSKEY_ACCESS_RECOVERY_MESSAGE.into())
+            );
+        }
     }
 
     #[test]

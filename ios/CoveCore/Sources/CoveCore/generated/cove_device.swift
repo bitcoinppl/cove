@@ -2078,6 +2078,7 @@ public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuf
 public enum PasskeyFailureReason: Equatable, Hashable, CustomStringConvertible {
 
     case platformAuthorizationFailed
+    case platformAuthorizationFailedAfterPresentation
     case invalidResponse
     case notHandled
     case interrupted
@@ -2124,27 +2125,29 @@ public struct FfiConverterTypePasskeyFailureReason: FfiConverterRustBuffer {
 
         case 1: return .platformAuthorizationFailed
 
-        case 2: return .invalidResponse
+        case 2: return .platformAuthorizationFailedAfterPresentation
 
-        case 3: return .notHandled
+        case 3: return .invalidResponse
 
-        case 4: return .interrupted
+        case 4: return .notHandled
 
-        case 5: return .providerConfiguration
+        case 5: return .interrupted
 
-        case 6: return .noCreateOption
+        case 6: return .providerConfiguration
 
-        case 7: return .deviceNotConfigured
+        case 7: return .noCreateOption
 
-        case 8: return .unexpectedCredentialType
+        case 8: return .deviceNotConfigured
 
-        case 9: return .missingCredentialId
+        case 9: return .unexpectedCredentialType
 
-        case 10: return .malformedResponse
+        case 10: return .missingCredentialId
 
-        case 11: return .timedOut
+        case 11: return .malformedResponse
 
-        case 12: return .unknown(diagnosticMessage: try FfiConverterString.read(from: &buf)
+        case 12: return .timedOut
+
+        case 13: return .unknown(diagnosticMessage: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2159,48 +2162,52 @@ public struct FfiConverterTypePasskeyFailureReason: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .invalidResponse:
+        case .platformAuthorizationFailedAfterPresentation:
             writeInt(&buf, Int32(2))
 
 
-        case .notHandled:
+        case .invalidResponse:
             writeInt(&buf, Int32(3))
 
 
-        case .interrupted:
+        case .notHandled:
             writeInt(&buf, Int32(4))
 
 
-        case .providerConfiguration:
+        case .interrupted:
             writeInt(&buf, Int32(5))
 
 
-        case .noCreateOption:
+        case .providerConfiguration:
             writeInt(&buf, Int32(6))
 
 
-        case .deviceNotConfigured:
+        case .noCreateOption:
             writeInt(&buf, Int32(7))
 
 
-        case .unexpectedCredentialType:
+        case .deviceNotConfigured:
             writeInt(&buf, Int32(8))
 
 
-        case .missingCredentialId:
+        case .unexpectedCredentialType:
             writeInt(&buf, Int32(9))
 
 
-        case .malformedResponse:
+        case .missingCredentialId:
             writeInt(&buf, Int32(10))
 
 
-        case .timedOut:
+        case .malformedResponse:
             writeInt(&buf, Int32(11))
 
 
-        case let .unknown(diagnosticMessage):
+        case .timedOut:
             writeInt(&buf, Int32(12))
+
+
+        case let .unknown(diagnosticMessage):
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(diagnosticMessage, into: &buf)
 
         }

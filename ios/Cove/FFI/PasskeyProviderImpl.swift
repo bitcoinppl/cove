@@ -505,7 +505,7 @@ func passkeyFailureReason(
     case .failed where !didRequestPresentationAnchor:
         .platformAuthorizationFailed
     case .failed:
-        .invalidResponse
+        .platformAuthorizationFailedAfterPresentation
     case .invalidResponse:
         .invalidResponse
     case .notHandled:

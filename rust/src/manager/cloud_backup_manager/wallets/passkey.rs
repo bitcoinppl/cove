@@ -96,7 +96,7 @@ impl PasskeyDiscoveryFailureHandling {
     }
 }
 
-struct PlatformAuthorizationRetrier {
+pub(crate) struct PlatformAuthorizationRetrier {
     policy: PlatformAuthorizationRetryPolicy,
     deadline: Instant,
     #[cfg(test)]
@@ -104,7 +104,7 @@ struct PlatformAuthorizationRetrier {
 }
 
 impl PlatformAuthorizationRetrier {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform())
     }
 
@@ -170,7 +170,7 @@ impl PlatformAuthorizationRetrier {
             .await
     }
 
-    async fn discover(
+    pub(crate) async fn discover(
         &self,
         passkey: &PasskeyAccess,
         prf_salt: [u8; 32],
@@ -211,7 +211,7 @@ impl PlatformAuthorizationRetrier {
         .await
     }
 
-    async fn authenticate(
+    pub(crate) async fn authenticate(
         &self,
         passkey: &PasskeyAccess,
         credential_id: &[u8],
@@ -712,7 +712,7 @@ impl NamespacePasskeyMatcher {
     }
 }
 
-fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
+pub(crate) fn map_wrapper_repair_passkey_error(error: PasskeyError) -> CloudBackupError {
     match error {
         PasskeyError::PrfUnsupportedProvider => CloudBackupError::UnsupportedPasskeyProvider,
         PasskeyError::UserCancelled => {
@@ -871,7 +871,7 @@ mod tests {
         assert!(!policy.retries(&PasskeyError::UserCancelled));
         assert!(!policy.retries(&PasskeyError::RequestFailed {
             operation: PasskeyOperation::AuthenticateAssertion,
-            reason: PasskeyFailureReason::InvalidResponse,
+            reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
         }));
     }
 
