@@ -312,7 +312,7 @@ fn raw_sections_from(
     vec![
         DiagnosticsSection::new(
             "Privacy notice",
-            "Cove redacts bitcoin addresses, extended public/private keys, WIF private keys, English BIP39 seed phrases, transaction IDs, and known local app data paths. Amounts remain visible. Review the report before submitting.",
+            "Cove redacts bitcoin addresses, extended public/private keys, WIF private keys, BIP39 seed phrases, transaction IDs, and known local app data paths. Amounts remain visible. Review the report before submitting.",
         ),
         DiagnosticsSection::new("Startup diagnostics", startup),
         DiagnosticsSection::new("Platform logs", platform_logs),

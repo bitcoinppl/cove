@@ -19,6 +19,13 @@ class SendDiagnosticsSheetHelpersTest {
     }
 
     @Test
+    fun logTailDropsPartialUnicodeMnemonicWord() {
+        val tail = "prefix a\u0301baco suffix".takeLastAtRedactionBoundary(12)
+
+        assertEquals(" suffix", tail)
+    }
+
+    @Test
     fun logTailKeepsShortValuesUnchanged() {
         val value = "short log"
 

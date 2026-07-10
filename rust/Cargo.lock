@@ -1268,6 +1268,7 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+ "unicode-normalization",
  "uniffi 0.31.1",
  "url",
  "winnow 1.0.2",

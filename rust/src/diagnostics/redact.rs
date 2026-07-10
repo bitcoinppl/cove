@@ -1,9 +1,12 @@
-use std::{cmp::Reverse, collections::BTreeMap, fmt, path::PathBuf, str::FromStr as _};
+use std::{
+    borrow::Cow, cmp::Reverse, collections::BTreeMap, fmt, path::PathBuf, str::FromStr as _,
+};
 
 use bip39::{Language, Mnemonic};
 use bitcoin::{Address, PrivateKey};
 use rand::RngExt as _;
 use sha2::{Digest as _, Sha256};
+use unicode_normalization::char::is_combining_mark;
 
 const BIP39_WORD_COUNTS: [usize; 5] = [24, 21, 18, 15, 12];
 const TXID_HEX_LEN: usize = 64;
@@ -122,10 +125,40 @@ impl Redactor {
 
     fn redact_token(&mut self, token: &str) -> String {
         let Some(kind) = classify_secret(token) else {
-            return self.redact_embedded_txids(token);
+            return self.redact_embedded_ascii_secrets(token);
         };
 
         self.placeholder_for(kind, token)
+    }
+
+    fn redact_embedded_ascii_secrets(&mut self, token: &str) -> String {
+        let mut output = String::with_capacity(token.len());
+        let mut cursor = 0;
+
+        while cursor < token.len() {
+            let Some(run_start_offset) =
+                token[cursor..].bytes().position(|byte| byte.is_ascii_alphanumeric())
+            else {
+                output.push_str(&token[cursor..]);
+                break;
+            };
+            let run_start = cursor + run_start_offset;
+            output.push_str(&token[cursor..run_start]);
+
+            let run_len = token[run_start..].bytes().take_while(u8::is_ascii_alphanumeric).count();
+            let run_end = run_start + run_len;
+            let run = &token[run_start..run_end];
+
+            if let Some(kind) = classify_secret(run) {
+                output.push_str(&self.placeholder_for(kind, run));
+            } else {
+                output.push_str(&self.redact_embedded_txids(run));
+            }
+
+            cursor = run_end;
+        }
+
+        output
     }
 
     fn redact_embedded_txids(&mut self, token: &str) -> String {
@@ -240,7 +273,7 @@ fn classify_secret(token: &str) -> Option<SecretKind> {
 }
 
 fn is_token_character(character: char) -> bool {
-    character.is_ascii_alphanumeric()
+    character.is_alphanumeric() || is_combining_mark(character)
 }
 
 fn token_spans(text: &str) -> Vec<TokenSpan> {
@@ -296,7 +329,10 @@ fn mnemonic_match(text: &str, tokens: &[TokenSpan], token_index: usize) -> Optio
         let word_token_indexes = &candidate.word_token_indexes[..word_count];
         let normalized_phrase = normalized_mnemonic_phrase(text, tokens, word_token_indexes);
 
-        if Mnemonic::parse_in_normalized(Language::English, &normalized_phrase).is_err() {
+        let is_valid = Language::ALL
+            .iter()
+            .any(|language| Mnemonic::parse_in_normalized(*language, &normalized_phrase).is_ok());
+        if !is_valid {
             continue;
         }
 
@@ -438,7 +474,8 @@ impl MnemonicNumbering {
 }
 
 fn is_mnemonic_word(word: &str) -> bool {
-    word.chars().all(|character| character.is_ascii_alphabetic())
+    word.chars().any(char::is_alphabetic)
+        && word.chars().all(|character| character.is_alphabetic() || is_combining_mark(character))
 }
 
 fn is_mnemonic_separator(separator: &str) -> bool {
@@ -527,10 +564,13 @@ fn normalized_mnemonic_phrase(
     let mut words = Vec::with_capacity(word_token_indexes.len());
 
     for token_index in word_token_indexes {
-        words.push(tokens[*token_index].text(text).to_ascii_lowercase());
+        words.push(tokens[*token_index].text(text).to_lowercase());
     }
 
-    words.join(" ")
+    let mut phrase = Cow::Owned(words.join(" "));
+    Mnemonic::normalize_utf8_cow(&mut phrase);
+
+    phrase.into_owned()
 }
 
 fn is_txid(token: &str) -> bool {
@@ -575,6 +615,7 @@ fn is_bitcoin_address(token: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use unicode_normalization::UnicodeNormalization as _;
 
     const MNEMONIC_WORDS: [&str; 12] = [
         "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
@@ -618,6 +659,32 @@ mod tests {
     }
 
     #[test]
+    fn redacts_ascii_secrets_adjacent_to_cjk_text() {
+        let mut redactor = redactor_without_paths();
+        let address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
+        let extended_key = format!("xpub{}", "A".repeat(106));
+        let wif = "5JYkZjmN7PVMjJUfJWfRFwtuXTGB439XV6faajeHPAM9Z2PT2R3";
+        let txid = "4d3c2b1a".repeat(8);
+        let input =
+            format!("地址{address}结束 密钥{extended_key}结束 私钥{wif}结束 交易{txid}结束");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output.matches("<redacted-bitcoin-address-1>").count(), 1);
+        assert_eq!(output.matches("<redacted-extended-key-1>").count(), 1);
+        assert_eq!(output.matches("<redacted-wif-private-key-1>").count(), 1);
+        assert_eq!(output.matches("<redacted-transaction-id-1>").count(), 1);
+        assert!(output.contains("地址<redacted-bitcoin-address-1>结束"));
+        assert!(output.contains("密钥<redacted-extended-key-1>结束"));
+        assert!(output.contains("私钥<redacted-wif-private-key-1>结束"));
+        assert!(output.contains("交易<redacted-transaction-id-1>结束"));
+        assert!(!output.contains(address));
+        assert!(!output.contains(&extended_key));
+        assert!(!output.contains(wif));
+        assert!(!output.contains(&txid));
+    }
+
+    #[test]
     fn redacts_txids_embedded_inside_larger_tokens() {
         let mut redactor = redactor_without_paths();
         let txid = "4d3c2b1a".repeat(8);
@@ -656,6 +723,61 @@ mod tests {
 
         assert_eq!(output.matches("<redacted-seed-phrase-1>").count(), 2);
         assert!(!output.contains(mnemonic));
+    }
+
+    #[test]
+    fn redacts_seed_phrases_in_every_supported_bip39_language() {
+        let mut redactor = redactor_without_paths();
+
+        for &language in Language::ALL.iter().filter(|&&language| language != Language::English) {
+            let mnemonic = Mnemonic::from_entropy_in(language, &[0; 16])
+                .expect("zero entropy produces a valid mnemonic")
+                .to_string();
+            let output = redactor.redact(&mnemonic);
+
+            assert!(
+                output.starts_with("<redacted-seed-phrase-"),
+                "language: {language}, output: {output}"
+            );
+            assert!(!output.contains(&mnemonic), "language: {language}, output: {output}");
+        }
+    }
+
+    #[test]
+    fn redacts_composed_and_decomposed_unicode_as_the_same_seed_phrase() {
+        let mut redactor = redactor_without_paths();
+        let decomposed = Mnemonic::from_entropy_in(Language::Spanish, &[0; 16])
+            .expect("zero entropy produces a valid mnemonic")
+            .to_string();
+        let composed = decomposed.nfc().collect::<String>();
+        let input = format!("decomposed: {decomposed}\ncomposed: {composed}");
+
+        assert_ne!(composed, decomposed);
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output.matches("<redacted-seed-phrase-1>").count(), 2);
+        assert!(!output.contains(&decomposed));
+        assert!(!output.contains(&composed));
+    }
+
+    #[test]
+    fn redacts_non_english_seed_phrase_formatting_variants() {
+        let mut redactor = redactor_without_paths();
+        let japanese = Mnemonic::from_entropy_in(Language::Japanese, &[0; 16])
+            .expect("zero entropy produces a valid mnemonic")
+            .to_string();
+        let spanish = Mnemonic::from_entropy_in(Language::Spanish, &[0; 16])
+            .expect("zero entropy produces a valid mnemonic")
+            .to_string();
+        let ideographic_spaces = japanese.split_whitespace().collect::<Vec<_>>().join("\u{3000}");
+        let comma_separated = spanish.split_whitespace().collect::<Vec<_>>().join(", ");
+
+        for formatted in [ideographic_spaces, comma_separated] {
+            let output = redactor.redact(&formatted);
+
+            assert!(output.starts_with("<redacted-seed-phrase-"), "output: {output}");
+        }
     }
 
     #[test]
@@ -839,6 +961,21 @@ mod tests {
         let mut redactor = redactor_without_paths();
         let invalid_words = ["abandon"; 12];
         let input = format!("{invalid_words:?}");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn non_english_words_still_require_a_valid_bip39_checksum() {
+        let mut redactor = redactor_without_paths();
+        let valid = Mnemonic::from_entropy_in(Language::Spanish, &[0; 16])
+            .expect("zero entropy produces a valid mnemonic")
+            .to_string();
+        let mut words = valid.split_whitespace().collect::<Vec<_>>();
+        words[11] = words[0];
+        let input = words.join(" ");
 
         let output = redactor.redact(&input);
 

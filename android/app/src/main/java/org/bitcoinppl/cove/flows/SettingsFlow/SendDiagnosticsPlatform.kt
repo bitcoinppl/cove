@@ -11,6 +11,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
+import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -19,8 +20,9 @@ import org.bitcoinppl.cove_core.DiagnosticsPlatformInfo
 
 private const val DIAGNOSTICS_FILENAME = "cove-diagnostics.txt"
 private const val MAX_PLATFORM_LOG_CHARS = 256 * 1024
-private const val MAX_ASCII_CODE = 0x7f
 private const val LOGCAT_LINE_COUNT = "1000"
+private val LOGCAT_TIMEOUT: Duration = Duration.ofSeconds(5)
+private val LOGCAT_TERMINATION_GRACE_PERIOD: Duration = Duration.ofMillis(250)
 
 internal fun androidDiagnosticsPlatformInfo(): DiagnosticsPlatformInfo =
     DiagnosticsPlatformInfo(
@@ -59,17 +61,15 @@ private fun collectLogcat(): String =
     runCatching {
         val process =
             ProcessBuilder("logcat", "-d", "-t", LOGCAT_LINE_COUNT)
-                .redirectErrorStream(true)
                 .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        val exitCode = process.waitFor()
 
-        if (exitCode == 0) {
-            output.ifBlank { "logcat returned no visible app logs" }
-        } else {
-            "logcat exited with code $exitCode\n$output"
-        }
+        LogcatProcessCollector(
+            timeout = LOGCAT_TIMEOUT,
+            terminationGracePeriod = LOGCAT_TERMINATION_GRACE_PERIOD,
+        ).collect(process)
     }.getOrElse { error ->
+        if (error is InterruptedException) throw error
+
         "logcat unavailable: ${error.displayMessage()}"
     }
 
@@ -118,11 +118,26 @@ internal fun String.takeLastAtRedactionBoundary(maxChars: Int): String {
     if (length <= maxChars) return this
 
     var start = length - maxChars
-    while (start < length && this[start].isRedactionTokenCharacter()) {
+    if (start > 0 && this[start].isLowSurrogate() && this[start - 1].isHighSurrogate()) {
         start++
+    }
+
+    while (start < length) {
+        val codePoint = codePointAt(start)
+        if (!codePoint.isRedactionTokenCharacter()) break
+
+        start += Character.charCount(codePoint)
     }
 
     return substring(start)
 }
 
-private fun Char.isRedactionTokenCharacter(): Boolean = isLetterOrDigit() && code <= MAX_ASCII_CODE
+private fun Int.isRedactionTokenCharacter(): Boolean =
+    Character.isLetterOrDigit(this) ||
+        when (Character.getType(this)) {
+            Character.NON_SPACING_MARK.toInt(),
+            Character.COMBINING_SPACING_MARK.toInt(),
+            Character.ENCLOSING_MARK.toInt(),
+            -> true
+            else -> false
+        }
