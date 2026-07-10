@@ -144,9 +144,10 @@ impl CloudBackupSupervisor {
                     CloudBackupCloudOnlyWalletOutcome::Deleted { record_id },
                 );
                 manager.refresh_sync_health();
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, result));
+                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
                 });
             }
             Err(error) => {
@@ -185,9 +186,10 @@ impl CloudBackupSupervisor {
                     },
                 );
                 manager.refresh_sync_health();
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, result));
+                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
                 });
             }
             Ok(WalletRestoreOutcome::SkippedDuplicate) => {
@@ -195,9 +197,10 @@ impl CloudBackupSupervisor {
                     CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id },
                 );
                 manager.refresh_sync_health();
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, result));
+                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
                 });
             }
             Err(error) => {

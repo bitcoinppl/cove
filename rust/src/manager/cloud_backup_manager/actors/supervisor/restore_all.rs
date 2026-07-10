@@ -241,6 +241,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_restore_all_record_refresh(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
+        detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<bool> {
         if self.active_operation != Some(claim) {
@@ -252,7 +253,9 @@ impl CloudBackupSupervisor {
             return Produces::ok(false);
         };
 
-        if let Some(result) = result {
+        if self.detail_workflow.is_latest_result(detail_claim)
+            && let Some(result) = result
+        {
             apply_cloud_only_operation_refresh_detail_result(&manager, &result);
             if let CloudBackupDetailResult::AccessError(error) = result
                 && restore_all_must_stop(&error)
@@ -408,8 +411,12 @@ async fn run_restore_all_queue(
         };
 
         if restored {
+            let Ok(detail_claim) = call!(addr.start_detail_result_claim()).await else {
+                return;
+            };
             let result = manager.refresh_cloud_backup_detail().await;
-            let Ok(true) = call!(addr.complete_restore_all_record_refresh(claim, result)).await
+            let Ok(true) =
+                call!(addr.complete_restore_all_record_refresh(claim, detail_claim, result)).await
             else {
                 return;
             };

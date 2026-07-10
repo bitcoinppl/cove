@@ -115,9 +115,10 @@ impl CloudBackupSupervisor {
             Ok(()) => {
                 manager.apply_other_backups_outcome(CloudBackupOtherBackupsOutcome::Deleted);
                 manager.refresh_sync_health();
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, result));
+                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
                 });
             }
             Err(error) => {
@@ -149,9 +150,10 @@ impl CloudBackupSupervisor {
         match result {
             Ok(()) => {
                 manager.refresh_sync_health();
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_sync_refresh_detail(claim, result));
+                    send!(addr.complete_operation_sync_refresh_detail(claim, detail_claim, result));
                 });
             }
             Err(error) => {
@@ -167,6 +169,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_operation_sync_refresh_detail(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
+        detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
@@ -178,7 +181,9 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        if let Some(result) = result {
+        if self.detail_workflow.is_latest_result(detail_claim)
+            && let Some(result) = result
+        {
             apply_refresh_detail_result(&manager, &result);
         }
 

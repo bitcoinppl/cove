@@ -125,8 +125,8 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
     ) -> Result<(), CloudBackupError> {
         self.pending_enable_session = None;
-        self.pending_verification_completion = None;
-        self.runtime_passkey_authorization = None;
+        self.detail_workflow.clear_pending_completion();
+        self.detail_workflow.clear_authorization();
         call!(self.sync_health.clear_upload_runtime_state())
             .await
             .map_err(CloudBackupError::internal)?;

@@ -24,7 +24,7 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn clear_runtime_passkey_authorization(&mut self) -> ActorResult<()> {
-        self.runtime_passkey_authorization = None;
+        self.detail_workflow.clear_authorization();
         Produces::ok(())
     }
 

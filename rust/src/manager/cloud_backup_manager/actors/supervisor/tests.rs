@@ -639,12 +639,19 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
         u64::MAX,
     );
 
-    supervisor.complete_repair_passkey_refresh_detail(stale, None).await.unwrap();
+    let detail_claim = supervisor.detail_workflow.start_operation_result();
+    supervisor
+        .complete_repair_passkey_refresh_detail(stale, detail_claim, None)
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_operation, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 
-    supervisor.complete_repair_passkey_refresh_detail(current, None).await.unwrap();
+    supervisor
+        .complete_repair_passkey_refresh_detail(current, detail_claim, None)
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
@@ -764,12 +771,19 @@ async fn supervisor_ignores_stale_sync_refresh_completion() {
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
     supervisor.active_sync_request = Some(7);
+    let detail_claim = supervisor.detail_workflow.start_operation_result();
 
-    supervisor.complete_sync_request_refresh_detail(6, None).await.unwrap();
+    supervisor
+        .complete_sync_request_refresh_detail(6, detail_claim, None)
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_sync_request, Some(7));
 
-    supervisor.complete_sync_request_refresh_detail(7, None).await.unwrap();
+    supervisor
+        .complete_sync_request_refresh_detail(7, detail_claim, None)
+        .await
+        .unwrap();
 
     assert_eq!(supervisor.active_sync_request, None);
 }
@@ -2646,7 +2660,10 @@ async fn restore_all_restart_marker_enters_detail_without_passkey_verification()
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
-    assert!(matches!(supervisor.detail_entry_plan(&manager), DetailEntryPlan::RefreshOnly));
+    assert!(matches!(
+        supervisor.detail_workflow.entry_plan(&manager),
+        DetailEntryPlan::RefreshOnly
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3039,10 +3056,12 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
         )
         .unwrap();
     supervisor.active_restore_all_cancellation = Some(Arc::new(AtomicBool::new(false)));
+    let detail_claim = supervisor.detail_workflow.start_operation_result();
 
     let should_continue = supervisor
         .complete_restore_all_record_refresh(
             claim,
+            detail_claim,
             Some(CloudBackupDetailResult::AccessError(CloudBackupError::Offline(
                 "offline".into(),
             ))),

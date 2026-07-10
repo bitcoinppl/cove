@@ -474,7 +474,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
+        self.detail_workflow.set_authorization(RuntimePasskeyAuthorization {
             namespace_id: namespace_id.clone(),
             credential_id: passkey.credential_id.clone(),
             prf_salt: passkey.prf_salt,

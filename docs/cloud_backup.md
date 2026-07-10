@@ -58,11 +58,13 @@ incomplete, not a confirmed empty inventory. Restore and destructive actions
 that depend on absence or a complete set stay disabled until the state is
 `Complete`.
 
-The supervisor permits one detail refresh in flight and coalesces further
+The supervisor embeds a `DetailWorkflow` that owns detail entry planning,
+runtime passkey authorization, pending verification completion, and refresh
+scheduling. It permits one screen refresh in flight and coalesces further
 requests into one trailing refresh. Rust starts refresh generations no more than
-once every five seconds and rejects stale completions after a newer generation
-or detail owner has taken over. Closing the detail screen invalidates its
-refresh owner without cancelling manager-owned operations.
+once every five seconds and admits results by start order, so an older screen or
+operation refresh cannot overwrite a newer one. Closing the detail screen
+invalidates its refresh owner without cancelling manager-owned operations.
 
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful

@@ -119,7 +119,7 @@ impl CloudBackupSupervisor {
         claim: Option<CloudBackupExclusiveOperationClaim>,
         continuation: DeepVerificationContinuation,
     ) {
-        self.pending_verification_completion = None;
+        self.detail_workflow.clear_pending_completion();
         if matches!(
             manager.state.read().verification_presentation(),
             CloudBackupVerificationPresentation::ManualVerifying { .. }
@@ -288,7 +288,7 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.runtime_passkey_authorization = Some(authorization);
+                self.detail_workflow.set_authorization(authorization);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager
                         .resume_deep_verify_after_wrapper_repair(
@@ -555,7 +555,7 @@ impl CloudBackupSupervisor {
         manager.handle_deep_verification_result(result);
 
         if should_refresh_open_detail {
-            let plan = self.detail_refresh.request(self.detail_refresh_now());
+            let plan = self.detail_workflow.request_refresh();
             self.handle_detail_refresh_plan(manager.clone(), plan);
         }
 
@@ -758,7 +758,7 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.runtime_passkey_authorization = Some(authorization);
+                self.detail_workflow.set_authorization(authorization);
                 if let Err(error) = manager.finish_passkey_wrapper_repair(uploaded) {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
@@ -803,9 +803,10 @@ impl CloudBackupSupervisor {
             .and_then(|finalization| manager.apply_passkey_repair_finalization(finalization))
         {
             Ok(()) => {
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_repair_passkey_refresh_detail(claim, result));
+                    send!(addr.complete_repair_passkey_refresh_detail(claim, detail_claim, result));
                 });
             }
             Err(error) => {
@@ -824,6 +825,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_repair_passkey_refresh_detail(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
+        detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
         if self.active_operation != Some(claim) {
@@ -834,7 +836,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result {
+        match self.detail_workflow.is_latest_result(detail_claim).then_some(result).flatten() {
             Some(CloudBackupDetailResult::Success(detail)) => {
                 manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
             }
