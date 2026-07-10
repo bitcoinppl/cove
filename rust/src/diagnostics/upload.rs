@@ -7,7 +7,8 @@ use serde::Deserialize;
 use super::DiagnosticsUploadReport;
 
 const PRODUCTION_UPLOAD_URL: &str = "https://diagnostics.covebitcoinwallet.com/reports";
-const APP_TOKEN: &str = "v1.cove-mobile-2026-07";
+// this identifies public mobile clients and must not be trusted as an authorization credential
+const PUBLIC_APP_TOKEN: &str = "v1.cove-mobile-2026-07";
 const GZIP_CONTENT_TYPE: &str = "application/gzip";
 const MAX_SUCCESS_RESPONSE_BYTES: usize = 16 * 1024;
 const MAX_STATUS_BODY_BYTES: usize = 2 * 1024;
@@ -129,7 +130,7 @@ async fn submit_report_once(client: &reqwest::Client, body: &[u8]) -> Result<Str
     let mut response = client
         .post(upload_url())
         .timeout(UPLOAD_ATTEMPT_TIMEOUT)
-        .bearer_auth(APP_TOKEN)
+        .bearer_auth(PUBLIC_APP_TOKEN)
         .header(CONTENT_TYPE, GZIP_CONTENT_TYPE)
         .body(body.to_vec())
         .send()
