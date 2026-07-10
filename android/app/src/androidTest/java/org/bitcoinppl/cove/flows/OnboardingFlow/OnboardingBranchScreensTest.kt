@@ -217,6 +217,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.SOFTWARE_IMPORT,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled" },
                 onSkip = { selected = "skip-software" },
@@ -230,6 +231,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.HARDWARE,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled" },
                 onSkip = { selected = "skip-hardware" },
@@ -248,6 +250,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.NEW_USER,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled-standard" },
                 onSkip = { selected = "skip-standard" },
@@ -264,6 +267,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.SOFTWARE_IMPORT,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled-software" },
                 onSkip = { selected = "skip-software" },
@@ -281,6 +285,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.HARDWARE,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled-hardware" },
                 onSkip = { selected = "skip-hardware" },
@@ -297,12 +302,40 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
+    fun cloudBackupEnableWaitsForRestoreDiscovery() {
+        var enableRequested = false
+
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepView(
+                branch = OnboardingBranch.NEW_USER,
+                isCloudRestoreCheckPending = true,
+                onEnable = { enableRequested = true },
+                onEnabled = {},
+                onSkip = {},
+            )
+        }
+
+        compose.onNodeWithText("Finishing the Google Drive check…")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.cardContaining("passkey is required").performScrollTo().performClick()
+        compose.cardContaining("need access to my Google account").performScrollTo().performClick()
+        compose.cardContaining("manually back up my 12 or 24 words").performScrollTo().performClick()
+
+        compose.button("Enable Cloud Backup")
+            .performScrollTo()
+            .assertIsNotEnabled()
+        assertEquals(false, enableRequested)
+    }
+
+    @Test
     fun cloudBackupDetailsSystemBackCancelsWithoutStartingEnable() {
         var selected = ""
 
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.NEW_USER,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled-standard" },
                 onSkip = { selected = "skip-standard" },
@@ -318,6 +351,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.SOFTWARE_IMPORT,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled-software" },
                 onSkip = { selected = "skip-software" },
@@ -336,6 +370,7 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingCloudBackupStepView(
                 branch = OnboardingBranch.HARDWARE,
+                isCloudRestoreCheckPending = false,
                 onEnable = {},
                 onEnabled = { selected = "enabled-hardware" },
                 onSkip = { selected = "skip-hardware" },
@@ -360,6 +395,7 @@ class OnboardingBranchScreensTest {
                 providerHint = null,
                 warningMessage = null,
                 errorMessage = null,
+                onBack = {},
                 onRestore = { selected = "restore" },
                 onSkip = { selected = "skip" },
             )
@@ -373,13 +409,16 @@ class OnboardingBranchScreensTest {
         compose.setOnboardingContent {
             OnboardingRestoreUnavailableScreen(
                 onContinue = { selected = "continue-unavailable" },
+                onCheckAgain = { selected = "check-again-unavailable" },
                 onBack = { selected = "back-unavailable" },
             )
         }
 
-        compose.onNodeWithText("No Google Drive Backup Found").assertIsDisplayed()
+        compose.onNodeWithText("No Backup Found").assertIsDisplayed()
         compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
-        compose.button("Continue Without Cloud Restore").performClick()
+        compose.button("Check Again").performClick()
+        assertEquals("check-again-unavailable", selected)
+        compose.button("Continue Setup").performClick()
         assertEquals("continue-unavailable", selected)
         compose.button("Back").performClick()
         assertEquals("back-unavailable", selected)
@@ -408,6 +447,7 @@ class OnboardingBranchScreensTest {
                 providerHint = null,
                 warningMessage = "Cloud storage may be unavailable.",
                 errorMessage = null,
+                onBack = {},
                 onRestore = { selected = "restore-warning" },
                 onSkip = { selected = "skip-warning" },
             )
@@ -428,6 +468,7 @@ class OnboardingBranchScreensTest {
                 providerHint = null,
                 warningMessage = null,
                 errorMessage = "Passkey verification failed.",
+                onBack = {},
                 onRestore = { selected = "restore-error" },
                 onSkip = { selected = "skip-error" },
             )

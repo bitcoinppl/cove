@@ -22,13 +22,6 @@ struct OnboardingContainer: View {
         .environment(manager.app)
     }
 
-    private var onOpenCloudRestore: (() -> Void)? {
-        guard manager.state.shouldOfferCloudRestore else { return nil }
-        return {
-            manager.dispatch(.openCloudRestore)
-        }
-    }
-
     private var restoreWarningMessage: String? {
         guard manager.state.step == .restoreOffer,
               manager.state.cloudRestoreState == .inconclusive
@@ -72,7 +65,7 @@ struct OnboardingContainer: View {
         case .restoreUnavailable:
             OnboardingRestoreUnavailableScreen(
                 onContinue: { manager.dispatch(.continueWithoutCloudRestore) },
-                onCheckAgain: { manager.dispatch(.back) }
+                onCheckAgain: { manager.dispatch(.retryCloudCheck) }
             )
 
         case .restoring, .restoreComplete, .restoreFailed:
@@ -94,6 +87,7 @@ struct OnboardingContainer: View {
         case .bitcoinChoice:
             OnboardingBitcoinChoiceScreen(
                 errorMessage: manager.state.errorMessage,
+                onRestoreFromCoveBackup: { manager.dispatch(.openCloudRestore) },
                 onNewHere: { manager.dispatch(.selectHasBitcoin(hasBitcoin: false)) },
                 onHasBitcoin: { manager.dispatch(.selectHasBitcoin(hasBitcoin: true)) }
             )
@@ -101,7 +95,7 @@ struct OnboardingContainer: View {
         case .storageChoice:
             OnboardingStorageChoiceScreen(
                 errorMessage: manager.state.errorMessage,
-                onRestoreFromCoveBackup: onOpenCloudRestore,
+                onRestoreFromCoveBackup: { manager.dispatch(.openCloudRestore) },
                 onSelectStorage: { selection in
                     manager.dispatch(.selectStorage(selection: selection))
                 },

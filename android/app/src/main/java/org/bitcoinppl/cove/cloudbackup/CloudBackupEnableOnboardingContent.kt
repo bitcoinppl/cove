@@ -47,6 +47,7 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingGradientLight
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingInlineMessage
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingPendingStatus
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingPrimaryButton
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
@@ -64,7 +65,9 @@ internal fun CloudBackupEnableOnboardingView(
     onEnable: () -> Unit,
     onCancel: () -> Unit,
     message: String?,
+    statusMessage: String? = null,
     isBusy: Boolean,
+    isEnableDisabled: Boolean = false,
     context: CloudBackupEnableOnboardingContext,
     primaryButtonTitle: String,
     cancelButtonTitle: String = "Cancel",
@@ -179,6 +182,10 @@ internal fun CloudBackupEnableOnboardingView(
                     OnboardingInlineMessage(text = message)
                 }
 
+                if (statusMessage != null) {
+                    OnboardingPendingStatus(text = statusMessage)
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OnboardingToggleCard(
                         checked = checks[0],
@@ -207,7 +214,7 @@ internal fun CloudBackupEnableOnboardingView(
                     text = primaryButtonTitle,
                     onClick = onEnable,
                     modifier = Modifier.testTag("onboarding.cloudBackup.enable"),
-                    enabled = allChecked && !isBusy,
+                    enabled = allChecked && !isBusy && !isEnableDisabled,
                 )
 
                 Spacer(modifier = Modifier.size(16.dp))

@@ -4,10 +4,16 @@ import Foundation
 final class CancellableDispatchOperation<Value: Sendable>: @unchecked Sendable {
     private typealias Continuation = CheckedContinuation<Value, Error>
 
+    private enum State {
+        case pending
+        case running
+        case resolved
+    }
+
     private let lock = NSLock()
     private var continuation: Continuation?
     private var pendingResult: Result<Value, Error>?
-    private var isResolved = false
+    private var state = State.pending
 
     static func run(
         on queue: DispatchQueue,
@@ -19,7 +25,7 @@ final class CancellableDispatchOperation<Value: Sendable>: @unchecked Sendable {
             try await withCheckedThrowingContinuation { continuation in
                 state.install(continuation)
                 queue.async {
-                    state.resolve(Result { try operation() })
+                    state.runIfPending(operation)
                 }
             }
         } onCancel: {
@@ -29,7 +35,7 @@ final class CancellableDispatchOperation<Value: Sendable>: @unchecked Sendable {
 
     private func install(_ continuation: Continuation) {
         let pendingResult: Result<Value, Error>? = lock.withLock {
-            guard isResolved else {
+            guard state == .resolved else {
                 self.continuation = continuation
                 return nil
             }
@@ -46,9 +52,9 @@ final class CancellableDispatchOperation<Value: Sendable>: @unchecked Sendable {
 
     private func resolve(_ result: Result<Value, Error>) {
         let continuation: Continuation? = lock.withLock {
-            guard !isResolved else { return nil }
+            guard state != .resolved else { return nil }
 
-            isResolved = true
+            state = .resolved
             guard let continuation = self.continuation else {
                 pendingResult = result
                 return nil
@@ -59,6 +65,19 @@ final class CancellableDispatchOperation<Value: Sendable>: @unchecked Sendable {
         }
 
         continuation?.resume(with: result)
+    }
+
+    private func runIfPending(_ operation: () throws -> Value) {
+        let shouldRun = lock.withLock {
+            guard state == .pending else { return false }
+
+            state = .running
+            return true
+        }
+
+        guard shouldRun else { return }
+
+        resolve(Result { try operation() })
     }
 }
 

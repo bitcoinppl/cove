@@ -43890,6 +43890,9 @@ sealed class OnboardingAction {
     object RetryRestore : OnboardingAction()
 
 
+    object RetryCloudCheck : OnboardingAction()
+
+
     object SkipRestore : OnboardingAction()
 
 
@@ -43953,13 +43956,14 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             16 -> OnboardingAction.DismissCloudRestoreAlert
             17 -> OnboardingAction.StartRestore
             18 -> OnboardingAction.RetryRestore
-            19 -> OnboardingAction.SkipRestore
-            20 -> OnboardingAction.ContinueWithoutCloudRestore
-            21 -> OnboardingAction.ContinueFromRestoreComplete
-            22 -> OnboardingAction.AcceptTerms
-            23 -> OnboardingAction.Back
-            24 -> OnboardingAction.BeginCloudBackupEnable
-            25 -> OnboardingAction.ContinueFromCloudBackupSuccess
+            19 -> OnboardingAction.RetryCloudCheck
+            20 -> OnboardingAction.SkipRestore
+            21 -> OnboardingAction.ContinueWithoutCloudRestore
+            22 -> OnboardingAction.ContinueFromRestoreComplete
+            23 -> OnboardingAction.AcceptTerms
+            24 -> OnboardingAction.Back
+            25 -> OnboardingAction.BeginCloudBackupEnable
+            26 -> OnboardingAction.ContinueFromCloudBackupSuccess
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -44072,6 +44076,12 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
             )
         }
         is OnboardingAction.RetryRestore -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is OnboardingAction.RetryCloudCheck -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -44199,32 +44209,36 @@ public object FfiConverterTypeOnboardingAction : FfiConverterRustBuffer<Onboardi
                 buf.putInt(18)
                 Unit
             }
-            is OnboardingAction.SkipRestore -> {
+            is OnboardingAction.RetryCloudCheck -> {
                 buf.putInt(19)
                 Unit
             }
-            is OnboardingAction.ContinueWithoutCloudRestore -> {
+            is OnboardingAction.SkipRestore -> {
                 buf.putInt(20)
                 Unit
             }
-            is OnboardingAction.ContinueFromRestoreComplete -> {
+            is OnboardingAction.ContinueWithoutCloudRestore -> {
                 buf.putInt(21)
                 Unit
             }
-            is OnboardingAction.AcceptTerms -> {
+            is OnboardingAction.ContinueFromRestoreComplete -> {
                 buf.putInt(22)
                 Unit
             }
-            is OnboardingAction.Back -> {
+            is OnboardingAction.AcceptTerms -> {
                 buf.putInt(23)
                 Unit
             }
-            is OnboardingAction.BeginCloudBackupEnable -> {
+            is OnboardingAction.Back -> {
                 buf.putInt(24)
                 Unit
             }
-            is OnboardingAction.ContinueFromCloudBackupSuccess -> {
+            is OnboardingAction.BeginCloudBackupEnable -> {
                 buf.putInt(25)
+                Unit
+            }
+            is OnboardingAction.ContinueFromCloudBackupSuccess -> {
+                buf.putInt(26)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

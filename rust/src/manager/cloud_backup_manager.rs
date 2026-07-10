@@ -92,12 +92,9 @@ type LocalWalletSecret = crate::backup::model::WalletSecret;
 const PASSKEY_RP_ID: &str = "covebitcoinwallet.com";
 pub(crate) const SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE: &str =
     "master key backup is missing from cloud storage";
-#[cfg(not(target_os = "android"))]
-const PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE: &str =
-    "Your iPhone is still getting your Cove passkey ready. Wait a moment, then try again.";
-#[cfg(target_os = "android")]
-const PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE: &str =
-    "Cove is still getting your passkey ready. Wait a moment, then try again.";
+const PASSKEY_ACCESS_RECOVERY_MESSAGE: &str = "Cove couldn't access your passkey. Check your connection and passkey account, then try again. If this keeps happening, choose another passkey provider or contact support.";
+const PASSKEY_NOT_FOUND_MESSAGE: &str =
+    "Cove couldn't find the requested passkey. Please try again or choose another passkey.";
 const GENERIC_PASSKEY_ERROR_MESSAGE: &str = "Cove couldn't use this passkey. Please try again.";
 const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. ",
@@ -1144,22 +1141,12 @@ impl CloudBackupError {
         matches!(self, Self::Cloud(_) | Self::CloudStorage(_) | Self::CloudStorageContext { .. })
     }
 
-    pub(crate) fn is_platform_authorization_failure(&self) -> bool {
-        matches!(
-            self,
-            Self::Passkey(PasskeyError::RequestFailed {
-                reason: PasskeyFailureReason::PlatformAuthorizationFailed,
-                ..
-            })
-        )
-    }
-
     pub(crate) fn reader_message(&self) -> String {
         match self {
             Self::Passkey(PasskeyError::RequestFailed {
                 reason: PasskeyFailureReason::PlatformAuthorizationFailed,
                 ..
-            }) => PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE.into(),
+            }) => PASSKEY_ACCESS_RECOVERY_MESSAGE.into(),
             Self::Passkey(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::Registration,
                 reason: PasskeyFailureReason::DeviceNotConfigured,
@@ -1167,7 +1154,7 @@ impl CloudBackupError {
             Self::Passkey(PasskeyError::UserCancelled) => {
                 Self::PasskeyDiscoveryCancelled.to_string()
             }
-            Self::Passkey(PasskeyError::NoCredentialFound) => Self::PasskeyMismatch.to_string(),
+            Self::Passkey(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
             Self::Passkey(PasskeyError::PrfUnsupportedProvider) => {
                 Self::UnsupportedPasskeyProvider.to_string()
             }
@@ -3691,17 +3678,25 @@ mod tests {
     }
 
     #[test]
-    fn platform_authorization_failure_uses_temporary_reader_message() {
+    fn platform_authorization_failure_uses_durable_recovery_message() {
         let error = CloudBackupError::Passkey(PasskeyError::RequestFailed {
             operation: PasskeyOperation::DiscoverAssertion,
             reason: PasskeyFailureReason::PlatformAuthorizationFailed,
         });
 
-        assert_eq!(error.reader_message(), PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE);
+        assert_eq!(error.reader_message(), PASSKEY_ACCESS_RECOVERY_MESSAGE);
         assert_eq!(
             RustCloudBackupManager::status_for_operation_error(&error),
-            CloudBackupStatus::Error(PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE.into())
+            CloudBackupStatus::Error(PASSKEY_ACCESS_RECOVERY_MESSAGE.into())
         );
+    }
+
+    #[test]
+    fn missing_credential_uses_context_neutral_reader_message() {
+        let message = CloudBackupError::Passkey(PasskeyError::NoCredentialFound).reader_message();
+
+        assert_eq!(message, PASSKEY_NOT_FOUND_MESSAGE);
+        assert_ne!(message, CloudBackupError::PasskeyMismatch.to_string());
     }
 
     #[test]

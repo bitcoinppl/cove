@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -583,6 +584,40 @@ internal fun OnboardingInlineMessage(
             style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
             modifier = Modifier.padding(14.dp),
         )
+    }
+}
+
+@Composable
+internal fun OnboardingPendingStatus(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = CoveColor.duskBlue.copy(alpha = 0.56f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, OnboardingCardBorder),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color = Color.White,
+                strokeWidth = 2.dp,
+            )
+
+            Text(
+                text = text,
+                color = Color.White.copy(alpha = 0.84f),
+                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 

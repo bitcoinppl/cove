@@ -219,6 +219,36 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertTrue(didFinish)
     }
 
+    func testCancellableDispatchOperationSkipsWorkCancelledBeforeItStarts() async {
+        let gate = QueuedCancellableDispatchOperationTestGate()
+        let queue = DispatchQueue(label: "cove.tests.queued-cancellable-cloud-operation")
+        gate.block(queue: queue)
+        await gate.waitUntilBlocked()
+
+        let task = Task {
+            try await CancellableDispatchOperation<[String]>.run(on: queue) {
+                gate.markOperationStarted()
+                return ["unexpected namespace"]
+            }
+        }
+
+        await Task.yield()
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("expected cancellation")
+        } catch is CancellationError {
+            // expected
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+
+        gate.release()
+        await gate.waitUntilQueueDrains(queue: queue)
+        XCTAssertFalse(gate.operationStarted)
+    }
+
     private func runSilentNamespaceProbe(
         with state: SilentNamespaceProbeTestState
     ) async throws -> [String] {
@@ -365,6 +395,51 @@ private final class CancellableDispatchOperationTestGate: @unchecked Sendable {
         await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
                 continuation.resume(returning: self.finished.wait(timeout: .now() + 1) == .success)
+            }
+        }
+    }
+}
+
+private final class QueuedCancellableDispatchOperationTestGate: @unchecked Sendable {
+    private let blocked = DispatchSemaphore(value: 0)
+    private let releaseBlock = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var didStartOperation = false
+
+    var operationStarted: Bool {
+        lock.withLock { didStartOperation }
+    }
+
+    func block(queue: DispatchQueue) {
+        queue.async {
+            self.blocked.signal()
+            self.releaseBlock.wait()
+        }
+    }
+
+    func waitUntilBlocked() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                self.blocked.wait()
+                continuation.resume()
+            }
+        }
+    }
+
+    func markOperationStarted() {
+        lock.withLock {
+            didStartOperation = true
+        }
+    }
+
+    func release() {
+        releaseBlock.signal()
+    }
+
+    func waitUntilQueueDrains(queue: DispatchQueue) async {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume()
             }
         }
     }

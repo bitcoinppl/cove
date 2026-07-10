@@ -836,16 +836,22 @@ internal fun OnboardingBitcoinChoiceScreen(
 @Composable
 internal fun OnboardingRestoreUnavailableScreen(
     onContinue: () -> Unit,
+    onCheckAgain: () -> Unit,
     onBack: () -> Unit,
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.CloudOff,
-        title = "No Backups Found",
-        subtitle = "We couldn't find a Cove backup in Google Drive for this account. Continue without a backup, then set up Cloud Backup when you're ready.",
+        title = "No Backup Found",
+        subtitle = "No Cove backup is available in Google Drive for this account. You can check again, or continue setup and check Cloud Backup from Settings.",
         onBack = onBack,
     ) {
         OnboardingPrimaryButton(
-            text = "Continue Without Backup",
+            text = "Check Again",
+            onClick = onCheckAgain,
+        )
+
+        OnboardingSecondaryButton(
+            text = "Continue Setup",
             onClick = onContinue,
         )
     }

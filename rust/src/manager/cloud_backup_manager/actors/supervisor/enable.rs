@@ -249,14 +249,9 @@ impl CloudBackupSupervisor {
                 manager.apply_enable_outcome(CloudBackupEnableOutcome::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
             }
-            CloudBackupSavedPasskeyConfirmation::Retry { pending, error }
-                if error.is_platform_authorization_failure() =>
-            {
-                self.pending_enable_session = Some(pending);
-                self.fail_enable_operation(&manager, claim, error);
-            }
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error } => {
-                warn!("Confirm saved passkey will retry: {error}");
+                let message = error.reader_message();
+                warn!("Confirm saved passkey will retry: {message}");
                 self.pending_enable_session = Some(pending);
                 manager.apply_enable_outcome(
                     CloudBackupEnableOutcome::AwaitingSavedPasskeyConfirmation(

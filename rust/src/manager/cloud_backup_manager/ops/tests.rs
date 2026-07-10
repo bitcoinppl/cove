@@ -25,7 +25,6 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
-use crate::manager::cloud_backup_manager::PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE;
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupOperation, CloudBackupWriteClient,
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
@@ -1935,7 +1934,7 @@ async fn automatic_saved_passkey_confirmation_does_not_represent_the_passkey_she
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn exhausted_platform_confirmation_failure_shows_safe_message_and_keeps_retry() {
+async fn exhausted_platform_confirmation_failure_stays_recoverable() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -1953,22 +1952,58 @@ async fn exhausted_platform_confirmation_failure_shows_safe_message_and_keeps_re
         saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
         verification_source: CloudBackupVerificationSource::Onboarding,
     };
-    let result = enable_cloud_backup_no_discovery_with_context(&manager, context).await;
+    enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
 
-    assert!(matches!(
-        result,
-        Err(CloudBackupError::Internal(message))
-            if message == PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE
-    ));
     assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabling);
     assert_eq!(
-        manager.current_status(),
-        CloudBackupStatus::Error(PASSKEY_TEMPORARILY_UNAVAILABLE_MESSAGE.into())
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        )
     );
-    assert!(matches!(
-        take_pending_enable_session_for_test(&manager).await,
-        Some(PendingEnableSession::AwaitingSavedPasskeyConfirmation(_))
-    ));
+    assert!(has_awaiting_saved_passkey_confirmation_for_test(&manager).await);
+
+    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+    confirm_saved_passkey_session(&manager).await;
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_after_platform_confirmation_failure_clears_staged_material() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+        operation: PasskeyOperation::AuthenticateAssertion,
+        reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+    }));
+
+    let context = CloudBackupEnableContext {
+        saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+        verification_source: CloudBackupVerificationSource::Onboarding,
+    };
+    enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
+
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    assert!(has_awaiting_saved_passkey_confirmation_for_test(&manager).await);
+    assert!(cspp.load_master_key_from_store().unwrap().is_some());
+
+    manager.discard_pending_enable_cloud_backup();
+    wait_for_test_condition(Duration::from_secs(1), "staged enable material is discarded", || {
+        manager.current_status() == CloudBackupStatus::Disabled
+            && cspp.load_master_key_from_store().unwrap().is_none()
+    })
+    .await;
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]

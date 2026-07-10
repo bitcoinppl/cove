@@ -14,7 +14,9 @@ private final class MetadataQuerySession<Value> {
         guard !didSignal else { return }
         didSignal = true
         finalizeWorkItem?.cancel()
-        if disableUpdates { query.disableUpdates() }
+        if disableUpdates {
+            query.disableUpdates()
+        }
         self.value = value
         query.stop()
         box.removeAll()
@@ -309,8 +311,12 @@ extension ICloudDriveHelper {
     }
 
     private static func metadataPath(for item: NSMetadataItem) -> String? {
-        if let path = item.value(forAttribute: NSMetadataItemPathKey) as? String { return resolvedPath(path) }
-        if let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL { return resolvedPath(url.path) }
+        if let path = item.value(forAttribute: NSMetadataItemPathKey) as? String {
+            return resolvedPath(path)
+        }
+        if let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL {
+            return resolvedPath(url.path)
+        }
         return nil
     }
 
@@ -554,13 +560,14 @@ extension ICloudDriveHelper {
 
     private func metadataNames(
         parentDirectoryURL: URL,
+        timeout: TimeInterval,
         transform: (String) -> String?
     ) throws -> [String] {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
         let pathPrefix = resolvedParent + "/"
         let items = try metadataQuery(
             predicate: NSPredicate(value: true),
-            timeout: 5
+            timeout: timeout
         )
         var names = Set<String>()
 
@@ -576,15 +583,21 @@ extension ICloudDriveHelper {
         return names.sorted()
     }
 
-    func metadataSubdirectoryNames(parentDirectoryURL: URL) throws -> [String] {
-        try metadataNames(parentDirectoryURL: parentDirectoryURL) { relativePath in
+    func metadataSubdirectoryNames(
+        parentDirectoryURL: URL,
+        timeout: TimeInterval
+    ) throws -> [String] {
+        try metadataNames(parentDirectoryURL: parentDirectoryURL, timeout: timeout) { relativePath in
             guard let firstComponent = relativePath.split(separator: "/").first else { return nil }
             return String(firstComponent)
         }
     }
 
     func metadataFileNames(parentDirectoryURL: URL, prefix: String) throws -> [String] {
-        try metadataNames(parentDirectoryURL: parentDirectoryURL) { relativePath in
+        try metadataNames(
+            parentDirectoryURL: parentDirectoryURL,
+            timeout: metadataListingTimeout
+        ) { relativePath in
             guard !relativePath.contains("/") else { return nil }
             let name = URL(fileURLWithPath: relativePath).lastPathComponent
             guard name.hasPrefix(prefix) else { return nil }

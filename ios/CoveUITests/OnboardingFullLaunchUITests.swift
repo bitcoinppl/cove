@@ -41,6 +41,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         reachStorageChoices()
 
         XCTAssertTrue(app.staticTexts["How do you store your Bitcoin?"].exists)
+        XCTAssertTrue(app.buttons["Restore from Cove Backup"].exists)
         XCTAssertTrue(button(startingWith: "On an exchange").exists)
         XCTAssertTrue(button(startingWith: "Hardware wallet").exists)
         XCTAssertTrue(button(startingWith: "Software wallet").exists)
@@ -55,6 +56,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         app.buttons["Back"].tap()
 
         XCTAssertTrue(app.staticTexts["Do you already have Bitcoin?"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Restore from Cove Backup"].exists)
         XCTAssertTrue(button(startingWith: "No, I").exists)
         XCTAssertTrue(button(startingWith: "Yes, I have Bitcoin").exists)
     }

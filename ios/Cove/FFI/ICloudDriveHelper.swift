@@ -11,7 +11,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     let defaultTimeout: TimeInterval = 60
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
-    private let metadataListingTimeout: TimeInterval = 5
+    let metadataListingTimeout: TimeInterval = 5
     private let progressLogInterval: TimeInterval = 1
     private static let legacyFileReadNoSuchFileError = 4
 
@@ -230,13 +230,17 @@ final class ICloudDriveHelper: @unchecked Sendable {
                     named: url.lastPathComponent,
                     parentDirectoryURL: url.deletingLastPathComponent()
                 )
-                if let item { return item.url }
+                if let item {
+                    return item.url
+                }
             } catch {
                 lastError = error
             }
         }
 
-        if let lastError { throw lastError }
+        if let lastError {
+            throw lastError
+        }
         throw CloudStorageError.NotFound(recordId)
     }
 
@@ -380,7 +384,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         if let error = coordinatorError ?? deleteError {
-            if Self.isNoSuchFileError(error) { throw CloudStorageError.NotFound(missingItemID) }
+            if Self.isNoSuchFileError(error) {
+                throw CloudStorageError.NotFound(missingItemID)
+            }
             throw Self.uploadError("delete failed", error: error)
         }
     }
@@ -664,8 +670,12 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         guard values.isUbiquitousItem == true else { return .notUbiquitous }
-        if values.ubiquitousItemIsUploaded == true { return .uploaded }
-        if let error = values.ubiquitousItemUploadingError { return .failed(error) }
+        if values.ubiquitousItemIsUploaded == true {
+            return .uploaded
+        }
+        if let error = values.ubiquitousItemUploadingError {
+            return .failed(error)
+        }
 
         return .uploading
     }
@@ -714,9 +724,15 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         guard values.isUbiquitousItem == true else { return .notUbiquitous }
-        if values.ubiquitousItemDownloadingStatus == .current { return .current }
-        if let error = values.ubiquitousItemDownloadingError { return .failed(error) }
-        if values.ubiquitousItemIsDownloading == true { return .downloading }
+        if values.ubiquitousItemDownloadingStatus == .current {
+            return .current
+        }
+        if let error = values.ubiquitousItemDownloadingError {
+            return .failed(error)
+        }
+        if values.ubiquitousItemIsDownloading == true {
+            return .downloading
+        }
 
         return .notDownloaded
     }
@@ -765,37 +781,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         return Array(names)
-    }
-
-    private func metadataSubdirectoryNames(
-        parentDirectoryURL: URL,
-        timeout: TimeInterval
-    ) throws -> [String] {
-        let resolvedParent = parentDirectoryURL.resolvingSymlinksInPath().path
-        let pathPrefix = resolvedParent + "/"
-        let items = try metadataQuery(
-            predicate: NSPredicate(value: true),
-            timeout: timeout
-        )
-        var names = Set<String>()
-
-        for item in items {
-            let metadataPath: String? = if let path = item.value(forAttribute: NSMetadataItemPathKey) as? String {
-                URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-            } else if let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL {
-                url.resolvingSymlinksInPath().path
-            } else {
-                nil
-            }
-
-            guard let metadataPath, metadataPath.hasPrefix(pathPrefix) else { continue }
-
-            let relativePath = String(metadataPath.dropFirst(pathPrefix.count))
-            guard let firstComponent = relativePath.split(separator: "/").first else { continue }
-            names.insert(String(firstComponent))
-        }
-
-        return names.sorted()
     }
 
     /// Lists filenames matching a prefix within a namespace directory
@@ -877,7 +862,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 "isBackupUploaded: recordId=\(recordId.prefix(12))… path=\(url.path) state=\(state) usedMetadata=\(usedMetadata)"
             )
 
-            if case .uploaded = state { return true }
+            if case .uploaded = state {
+                return true
+            }
         }
 
         return false
@@ -918,8 +905,12 @@ final class ICloudDriveHelper: @unchecked Sendable {
             }
         }
 
-        if let lastError { throw lastError }
-        if !deletedAny { throw CloudStorageError.NotFound(recordId) }
+        if let lastError {
+            throw lastError
+        }
+        if !deletedAny {
+            throw CloudStorageError.NotFound(recordId)
+        }
     }
 
     private func allBackupFiles(in namespaceDirectory: URL) -> [URL] {
@@ -1004,9 +995,15 @@ final class ICloudDriveHelper: @unchecked Sendable {
             }
         }
 
-        if !hasFiles { return .noFiles }
-        if anyFailed { return .failed(failureMessage ?? "upload error") }
-        if allUploaded { return .allUploaded }
+        if !hasFiles {
+            return .noFiles
+        }
+        if anyFailed {
+            return .failed(failureMessage ?? "upload error")
+        }
+        if allUploaded {
+            return .allUploaded
+        }
         return .uploading
     }
 }

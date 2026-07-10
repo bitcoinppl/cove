@@ -100,6 +100,7 @@ struct OnboardingCloudCheckStatus: View {
 
 struct OnboardingBitcoinChoiceScreen: View {
     let errorMessage: String?
+    let onRestoreFromCoveBackup: () -> Void
     let onNewHere: () -> Void
     let onHasBitcoin: () -> Void
 
@@ -129,6 +130,8 @@ struct OnboardingBitcoinChoiceScreen: View {
                 ) {
                     onHasBitcoin()
                 }
+
+                OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
             }
         }
     }
@@ -174,7 +177,7 @@ struct OnboardingRestoreOfflineScreen: View {
 
 struct OnboardingStorageChoiceScreen: View {
     let errorMessage: String?
-    let onRestoreFromCoveBackup: (() -> Void)?
+    let onRestoreFromCoveBackup: () -> Void
     let onSelectStorage: (OnboardingStorageSelection) -> Void
     let onBack: () -> Void
 
@@ -189,9 +192,7 @@ struct OnboardingStorageChoiceScreen: View {
             }
 
             VStack(spacing: 14) {
-                if let onRestoreFromCoveBackup {
-                    OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
-                }
+                OnboardingCloudRestoreChoiceCard(action: onRestoreFromCoveBackup)
 
                 OnboardingChoiceCard(
                     title: "On an exchange",

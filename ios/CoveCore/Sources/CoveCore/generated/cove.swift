@@ -27051,6 +27051,7 @@ public enum OnboardingAction: Equatable, Hashable {
     case dismissCloudRestoreAlert
     case startRestore
     case retryRestore
+    case retryCloudCheck
     case skipRestore
     case continueWithoutCloudRestore
     case continueFromRestoreComplete
@@ -27119,19 +27120,21 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
 
         case 18: return .retryRestore
 
-        case 19: return .skipRestore
+        case 19: return .retryCloudCheck
 
-        case 20: return .continueWithoutCloudRestore
+        case 20: return .skipRestore
 
-        case 21: return .continueFromRestoreComplete
+        case 21: return .continueWithoutCloudRestore
 
-        case 22: return .acceptTerms
+        case 22: return .continueFromRestoreComplete
 
-        case 23: return .back
+        case 23: return .acceptTerms
 
-        case 24: return .beginCloudBackupEnable
+        case 24: return .back
 
-        case 25: return .continueFromCloudBackupSuccess
+        case 25: return .beginCloudBackupEnable
+
+        case 26: return .continueFromCloudBackupSuccess
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27217,32 +27220,36 @@ public struct FfiConverterTypeOnboardingAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(18))
 
 
-        case .skipRestore:
+        case .retryCloudCheck:
             writeInt(&buf, Int32(19))
 
 
-        case .continueWithoutCloudRestore:
+        case .skipRestore:
             writeInt(&buf, Int32(20))
 
 
-        case .continueFromRestoreComplete:
+        case .continueWithoutCloudRestore:
             writeInt(&buf, Int32(21))
 
 
-        case .acceptTerms:
+        case .continueFromRestoreComplete:
             writeInt(&buf, Int32(22))
 
 
-        case .back:
+        case .acceptTerms:
             writeInt(&buf, Int32(23))
 
 
-        case .beginCloudBackupEnable:
+        case .back:
             writeInt(&buf, Int32(24))
 
 
-        case .continueFromCloudBackupSuccess:
+        case .beginCloudBackupEnable:
             writeInt(&buf, Int32(25))
+
+
+        case .continueFromCloudBackupSuccess:
+            writeInt(&buf, Int32(26))
 
         }
     }

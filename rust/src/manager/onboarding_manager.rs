@@ -153,6 +153,7 @@ pub enum OnboardingAction {
     DismissCloudRestoreAlert,
     StartRestore,
     RetryRestore,
+    RetryCloudCheck,
     SkipRestore,
     ContinueWithoutCloudRestore,
     ContinueFromRestoreComplete,
@@ -1259,6 +1260,9 @@ impl FlowState {
                 Self::RestoreUnavailable { origin },
                 OnboardingAction::ContinueWithoutCloudRestore,
             ) => (origin.flow_state_after_restore_unavailable(), TransitionCommand::None),
+            (Self::RestoreUnavailable { origin }, OnboardingAction::RetryCloudCheck) => {
+                (Self::CloudCheck { origin }, TransitionCommand::StartCloudCheck)
+            }
             (Self::RestoreFailed { origin, .. }, OnboardingAction::RetryRestore) => {
                 let attempt_id =
                     restore_attempt_id.expect("restore attempt id required for RetryRestore");
@@ -1298,7 +1302,7 @@ impl FlowState {
                 (origin.flow_state(), TransitionCommand::None)
             }
             (Self::RestoreUnavailable { origin }, OnboardingAction::Back) => {
-                (Self::CloudCheck { origin }, TransitionCommand::StartCloudCheck)
+                (origin.flow_state(), TransitionCommand::None)
             }
             (Self::SecretWords(flow), OnboardingAction::Back) => {
                 (Self::BackupWallet(flow), TransitionCommand::None)
@@ -1820,7 +1824,7 @@ where
             Some(flow) => InitialFlowResolution {
                 flow,
                 clear_persisted_progress: false,
-                start_cloud_check: false,
+                start_cloud_check: true,
             },
             None => InitialFlowResolution {
                 flow: default_initial_flow(has_wallets),
@@ -3109,6 +3113,33 @@ mod tests {
     }
 
     #[test]
+    fn explicit_restore_remains_available_after_automatic_offers_are_disabled() {
+        let scenarios = [
+            (FlowState::BitcoinChoice { error_message: None }, RestoreOrigin::BitcoinChoice),
+            (FlowState::StorageChoice { error_message: None }, RestoreOrigin::StorageChoice),
+        ];
+
+        for (mut flow, expected_origin) in scenarios {
+            let mut restore_offer_allowed = false;
+
+            let command = flow.apply_user_action(
+                OnboardingAction::OpenCloudRestore,
+                CloudRestoreDiscovery::BackupFound(None),
+                &mut restore_offer_allowed,
+                None,
+            );
+
+            assert_eq!(command, TransitionCommand::None);
+            assert!(matches!(
+                flow,
+                FlowState::RestoreOffer { origin, error_message: None }
+                    if origin == expected_origin
+            ));
+            assert!(!restore_offer_allowed);
+        }
+    }
+
+    #[test]
     fn explicit_restore_from_welcome_while_checking_opens_non_blocking_check() {
         let mut flow = FlowState::Welcome { error_message: None };
         let mut restore_offer_allowed = true;
@@ -3584,12 +3615,42 @@ mod tests {
     }
 
     #[test]
-    fn check_again_from_no_result_restarts_the_cloud_check() {
+    fn back_from_restore_unavailable_returns_to_origin_without_rechecking() {
+        let scenarios = [
+            (RestoreOrigin::Welcome, OnboardingStep::Welcome),
+            (RestoreOrigin::BitcoinChoice, OnboardingStep::BitcoinChoice),
+            (RestoreOrigin::StorageChoice, OnboardingStep::StorageChoice),
+            (RestoreOrigin::HardwareImport, OnboardingStep::HardwareImport),
+            (RestoreOrigin::SoftwareImport, OnboardingStep::SoftwareImport),
+        ];
+
+        for (origin, expected_step) in scenarios {
+            let mut flow = FlowState::RestoreUnavailable { origin };
+            let mut restore_offer_allowed = true;
+
+            let command = flow.apply_user_action(
+                OnboardingAction::Back,
+                CloudRestoreDiscovery::NoBackupFound,
+                &mut restore_offer_allowed,
+                None,
+            );
+
+            assert_eq!(command, TransitionCommand::None);
+            assert_eq!(
+                flow.ui_state(&CloudRestoreDiscovery::NoBackupFound, false, false).step,
+                expected_step
+            );
+            assert!(restore_offer_allowed);
+        }
+    }
+
+    #[test]
+    fn explicit_check_again_from_no_result_restarts_the_cloud_check() {
         let mut flow = FlowState::RestoreUnavailable { origin: RestoreOrigin::Welcome };
         let mut restore_offer_allowed = true;
 
         let command = flow.apply_user_action(
-            OnboardingAction::Back,
+            OnboardingAction::RetryCloudCheck,
             CloudRestoreDiscovery::NoBackupFound,
             &mut restore_offer_allowed,
             None,
@@ -3601,14 +3662,14 @@ mod tests {
     }
 
     #[test]
-    fn check_again_reconciles_the_checking_state_before_launching_another_probe() {
+    fn explicit_check_again_reconciles_checking_before_launching_another_probe() {
         let manager = preview_manager(
             FlowState::RestoreUnavailable { origin: RestoreOrigin::Welcome },
             CloudRestoreDiscovery::NoBackupFound,
         );
         manager.cloud_check_in_flight.store(true, Ordering::Release);
 
-        manager.dispatch(OnboardingAction::Back);
+        manager.dispatch(OnboardingAction::RetryCloudCheck);
 
         let state = manager.state.read();
         assert!(matches!(state.flow, FlowState::CloudCheck { origin: RestoreOrigin::Welcome }));
@@ -3980,7 +4041,7 @@ mod tests {
     }
 
     #[test]
-    fn persisted_created_wallet_progress_resumes_to_backup_wallet() {
+    fn persisted_created_wallet_resume_starts_discovery_before_cloud_backup_enable() {
         let wallet_id = WalletId::new();
         let mnemonic = Mnemonic::parse(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
@@ -3995,22 +4056,52 @@ mod tests {
             cloud_backup_enabled: false,
         };
 
-        let flow = progress
-            .restore_flow(|requested_wallet_id, _, _| {
-                assert_eq!(requested_wallet_id, &wallet_id);
-                Some(mnemonic.clone())
-            })
-            .expect("should restore backup flow");
+        let resolution = resolve_initial_flow(Some(progress), true, |requested_wallet_id, _, _| {
+            assert_eq!(requested_wallet_id, &wallet_id);
+            Some(mnemonic.clone())
+        });
 
-        match flow {
+        assert!(resolution.start_cloud_check);
+        assert!(!resolution.clear_persisted_progress);
+
+        let mut state = InternalState::new(resolution.flow);
+        match &state.flow {
             FlowState::BackupWallet(flow) => {
-                assert_eq!(flow.wallet_id, wallet_id);
+                assert_eq!(flow.wallet_id, wallet_id.clone());
                 assert_eq!(flow.branch, OnboardingBranch::Exchange);
                 assert!(flow.secret_words_saved);
                 assert!(!flow.cloud_backup_enabled);
             }
             other => panic!("unexpected flow state: {other:?}"),
         }
+
+        state.flow.apply_event(
+            InternalEvent::CloudCheckFinished(CloudCheckOutcome::NoBackupConfirmed),
+            &mut state.cloud_restore_discovery,
+            state.restore_offer_allowed,
+        );
+        assert_eq!(state.cloud_restore_discovery, CloudRestoreDiscovery::NoBackupFound);
+
+        let command = state.flow.apply_user_action(
+            OnboardingAction::OpenCloudBackup,
+            state.cloud_restore_discovery.clone(),
+            &mut state.restore_offer_allowed,
+            None,
+        );
+        assert_eq!(command, TransitionCommand::None);
+
+        let command = state.flow.apply_user_action(
+            OnboardingAction::BeginCloudBackupEnable,
+            state.cloud_restore_discovery.clone(),
+            &mut state.restore_offer_allowed,
+            None,
+        );
+        assert_eq!(
+            command,
+            TransitionCommand::BeginCloudBackupEnable {
+                discovery: CloudRestoreDiscovery::NoBackupFound
+            }
+        );
     }
 
     #[test]

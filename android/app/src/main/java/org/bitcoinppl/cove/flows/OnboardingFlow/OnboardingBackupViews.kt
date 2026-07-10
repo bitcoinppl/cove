@@ -410,6 +410,7 @@ private fun OnboardingWordCard(
 @Composable
 internal fun OnboardingCloudBackupStepView(
     branch: OnboardingBranch?,
+    isCloudRestoreCheckPending: Boolean,
     onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
@@ -417,6 +418,7 @@ internal fun OnboardingCloudBackupStepView(
     when (branch) {
         OnboardingBranch.SOFTWARE_IMPORT -> {
             OnboardingSoftwareImportCloudBackupStepView(
+                isCloudRestoreCheckPending = isCloudRestoreCheckPending,
                 onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
@@ -424,6 +426,7 @@ internal fun OnboardingCloudBackupStepView(
         }
         OnboardingBranch.HARDWARE -> {
             OnboardingHardwareImportCloudBackupStepView(
+                isCloudRestoreCheckPending = isCloudRestoreCheckPending,
                 onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
@@ -431,6 +434,7 @@ internal fun OnboardingCloudBackupStepView(
         }
         else -> {
             OnboardingCloudBackupDetailsStepView(
+                isCloudRestoreCheckPending = isCloudRestoreCheckPending,
                 onEnable = onEnable,
                 onEnabled = onEnabled,
                 onSkip = onSkip,
@@ -442,6 +446,7 @@ internal fun OnboardingCloudBackupStepView(
 
 @Composable
 private fun OnboardingSoftwareImportCloudBackupStepView(
+    isCloudRestoreCheckPending: Boolean,
     onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
@@ -450,6 +455,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
+            isCloudRestoreCheckPending = isCloudRestoreCheckPending,
             onEnable = onEnable,
             onEnabled = onEnabled,
             onSkip = { showingDetails = false },
@@ -503,6 +509,7 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 
 @Composable
 private fun OnboardingHardwareImportCloudBackupStepView(
+    isCloudRestoreCheckPending: Boolean,
     onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
@@ -511,6 +518,7 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
+            isCloudRestoreCheckPending = isCloudRestoreCheckPending,
             onEnable = onEnable,
             onEnabled = onEnabled,
             onSkip = { showingDetails = false },
@@ -575,6 +583,7 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 
 @Composable
 private fun OnboardingCloudBackupDetailsStepView(
+    isCloudRestoreCheckPending: Boolean,
     onEnable: () -> Unit,
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
@@ -659,7 +668,7 @@ private fun OnboardingCloudBackupDetailsStepView(
     Box(modifier = Modifier.fillMaxSize()) {
         CloudBackupEnableOnboardingView(
             onEnable = {
-                if (isBusy || isPromptingForEnableChoice) {
+                if (isCloudRestoreCheckPending || isBusy || isPromptingForEnableChoice) {
                     return@CloudBackupEnableOnboardingView
                 }
 
@@ -681,7 +690,14 @@ private fun OnboardingCloudBackupDetailsStepView(
             },
             onCancel = { cancelCloudBackupDetails() },
             message = onboardingMessage,
+            statusMessage =
+                if (isCloudRestoreCheckPending) {
+                    "Finishing the Google Drive check…"
+                } else {
+                    null
+                },
             isBusy = isBusy || isPromptingForEnableChoice,
+            isEnableDisabled = isCloudRestoreCheckPending,
             context = context,
             primaryButtonTitle = primaryButtonTitle,
             cancelButtonTitle = "Back",

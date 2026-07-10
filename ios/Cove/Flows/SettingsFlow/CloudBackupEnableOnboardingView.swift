@@ -57,7 +57,7 @@ struct CloudBackupEnableOnboardingView: View {
                         OnboardingInlineMessage(text: message)
                     }
                     if let statusMessage {
-                        CloudBackupEnableStatusMessage(text: statusMessage)
+                        OnboardingCloudCheckStatus(text: statusMessage)
                     }
                     checkboxSection
                     enableButton
@@ -219,7 +219,9 @@ struct CloudBackupEnableOnboardingView: View {
 
     private var enableButton: some View {
         Button {
-            if allChecked { onEnable() }
+            if allChecked {
+                onEnable()
+            }
         } label: {
             Text(primaryButtonTitle)
         }
@@ -254,31 +256,6 @@ struct CloudBackupEnableOnboardingView: View {
             )
         }
         .ignoresSafeArea()
-    }
-}
-
-private struct CloudBackupEnableStatusMessage: View {
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ProgressView()
-                .tint(.white)
-
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.84))
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.duskBlue.opacity(0.56))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.coveLightGray.opacity(0.16), lineWidth: 1)
-        )
     }
 }
 
@@ -363,7 +340,9 @@ struct CloudBackupEnableBusyOverlay: View {
     var subtitleOverride: String?
 
     private var title: String {
-        if let titleOverride { return titleOverride }
+        if let titleOverride {
+            return titleOverride
+        }
 
         return switch enableFlow {
         case .creatingPasskey:
@@ -382,7 +361,9 @@ struct CloudBackupEnableBusyOverlay: View {
     }
 
     private var subtitle: String {
-        if let subtitleOverride { return subtitleOverride }
+        if let subtitleOverride {
+            return subtitleOverride
+        }
 
         return switch enableFlow {
         case .waitingForPasskeyAvailability, .awaitingSavedPasskeyConfirmation:
