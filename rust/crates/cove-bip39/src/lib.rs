@@ -77,7 +77,7 @@ fn split_and_encode_phrase(phrase: &str) -> (usize, BigUint) {
 mod test {
     use std::str::FromStr as _;
 
-    use bip39::Mnemonic;
+    use bip39::{Language, Mnemonic};
     use num_bigint::BigUint;
     use rand::RngExt as _;
 
@@ -99,8 +99,8 @@ mod test {
 
             words.push(word.to_string());
 
-            let result = bip39::Mnemonic::parse_normalized(words.join(" ").as_str());
-            assert!(result.is_ok());
+            let result = Mnemonic::parse_in_normalized(Language::English, words.join(" ").as_str());
+            assert!(result.is_ok(), "generated final word {word} must be valid: {result:?}");
         }
 
         assert_eq!(split_and_encode_phrase(words), (23, BigUint::from(0_u64)));
@@ -156,7 +156,7 @@ mod test {
 
             words.push(word.to_string());
 
-            let result = bip39::Mnemonic::parse_normalized(words.join(" ").as_str());
+            let result = Mnemonic::parse_in_normalized(Language::English, words.join(" ").as_str());
             assert!(result.is_ok());
         }
 

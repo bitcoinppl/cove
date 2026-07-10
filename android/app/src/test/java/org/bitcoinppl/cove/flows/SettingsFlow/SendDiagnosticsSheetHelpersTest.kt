@@ -60,7 +60,7 @@ class SendDiagnosticsSheetHelpersTest {
                 loadSubmittedDiagnosticsRecords(
                     ioDispatcher = StandardTestDispatcher(testScheduler),
                     loadRecords = {
-                        throw IllegalStateException("history corrupt")
+                        Result.failure(IllegalStateException("history corrupt"))
                     },
                     logFailure = { _ -> },
                 )
@@ -75,7 +75,7 @@ class SendDiagnosticsSheetHelpersTest {
             loadSubmittedDiagnosticsRecords(
                 ioDispatcher = StandardTestDispatcher(testScheduler),
                 loadRecords = {
-                    throw CancellationException("cancelled")
+                    Result.failure(CancellationException("cancelled"))
                 },
                 logFailure = { _ -> },
             )

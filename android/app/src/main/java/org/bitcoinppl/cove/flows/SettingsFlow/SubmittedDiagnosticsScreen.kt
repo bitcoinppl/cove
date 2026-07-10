@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.DatabaseException
 import org.bitcoinppl.cove_core.DiagnosticsReportRecord
 
 private const val TAG = "SubmittedDiagnostics"
@@ -118,25 +119,36 @@ fun SubmittedDiagnosticsScreen(
                     onRecordsChanged()
                 } catch (error: CancellationException) {
                     throw error
-                } catch (error: Exception) {
+                } catch (error: DatabaseException) {
                     actionError = error.displayMessage()
                 }
             }
         },
     )
 
-    actionError?.let { error ->
-        AlertDialog(
-            onDismissRequest = { actionError = null },
-            title = { Text("Something went wrong") },
-            text = { Text(error) },
-            confirmButton = {
-                TextButton(onClick = { actionError = null }) {
-                    Text("OK")
-                }
-            },
-        )
-    }
+    SubmittedDiagnosticsErrorDialog(
+        error = actionError,
+        onDismiss = { actionError = null },
+    )
+}
+
+@Composable
+private fun SubmittedDiagnosticsErrorDialog(
+    error: String?,
+    onDismiss: () -> Unit,
+) {
+    if (error == null) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Something went wrong") },
+        text = { Text(error) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("OK")
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,65 +199,81 @@ private fun SubmittedDiagnosticsBody(
 ) {
     when (loadState) {
         SubmittedDiagnosticsLoadState.Loading -> {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Text(
-                        text = "Loading submitted diagnostics...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                }
-            }
-            return
+            SubmittedDiagnosticsLoading(paddingValues)
         }
         is SubmittedDiagnosticsLoadState.Failed -> {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Submitted diagnostics unavailable",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        text = loadState.message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    Button(
-                        onClick = onRetry,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp),
-                    ) {
-                        Text("Retry")
-                    }
-                }
-            }
-            return
+            SubmittedDiagnosticsLoadError(
+                message = loadState.message,
+                onRetry = onRetry,
+                paddingValues = paddingValues,
+            )
         }
         is SubmittedDiagnosticsLoadState.Loaded -> {
             SubmittedDiagnosticsRecordsBody(
                 records = loadState.records,
                 paddingValues = paddingValues,
             )
+        }
+    }
+}
+
+@Composable
+private fun SubmittedDiagnosticsLoading(paddingValues: PaddingValues) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Text(
+                text = "Loading submitted diagnostics...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubmittedDiagnosticsLoadError(
+    message: String,
+    onRetry: () -> Unit,
+    paddingValues: PaddingValues,
+) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Submitted diagnostics unavailable",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Button(
+                onClick = onRetry,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+            ) {
+                Text("Retry")
+            }
         }
     }
 }
@@ -382,22 +410,28 @@ private fun ClearSubmittedDiagnosticsDialog(
 
 internal suspend fun loadSubmittedDiagnosticsRecords(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    loadRecords: () -> List<DiagnosticsReportRecord> = {
-        Database().diagnosticsReports().all()
+    loadRecords: () -> Result<List<DiagnosticsReportRecord>> = {
+        try {
+            Result.success(Database().diagnosticsReports().all())
+        } catch (error: DatabaseException) {
+            Result.failure(error)
+        }
     },
     logFailure: (Exception) -> Unit = { error ->
         Log.w(TAG, "Failed to load submitted diagnostics", error)
     },
 ): SubmittedDiagnosticsLoadState =
     withContext(ioDispatcher) {
-        try {
-            SubmittedDiagnosticsLoadState.Loaded(loadRecords())
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            logFailure(error)
-            SubmittedDiagnosticsLoadState.Failed(error.displayMessage())
-        }
+        loadRecords().fold(
+            onSuccess = SubmittedDiagnosticsLoadState::Loaded,
+            onFailure = { error ->
+                if (error is CancellationException) throw error
+
+                val exception = error as? Exception ?: RuntimeException(error)
+                logFailure(exception)
+                SubmittedDiagnosticsLoadState.Failed(error.displayMessage())
+            },
+        )
     }
 
 private fun formattedSubmittedAt(timestamp: ULong): String =

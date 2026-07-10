@@ -1334,6 +1334,18 @@ mod tests {
         Arc::new(RwLock::new(WalletSnapshot::from_wallet(wallet)))
     }
 
+    fn new_test_wallet_actor(
+        wallet: Wallet,
+        sender: flume::Sender<SingleOrMany>,
+    ) -> super::WalletActor {
+        crate::test_support::ensure_tokio_runtime();
+
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
+
+        super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+            .expect("actor is created")
+    }
+
     fn test_keychain() -> &'static Keychain {
         static INIT: Once = Once::new();
         INIT.call_once(|| {
@@ -1370,12 +1382,8 @@ mod tests {
     fn spawn_test_wallet_actor(
         wallet: Wallet,
     ) -> (Addr<super::WalletActor>, flume::Receiver<SingleOrMany>) {
-        crate::test_support::ensure_tokio_runtime();
-
         let (sender, receiver) = flume::bounded(100);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let actor = super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-            .expect("actor is created");
+        let actor = new_test_wallet_actor(wallet, sender);
         let addr = spawn_actor(actor);
 
         (addr, receiver)
@@ -1677,10 +1685,7 @@ mod tests {
         let unlocked = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         db.labels.set_output_spendability(locked, false).expect("output is locked");
         actor.db = db;
@@ -1785,10 +1790,7 @@ mod tests {
             receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
@@ -1810,10 +1812,7 @@ mod tests {
 
         let wallet = Wallet::preview_new_wallet();
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = wallet_data_db_with_mismatched_output_table(actor.wallet.id.clone());
         actor.db = db;
 
@@ -2002,7 +2001,6 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn actor_fee_options_include_fee_when_amount_exceeds_available_with_fee() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        crate::test_support::ensure_tokio_runtime();
         let fixture = locked_actor_fixture();
         let mut actor = fixture.actor;
 
@@ -2090,6 +2088,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_manual_max_send_uses_recipient_exact_dust_floor() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::database::test_support::init_test_database();
 
         let mut wallet = Wallet::preview_new_wallet();
@@ -2101,10 +2100,7 @@ mod tests {
         let spendable = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(4_000));
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
@@ -2122,6 +2118,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn actor_manual_max_send_returns_domain_error_when_fee_shortfall_consumes_estimate() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::database::test_support::init_test_database();
 
         let mut wallet = Wallet::preview_new_wallet();
@@ -2133,10 +2130,7 @@ mod tests {
         let spendable = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(7_500));
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 

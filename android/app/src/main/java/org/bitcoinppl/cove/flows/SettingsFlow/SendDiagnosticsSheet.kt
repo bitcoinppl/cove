@@ -3,6 +3,7 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
 import android.content.Context
+import android.content.ActivityNotFoundException
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -33,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
@@ -42,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.DiagnosticsReport
+import org.bitcoinppl.cove_core.DiagnosticsException
 import org.bitcoinppl.cove_core.buildDiagnosticsReport
 import org.bitcoinppl.cove_core.clearDiagnosticsLogs
 
@@ -319,7 +322,11 @@ private class SendDiagnosticsSheetState(
             applyPreview(nextPreview)
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Exception) {
+        } catch (error: DiagnosticsException) {
+            if (rebuildGeneration.isCurrent(generation)) {
+                loadError = error.displayMessage()
+            }
+        } catch (error: InterruptedException) {
             if (rebuildGeneration.isCurrent(generation)) {
                 loadError = error.displayMessage()
             }
@@ -342,7 +349,13 @@ private class SendDiagnosticsSheetState(
             shareDiagnosticsFile(context, content, ioDispatcher)
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Exception) {
+        } catch (error: IOException) {
+            actionError = error.displayMessage()
+        } catch (error: IllegalArgumentException) {
+            actionError = error.displayMessage()
+        } catch (error: ActivityNotFoundException) {
+            actionError = error.displayMessage()
+        } catch (error: SecurityException) {
             actionError = error.displayMessage()
         }
     }
@@ -359,7 +372,7 @@ private class SendDiagnosticsSheetState(
             submissionWarning = submission.warning
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Exception) {
+        } catch (error: DiagnosticsException) {
             actionError = error.displayMessage()
         } finally {
             submitting = false
@@ -376,7 +389,10 @@ private class SendDiagnosticsSheetState(
             description = description,
             previewChunks = previewChunks,
             reportSize = reportSize,
-            feedback = feedback(),
+            feedback =
+                actionError?.let { DiagnosticsContentFeedback.Error(it) }
+                    ?: reportId?.let { DiagnosticsContentFeedback.Sent(it, submissionWarning) }
+                    ?: DiagnosticsContentFeedback.None,
             submitting = submitting,
         )
 
@@ -398,13 +414,6 @@ private class SendDiagnosticsSheetState(
         oldPreviewRefreshJob?.cancel()
         previewRefreshJob = null
         report = nextReport
-        closeReportAfterPreview(oldReport, oldPreviewRefreshJob)
-    }
-
-    private fun closeReportAfterPreview(
-        oldReport: DiagnosticsReport?,
-        oldPreviewRefreshJob: Job?,
-    ) {
         if (oldReport == null) return
 
         if (oldPreviewRefreshJob == null || oldPreviewRefreshJob.isCompleted) {
@@ -458,10 +467,6 @@ private class SendDiagnosticsSheetState(
         reportSize = nextPreview.formattedSize
     }
 
-    private fun feedback(): DiagnosticsContentFeedback =
-        actionError?.let { DiagnosticsContentFeedback.Error(it) }
-            ?: reportId?.let { DiagnosticsContentFeedback.Sent(it, submissionWarning) }
-            ?: DiagnosticsContentFeedback.None
 }
 
 private data class DiagnosticsPreviewState(
