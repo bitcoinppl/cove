@@ -7,6 +7,7 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     fs,
@@ -37,9 +38,15 @@ const ANDROID_SCREENSHOT_DIRS: &[&str] =
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
+const APK_STORE_RELEASE_DIR: &str = "app/build/outputs/apk/store/release";
 const APK_STORE_RELEASE_PATH: &str = "app/build/outputs/apk/store/release/app-store-release.apk";
+const APK_STORE_RELEASE_METADATA_PATH: &str =
+    "app/build/outputs/apk/store/release/output-metadata.json";
 const ANDROID_GRADLE_PATH: &str = "app/build.gradle.kts";
 const STORE_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
+const STORE_RELEASE_ARM64_ABI: &str = "arm64-v8a";
+const COMMON_ANDROID_APK_QUALIFIER: &str = "common";
+const UNIVERSAL_ANDROID_APK_QUALIFIER: &str = "universal";
 const SIGNING_ENV_VARS: &[&str] =
     &["COVE_KEYSTORE_PATH", "COVE_KEYSTORE_PASSWORD", "COVE_KEY_ALIAS", "COVE_KEY_PASSWORD"];
 
@@ -72,6 +79,25 @@ struct ApkBadging {
     package_name: String,
     version_name: String,
     version_code: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApkOutputMetadata {
+    elements: Vec<ApkOutputElement>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApkOutputElement {
+    filters: Vec<ApkOutputFilter>,
+    #[serde(rename = "outputFile")]
+    output_file: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApkOutputFilter {
+    #[serde(rename = "filterType")]
+    filter_type: String,
+    value: String,
 }
 
 impl BuildProfile {
@@ -346,23 +372,31 @@ pub fn signed_android_release_apk(verbose: bool) -> Result<()> {
     sh.change_dir("../android");
 
     validate_android_release_signing_env(&sh)?;
+    let _ = sh.remove_path(APK_STORE_RELEASE_DIR);
 
-    print_info("Building signed store release APK...");
+    print_info("Building signed store release arm64-v8a APK...");
     if verbose {
-        cmd!(sh, "./gradlew assembleStoreRelease")
+        cmd!(sh, "./gradlew -Pcove.storeReleaseArm64ApkOnly=true assembleStoreRelease")
             .run()
-            .wrap_err("Failed to build signed store release APK")?;
+            .wrap_err("Failed to build signed store release arm64-v8a APK")?;
     } else {
-        cmd!(sh, "./gradlew assembleStoreRelease")
+        cmd!(sh, "./gradlew -Pcove.storeReleaseArm64ApkOnly=true assembleStoreRelease")
             .quiet()
             .run()
-            .wrap_err("Failed to build signed store release APK")?;
+            .wrap_err("Failed to build signed store release arm64-v8a APK")?;
     }
-    print_success("Signed store release APK build successful");
+    print_success("Signed store release arm64-v8a APK build successful");
 
     let version = read_android_release_version(&sh)?;
-    validate_store_release_apk(&sh, &version)?;
-    copy_release_artifact(&sh, APK_STORE_RELEASE_PATH, &version, "apk")?;
+    let apk_path = store_release_arm64_apk_path(&sh)?;
+    validate_store_release_apk_path(&apk_path, &version)?;
+    copy_release_artifact_path(
+        &sh,
+        &apk_path,
+        &version,
+        Some(COMMON_ANDROID_APK_QUALIFIER),
+        "apk",
+    )?;
 
     Ok(())
 }
@@ -399,7 +433,13 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     validate_store_release_apk(&sh, &version)?;
 
     copy_release_artifact(&sh, AAB_OUTPUT_PATH, &version, "aab")?;
-    copy_release_artifact(&sh, APK_STORE_RELEASE_PATH, &version, "apk")?;
+    copy_release_artifact_path(
+        &sh,
+        Path::new(APK_STORE_RELEASE_PATH),
+        &version,
+        Some(UNIVERSAL_ANDROID_APK_QUALIFIER),
+        "apk",
+    )?;
 
     // create native debug symbols zip for every ABI shipped in the app bundle
     let home_dir = std::env::var("HOME").wrap_err("HOME environment variable not set")?;
@@ -492,12 +532,51 @@ fn validate_store_release_apk(sh: &Shell, expected_version: &AndroidReleaseVersi
 
     let apk_path = sh.current_dir().join(APK_STORE_RELEASE_PATH);
 
+    validate_store_release_apk_path(&apk_path, expected_version)
+}
+
+fn validate_store_release_apk_path(
+    apk_path: &Path,
+    expected_version: &AndroidReleaseVersion,
+) -> Result<()> {
     validate_apk_signature(&apk_path)?;
     validate_apk_badging(&apk_path, expected_version)?;
 
     print_success("Store release APK validation successful");
 
     Ok(())
+}
+
+fn store_release_arm64_apk_path(sh: &Shell) -> Result<PathBuf> {
+    let metadata_path = sh.current_dir().join(APK_STORE_RELEASE_METADATA_PATH);
+    let metadata = fs::read_to_string(&metadata_path)
+        .wrap_err_with(|| format!("Failed to read {}", metadata_path.display()))?;
+    let output_file = arm64_apk_output_file_from_metadata(&metadata)?;
+    let apk_path = sh.current_dir().join(APK_STORE_RELEASE_DIR).join(output_file);
+
+    if !apk_path.exists() {
+        color_eyre::eyre::bail!("Gradle metadata pointed to missing APK {}", apk_path.display());
+    }
+
+    Ok(apk_path)
+}
+
+fn arm64_apk_output_file_from_metadata(metadata: &str) -> Result<String> {
+    let metadata: ApkOutputMetadata =
+        serde_json::from_str(metadata).wrap_err("Failed to parse APK output metadata")?;
+    let output = metadata
+        .elements
+        .iter()
+        .find(|element| element.has_filter("ABI", STORE_RELEASE_ARM64_ABI))
+        .context("APK output metadata did not include an arm64-v8a APK output")?;
+
+    Ok(output.output_file.clone())
+}
+
+impl ApkOutputElement {
+    fn has_filter(&self, filter_type: &str, value: &str) -> bool {
+        self.filters.iter().any(|filter| filter.filter_type == filter_type && filter.value == value)
+    }
 }
 
 fn validate_apk_signature(apk_path: &Path) -> Result<()> {
@@ -668,7 +747,17 @@ fn copy_release_artifact(
     version: &AndroidReleaseVersion,
     extension: &str,
 ) -> Result<()> {
-    let dest = release_artifact_destination(version, extension)?;
+    copy_release_artifact_path(sh, Path::new(source_path), version, None, extension)
+}
+
+fn copy_release_artifact_path(
+    sh: &Shell,
+    source_path: &Path,
+    version: &AndroidReleaseVersion,
+    qualifier: Option<&str>,
+    extension: &str,
+) -> Result<()> {
+    let dest = release_artifact_destination(version, qualifier, extension)?;
 
     print_info(&format!("Copying {} to {}...", extension.to_uppercase(), dest.display()));
     sh.copy_file(source_path, &dest)
@@ -680,10 +769,16 @@ fn copy_release_artifact(
 
 fn release_artifact_destination(
     version: &AndroidReleaseVersion,
+    qualifier: Option<&str>,
     extension: &str,
 ) -> Result<PathBuf> {
     let home_dir = std::env::var("HOME").wrap_err("HOME environment variable not set")?;
-    let filename = format!("cove-{}-{}.{}", version.name, version.code, extension);
+    let filename = match qualifier {
+        Some(qualifier) => {
+            format!("cove-{}-{}-{}.{}", version.name, version.code, qualifier, extension)
+        }
+        None => format!("cove-{}-{}.{}", version.name, version.code, extension),
+    };
 
     Ok(PathBuf::from(home_dir).join("Downloads").join(filename))
 }
@@ -1014,10 +1109,10 @@ fn validate_sha256_digest(value: &str, label: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_version_code, extract_version_name, normalize_sha256_digest, parse_aapt_badging,
-        parse_apksigner_sha256_digest, remote_shell_quote, target_for_abi,
-        target_path_for_android_file, validate_android_release_signing_values,
-        validate_signing_cert_sha256,
+        arm64_apk_output_file_from_metadata, extract_version_code, extract_version_name,
+        normalize_sha256_digest, parse_aapt_badging, parse_apksigner_sha256_digest,
+        remote_shell_quote, target_for_abi, target_path_for_android_file,
+        validate_android_release_signing_values, validate_signing_cert_sha256,
     };
     use std::{collections::HashMap, fs};
 
@@ -1122,6 +1217,45 @@ mod tests {
         assert_eq!(badging.package_name, "org.bitcoinppl.cove");
         assert_eq!(badging.version_name, "1.3.0");
         assert_eq!(badging.version_code, 27);
+    }
+
+    #[test]
+    fn finds_arm64_apk_output_from_gradle_metadata() {
+        let metadata = r#"
+        {
+          "elements": [
+            {
+              "filters": [
+                { "filterType": "ABI", "value": "arm64-v8a" }
+              ],
+              "outputFile": "app-store-arm64-v8a-release.apk"
+            }
+          ]
+        }
+        "#;
+
+        assert_eq!(
+            arm64_apk_output_file_from_metadata(metadata).unwrap(),
+            "app-store-arm64-v8a-release.apk"
+        );
+    }
+
+    #[test]
+    fn rejects_metadata_without_arm64_apk_output() {
+        let metadata = r#"
+        {
+          "elements": [
+            {
+              "filters": [],
+              "outputFile": "app-store-release.apk"
+            }
+          ]
+        }
+        "#;
+
+        let error = arm64_apk_output_file_from_metadata(metadata).unwrap_err().to_string();
+
+        assert!(error.contains("arm64-v8a APK output"));
     }
 
     #[test]
