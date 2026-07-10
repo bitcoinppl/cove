@@ -5,7 +5,11 @@ use std::{
     fs::{File, OpenOptions},
     io::Write as _,
     path::{Path, PathBuf},
-    sync::{LazyLock, mpsc},
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    },
     thread::{self, JoinHandle},
 };
 
@@ -20,6 +24,7 @@ pub const MAX_TOTAL_FILE_BYTES: usize = 2 * 1024 * 1024;
 
 const LOG_FILE_BYTES: usize = RING_CAP_BYTES;
 const ARCHIVE_FILE_COUNT: usize = (MAX_TOTAL_FILE_BYTES / LOG_FILE_BYTES) - 1;
+const WRITER_QUEUE_CAPACITY: usize = 64;
 const CURRENT_LOG_FILE: &str = "cove-rust.log";
 
 static CAPTURE: LazyLock<Capture> = LazyLock::new(Capture::default);
@@ -66,6 +71,7 @@ struct Capture {
 struct CaptureState {
     ring: RingBuffer,
     writer: Option<LogWriter>,
+    writer_health: Arc<WriterHealth>,
     replayed_on_attach: bool,
 }
 
@@ -91,13 +97,24 @@ struct LogWriter {
 #[derive(Clone)]
 struct LogWriterHandle {
     dir: PathBuf,
-    sender: mpsc::Sender<WriterCommand>,
+    sender: mpsc::SyncSender<WriterCommand>,
+    health: Arc<WriterHealth>,
+}
+
+#[derive(Default)]
+struct WriterHealth {
+    dropped_writes: AtomicUsize,
+    cleared_drops_through: AtomicUsize,
 }
 
 enum WriterCommand {
     Write(String),
     Flush(mpsc::Sender<Result<Option<String>, CaptureError>>),
-    ClearAndWrite { marker: String, reply: mpsc::Sender<Result<(), CaptureError>> },
+    ClearAndWrite {
+        marker: String,
+        clear_drops_through: usize,
+        reply: mpsc::Sender<Result<(), CaptureError>>,
+    },
     Shutdown,
 }
 
@@ -129,11 +146,19 @@ pub fn clear() -> Result<(), CaptureError> {
 
 pub fn clear_default_logs_dir() -> Result<(), CaptureError> {
     let logs_dir = ROOT_DATA_DIR.join("logs");
-    let writer = CAPTURE.state.lock().detach_writer_for_dir(&logs_dir);
+    let (writer, writer_health) = {
+        let mut state = CAPTURE.state.lock();
+        let writer = state.detach_writer_for_dir(&logs_dir);
+
+        (writer, state.writer_health.clone())
+    };
     let should_reattach = writer.is_some();
     drop(writer);
 
     let remove_result = remove_dir_all_if_exists(&logs_dir);
+    if remove_result.is_ok() {
+        writer_health.mark_all_drops_cleared();
+    }
 
     let reattach_result = if should_reattach { attach(logs_dir) } else { Ok(()) };
 
@@ -151,6 +176,7 @@ where
         let Some(_guard) = ReentrancyGuard::enter() else {
             return;
         };
+
         let line = format_event(event);
 
         CAPTURE.state.lock().record_line(line);
@@ -183,7 +209,12 @@ impl Drop for ReentrancyGuard {
 
 impl Default for CaptureState {
     fn default() -> Self {
-        Self { ring: RingBuffer::new(RING_CAP_BYTES), writer: None, replayed_on_attach: false }
+        Self {
+            ring: RingBuffer::new(RING_CAP_BYTES),
+            writer: None,
+            writer_health: Arc::new(WriterHealth::default()),
+            replayed_on_attach: false,
+        }
     }
 }
 
@@ -206,7 +237,7 @@ impl CaptureState {
             self.replayed_on_attach = true;
         }
 
-        self.writer = Some(LogWriter::spawn(file)?);
+        self.writer = Some(LogWriter::spawn(file, self.writer_health.clone())?);
         Ok(())
     }
 
@@ -349,15 +380,18 @@ impl WriterReply {
 }
 
 impl LogWriter {
-    fn spawn(file: RollingLogFile) -> Result<Self, CaptureError> {
+    fn spawn(file: RollingLogFile, health: Arc<WriterHealth>) -> Result<Self, CaptureError> {
         let dir = file.dir.clone();
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(WRITER_QUEUE_CAPACITY);
+        let writer_health = health.clone();
         let join_handle = thread::Builder::new()
             .name("cove-diagnostics-log-writer".to_string())
-            .spawn(move || run_writer(file, receiver))
+            .spawn(move || run_writer(file, receiver, writer_health))
             .map_err(|source| CaptureError::StartWriter { source })?;
 
-        Ok(Self { handle: LogWriterHandle { dir, sender }, join_handle: Some(join_handle) })
+        let handle = LogWriterHandle { dir, sender, health };
+
+        Ok(Self { handle, join_handle: Some(join_handle) })
     }
 
     fn write(&self, entry: String) {
@@ -367,7 +401,18 @@ impl LogWriter {
 
 impl LogWriterHandle {
     fn write(&self, entry: String) {
-        let _ = self.sender.send(WriterCommand::Write(entry));
+        let entry = if entry.len() > LOG_FILE_BYTES {
+            last_bytes_at_token_boundary(&entry, LOG_FILE_BYTES)
+        } else {
+            entry
+        };
+
+        if matches!(
+            self.sender.try_send(WriterCommand::Write(entry)),
+            Err(mpsc::TrySendError::Full(_))
+        ) {
+            self.health.record_dropped_write();
+        }
     }
 
     fn start_flush(&self) -> Result<FlushReply, CaptureError> {
@@ -381,8 +426,9 @@ impl LogWriterHandle {
 
     fn start_clear_and_write(&self, marker: String) -> Result<WriterReply, CaptureError> {
         let (reply, receiver) = mpsc::channel();
+        let clear_drops_through = self.health.total_dropped_writes();
         self.sender
-            .send(WriterCommand::ClearAndWrite { marker, reply })
+            .send(WriterCommand::ClearAndWrite { marker, clear_drops_through, reply })
             .map_err(|_| CaptureError::WriterUnavailable { action: "clear diagnostics logs" })?;
 
         Ok(WriterReply { receiver, action: "clear diagnostics logs" })
@@ -398,7 +444,34 @@ impl Drop for LogWriter {
     }
 }
 
-fn run_writer(mut file: RollingLogFile, receiver: mpsc::Receiver<WriterCommand>) {
+impl WriterHealth {
+    fn record_dropped_write(&self) {
+        self.dropped_writes.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn total_dropped_writes(&self) -> usize {
+        self.dropped_writes.load(Ordering::Relaxed)
+    }
+
+    fn dropped_writes_since_clear(&self) -> usize {
+        self.total_dropped_writes()
+            .saturating_sub(self.cleared_drops_through.load(Ordering::Relaxed))
+    }
+
+    fn mark_cleared_through(&self, dropped_writes: usize) {
+        self.cleared_drops_through.store(dropped_writes, Ordering::Relaxed);
+    }
+
+    fn mark_all_drops_cleared(&self) {
+        self.mark_cleared_through(self.total_dropped_writes());
+    }
+}
+
+fn run_writer(
+    mut file: RollingLogFile,
+    receiver: mpsc::Receiver<WriterCommand>,
+    health: Arc<WriterHealth>,
+) {
     let mut last_write_error = None;
 
     for command in receiver {
@@ -409,13 +482,28 @@ fn run_writer(mut file: RollingLogFile, receiver: mpsc::Receiver<WriterCommand>)
                 }
             }
             WriterCommand::Flush(reply) => {
-                let result = file.flush().map(|()| last_write_error.clone());
+                let dropped_writes = health.dropped_writes_since_clear();
+                let queue_error = (dropped_writes > 0).then(|| {
+                    format!(
+                        "dropped {dropped_writes} entries because the diagnostics writer queue was full"
+                    )
+                });
+                let incomplete_reason = match (&last_write_error, queue_error) {
+                    (Some(write_error), Some(queue_error)) => {
+                        Some(format!("{write_error}; {queue_error}"))
+                    }
+                    (Some(write_error), None) => Some(write_error.clone()),
+                    (None, queue_error) => queue_error,
+                };
+
+                let result = file.flush().map(|()| incomplete_reason);
                 let _ = reply.send(result);
             }
-            WriterCommand::ClearAndWrite { marker, reply } => {
+            WriterCommand::ClearAndWrite { marker, clear_drops_through, reply } => {
                 let result = file.clear_and_write(&marker);
                 if result.is_ok() {
                     last_write_error = None;
+                    health.mark_cleared_through(clear_drops_through);
                 }
                 let _ = reply.send(result);
             }
@@ -697,7 +785,7 @@ mod tests {
 
     fn writer_that_replaces_current_file_on_shutdown(dir: &Path) -> LogWriter {
         let writer_dir = dir.to_path_buf();
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(WRITER_QUEUE_CAPACITY);
         let join_handle = thread::spawn(move || {
             while let Ok(command) = receiver.recv() {
                 if matches!(command, WriterCommand::Shutdown) {
@@ -709,9 +797,41 @@ mod tests {
         });
 
         LogWriter {
-            handle: LogWriterHandle { dir: dir.to_path_buf(), sender },
+            handle: LogWriterHandle {
+                dir: dir.to_path_buf(),
+                sender,
+                health: Arc::new(WriterHealth::default()),
+            },
             join_handle: Some(join_handle),
         }
+    }
+
+    #[test]
+    fn full_writer_queue_drops_writes_and_reports_incomplete_disk_capture() -> eyre::Result<()> {
+        let dir = TempDir::new()?;
+        let file = RollingLogFile::open(dir.path().to_path_buf())?;
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let health = Arc::new(WriterHealth::default());
+        let handle =
+            LogWriterHandle { dir: dir.path().to_path_buf(), sender, health: health.clone() };
+
+        handle.write("first\n".to_string());
+        handle.write("dropped\n".to_string());
+
+        let join_handle = thread::spawn(move || run_writer(file, receiver, health));
+        let error = handle.start_flush()?.wait()?.expect("dropped write is reported");
+
+        assert!(error.contains("dropped 1 entries"));
+        assert_eq!(std::fs::read_to_string(current_log_path(dir.path()))?, "first\n");
+
+        handle.start_clear_and_write("cleared\n".to_string())?.wait()?;
+        assert_eq!(handle.start_flush()?.wait()?, None);
+        assert_eq!(std::fs::read_to_string(current_log_path(dir.path()))?, "cleared\n");
+
+        handle.sender.send(WriterCommand::Shutdown)?;
+        join_handle.join().expect("writer exits cleanly");
+
+        Ok(())
     }
 
     #[test]

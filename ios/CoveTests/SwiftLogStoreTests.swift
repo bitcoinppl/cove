@@ -104,6 +104,18 @@ final class SwiftLogStoreTests: XCTestCase {
         XCTAssertTrue(restarted.snapshot().contains("before restart"))
     }
 
+    func testLogFileUsesExplicitProtectionClass() {
+        let fileManager = CapturingCreateFileManager()
+        let store = SwiftLogStore(logsDirectory: tempDirectory, fileManager: fileManager)
+        store.record(level: .info, category: "protection", message: "protected log")
+        _ = store.snapshot()
+
+        XCTAssertEqual(
+            fileManager.createdFileAttributes?[.protectionKey] as? FileProtectionType,
+            .completeUntilFirstUserAuthentication
+        )
+    }
+
     func testSnapshotIncludesWriteFailureBreadcrumb() throws {
         let fileURL = tempDirectory.appendingPathComponent("not-a-directory")
         try "not a directory".write(to: fileURL, atomically: true, encoding: .utf8)
@@ -135,6 +147,20 @@ final class SwiftLogStoreTests: XCTestCase {
 
     private func makeStore() -> SwiftLogStore {
         SwiftLogStore(logsDirectory: tempDirectory)
+    }
+}
+
+private final class CapturingCreateFileManager: FileManager, @unchecked Sendable {
+    private(set) var createdFileAttributes: [FileAttributeKey: Any]?
+
+    override func createFile(
+        atPath path: String,
+        contents data: Data?,
+        attributes attr: [FileAttributeKey: Any]? = nil
+    ) -> Bool {
+        createdFileAttributes = attr
+
+        return super.createFile(atPath: path, contents: data, attributes: attr)
     }
 }
 

@@ -116,7 +116,11 @@ final class SwiftLogStore {
         }
 
         if !fileManager.fileExists(atPath: currentLogURL().path) {
-            fileManager.createFile(atPath: currentLogURL().path, contents: nil)
+            fileManager.createFile(
+                atPath: currentLogURL().path,
+                contents: nil,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
             currentSize = 0
         }
 
