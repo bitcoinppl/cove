@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -15,12 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -34,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -43,22 +37,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.BuildConfig
-import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
-import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
-import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.GlobalFlagKey
-import org.bitcoinppl.cove_core.RustCloudBackupManager
-import org.bitcoinppl.cove_core.device.CloudAccessPolicy
-
-private data class WipeCloudResult(
-    val succeeded: Boolean,
-    val message: String,
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,13 +55,9 @@ fun AboutSettingsScreen(
     var buildTapCount by remember { mutableIntStateOf(0) }
     var showBetaDialog by remember { mutableStateOf(false) }
     var showBetaEnabledDialog by remember { mutableStateOf(false) }
-    var showWipeCloudDialog by remember { mutableStateOf(false) }
-    var wipeCloudResult by remember { mutableStateOf<WipeCloudResult?>(null) }
-    var showResetLocalStateDialog by remember { mutableStateOf(false) }
     var showSendDiagnostics by remember { mutableStateOf(false) }
     var showSubmittedDiagnostics by remember { mutableStateOf(false) }
     var sendDiagnosticsSubmitting by remember { mutableStateOf(false) }
-    var resetLocalStateMessage by remember { mutableStateOf<String?>(null) }
     val isInDecoyMode = Auth.isInDecoyMode()
     var submittedDiagnosticsLoadState by remember {
         mutableStateOf<SubmittedDiagnosticsLoadState>(
@@ -139,7 +119,6 @@ fun AboutSettingsScreen(
         buildNumber = BuildConfig.VERSION_CODE.toString(),
         gitCommit = app.gitShortHash,
         gitBranch = app.gitBranch,
-        isBetaEnabled = isBetaEnabled,
         onBack = { app.popRoute() },
         onBuildNumberClick = {
             buildTapCount++
@@ -166,8 +145,6 @@ fun AboutSettingsScreen(
                 showSubmittedDiagnostics = true
             }
         },
-        onWipeCloudBackupClick = { showWipeCloudDialog = true },
-        onResetLocalBackupStateClick = { showResetLocalStateDialog = true },
         modifier = modifier,
     )
 
@@ -195,87 +172,6 @@ fun AboutSettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showBetaDialog = false }) {
                     Text("Cancel")
-                }
-            },
-        )
-    }
-
-    if (showWipeCloudDialog) {
-        AlertDialog(
-            onDismissRequest = { showWipeCloudDialog = false },
-            title = { Text("Wipe Cloud Backup?") },
-            text = { Text("Deletes all Google Drive backup files and resets local backup state") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showWipeCloudDialog = false
-                        coroutineScope.launch {
-                            wipeCloudResult = debugWipeCloudBackup(context)
-                        }
-                    },
-                ) {
-                    Text("Wipe")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWipeCloudDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    wipeCloudResult?.let { result ->
-        AlertDialog(
-            onDismissRequest = { wipeCloudResult = null },
-            title = { Text(if (result.succeeded) "Cloud Backup Wiped" else "Cloud Backup Wipe Failed") },
-            text = { Text(result.message) },
-            confirmButton = {
-                TextButton(onClick = { wipeCloudResult = null }) {
-                    Text("OK")
-                }
-            },
-        )
-    }
-
-    if (showResetLocalStateDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetLocalStateDialog = false },
-            title = { Text("Reset Local Backup State?") },
-            text = {
-                Text("Clears local keychain and DB backup state but keeps Google Drive files intact. Use this to test the recovery flow.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        RustCloudBackupManager().use {
-                            it.debugResetCloudBackupState()
-                        }
-                        clearCloudBackupDriveAccountBinding(context)
-                        showResetLocalStateDialog = false
-                        resetLocalStateMessage =
-                            "Local backup state and Google Drive account selection reset. Google Drive files are untouched."
-                    },
-                ) {
-                    Text("Reset")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetLocalStateDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    resetLocalStateMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = { resetLocalStateMessage = null },
-            title = { Text("Local State Reset") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { resetLocalStateMessage = null }) {
-                    Text("OK")
                 }
             },
         )
@@ -356,7 +252,6 @@ internal fun AboutSettingsContent(
     buildNumber: String,
     gitCommit: String,
     gitBranch: String,
-    isBetaEnabled: Boolean,
     onBack: () -> Unit,
     onBuildNumberClick: () -> Unit,
     onFeedbackClick: () -> Unit,
@@ -365,8 +260,6 @@ internal fun AboutSettingsContent(
     showSubmittedDiagnostics: Boolean,
     submittedDiagnosticsSummary: String,
     onSubmittedDiagnosticsClick: () -> Unit,
-    onWipeCloudBackupClick: () -> Unit,
-    onResetLocalBackupStateClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -443,38 +336,6 @@ internal fun AboutSettingsContent(
                         }
                     }
                 }
-
-                if (isBetaEnabled) {
-                    SectionHeader("Debug")
-                    MaterialSection {
-                        Column {
-                            DebugRow(
-                                title = "Wipe Cloud Backup",
-                                color = MaterialTheme.colorScheme.error,
-                                icon = {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                    )
-                                },
-                                onClick = onWipeCloudBackupClick,
-                            )
-                            MaterialDivider()
-                            DebugRow(
-                                title = "Reset Local Backup State",
-                                icon = {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                },
-                                onClick = onResetLocalBackupStateClick,
-                            )
-                        }
-                    }
-                }
             }
         },
     )
@@ -499,7 +360,6 @@ internal fun AboutSettingsPreviewContent() {
             buildNumber = "18",
             gitCommit = "abc1234",
             gitBranch = "fix-lock-unlock",
-            isBetaEnabled = true,
             onBack = { },
             onBuildNumberClick = { },
             onFeedbackClick = { },
@@ -508,8 +368,6 @@ internal fun AboutSettingsPreviewContent() {
             showSubmittedDiagnostics = true,
             submittedDiagnosticsSummary = "3 reports",
             onSubmittedDiagnosticsClick = { },
-            onWipeCloudBackupClick = { },
-            onResetLocalBackupStateClick = { },
         )
     }
 }
@@ -535,43 +393,6 @@ private fun submittedDiagnosticsSummary(state: SubmittedDiagnosticsLoadState): S
         is SubmittedDiagnosticsLoadState.Loaded -> diagnosticsReportCountText(state.records.size)
         is SubmittedDiagnosticsLoadState.Failed -> "Unavailable"
     }
-
-@Composable
-private fun DebugRow(
-    title: String,
-    onClick: () -> Unit,
-    icon: @Composable () -> Unit,
-    color: Color? = null,
-) {
-    MaterialSettingsItem(
-        title = title,
-        titleColor = color,
-        leadingContent = icon,
-        onClick = onClick,
-    )
-}
-
-private suspend fun debugWipeCloudBackup(context: Context): WipeCloudResult {
-    return try {
-        val cloudStorage = AndroidCloudStorageAccess(context)
-        val namespaces = cloudStorage.listNamespaces(CloudAccessPolicy.CONSENT_ALLOWED)
-
-        for (namespace in namespaces) {
-            cloudStorage.deleteNamespace(namespace, CloudAccessPolicy.CONSENT_ALLOWED)
-        }
-
-        RustCloudBackupManager().use {
-            it.debugResetCloudBackupState()
-        }
-
-        WipeCloudResult(succeeded = true, message = "All cloud backup data deleted and local state reset")
-    } catch (error: Exception) {
-        WipeCloudResult(
-            succeeded = false,
-            message = "Google Drive wipe failed: ${error.message ?: error.javaClass.simpleName}",
-        )
-    }
-}
 
 @Composable
 private fun AboutRow(

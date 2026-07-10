@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,28 +37,23 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import org.bitcoinppl.cove_core.CloudBackupConfiguredState
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
-internal fun shouldCompleteOnboardingCloudBackup(
-    configuredState: CloudBackupConfiguredState?,
-    hasPendingUploadVerification: Boolean,
-): Boolean {
-    configuredState ?: return false
-    if (configuredState.passkey != CloudBackupPasskeyState.Available) return false
-    if (hasPendingUploadVerification) return false
+internal fun shouldCompleteOnboardingCloudBackupFromPersistedState(
+    readiness: CloudBackupOnboardingCompletionReadiness,
+): Boolean = readiness == CloudBackupOnboardingCompletionReadiness.READY
 
-    val verification = configuredState.verification as? CloudBackupVerificationState.Verified
-    return verification?.report != null
-}
+internal fun isOnboardingCloudBackupEnableCompletion(context: CloudBackupEnableContext): Boolean =
+    context.verificationSource == CloudBackupVerificationSource.ONBOARDING
 
 @Composable
 internal fun OnboardingCloudBackupStepView(
@@ -66,25 +62,48 @@ internal fun OnboardingCloudBackupStepView(
     onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
+    val backupManager = remember { CloudBackupManager.getInstance() }
+    var didReportEnabled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(backupManager.enableCompletion?.id, backupManager.lifecycle) {
+        if (didReportEnabled) return@LaunchedEffect
+
+        val completion = backupManager.enableCompletion
+        if (completion != null && isOnboardingCloudBackupEnableCompletion(completion.item)) {
+            backupManager.consumeEnableCompletion(completion)
+            didReportEnabled = true
+            onEnabled()
+            return@LaunchedEffect
+        }
+
+        val readiness = backupManager.onboardingEnableCompletionReadiness()
+        if (
+            didReportEnabled ||
+            !shouldCompleteOnboardingCloudBackupFromPersistedState(readiness)
+        ) {
+            return@LaunchedEffect
+        }
+
+        didReportEnabled = true
+        onEnabled()
+    }
+
     when (branch) {
         OnboardingBranch.SOFTWARE_IMPORT -> {
             OnboardingSoftwareImportCloudBackupStepView(
                 onEnable = onEnable,
-                onEnabled = onEnabled,
                 onSkip = onSkip,
             )
         }
         OnboardingBranch.HARDWARE -> {
             OnboardingHardwareImportCloudBackupStepView(
                 onEnable = onEnable,
-                onEnabled = onEnabled,
                 onSkip = onSkip,
             )
         }
         else -> {
             OnboardingCloudBackupDetailsStepView(
                 onEnable = onEnable,
-                onEnabled = onEnabled,
                 onSkip = onSkip,
                 context = CloudBackupEnableOnboardingContext.STANDARD,
             )
@@ -95,15 +114,13 @@ internal fun OnboardingCloudBackupStepView(
 @Composable
 private fun OnboardingSoftwareImportCloudBackupStepView(
     onEnable: () -> Unit,
-    onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
-    var showingDetails by remember { mutableStateOf(false) }
+    var showingDetails by rememberSaveable { mutableStateOf(false) }
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
             onEnable = onEnable,
-            onEnabled = onEnabled,
             onSkip = { showingDetails = false },
             context = CloudBackupEnableOnboardingContext.STANDARD,
         )
@@ -156,15 +173,13 @@ private fun OnboardingSoftwareImportCloudBackupStepView(
 @Composable
 private fun OnboardingHardwareImportCloudBackupStepView(
     onEnable: () -> Unit,
-    onEnabled: () -> Unit,
     onSkip: () -> Unit,
 ) {
-    var showingDetails by remember { mutableStateOf(false) }
+    var showingDetails by rememberSaveable { mutableStateOf(false) }
 
     if (showingDetails) {
         OnboardingCloudBackupDetailsStepView(
             onEnable = onEnable,
-            onEnabled = onEnabled,
             onSkip = { showingDetails = false },
             context = CloudBackupEnableOnboardingContext.HARDWARE_IMPORT,
         )
@@ -228,12 +243,10 @@ private fun OnboardingHardwareImportCloudBackupStepView(
 @Composable
 private fun OnboardingCloudBackupDetailsStepView(
     onEnable: () -> Unit,
-    onEnabled: () -> Unit,
     onSkip: () -> Unit,
     context: CloudBackupEnableOnboardingContext,
 ) {
     val backupManager = remember { CloudBackupManager.getInstance() }
-    var didReportEnabled by remember { mutableStateOf(false) }
 
     val lifecycleMsg = backupManager.lifecycleFailureMessage
     val onboardingMessage =
@@ -268,7 +281,10 @@ private fun OnboardingCloudBackupDetailsStepView(
         rootPrompt is CloudBackupRootPrompt.ExistingBackupFound ||
             (
                 rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
-                    rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable
+                    (
+                        rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable ||
+                            rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly
+                    )
             )
 
     fun cancelCloudBackupDetails() {
@@ -277,27 +293,6 @@ private fun OnboardingCloudBackupDetailsStepView(
         }
 
         onSkip()
-    }
-
-    fun completeIfEnabled() {
-        if (didReportEnabled) return
-        if (!shouldCompleteOnboardingCloudBackup(
-                backupManager.configuredState,
-                backupManager.hasPendingUploadVerification,
-            )
-        ) {
-            return
-        }
-
-        didReportEnabled = true
-        onEnabled()
-    }
-
-    LaunchedEffect(
-        backupManager.configuredState,
-        backupManager.hasPendingUploadVerification,
-    ) {
-        completeIfEnabled()
     }
 
     BackHandler {
@@ -341,7 +336,10 @@ private fun OnboardingCloudBackupDetailsStepView(
         )
 
         if (isBusy) {
-            CloudBackupEnableBusyOverlay(backupManager.enableFlow)
+            CloudBackupEnableBusyOverlay(
+                backupManager.enableFlow,
+                backupManager.verificationPresentation,
+            )
         }
     }
 }
@@ -370,10 +368,20 @@ internal fun OnboardingCloudBackupSuccessView(
             Spacer(modifier = Modifier.height(36.dp))
 
             Text(
-                text = "Cloud Backup enabled successfully",
+                text = "Cloud Backup enabled",
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "Cove can finish confirming cloud visibility in the background.",
+                color = OnboardingTextSecondary,
+                style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )

@@ -21,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove_core.CloudRestoreProviderHint
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
 import org.junit.Assert.assertEquals
@@ -352,6 +353,20 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
+    fun cloudCheckAllowsSetupToContinueWhileDiscoveryRuns() {
+        var continued = false
+
+        compose.setOnboardingContent {
+            CloudCheckContent(onContinue = { continued = true })
+        }
+
+        compose.onNodeWithText("Looking for Google Drive backup...").assertIsDisplayed()
+        compose.onNodeWithText("This can take a few minutes, please be patient").assertIsDisplayed()
+        compose.button("Continue Setup").performClick()
+        assertEquals(true, continued)
+    }
+
+    @Test
     fun restoreScreensAllowSimulatorSafeSkipPathsOnly() {
         var selected = ""
 
@@ -373,14 +388,21 @@ class OnboardingBranchScreensTest {
 
         compose.setOnboardingContent {
             OnboardingRestoreUnavailableScreen(
+                onCheckAgain = { selected = "check-again" },
                 onContinue = { selected = "continue-unavailable" },
                 onBack = { selected = "back-unavailable" },
             )
         }
 
-        compose.onNodeWithText("No Google Drive Backup Found").assertIsDisplayed()
+        compose.onNodeWithText("Nothing visible yet").assertIsDisplayed()
+        compose
+            .onNodeWithText(
+                "On a new Android device, your Cove backup may take time to become visible in Google Drive. Make sure you're signed in to the same Google account and can use the same passkey provider, then check again.",
+            ).assertIsDisplayed()
         compose.onNodeWithTag("onboarding.back").assertIsDisplayed()
-        compose.button("Continue Without Cloud Restore").performClick()
+        compose.button("Check Again").performClick()
+        assertEquals("check-again", selected)
+        compose.button("Continue Setup").performClick()
         assertEquals("continue-unavailable", selected)
         compose.button("Back").performClick()
         assertEquals("back-unavailable", selected)
@@ -416,10 +438,11 @@ class OnboardingBranchScreensTest {
         }
 
         compose.onNodeWithText("Restore from Google Drive").assertIsDisplayed()
-        compose.onAllNodesWithText(
-            "We couldn't confirm whether a Google Drive backup is available.",
-            substring = true,
-        ).assertCountEquals(0)
+        compose
+            .onAllNodesWithText(
+                "We couldn't confirm whether a Google Drive backup is available.",
+                substring = true,
+            ).assertCountEquals(0)
         compose.onAllNodesWithText("Cloud storage may be unavailable.").assertCountEquals(0)
         compose.button("Restore with Passkey").assertIsDisplayed()
         compose.onNodeWithText("Set Up as New").performClick()
@@ -440,6 +463,31 @@ class OnboardingBranchScreensTest {
         compose.onNodeWithText("Passkey verification failed.").assertIsDisplayed()
         compose.onNodeWithText("Set Up as New").performClick()
         assertEquals("skip-error", selected)
+    }
+
+    @Test
+    fun restoreOfferProjectsPasskeyProviderHint() {
+        compose.setOnboardingContent {
+            OnboardingRestoreOfferView(
+                providerHint =
+                    CloudRestoreProviderHint(
+                        providerName = "Google Password Manager",
+                        registeredAt = 1_777_612_800u,
+                        nameSuffix = "09IX",
+                    ),
+                warningMessage = null,
+                errorMessage = null,
+                onBack = {},
+                onRestore = {},
+                onSkip = {},
+            )
+        }
+
+        compose.onNodeWithText("Cove Cloud Backup (09IX)").assertIsDisplayed()
+        compose.onNodeWithText("Google Password Manager").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Provider Details").assertIsDisplayed()
+        compose.onNodeWithText("STORED IN").assertIsDisplayed()
+        compose.onNodeWithText("CREATED").assertIsDisplayed()
     }
 
     @Test
@@ -471,6 +519,30 @@ class OnboardingBranchScreensTest {
         compose.onNodeWithText("Import your software wallet").assertIsDisplayed()
         compose.button("Back").performClick()
         assertEquals("back", selected)
+    }
+
+    @Test
+    fun softwareImportLateCloudRestoreOfferExposesBothActions() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingSoftwareImportFlowView(
+                errorMessage = null,
+                cloudRestoreAlertVisible = true,
+                onImported = {},
+                onCreateWallet = {},
+                onRestoreFromCloudBackup = { selected = "restore" },
+                onDismissCloudRestoreAlert = { selected = "continue" },
+                onBack = {},
+            )
+        }
+
+        compose.onNodeWithText("Cove backup found").assertIsDisplayed()
+        compose.button("Restore from Cove backup").performClick()
+        assertEquals("restore", selected)
+
+        compose.button("Continue setup").performClick()
+        assertEquals("continue", selected)
     }
 
     @Test
@@ -565,6 +637,28 @@ class OnboardingBranchScreensTest {
     }
 
     @Test
+    fun hardwareImportLateCloudRestoreOfferExposesBothActions() {
+        var selected = ""
+
+        compose.setOnboardingContent {
+            OnboardingHardwareImportFlowView(
+                cloudRestoreAlertVisible = true,
+                onImported = {},
+                onRestoreFromCloudBackup = { selected = "restore" },
+                onDismissCloudRestoreAlert = { selected = "continue" },
+                onBack = {},
+            )
+        }
+
+        compose.onNodeWithText("Cove backup found").assertIsDisplayed()
+        compose.button("Restore from Cove backup").performClick()
+        assertEquals("restore", selected)
+
+        compose.button("Continue setup").performClick()
+        assertEquals("continue", selected)
+    }
+
+    @Test
     fun hardwareImportFileAndNfcScreensBackOutWithoutImportingHardwareData() {
         compose.setOnboardingContent {
             OnboardingHardwareImportFlowView(
@@ -636,15 +730,25 @@ class OnboardingBranchScreensTest {
         }
 
         compose.button("Agree and Continue").assertIsNotEnabled()
-        compose.cardContaining("responsible for securely managing").performScrollTo()
+        compose
+            .cardContaining("responsible for securely managing")
+            .performScrollTo()
             .performClick()
-        compose.cardContaining("unlawful use of Cove").performScrollTo()
+        compose
+            .cardContaining("unlawful use of Cove")
+            .performScrollTo()
             .performClick()
-        compose.cardContaining("not a bank, exchange").performScrollTo()
+        compose
+            .cardContaining("not a bank, exchange")
+            .performScrollTo()
             .performClick()
-        compose.cardContaining("cannot recover my funds").performScrollTo()
+        compose
+            .cardContaining("cannot recover my funds")
+            .performScrollTo()
             .performClick()
-        compose.cardContaining("I have read and agree").performScrollTo()
+        compose
+            .cardContaining("I have read and agree")
+            .performScrollTo()
             .performClick()
         compose.button("Agree and Continue").assertIsEnabled()
         compose.button("Agree and Continue").performClick()

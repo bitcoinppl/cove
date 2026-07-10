@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,12 +15,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Nfc
@@ -378,128 +382,134 @@ fun HotWalletImportScreen(
                 alpha = 0.5f,
             )
 
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                // word input grid
+            BoxWithConstraints(Modifier.fillMaxSize()) {
                 Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Spacer(Modifier.height(24.dp))
-
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { page ->
-                        WordInputGrid(
-                            enteredWords = enteredWords,
-                            numberOfWords = currentNumberOfWords,
-                            focusedField = focusedField,
-                            tabIndex = page,
-                            onWordsChanged = { newWords -> enteredWords = newWords },
-                            onFocusChanged = { field -> focusedField = field },
-                            onPasteMnemonic = ::handlePasteMnemonic,
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
-                    }
-
-                    // page indicator dots for multi-page import
-                    if (enteredWords.size > 1) {
-                        Spacer(Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            repeat(enteredWords.size) { i ->
-                                val isSelected = i == tabIndex
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .padding(horizontal = 4.dp)
-                                            .size(8.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .background(
-                                                if (isSelected) {
-                                                    Color.White
-                                                } else {
-                                                    Color.White.copy(alpha = 0.33f)
-                                                },
-                                            ).clickable {
-                                                scope.launch { pagerState.animateScrollToPage(i) }
-                                            },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                // bottom section
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .imePadding()
-                            .padding(horizontal = 20.dp),
+                            .heightIn(min = maxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(top = 20.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    // word input grid
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        DotMenuView(
-                            count = 5,
-                            currentIndex = 2,
-                        )
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.height(24.dp))
+
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { page ->
+                            WordInputGrid(
+                                enteredWords = enteredWords,
+                                numberOfWords = currentNumberOfWords,
+                                focusedField = focusedField,
+                                tabIndex = page,
+                                onWordsChanged = { newWords -> enteredWords = newWords },
+                                onFocusChanged = { field -> focusedField = field },
+                                onPasteMnemonic = ::handlePasteMnemonic,
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                            )
+                        }
+
+                        // page indicator dots for multi-page import
+                        if (enteredWords.size > 1) {
+                            Spacer(Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                repeat(enteredWords.size) { i ->
+                                    val isSelected = i == tabIndex
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .padding(horizontal = 4.dp)
+                                                .size(8.dp)
+                                                .clip(RoundedCornerShape(50))
+                                                .background(
+                                                    if (isSelected) {
+                                                        Color.White
+                                                    } else {
+                                                        Color.White.copy(alpha = 0.33f)
+                                                    },
+                                                ).clickable {
+                                                    scope.launch { pagerState.animateScrollToPage(i) }
+                                                },
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    Text(
-                        text = stringResource(R.string.title_import_wallet),
-                        color = Color.White,
-                        fontSize = 38.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 42.sp,
-                    )
+                    // bottom section
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .imePadding()
+                                .padding(horizontal = 20.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            DotMenuView(
+                                count = 5,
+                                currentIndex = 2,
+                            )
+                            Spacer(Modifier.weight(1f))
+                        }
 
-                    Text(
-                        text = stringResource(R.string.label_import_wallet_instructions),
-                        color = CoveColor.coveLightGray,
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                        Text(
+                            text = stringResource(R.string.title_import_wallet),
+                            color = Color.White,
+                            fontSize = 38.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 42.sp,
+                        )
 
-                    HorizontalDivider(
-                        color = CoveColor.coveLightGray.copy(alpha = 0.50f),
-                        thickness = 1.dp,
-                    )
+                        Text(
+                            text = stringResource(R.string.label_import_wallet_instructions),
+                            color = CoveColor.coveLightGray,
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
 
-                    ImageButton(
-                        text = stringResource(R.string.action_import_wallet),
-                        onClick = {
-                            if (isAllWordsValid()) {
-                                importWallet()
-                            } else {
-                                alertState = AlertState.InvalidWords
-                            }
-                        },
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary,
-                                contentColor = CoveColor.midnightBlue,
-                                disabledContainerColor = CoveColor.btnPrimary.copy(alpha = 0.5f),
-                                disabledContentColor = CoveColor.midnightBlue.copy(alpha = 0.5f),
-                            ),
-                        modifier = Modifier.fillMaxWidth().testTag("hotWalletImport.import"),
-                    )
+                        HorizontalDivider(
+                            color = CoveColor.coveLightGray.copy(alpha = 0.50f),
+                            thickness = 1.dp,
+                        )
+
+                        ImageButton(
+                            text = stringResource(R.string.action_import_wallet),
+                            onClick = {
+                                if (isAllWordsValid()) {
+                                    importWallet()
+                                } else {
+                                    alertState = AlertState.InvalidWords
+                                }
+                            },
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = CoveColor.btnPrimary,
+                                    contentColor = CoveColor.midnightBlue,
+                                    disabledContainerColor = CoveColor.btnPrimary.copy(alpha = 0.5f),
+                                    disabledContentColor = CoveColor.midnightBlue.copy(alpha = 0.5f),
+                                ),
+                            modifier = Modifier.fillMaxWidth().testTag("hotWalletImport.import"),
+                        )
+
+                        Spacer(
+                            Modifier
+                                .height(16.dp)
+                                .testTag("hotWalletImport.bottomPadding"),
+                        )
+                    }
                 }
             }
         }

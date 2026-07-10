@@ -104,7 +104,7 @@ class AndroidPasskeyProvider(
                     credentialManager.getCredential(
                         activity,
                         buildGetCredentialRequest(
-                            requestJson = buildAssertionRequestJson(rpId, credentialId, prfSalt, challenge),
+                            requestJson = buildPasskeyAssertionRequestJson(rpId, credentialId, prfSalt, challenge),
                             preferImmediatelyAvailableCredentials = false,
                         ),
                     )
@@ -128,16 +128,17 @@ class AndroidPasskeyProvider(
         rpId: String,
         prfSalt: ByteArray,
         challenge: ByteArray,
-    ): DiscoveredPasskeyResult {
-        enforceBackgroundThread("discoverAndAuthenticateWithPrf")
-        return runBlocking {
+    ): DiscoveredPasskeyResult =
+        runBlocking {
+            enforceBackgroundThread("discoverAndAuthenticateWithPrf")
+
             try {
                 val activity = ForegroundUiBridge.requireActivity()
                 val response =
                     credentialManager.getCredential(
                         activity,
                         buildGetCredentialRequest(
-                            requestJson = buildAssertionRequestJson(rpId, null, prfSalt, challenge),
+                            requestJson = buildPasskeyAssertionRequestJson(rpId, null, prfSalt, challenge),
                             preferImmediatelyAvailableCredentials = false,
                         ),
                     )
@@ -155,7 +156,6 @@ class AndroidPasskeyProvider(
                 throw mapPasskeyGetError(error, PasskeyOperation.DISCOVER_ASSERTION)
             }
         }
-    }
 
     // prf support is verified lazily when registration and authentication responses are parsed
     override fun isPrfSupported(): Boolean = true
@@ -195,43 +195,6 @@ class AndroidPasskeyProvider(
         challenge: ByteArray,
         user: PasskeyRegistrationUser,
     ): String = buildPasskeyCreateRequestJson(rpId, challenge, user)
-
-    private fun buildAssertionRequestJson(
-        rpId: String,
-        credentialId: ByteArray?,
-        prfSalt: ByteArray,
-        challenge: ByteArray,
-    ): String {
-        val request =
-            JSONObject()
-                .put("challenge", challenge.toBase64Url())
-                .put("rpId", rpId)
-                .put("timeout", 120_000)
-                .put("userVerification", "preferred")
-                .put(
-                    "extensions",
-                    JSONObject().put(
-                        "prf",
-                        JSONObject().put(
-                            "eval",
-                            JSONObject().put("first", prfSalt.toBase64Url()),
-                        ),
-                    ),
-                )
-
-        credentialId?.let {
-            request.put(
-                "allowCredentials",
-                JSONArray().put(
-                    JSONObject()
-                        .put("type", "public-key")
-                        .put("id", it.toBase64Url()),
-                ),
-            )
-        }
-
-        return request.toString()
-    }
 
     private fun buildPresenceCheckRequestJson(
         rpId: String,
@@ -449,40 +412,24 @@ private fun passkeyUnknownReason(message: String): PasskeyFailureReason =
     PasskeyFailureReason.Unknown(diagnosticMessage = message)
 
 private fun passkeyCreateFailureReason(message: String): PasskeyFailureReason =
-    if (message.isRpIdValidationErrorMessage()) {
-        PasskeyFailureReason.DeviceNotConfigured
-    } else {
-        passkeyUnknownReason(message)
-    }
+    passkeyUnknownReason(message)
 
 private fun passkeyCreateDomErrorReason(
     error: CreatePublicKeyCredentialDomException,
 ): PasskeyFailureReason {
     val domError = error.domError
-    val message =
-        error.errorMessage?.toString()?.takeIf(String::isNotBlank)
-            ?: error.passkeyMessage("")
 
-    return if (domError.isRpIdValidationError(message)) {
+    return if (domError is DataError || domError is SecurityError) {
         PasskeyFailureReason.DeviceNotConfigured
     } else {
         passkeyDomErrorReason(domError)
     }
 }
 
-private fun DomError.isRpIdValidationError(message: String): Boolean =
-    this is DataError ||
-        this is SecurityError ||
-        type.isRpIdValidationErrorMessage() ||
-        message.isRpIdValidationErrorMessage()
-
-private fun String.isRpIdValidationErrorMessage(): Boolean =
-    contains("RP ID cannot be validated", ignoreCase = true)
-
 private fun passkeyDomErrorReason(domError: DomError): PasskeyFailureReason =
     when (domError) {
         is TimeoutError -> PasskeyFailureReason.TimedOut
-        is NotAllowedError -> PasskeyFailureReason.PlatformAuthorizationFailed
+        is NotAllowedError -> PasskeyFailureReason.PlatformAuthorizationFailedAfterPresentation
         is SecurityError -> PasskeyFailureReason.ProviderConfiguration
         is InvalidStateError -> PasskeyFailureReason.InvalidResponse
         else -> passkeyUnknownReason("passkey DOM error: ${domError.type}")
@@ -514,8 +461,7 @@ internal fun buildPasskeyCreateRequestJson(
             JSONArray()
                 .put(JSONObject().put("type", "public-key").put("alg", -7))
                 .put(JSONObject().put("type", "public-key").put("alg", -257)),
-        ).put("timeout", 120_000)
-        .put("attestation", "none")
+        ).put("attestation", "none")
         .put(
             "authenticatorSelection",
             JSONObject()
@@ -525,6 +471,42 @@ internal fun buildPasskeyCreateRequestJson(
             "extensions",
             JSONObject().put("prf", JSONObject()),
         ).toString()
+
+internal fun buildPasskeyAssertionRequestJson(
+    rpId: String,
+    credentialId: ByteArray?,
+    prfSalt: ByteArray,
+    challenge: ByteArray,
+): String {
+    val request =
+        JSONObject()
+            .put("challenge", challenge.toBase64Url())
+            .put("rpId", rpId)
+            .put("userVerification", "preferred")
+            .put(
+                "extensions",
+                JSONObject().put(
+                    "prf",
+                    JSONObject().put(
+                        "eval",
+                        JSONObject().put("first", prfSalt.toBase64Url()),
+                    ),
+                ),
+            )
+
+    credentialId?.let {
+        request.put(
+            "allowCredentials",
+            JSONArray().put(
+                JSONObject()
+                    .put("type", "public-key")
+                    .put("id", it.toBase64Url()),
+            ),
+        )
+    }
+
+    return request.toString()
+}
 
 internal fun validatePasskeyRegistrationPrf(responseJson: String) {
     val prf =

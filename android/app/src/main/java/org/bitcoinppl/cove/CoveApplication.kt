@@ -11,11 +11,13 @@ import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove_core.AuthType
-import org.bitcoinppl.cove_core.device.Device
 import org.bitcoinppl.cove_core.device.CloudStorage
+import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.Connectivity
+import org.bitcoinppl.cove_core.device.Device
 import org.bitcoinppl.cove_core.device.Keychain
 import org.bitcoinppl.cove_core.device.PasskeyAccess
+import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.bitcoinppl.cove_core.initializeApp
 import org.bitcoinppl.cove_core.setRootDataDir
 import java.time.Instant
@@ -25,14 +27,14 @@ import java.time.Instant
 private const val AUTO_UNLOCK_THRESHOLD_ALL_AUTH = 1L
 private const val AUTO_UNLOCK_THRESHOLD_PIN_ONLY = 2L
 
-class CoveApplication : Application() {
+open class CoveApplication : Application() {
     // hold references to FFI objects for proper cleanup
     private var keychain: Keychain? = null
     private var device: Device? = null
     private var connectivity: Connectivity? = null
     private var passkeyAccess: PasskeyAccess? = null
     private var cloudStorage: CloudStorage? = null
-    private var connectivityMonitor: ConnectivityMonitor? = null
+    private var connectivityAccess: LifecycleConnectivityAccess? = null
     private var bootstrapCompleted = false
 
     override fun onCreate() {
@@ -54,10 +56,11 @@ class CoveApplication : Application() {
         try {
             keychain = Keychain(KeychainAccessor(this))
             device = Device(DeviceAccessor())
-            connectivityMonitor = ConnectivityMonitor(this)
-            connectivity = Connectivity(connectivityMonitor!!)
-            passkeyAccess = PasskeyAccess(AndroidPasskeyProvider(this))
-            cloudStorage = CloudStorage(AndroidCloudStorageAccess(this))
+            val createdConnectivityAccess = createConnectivityAccess()
+            connectivityAccess = createdConnectivityAccess
+            connectivity = Connectivity(createdConnectivityAccess)
+            passkeyAccess = PasskeyAccess(createPasskeyProvider())
+            cloudStorage = CloudStorage(createCloudStorageAccess())
             CloudBackupManager.setOnCloudBackupDisabled {
                 clearCloudBackupDriveAccountBinding(this)
             }
@@ -70,7 +73,16 @@ class CoveApplication : Application() {
         // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
     }
 
-    /// Called from MainActivity after bootstrap completes on the main thread
+    protected open fun createCloudStorageAccess(): CloudStorageAccess =
+        AndroidCloudStorageAccess(this)
+
+    protected open fun createPasskeyProvider(): PasskeyProvider =
+        AndroidPasskeyProvider(this)
+
+    protected open fun createConnectivityAccess(): LifecycleConnectivityAccess =
+        ConnectivityMonitor(this)
+
+    // Called from MainActivity after bootstrap completes on the main thread
     fun onBootstrapComplete() {
         if (bootstrapCompleted) return
 
@@ -78,7 +90,7 @@ class CoveApplication : Application() {
         initializeApp()
         bootstrapCompleted = true
 
-        connectivityMonitor?.start()
+        connectivityAccess?.start()
         setupLifecycleObserver()
         setupMemoryCallbacks()
     }
@@ -98,8 +110,8 @@ class CoveApplication : Application() {
      */
     private fun cleanupFfiObjects() {
         try {
-            connectivityMonitor?.stop()
-            connectivityMonitor = null
+            connectivityAccess?.stop()
+            connectivityAccess = null
             Log.d(TAG, "Connectivity monitor stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping connectivity monitor", e)
@@ -258,11 +270,13 @@ class CoveApplication : Application() {
                     Log.d(TAG, "[LIFECYCLE] < ${AUTO_UNLOCK_THRESHOLD_PIN_ONLY}s since lock (PIN only, no decoy), auto-unlocking")
                     auth.unlock()
                 }
+
                 // less than 1 second - auto unlock for all auth types
                 sinceLocked < AUTO_UNLOCK_THRESHOLD_ALL_AUTH -> {
                     Log.d(TAG, "[LIFECYCLE] < ${AUTO_UNLOCK_THRESHOLD_ALL_AUTH}s since lock, auto-unlocking")
                     auth.unlock()
                 }
+
                 // otherwise - require authentication
                 else -> {
                     Log.d(TAG, "[LIFECYCLE] Requiring authentication")

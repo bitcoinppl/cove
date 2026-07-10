@@ -15,6 +15,7 @@ import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
+import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupState
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.CloudBackupSyncState
@@ -146,7 +147,8 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                         ),
                     sync = CloudBackupSyncState.Syncing,
                     destructiveOperation = CloudBackupDestructiveOperationState.Idle,
-                    detail = CloudBackupDetailState.Loaded(loadedDetail),
+                    detail = CloudBackupDetailState.Complete(loadedDetail),
+                    restoreAll = CloudBackupRestoreAllState.StartAvailable(walletCount = 2u),
                     rootPrompt = CloudBackupRootPrompt.None,
                     syncHealth = CloudSyncHealth.Uploading,
                     verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
@@ -172,5 +174,6 @@ private fun cloudBackupPreviewWallet(
         labelCount = 0u,
         backupUpdatedAt = updatedAt,
         syncStatus = status,
+        restoreFailure = null,
         recordId = name,
     )

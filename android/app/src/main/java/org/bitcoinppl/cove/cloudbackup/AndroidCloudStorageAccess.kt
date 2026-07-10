@@ -6,9 +6,17 @@ import kotlinx.coroutines.CancellationException
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.CloudStorageException
+import org.bitcoinppl.cove_core.device.CloudStorageInventorySnapshot
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.bitcoinppl.cove_core.device.RemoteBackupLocation
 import org.bitcoinppl.cove_core.device.cloudBackupLocationsSyncHealth
+
+private const val GOOGLE_DRIVE_AUTHORIZATION_REQUIRED_MESSAGE =
+    "Cove couldn't access Google Drive. Reconnect Google Drive, then try again."
+private const val GOOGLE_DRIVE_OFFLINE_MESSAGE =
+    "Cove couldn't reach Google Drive. Reconnect to the internet, then try again."
+private const val GOOGLE_DRIVE_SYNC_FAILED_MESSAGE =
+    "Cove couldn't check Google Drive sync. Please try again."
 
 class AndroidCloudStorageAccess internal constructor(
     driveAuthorization: DriveAuthorization,
@@ -198,6 +206,15 @@ class AndroidCloudStorageAccess internal constructor(
     ): List<String> =
         listWalletFiles(namespace, interactive = policy.allowsConsent())
 
+    override suspend fun listWalletFilesSnapshot(
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ): CloudStorageInventorySnapshot =
+        CloudStorageInventorySnapshot(
+            names = listWalletFiles(namespace, interactive = policy.allowsConsent()),
+            isComplete = true,
+        )
+
     override suspend fun isBackupUploaded(
         namespace: String,
         recordId: String,
@@ -227,10 +244,10 @@ class AndroidCloudStorageAccess internal constructor(
             val mapped = mapDriveListError(error)
             when (mapped) {
                 is CloudStorageException.AuthorizationRequired ->
-                    CloudSyncHealth.AuthorizationRequired(mapped.message)
-                is CloudStorageException.Offline -> CloudSyncHealth.Failed(mapped.message)
+                    CloudSyncHealth.AuthorizationRequired(GOOGLE_DRIVE_AUTHORIZATION_REQUIRED_MESSAGE)
+                is CloudStorageException.Offline -> CloudSyncHealth.Failed(GOOGLE_DRIVE_OFFLINE_MESSAGE)
                 is CloudStorageException.NotAvailable -> CloudSyncHealth.Unavailable
-                else -> CloudSyncHealth.Failed(mapped.message ?: "drive sync status failed")
+                else -> CloudSyncHealth.Failed(GOOGLE_DRIVE_SYNC_FAILED_MESSAGE)
             }
         }
 

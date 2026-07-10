@@ -139,17 +139,28 @@ internal fun OnboardingBitcoinChoiceScreen(
 
 @Composable
 internal fun OnboardingRestoreUnavailableScreen(
+    onCheckAgain: () -> Unit,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
     OnboardingPromptScreen(
         icon = Icons.Default.CloudOff,
-        title = "No Backups Found",
-        subtitle = "We couldn't find a Cove backup in Google Drive for this account. Continue without a backup, then set up Cloud Backup when you're ready.",
+        title = "Nothing visible yet",
+        subtitle =
+            "On a new Android device, your Cove backup may take time to become visible in Google Drive. " +
+                "Make sure you're signed in to the same Google account and can use the same " +
+                "passkey provider, then check again.",
         onBack = onBack,
     ) {
         OnboardingPrimaryButton(
-            text = "Continue Without Backup",
+            text = "Check Again",
+            onClick = onCheckAgain,
+        )
+
+        Spacer(modifier = Modifier.size(14.dp))
+
+        OnboardingSecondaryButton(
+            text = "Continue Setup",
             onClick = onContinue,
         )
     }
@@ -176,7 +187,7 @@ internal fun OnboardingRestoreOfflineScreen(
 @Composable
 internal fun OnboardingStorageChoiceScreen(
     errorMessage: String?,
-    onRestoreFromCoveBackup: (() -> Unit)?,
+    onRestoreFromCoveBackup: () -> Unit,
     onSelectStorage: (OnboardingStorageSelection) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -213,15 +224,13 @@ internal fun OnboardingStorageChoiceScreen(
                 onClick = { onSelectStorage(OnboardingStorageSelection.SOFTWARE_WALLET) },
                 modifier = Modifier.testTag("onboarding.storage.software"),
             )
-            if (onRestoreFromCoveBackup != null) {
-                OnboardingCloudRestoreChoiceSection(
-                    onClick = onRestoreFromCoveBackup,
-                    showDivider = false,
-                    title = "I'm already using Cove",
-                    subtitle = "Restore your Cove backup from Google Drive, secured by passkeys",
-                    cardModifier = Modifier.testTag("onboarding.storage.restore"),
-                )
-            }
+            OnboardingCloudRestoreChoiceSection(
+                onClick = onRestoreFromCoveBackup,
+                showDivider = false,
+                title = "I'm already using Cove",
+                subtitle = "Restore your Cove backup from Google Drive, secured by passkeys",
+                cardModifier = Modifier.testTag("onboarding.storage.restore"),
+            )
         }
     }
 }

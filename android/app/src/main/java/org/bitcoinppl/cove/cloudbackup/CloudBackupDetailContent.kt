@@ -43,6 +43,7 @@ internal enum class CloudBackupDetailBodyState {
     VERIFYING,
     DETAIL,
     AUTHORIZATION_BLOCKED,
+    INVENTORY_FAILED,
     LOADING,
 }
 
@@ -57,6 +58,7 @@ internal fun cloudBackupDetailBodyState(
         hasDetail -> CloudBackupDetailBodyState.DETAIL
         manager.hasPendingUploadVerification && manager.syncState is CloudBackupSyncState.Blocked ->
             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED
+        manager.detailError != null -> CloudBackupDetailBodyState.INVENTORY_FAILED
         manager.verificationState !is CloudBackupVerificationState.Failed -> CloudBackupDetailBodyState.LOADING
         else -> null
     }
@@ -64,6 +66,10 @@ internal fun cloudBackupDetailBodyState(
 internal fun shouldShowPendingUploadConfirmationStatus(
     manager: CloudBackupManager,
 ): Boolean = manager.hasPendingUploadVerification
+
+internal fun pendingUploadConfirmationActionTitle(
+    isBlockedOnAuthorization: Boolean,
+): String? = if (isBlockedOnAuthorization) "Reconnect Google Drive" else null
 
 internal fun shouldFetchCloudOnly(cloudOnly: CloudOnlyState): Boolean =
     cloudOnly is CloudOnlyState.NotFetched
@@ -97,6 +103,25 @@ internal fun CloudBackupDetailContent(
             ErrorInlineMessage(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
 
+        manager.detailError?.let { error ->
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ErrorInlineMessage(error)
+                Button(onClick = { manager.dispatch(CloudBackupManagerAction.RefreshDetail) }) {
+                    Text("Check Again")
+                }
+            }
+        }
+
+        if (manager.isDetailInventoryChecking && manager.detail != null) {
+            CloudBackupProgressCard(
+                title = "Checking for more cloud backups",
+                message = "Keeping the backups already found visible while the provider finishes checking",
+            )
+        }
+
         when (bodyState) {
             CloudBackupDetailBodyState.UNSUPPORTED_PASSKEY_PROVIDER -> {
                 UnsupportedPasskeyProviderContent(manager = manager)
@@ -118,8 +143,18 @@ internal fun CloudBackupDetailContent(
                 )
             }
             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED -> {
-                PendingUploadConfirmationStatus(isBlockedOnAuthorization = true)
+                PendingUploadConfirmationStatus(
+                    isBlockedOnAuthorization = true,
+                    onReconnect = {
+                        manager.dispatch(
+                            CloudBackupManagerAction.StartVerification(
+                                CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                            ),
+                        )
+                    },
+                )
             }
+            CloudBackupDetailBodyState.INVENTORY_FAILED -> Unit
             CloudBackupDetailBodyState.LOADING -> {
                 CloudBackupProgressCard(
                     title = "Loading cloud backup",
@@ -133,7 +168,16 @@ internal fun CloudBackupDetailContent(
             bodyState != CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED &&
                 shouldShowPendingUploadConfirmationStatus(manager)
         ) {
-            PendingUploadConfirmationStatus(isBlockedOnAuthorization = manager.syncState is CloudBackupSyncState.Blocked)
+            PendingUploadConfirmationStatus(
+                isBlockedOnAuthorization = manager.syncState is CloudBackupSyncState.Blocked,
+                onReconnect = {
+                    manager.dispatch(
+                        CloudBackupManagerAction.StartVerification(
+                            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
+                        ),
+                    )
+                },
+            )
         }
 
         if (showFallbackVerificationSection) {
@@ -152,11 +196,17 @@ internal fun CloudBackupDetailContent(
             )
         }
 
-        if (
-            bodyState == CloudBackupDetailBodyState.DETAIL ||
-                bodyState == CloudBackupDetailBodyState.MISSING_PASSKEY
-        ) {
-            DisableCloudBackupSection(manager = manager, detail = manager.detail)
+        val allowDisable =
+            bodyState == CloudBackupDetailBodyState.DETAIL &&
+                manager.isDetailInventoryComplete
+        val showDisableRecovery =
+            manager.disableFailure?.canKeepEnabled == true || manager.isDisablingCloudBackup
+        if (bodyState == CloudBackupDetailBodyState.DETAIL || showDisableRecovery) {
+            DisableCloudBackupSection(
+                manager = manager,
+                detail = manager.detail,
+                allowDisable = allowDisable,
+            )
         }
     }
 }
@@ -164,6 +214,7 @@ internal fun CloudBackupDetailContent(
 @Composable
 private fun PendingUploadConfirmationStatus(
     isBlockedOnAuthorization: Boolean,
+    onReconnect: () -> Unit,
 ) {
     if (isBlockedOnAuthorization) {
         Card(
@@ -175,15 +226,18 @@ private fun PendingUploadConfirmationStatus(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Cloud storage authorization needed",
+                    "Google Drive authorization needed",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 Text(
-                    "Cove needs cloud storage access to confirm the latest backup upload",
+                    "Cove needs Google Drive access to confirm the latest backup upload",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
+                Button(onClick = onReconnect) {
+                    Text(requireNotNull(pendingUploadConfirmationActionTitle(true)))
+                }
             }
         }
     } else {

@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.flows.cloudbackup
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
@@ -10,6 +11,7 @@ import org.bitcoinppl.cove.test.ManualFullLaunchTest
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.junit.Before
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,6 +61,12 @@ class CloudBackupOnboardingFullLaunchTest {
 
     @Test
     fun newUserCloudBackupEnableOpensCreatePasskeySheet() {
+        val targetPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        assumeFalse(
+            "the uiTest flavor uses a scripted passkey provider without a system Credential Manager sheet",
+            targetPackage.endsWith(".uitest"),
+        )
+
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
 
         FullLaunchOnboardingRobot(device)

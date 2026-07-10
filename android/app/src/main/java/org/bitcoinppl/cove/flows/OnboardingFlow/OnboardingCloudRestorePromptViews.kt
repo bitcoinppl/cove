@@ -62,7 +62,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
-internal fun CloudCheckContent() {
+internal fun CloudCheckContent(onContinue: () -> Unit) {
     OnboardingBackground {
         Column(
             modifier =
@@ -94,6 +94,14 @@ internal fun CloudCheckContent() {
                 color = OnboardingTextSecondary,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
+            )
+
+            Spacer(modifier = Modifier.size(28.dp))
+
+            OnboardingSecondaryButton(
+                text = "Continue Setup",
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

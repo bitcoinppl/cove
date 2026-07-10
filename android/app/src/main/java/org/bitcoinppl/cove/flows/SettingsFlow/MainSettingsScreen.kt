@@ -19,7 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Hub
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -67,6 +71,7 @@ import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove.performWalletReorderHaptic
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.utils.movedWithinPrefix
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
@@ -85,10 +90,6 @@ import org.bitcoinppl.cove_core.WalletSettingsRoute
 import sh.calvin.reorderable.ReorderableColumn
 
 private const val WALLET_SETTINGS_VISIBLE_LIMIT = 5
-
-internal fun shouldShowCloudBackupSettings(
-    isInDecoyMode: Boolean,
-): Boolean = !isInDecoyMode
 
 @Composable
 private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
@@ -258,13 +259,31 @@ fun MainSettingsScreen(
                 )
 
                 if (showCloudBackupSettings) {
+                    val cloudBackupSeverity =
+                        cloudBackupSettingsSeverity(cloudBackupManager.settingsRowStatus)
                     SectionHeader(stringResource(R.string.title_cloud_backup))
                     MaterialSection {
                         Column {
                             MaterialSettingsItem(
                                 title = stringResource(R.string.title_cloud_backup),
                                 subtitle = cloudBackupSettingsSubtitle(cloudBackupManager),
-                                icon = Icons.Default.CloudUpload,
+                                icon =
+                                    when (cloudBackupSeverity) {
+                                        CloudBackupSettingsSeverity.NEUTRAL -> Icons.Default.CloudUpload
+                                        CloudBackupSettingsSeverity.INFO -> Icons.Default.CloudSync
+                                        CloudBackupSettingsSeverity.SUCCESS -> Icons.Default.CheckCircle
+                                        CloudBackupSettingsSeverity.WARNING -> Icons.Default.WarningAmber
+                                        CloudBackupSettingsSeverity.ERROR -> Icons.Default.ErrorOutline
+                                    },
+                                iconTint =
+                                    when (cloudBackupSeverity) {
+                                        CloudBackupSettingsSeverity.NEUTRAL ->
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        CloudBackupSettingsSeverity.INFO -> MaterialTheme.colorScheme.primary
+                                        CloudBackupSettingsSeverity.SUCCESS -> CoveColor.SuccessGreen
+                                        CloudBackupSettingsSeverity.WARNING -> CoveColor.WarningOrange
+                                        CloudBackupSettingsSeverity.ERROR -> MaterialTheme.colorScheme.error
+                                    },
                                 onClick = {
                                     app.pushRoute(Route.Settings(SettingsRoute.CloudBackup))
                                 },

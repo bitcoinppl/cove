@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -36,6 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -272,6 +276,16 @@ private fun WalletType.cloudBackupDisplayName(): String =
         WalletType.WATCH_ONLY -> "Watch Only"
     }
 
+internal fun cloudBackupWalletRowActionLabel(item: CloudBackupWalletItem): String {
+    val restoreFailure = item.restoreFailure
+
+    return if (restoreFailure == null) {
+        "Restore ${item.name} to this device"
+    } else {
+        "Retry restoring ${item.name} to this device"
+    }
+}
+
 @Composable
 private fun WalletItemRow(
     item: CloudBackupWalletItem,
@@ -289,20 +303,35 @@ private fun WalletItemRow(
         }.joinToString(" • ")
     val labelText = "${item.labelCount ?: 0UL} labels"
     val updatedAt = item.backupUpdatedAt?.let(::cloudBackupFormattedDate)
+    val restoreFailure = item.restoreFailure
     val shape = RoundedCornerShape(18.dp)
 
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clip(shape)
+                .cloudBackupActionEnabled(enabled || onClick == null)
                 .then(
                     if (onClick != null) {
-                        Modifier.clickable(enabled = enabled, onClick = onClick)
+                        Modifier.clickable(
+                            enabled = enabled,
+                            onClickLabel = cloudBackupWalletRowActionLabel(item),
+                            role = Role.Button,
+                            onClick = onClick,
+                        )
                     } else {
                         Modifier
                     },
                 )
+                .semantics(mergeDescendants = true) {
+                    when {
+                        isOperating -> stateDescription = "Restore in progress"
+                        restoreFailure != null ->
+                            stateDescription = "Restore failed. ${restoreFailure.message}"
+                    }
+                }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -330,7 +359,7 @@ private fun WalletItemRow(
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 StatusBadge(status = item.syncStatus)
@@ -367,6 +396,34 @@ private fun WalletItemRow(
                         maxLines = 1,
                         modifier = Modifier.weight(1f),
                     )
+                }
+            }
+
+            restoreFailure?.let { failure ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = colors.danger,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "Restore failed",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.danger,
+                        )
+                        Text(
+                            failure.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.primaryText,
+                        )
+                    }
                 }
             }
         }

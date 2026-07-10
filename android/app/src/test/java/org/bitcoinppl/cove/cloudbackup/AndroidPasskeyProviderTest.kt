@@ -6,6 +6,7 @@ import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.credentials.exceptions.domerrors.DataError
 import androidx.credentials.exceptions.domerrors.InvalidStateError
 import androidx.credentials.exceptions.domerrors.NotAllowedError
@@ -43,6 +44,22 @@ class AndroidPasskeyProviderTest {
         val prf = request.getJSONObject("extensions").getJSONObject("prf")
 
         assertEquals(0, prf.length())
+        assertTrue(!request.has("timeout"))
+    }
+
+    @Test
+    fun assertionRequestJsonDoesNotBoundInteractiveAuthorization() {
+        val request =
+            JSONObject(
+                buildPasskeyAssertionRequestJson(
+                    rpId = "covebitcoinwallet.com",
+                    credentialId = byteArrayOf(1, 2, 3),
+                    prfSalt = byteArrayOf(4, 5, 6),
+                    challenge = byteArrayOf(7, 8, 9),
+                ),
+            )
+
+        assertTrue(!request.has("timeout"))
     }
 
     @Test
@@ -117,11 +134,11 @@ class AndroidPasskeyProviderTest {
         assertEquals(PasskeyOperation.REGISTRATION, (timedOut as PasskeyException.RequestFailed).operation)
         assertEquals(PasskeyFailureReason.TimedOut, timedOut.reason)
 
-        val rpIdValidation = mapPasskeyCreateError(Exception("RP ID cannot be validated."))
-        assertTrue(rpIdValidation is PasskeyException.RequestFailed)
-        assertEquals(
-            PasskeyFailureReason.DeviceNotConfigured,
-            (rpIdValidation as PasskeyException.RequestFailed).reason,
+        val localizedDiagnostic = mapPasskeyCreateError(Exception("RP ID cannot be validated."))
+        assertTrue(localizedDiagnostic is PasskeyException.RequestFailed)
+        assertTrue(
+            (localizedDiagnostic as PasskeyException.RequestFailed).reason
+                is PasskeyFailureReason.Unknown,
         )
 
         val createSecurityError = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(SecurityError()))
@@ -149,6 +166,10 @@ class AndroidPasskeyProviderTest {
             mapPasskeyGetError(GetCredentialUnsupportedException())
                 is PasskeyException.NotSupported,
         )
+        assertTrue(
+            mapPasskeyGetError(NoCredentialException())
+                is PasskeyException.NoCredentialFound,
+        )
 
         val interrupted = mapPasskeyGetError(
             GetCredentialInterruptedException(),
@@ -168,13 +189,20 @@ class AndroidPasskeyProviderTest {
             (foregroundTimeout as PasskeyException.RequestFailed).reason,
         )
 
+        assertGetCredentialDomExceptionMappings()
+    }
+
+    private fun assertGetCredentialDomExceptionMappings() {
         val notAllowed = mapPasskeyGetError(
             GetPublicKeyCredentialDomException(NotAllowedError()),
             PasskeyOperation.DISCOVER_ASSERTION,
         )
         assertTrue(notAllowed is PasskeyException.RequestFailed)
         assertEquals(PasskeyOperation.DISCOVER_ASSERTION, (notAllowed as PasskeyException.RequestFailed).operation)
-        assertEquals(PasskeyFailureReason.PlatformAuthorizationFailed, notAllowed.reason)
+        assertEquals(
+            PasskeyFailureReason.PlatformAuthorizationFailedAfterPresentation,
+            notAllowed.reason,
+        )
 
         val securityError = mapPasskeyGetError(GetPublicKeyCredentialDomException(SecurityError()))
         assertTrue(securityError is PasskeyException.RequestFailed)
@@ -196,6 +224,20 @@ class AndroidPasskeyProviderTest {
         val reason = (dataError as PasskeyException.RequestFailed).reason
         assertTrue(reason is PasskeyFailureReason.Unknown)
         assertTrue((reason as PasskeyFailureReason.Unknown).diagnosticMessage.contains("passkey DOM error"))
+
+        val diagnostic = mapPasskeyGetError(
+            Exception("credential provider diagnostic"),
+            PasskeyOperation.DISCOVER_ASSERTION,
+        )
+        assertTrue(diagnostic is PasskeyException.RequestFailed)
+        assertEquals(
+            PasskeyOperation.DISCOVER_ASSERTION,
+            (diagnostic as PasskeyException.RequestFailed).operation,
+        )
+        assertEquals(
+            PasskeyFailureReason.Unknown("credential provider diagnostic"),
+            diagnostic.reason,
+        )
     }
 
     private fun registrationResponseJson(clientExtensionResults: JSONObject): String =

@@ -74,6 +74,12 @@ fun CloudBackupScreen(
         manager.dispatch(CloudBackupManagerAction.EnterDetail)
     }
 
+    DisposableEffect(manager) {
+        onDispose {
+            manager.dispatch(CloudBackupManagerAction.CloseDetail)
+        }
+    }
+
     LaunchedEffect(manager, isLifecycleDisabled) {
         if (isReturningToSettingsAfterDisable) {
             app.popRoute()
@@ -93,8 +99,16 @@ fun CloudBackupScreen(
             manager = manager,
             modifier = modifier,
             onBack = { app.popRoute() },
-            onRecreate = { showRecreateConfirmation = true },
-            onReinitialize = { showReinitializeConfirmation = true },
+            onRecreate = {
+                if (manager.isDetailInventoryComplete) {
+                    showRecreateConfirmation = true
+                }
+            },
+            onReinitialize = {
+                if (manager.isDetailInventoryComplete) {
+                    showReinitializeConfirmation = true
+                }
+            },
         )
     }
 
@@ -109,6 +123,7 @@ fun CloudBackupScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = manager.isDetailInventoryComplete,
                     onClick = {
                         showRecreateConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.RecreateManifest)
@@ -132,6 +147,7 @@ fun CloudBackupScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = manager.isDetailInventoryComplete,
                     onClick = {
                         showReinitializeConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.ReinitializeBackup)
@@ -194,14 +210,14 @@ internal fun CloudBackupScreenFrame(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { isMenuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Cloud Backup options")
-                    }
-                    DropdownMenu(
-                        expanded = isMenuOpen,
-                        onDismissRequest = { isMenuOpen = false },
-                    ) {
-                        if (isConfigured) {
+                    if (isConfigured && manager.isDetailInventoryComplete) {
+                        IconButton(onClick = { isMenuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Cloud Backup options")
+                        }
+                        DropdownMenu(
+                            expanded = isMenuOpen,
+                            onDismissRequest = { isMenuOpen = false },
+                        ) {
                             DropdownMenuItem(
                                 text = { Text("Recreate Backup Index") },
                                 onClick = {
@@ -324,7 +340,10 @@ private fun CloudBackupSettingsEnableOnboarding(
         )
 
         if (isBusy) {
-            CloudBackupEnableBusyOverlay(manager.enableFlow)
+            CloudBackupEnableBusyOverlay(
+                manager.enableFlow,
+                manager.verificationPresentation,
+            )
         }
     }
 }
@@ -333,7 +352,10 @@ private fun isAwaitingEnablePrompt(rootPrompt: CloudBackupRootPrompt): Boolean =
     rootPrompt is CloudBackupRootPrompt.ExistingBackupFound ||
         (
             rootPrompt is CloudBackupRootPrompt.PasskeyChoice &&
-                rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable
+                (
+                    rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.Enable ||
+                        rootPrompt.v1 is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly
+                )
         )
 
 internal fun settingsEnableCloudBackupPrompt(): CloudBackupManagerAction =
