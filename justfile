@@ -118,7 +118,7 @@ build-android-release:
 
 alias bar := build-android-release
 
-# Build signed AAB for Google Play, copy to Downloads
+# Build signed AAB and universal APK for Google Play, copy to Downloads
 [group('build')]
 bundle-android: build-android-release
     cd android && ./gradlew --stop
@@ -126,7 +126,7 @@ bundle-android: build-android-release
 
 alias bua := bundle-android
 
-# Build signed store release APK for Google Play, copy to Downloads
+# Build signed common arm64 store release APK, copy to Downloads
 [group('build')]
 signed-android-release-apk: build-android-release
     cd android && ./gradlew --stop

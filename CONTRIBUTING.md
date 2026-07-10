@@ -52,9 +52,9 @@ just signed-android-release-apk    # alias: just sara
 just bundle-android                # alias: just bua
 ```
 
-`just signed-android-release-apk` builds release Rust FFI and Kotlin bindings, builds the signed store release APK, validates the APK signing and package metadata, and copies it to `~/Downloads/cove-<versionName>-<versionCode>.apk`.
+`just signed-android-release-apk` builds release Rust FFI and Kotlin bindings, builds the signed store release APK for common arm64 devices, validates the APK signing and package metadata, and copies it to `~/Downloads/cove-<versionName>-<versionCode>-common.apk`.
 
-`just bundle-android` builds release Rust FFI and Kotlin bindings, builds the signed store release AAB and APK, validates the APK signing and package metadata, and copies the release artifacts to `~/Downloads`.
+`just bundle-android` builds release Rust FFI and Kotlin bindings, builds the signed store release AAB and universal APK, validates the APK signing and package metadata, and copies the release artifacts to `~/Downloads`. The universal APK is copied as `cove-<versionName>-<versionCode>-universal.apk`.
 
 Signed Android release workflows require `COVE_KEYSTORE_PATH`, `COVE_KEYSTORE_PASSWORD`, `COVE_KEY_ALIAS`, and `COVE_KEY_PASSWORD`. Set `COVE_SIGNING_CERT_SHA256` to the expected upload certificate SHA-256 digest when you want the script to verify the signing certificate fingerprint.
 
@@ -79,8 +79,8 @@ Signed Android release workflows require `COVE_KEYSTORE_PATH`, `COVE_KEYSTORE_PA
 | `just build-android` | `just ba` | Build Android debug Rust FFI and Kotlin bindings for all ABIs |
 | `just build-android-connected-device` | `just bad` | Build Android debug Rust FFI and Kotlin bindings for the connected device ABI |
 | `just build-android-release` | `just bar` | Build Android release Rust FFI and Kotlin bindings |
-| `just signed-android-release-apk` | `just sara` | Build, validate, and copy signed Android store release APK |
-| `just bundle-android` | `just bua` | Build, validate, and copy signed Android store release AAB and APK |
+| `just signed-android-release-apk` | `just sara` | Build, validate, and copy signed Android common arm64 release APK |
+| `just bundle-android` | `just bua` | Build, validate, and copy signed Android store release AAB and universal APK |
 | `just build-ios` | `just bi` | Build iOS debug simulator |
 | `just build-ios-debug-device` | `just bidd` | Build iOS debug device |
 | `just build-ios-release` | `just bir` | Build iOS release |
