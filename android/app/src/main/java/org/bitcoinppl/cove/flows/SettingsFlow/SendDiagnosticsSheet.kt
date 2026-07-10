@@ -296,6 +296,7 @@ private class SendDiagnosticsSheetState(
         try {
             if (clearStoredLogs) {
                 withContext(ioDispatcher) { clearDiagnosticsLogs() }
+                attemptToClearAndroidPlatformLogs(ioDispatcher)
             }
 
             val platformLogs = collectAndroidPlatformLogs(context, ioDispatcher)

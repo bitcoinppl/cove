@@ -13,6 +13,7 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.BuildConfig
@@ -72,6 +73,25 @@ private fun collectLogcat(): String =
 
         "logcat unavailable: ${error.displayMessage()}"
     }
+
+/** Attempts to clear logcat without failing diagnostics when Android rejects the command */
+internal suspend fun attemptToClearAndroidPlatformLogs(ioDispatcher: CoroutineDispatcher) {
+    withContext(ioDispatcher) {
+        val process =
+            runCatching { ProcessBuilder("logcat", "-c").start() }
+                .getOrNull() ?: return@withContext
+
+        try {
+            if (!process.waitFor(LOGCAT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+            }
+        } catch (error: InterruptedException) {
+            process.destroyForcibly()
+
+            throw error
+        }
+    }
+}
 
 internal suspend fun shareDiagnosticsFile(
     context: Context,
