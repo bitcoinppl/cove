@@ -74,11 +74,14 @@ mod cloud_only;
 mod detail_refresh;
 mod disable;
 mod enable;
+mod other_backups;
+mod restore_all;
 mod verification;
 
 pub(crate) use verification::DeepVerificationContinuation;
 
 use detail_refresh::{DetailRefreshClaim, DetailRefreshCoordinator, DetailRefreshPlan};
+use restore_all::restore_all_marker_matches_active_namespace;
 
 mod tests {
     #![cfg(test)]
@@ -197,17 +200,6 @@ fn verification_needs_connectivity_retry(
 
     matches!(result, DeepVerificationResult::Failed(failure) if failure.is_connectivity_retry())
         && should_retry_connectivity_failure(manager.connection_status())
-}
-
-fn restore_all_marker_matches_active_namespace(manager: &RustCloudBackupManager) -> bool {
-    let Ok(state) = Database::global().cloud_backup_state.get() else {
-        return false;
-    };
-    let Some(marker) = state.pending_restore_all() else {
-        return false;
-    };
-
-    manager.current_namespace_id().ok().as_deref() == Some(marker.namespace_id.as_str())
 }
 
 /// Pending disable state held while the write lane drains before namespace delete
