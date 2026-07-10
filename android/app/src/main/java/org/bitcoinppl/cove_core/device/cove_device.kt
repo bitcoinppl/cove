@@ -682,9 +682,12 @@ internal interface UniffiCallbackInterfaceCloudStorageAccessMethod7 : com.sun.jn
     fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod8 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod9 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+}
+internal interface UniffiCallbackInterfaceCloudStorageAccessMethod10 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceConnectivityAccessMethod0 : com.sun.jna.Callback {
@@ -717,7 +720,7 @@ internal interface UniffiCallbackInterfacePasskeyProviderMethod3 : com.sun.jna.C
 internal interface UniffiCallbackInterfacePasskeyProviderMethod4 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "deleteNamespace", "listNamespaces", "listWalletFiles", "isBackupUploaded", "overallSyncHealth")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "uploadMasterKeyBackup", "uploadWalletBackup", "downloadMasterKeyBackup", "downloadWalletBackup", "deleteWalletBackup", "deleteNamespace", "listNamespaces", "listWalletFiles", "listWalletFilesSnapshot", "isBackupUploaded", "overallSyncHealth")
 internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
@@ -729,8 +732,9 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
     @JvmField internal var `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
     @JvmField internal var `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
     @JvmField internal var `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-    @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
-    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
+    @JvmField internal var `listWalletFilesSnapshot`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+    @JvmField internal var `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
+    @JvmField internal var `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod10? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -743,9 +747,10 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `deleteNamespace`: UniffiCallbackInterfaceCloudStorageAccessMethod5? = null,
         `listNamespaces`: UniffiCallbackInterfaceCloudStorageAccessMethod6? = null,
         `listWalletFiles`: UniffiCallbackInterfaceCloudStorageAccessMethod7? = null,
-        `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
-        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
-    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`deleteNamespace`,`listNamespaces`,`listWalletFiles`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
+        `listWalletFilesSnapshot`: UniffiCallbackInterfaceCloudStorageAccessMethod8? = null,
+        `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod9? = null,
+        `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod10? = null,
+    ): UniffiVTableCallbackInterfaceCloudStorageAccess(`uniffiFree`,`uniffiClone`,`uploadMasterKeyBackup`,`uploadWalletBackup`,`downloadMasterKeyBackup`,`downloadWalletBackup`,`deleteWalletBackup`,`deleteNamespace`,`listNamespaces`,`listWalletFiles`,`listWalletFilesSnapshot`,`isBackupUploaded`,`overallSyncHealth`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceCloudStorageAccess) {
         `uniffiFree` = other.`uniffiFree`
@@ -758,6 +763,7 @@ internal open class UniffiVTableCallbackInterfaceCloudStorageAccess(
         `deleteNamespace` = other.`deleteNamespace`
         `listNamespaces` = other.`listNamespaces`
         `listWalletFiles` = other.`listWalletFiles`
+        `listWalletFilesSnapshot` = other.`listWalletFilesSnapshot`
         `isBackupUploaded` = other.`isBackupUploaded`
         `overallSyncHealth` = other.`overallSyncHealth`
     }
@@ -915,6 +921,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_namespaces(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files_snapshot(
     ): Short
     external fun uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded(
     ): Short
@@ -1196,10 +1204,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 25910.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 9032.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files_snapshot() != 37594.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 49127.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 49275.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 41055.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918.toShort()) {
@@ -2985,6 +2996,47 @@ public object FfiConverterTypePasskeyAccess: FfiConverter<PasskeyAccess, Long> {
 
 
 /**
+ * Fast provider inventory that may still require an authoritative follow-up
+ */
+data class CloudStorageInventorySnapshot (
+    var `names`: List<kotlin.String>
+    ,
+    var `isComplete`: kotlin.Boolean
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudStorageInventorySnapshot: FfiConverterRustBuffer<CloudStorageInventorySnapshot> {
+    override fun read(buf: ByteBuffer): CloudStorageInventorySnapshot {
+        return CloudStorageInventorySnapshot(
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudStorageInventorySnapshot) = (
+            FfiConverterSequenceString.allocationSize(value.`names`) +
+            FfiConverterBoolean.allocationSize(value.`isComplete`)
+    )
+
+    override fun write(value: CloudStorageInventorySnapshot, buf: ByteBuffer) {
+            FfiConverterSequenceString.write(value.`names`, buf)
+            FfiConverterBoolean.write(value.`isComplete`, buf)
+    }
+}
+
+
+
+/**
  * Result from discovering a synced passkey during restore
  */
 data class DiscoveredPasskeyResult (
@@ -3874,6 +3926,9 @@ sealed class PasskeyFailureReason {
     object PlatformAuthorizationFailed : PasskeyFailureReason()
 
 
+    object PlatformAuthorizationFailedAfterPresentation : PasskeyFailureReason()
+
+
     object InvalidResponse : PasskeyFailureReason()
 
 
@@ -3948,17 +4003,18 @@ public object FfiConverterTypePasskeyFailureReason : FfiConverterRustBuffer<Pass
     override fun read(buf: ByteBuffer): PasskeyFailureReason {
         return when(buf.getInt()) {
             1 -> PasskeyFailureReason.PlatformAuthorizationFailed
-            2 -> PasskeyFailureReason.InvalidResponse
-            3 -> PasskeyFailureReason.NotHandled
-            4 -> PasskeyFailureReason.Interrupted
-            5 -> PasskeyFailureReason.ProviderConfiguration
-            6 -> PasskeyFailureReason.NoCreateOption
-            7 -> PasskeyFailureReason.DeviceNotConfigured
-            8 -> PasskeyFailureReason.UnexpectedCredentialType
-            9 -> PasskeyFailureReason.MissingCredentialId
-            10 -> PasskeyFailureReason.MalformedResponse
-            11 -> PasskeyFailureReason.TimedOut
-            12 -> PasskeyFailureReason.Unknown(
+            2 -> PasskeyFailureReason.PlatformAuthorizationFailedAfterPresentation
+            3 -> PasskeyFailureReason.InvalidResponse
+            4 -> PasskeyFailureReason.NotHandled
+            5 -> PasskeyFailureReason.Interrupted
+            6 -> PasskeyFailureReason.ProviderConfiguration
+            7 -> PasskeyFailureReason.NoCreateOption
+            8 -> PasskeyFailureReason.DeviceNotConfigured
+            9 -> PasskeyFailureReason.UnexpectedCredentialType
+            10 -> PasskeyFailureReason.MissingCredentialId
+            11 -> PasskeyFailureReason.MalformedResponse
+            12 -> PasskeyFailureReason.TimedOut
+            13 -> PasskeyFailureReason.Unknown(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -3967,6 +4023,12 @@ public object FfiConverterTypePasskeyFailureReason : FfiConverterRustBuffer<Pass
 
     override fun allocationSize(value: PasskeyFailureReason): ULong = when(value) {
         is PasskeyFailureReason.PlatformAuthorizationFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is PasskeyFailureReason.PlatformAuthorizationFailedAfterPresentation -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -4047,48 +4109,52 @@ public object FfiConverterTypePasskeyFailureReason : FfiConverterRustBuffer<Pass
                 buf.putInt(1)
                 Unit
             }
-            is PasskeyFailureReason.InvalidResponse -> {
+            is PasskeyFailureReason.PlatformAuthorizationFailedAfterPresentation -> {
                 buf.putInt(2)
                 Unit
             }
-            is PasskeyFailureReason.NotHandled -> {
+            is PasskeyFailureReason.InvalidResponse -> {
                 buf.putInt(3)
                 Unit
             }
-            is PasskeyFailureReason.Interrupted -> {
+            is PasskeyFailureReason.NotHandled -> {
                 buf.putInt(4)
                 Unit
             }
-            is PasskeyFailureReason.ProviderConfiguration -> {
+            is PasskeyFailureReason.Interrupted -> {
                 buf.putInt(5)
                 Unit
             }
-            is PasskeyFailureReason.NoCreateOption -> {
+            is PasskeyFailureReason.ProviderConfiguration -> {
                 buf.putInt(6)
                 Unit
             }
-            is PasskeyFailureReason.DeviceNotConfigured -> {
+            is PasskeyFailureReason.NoCreateOption -> {
                 buf.putInt(7)
                 Unit
             }
-            is PasskeyFailureReason.UnexpectedCredentialType -> {
+            is PasskeyFailureReason.DeviceNotConfigured -> {
                 buf.putInt(8)
                 Unit
             }
-            is PasskeyFailureReason.MissingCredentialId -> {
+            is PasskeyFailureReason.UnexpectedCredentialType -> {
                 buf.putInt(9)
                 Unit
             }
-            is PasskeyFailureReason.MalformedResponse -> {
+            is PasskeyFailureReason.MissingCredentialId -> {
                 buf.putInt(10)
                 Unit
             }
-            is PasskeyFailureReason.TimedOut -> {
+            is PasskeyFailureReason.MalformedResponse -> {
                 buf.putInt(11)
                 Unit
             }
-            is PasskeyFailureReason.Unknown -> {
+            is PasskeyFailureReason.TimedOut -> {
                 buf.putInt(12)
+                Unit
+            }
+            is PasskeyFailureReason.Unknown -> {
+                buf.putInt(13)
                 FfiConverterString.write(value.`diagnosticMessage`, buf)
                 Unit
             }
@@ -4203,6 +4269,11 @@ public interface CloudStorageAccess {
      * List wallet backup file names for a namespace and access policy
      */
     suspend fun `listWalletFiles`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): List<kotlin.String>
+
+    /**
+     * List wallet backup names without waiting for provider reconciliation
+     */
+    suspend fun `listWalletFilesSnapshot`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): CloudStorageInventorySnapshot
 
     /**
      * Check whether a blob has been fully uploaded to iCloud
@@ -4499,7 +4570,42 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
-    internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
+    internal object `listWalletFilesSnapshot`: UniffiCallbackInterfaceCloudStorageAccessMethod8 {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+            val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
+            val makeCall = suspend { ->
+                uniffiObj.`listWalletFilesSnapshot`(
+                    FfiConverterString.lift(`namespace`),
+                    FfiConverterTypeCloudAccessPolicy.lift(`policy`),
+                )
+            }
+            val uniffiHandleSuccess = { returnValue: CloudStorageInventorySnapshot ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeCloudStorageInventorySnapshot.lower(returnValue),
+                    UniffiRustCallStatus.ByValue()
+                )
+                uniffiResult.write()
+                uniffiFutureCallback.callback(uniffiCallbackData, uniffiResult)
+            }
+            val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
+                uniffiFutureCallback.callback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
+                        callStatus,
+                    ),
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall,
+                uniffiHandleSuccess,
+                uniffiHandleError,
+                { e: CloudStorageException -> FfiConverterTypeCloudStorageError.lower(e) },
+                uniffiOutDroppedCallback
+            )
+        }
+    }
+    internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod9 {
         override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -4536,7 +4642,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             )
         }
     }
-    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod9 {
+    internal object `overallSyncHealth`: UniffiCallbackInterfaceCloudStorageAccessMethod10 {
         override fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
@@ -4593,6 +4699,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
         `deleteNamespace`,
         `listNamespaces`,
         `listWalletFiles`,
+        `listWalletFilesSnapshot`,
         `isBackupUploaded`,
         `overallSyncHealth`,
     )

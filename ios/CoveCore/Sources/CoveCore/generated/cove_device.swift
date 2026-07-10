@@ -1208,6 +1208,63 @@ public func FfiConverterTypePasskeyAccess_lower(_ value: PasskeyAccess) -> UInt6
 
 
 /**
+ * Fast provider inventory that may still require an authoritative follow-up
+ */
+public struct CloudStorageInventorySnapshot: Equatable, Hashable {
+    public var names: [String]
+    public var isComplete: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(names: [String], isComplete: Bool) {
+        self.names = names
+        self.isComplete = isComplete
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudStorageInventorySnapshot: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudStorageInventorySnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudStorageInventorySnapshot {
+        return
+            try CloudStorageInventorySnapshot(
+                names: FfiConverterSequenceString.read(from: &buf),
+                isComplete: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudStorageInventorySnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.names, into: &buf)
+        FfiConverterBool.write(value.isComplete, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudStorageInventorySnapshot_lift(_ buf: RustBuffer) throws -> CloudStorageInventorySnapshot {
+    return try FfiConverterTypeCloudStorageInventorySnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudStorageInventorySnapshot_lower(_ value: CloudStorageInventorySnapshot) -> RustBuffer {
+    return FfiConverterTypeCloudStorageInventorySnapshot.lower(value)
+}
+
+
+/**
  * Result from discovering a synced passkey during restore
  */
 public struct DiscoveredPasskeyResult: Equatable, Hashable {
@@ -2078,6 +2135,7 @@ public func FfiConverterTypePasskeyError_lower(_ value: PasskeyError) -> RustBuf
 public enum PasskeyFailureReason: Equatable, Hashable, CustomStringConvertible {
 
     case platformAuthorizationFailed
+    case platformAuthorizationFailedAfterPresentation
     case invalidResponse
     case notHandled
     case interrupted
@@ -2124,27 +2182,29 @@ public struct FfiConverterTypePasskeyFailureReason: FfiConverterRustBuffer {
 
         case 1: return .platformAuthorizationFailed
 
-        case 2: return .invalidResponse
+        case 2: return .platformAuthorizationFailedAfterPresentation
 
-        case 3: return .notHandled
+        case 3: return .invalidResponse
 
-        case 4: return .interrupted
+        case 4: return .notHandled
 
-        case 5: return .providerConfiguration
+        case 5: return .interrupted
 
-        case 6: return .noCreateOption
+        case 6: return .providerConfiguration
 
-        case 7: return .deviceNotConfigured
+        case 7: return .noCreateOption
 
-        case 8: return .unexpectedCredentialType
+        case 8: return .deviceNotConfigured
 
-        case 9: return .missingCredentialId
+        case 9: return .unexpectedCredentialType
 
-        case 10: return .malformedResponse
+        case 10: return .missingCredentialId
 
-        case 11: return .timedOut
+        case 11: return .malformedResponse
 
-        case 12: return .unknown(diagnosticMessage: try FfiConverterString.read(from: &buf)
+        case 12: return .timedOut
+
+        case 13: return .unknown(diagnosticMessage: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2159,48 +2219,52 @@ public struct FfiConverterTypePasskeyFailureReason: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .invalidResponse:
+        case .platformAuthorizationFailedAfterPresentation:
             writeInt(&buf, Int32(2))
 
 
-        case .notHandled:
+        case .invalidResponse:
             writeInt(&buf, Int32(3))
 
 
-        case .interrupted:
+        case .notHandled:
             writeInt(&buf, Int32(4))
 
 
-        case .providerConfiguration:
+        case .interrupted:
             writeInt(&buf, Int32(5))
 
 
-        case .noCreateOption:
+        case .providerConfiguration:
             writeInt(&buf, Int32(6))
 
 
-        case .deviceNotConfigured:
+        case .noCreateOption:
             writeInt(&buf, Int32(7))
 
 
-        case .unexpectedCredentialType:
+        case .deviceNotConfigured:
             writeInt(&buf, Int32(8))
 
 
-        case .missingCredentialId:
+        case .unexpectedCredentialType:
             writeInt(&buf, Int32(9))
 
 
-        case .malformedResponse:
+        case .missingCredentialId:
             writeInt(&buf, Int32(10))
 
 
-        case .timedOut:
+        case .malformedResponse:
             writeInt(&buf, Int32(11))
 
 
-        case let .unknown(diagnosticMessage):
+        case .timedOut:
             writeInt(&buf, Int32(12))
+
+
+        case let .unknown(diagnosticMessage):
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(diagnosticMessage, into: &buf)
 
         }
@@ -2399,6 +2463,11 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
      * List wallet backup file names for a namespace and access policy
      */
     func listWalletFiles(namespace: String, policy: CloudAccessPolicy) async throws  -> [String]
+
+    /**
+     * List wallet backup names without waiting for provider reconciliation
+     */
+    func listWalletFilesSnapshot(namespace: String, policy: CloudAccessPolicy) async throws  -> CloudStorageInventorySnapshot
 
     /**
      * Check whether a blob has been fully uploaded to iCloud
@@ -2781,6 +2850,51 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                     uniffiCallbackData,
                     UniffiForeignFutureResultRustBuffer(
                         returnValue: FfiConverterSequenceString.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            uniffiTraitInterfaceCallAsyncWithError(
+                makeCall: makeCall,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
+                lowerError: FfiConverterTypeCloudStorageError_lower,
+                droppedCallback: uniffiOutDroppedCallback
+            )
+        },
+        listWalletFilesSnapshot: { (
+            uniffiHandle: UInt64,
+            namespace: RustBuffer,
+            policy: RustBuffer,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
+        ) in
+            let makeCall = {
+                () async throws -> CloudStorageInventorySnapshot in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try await uniffiObj.listWalletFilesSnapshot(
+                     namespace: try FfiConverterString.lift(namespace),
+                     policy: try FfiConverterTypeCloudAccessPolicy_lift(policy)
+                )
+            }
+
+            let uniffiHandleSuccess = { (returnValue: CloudStorageInventorySnapshot) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeCloudStorageInventorySnapshot_lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -4013,10 +4127,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files() != 25910) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 9032) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files_snapshot() != 37594) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 49127) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 49275) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 41055) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_connectivityaccess_is_connected() != 15918) {
