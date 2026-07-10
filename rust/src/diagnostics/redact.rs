@@ -178,15 +178,15 @@ impl Redactor {
             let run_len =
                 token[run_start..].bytes().take_while(|byte| byte.is_ascii_hexdigit()).count();
             let run_end = run_start + run_len;
-            let mut run_cursor = run_start;
 
-            while run_cursor + TXID_HEX_LEN <= run_end {
-                let txid = &token[run_cursor..run_cursor + TXID_HEX_LEN];
-                output.push_str(&self.placeholder_for(SecretKind::TransactionId, txid));
-                run_cursor += TXID_HEX_LEN;
+            if run_len >= TXID_HEX_LEN {
+                output.push_str(
+                    &self.placeholder_for(SecretKind::TransactionId, &token[run_start..run_end]),
+                );
+            } else {
+                output.push_str(&token[run_start..run_end]);
             }
 
-            output.push_str(&token[run_cursor..run_end]);
             cursor = run_end;
         }
 
@@ -694,6 +694,18 @@ mod tests {
 
         assert_eq!(output.matches("<redacted-transaction-id-1>").count(), 2);
         assert!(output.contains("payment<redacted-transaction-id-1>suffix"));
+        assert!(!output.contains(&txid));
+    }
+
+    #[test]
+    fn redacts_entire_hex_run_when_txid_boundaries_are_ambiguous() {
+        let mut redactor = redactor_without_paths();
+        let txid = "4d3c2b1a".repeat(8);
+        let input = format!("ref{txid}dead");
+
+        let output = redactor.redact(&input);
+
+        assert_eq!(output, "r<redacted-transaction-id-1>");
         assert!(!output.contains(&txid));
     }
 
