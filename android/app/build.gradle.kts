@@ -10,6 +10,12 @@ android {
     namespace = "org.bitcoinppl.cove"
     compileSdk = 36
     experimentalProperties["android.experimental.enableScreenshotTest"] = true
+    val storeReleaseArm64ApkOnly =
+        providers
+            .gradleProperty("cove.storeReleaseArm64ApkOnly")
+            .map(String::toBoolean)
+            .orElse(false)
+            .get()
 
     defaultConfig {
         applicationId = "org.bitcoinppl.cove"
@@ -22,8 +28,11 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        // abi splits conflict with ndk abiFilters, so split APK builds own ABI selection
+        if (!storeReleaseArm64ApkOnly) {
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            }
         }
     }
 
@@ -51,6 +60,15 @@ android {
             ndk {
                 debugSymbolLevel = "FULL"
             }
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = storeReleaseArm64ApkOnly
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 
