@@ -376,6 +376,30 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testMetadataIndexRetriesAfterQueryStartFailure() async throws {
+        let source = MetadataQuerySourceSpy(startResults: [false, true])
+        let index = ICloudMetadataIndex(source: source)
+
+        do {
+            _ = try await index.currentOrInitialRecords(timeout: 1)
+            XCTFail("expected first query startup to fail")
+        } catch let error as ICloudMetadataIndexError {
+            XCTAssertEqual(error, .startFailed)
+        }
+
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let retry = Task { try await index.currentOrInitialRecords(timeout: 1) }
+
+        await Task.yield()
+        XCTAssertEqual(source.startCount, 2)
+        source.send(.finishedGathering([record]))
+
+        let records = try await retry.value
+        XCTAssertEqual(records, [record])
+        XCTAssertEqual(source.startCount, 2)
+    }
+
     func testMetadataProjectionFiltersByParentAndDirectChild() {
         let records = [
             metadataRecord(name: "alpha", parentPath: "/cloud"),
@@ -506,18 +530,26 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
 
 @MainActor
 private final class MetadataQuerySourceSpy: ICloudMetadataQuerySource {
-    private let startsSuccessfully: Bool
+    private let startResults: [Bool]
     private var onEvent: (@MainActor (ICloudMetadataQueryEvent) -> Void)?
     private(set) var startCount = 0
 
     init(startsSuccessfully: Bool = true) {
-        self.startsSuccessfully = startsSuccessfully
+        startResults = [startsSuccessfully]
+    }
+
+    init(startResults: [Bool]) {
+        precondition(!startResults.isEmpty)
+        self.startResults = startResults
     }
 
     func start(onEvent: @escaping @MainActor (ICloudMetadataQueryEvent) -> Void) -> Bool {
+        let result = startResults[min(startCount, startResults.count - 1)]
         startCount += 1
+        guard result else { return false }
+
         self.onEvent = onEvent
-        return startsSuccessfully
+        return true
     }
 
     func send(_ event: ICloudMetadataQueryEvent) {

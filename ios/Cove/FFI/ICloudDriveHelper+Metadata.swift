@@ -154,7 +154,6 @@ final class ICloudMetadataIndex {
         case idle
         case gathering
         case live
-        case failed
     }
 
     private struct SnapshotWaiter {
@@ -183,13 +182,11 @@ final class ICloudMetadataIndex {
 
     func currentOrInitialRecords(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
         try Task.checkCancellation()
-        startIfNeeded()
+        try startIfNeeded()
 
         switch phase {
         case .live:
             return records
-        case .failed:
-            throw ICloudMetadataIndexError.startFailed
         case .idle, .gathering:
             return try await waitForInitialSnapshot(timeout: timeout)
         }
@@ -230,13 +227,10 @@ final class ICloudMetadataIndex {
         timeout: TimeInterval
     ) async throws -> ICloudMetadataRecord {
         try Task.checkCancellation()
-        startIfNeeded()
+        try startIfNeeded()
 
         if let item = Self.item(named: name, parentPath: parentPath, in: records) {
             return item
-        }
-        if case .failed = phase {
-            throw ICloudMetadataIndexError.startFailed
         }
 
         let id = UUID()
@@ -265,7 +259,7 @@ final class ICloudMetadataIndex {
     }
 
     func addObserver(_ observer: @escaping @MainActor @Sendable () -> Void) -> UUID {
-        startIfNeeded()
+        try? startIfNeeded()
         let id = UUID()
         observers[id] = observer
         return id
@@ -275,7 +269,7 @@ final class ICloudMetadataIndex {
         observers.removeValue(forKey: id)
     }
 
-    private func startIfNeeded() {
+    private func startIfNeeded() throws {
         guard case .idle = phase else { return }
 
         phase = .gathering
@@ -284,8 +278,8 @@ final class ICloudMetadataIndex {
         }
         guard !started else { return }
 
-        phase = .failed
-        failAllWaiters(with: ICloudMetadataIndexError.startFailed)
+        phase = .idle
+        throw ICloudMetadataIndexError.startFailed
     }
 
     private func apply(_ event: ICloudMetadataQueryEvent) {
@@ -378,22 +372,6 @@ final class ICloudMetadataIndex {
         guard let waiter = itemWaiters.removeValue(forKey: id) else { return }
         waiter.timeoutTask.cancel()
         waiter.continuation.resume(throwing: CancellationError())
-    }
-
-    private func failAllWaiters(with error: Error) {
-        let snapshotWaiters = snapshotWaiters.values
-        self.snapshotWaiters.removeAll()
-        for waiter in snapshotWaiters {
-            waiter.timeoutTask.cancel()
-            waiter.continuation.resume(throwing: error)
-        }
-
-        let itemWaiters = itemWaiters.values
-        self.itemWaiters.removeAll()
-        for waiter in itemWaiters {
-            waiter.timeoutTask.cancel()
-            waiter.continuation.resume(throwing: error)
-        }
     }
 
     private static func item(
