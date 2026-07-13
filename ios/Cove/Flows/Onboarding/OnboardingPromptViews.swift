@@ -31,7 +31,7 @@ struct CloudCheckContent: View {
 
             Spacer(minLength: 0)
 
-            Button("Continue Setup", action: onContinue)
+            Button("Cancel and Setup as New", action: onContinue)
                 .buttonStyle(OnboardingSecondaryButtonStyle())
         }
         .padding(.horizontal, 28)
