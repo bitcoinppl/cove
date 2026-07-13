@@ -46,7 +46,11 @@ final class KeyboardObserver {
     }
 
     deinit {
-        if let showObserver { NotificationCenter.default.removeObserver(showObserver) }
-        if let hideObserver { NotificationCenter.default.removeObserver(hideObserver) }
+        if let showObserver {
+            NotificationCenter.default.removeObserver(showObserver)
+        }
+        if let hideObserver {
+            NotificationCenter.default.removeObserver(hideObserver)
+        }
     }
 }

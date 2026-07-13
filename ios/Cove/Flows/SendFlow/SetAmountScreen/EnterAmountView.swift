@@ -39,7 +39,9 @@ struct EnterAmountView: View {
     }
 
     var offset: CGFloat {
-        if metadata.fiatOrBtc == .fiat { return 0 }
+        if metadata.fiatOrBtc == .fiat {
+            return 0
+        }
         return metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
     }
 
@@ -160,7 +162,9 @@ struct EnterAmountView: View {
             }
         }
         .onTapGesture {
-            if metadata.fiatOrBtc == .btc, app.prices == nil { return }
+            if metadata.fiatOrBtc == .btc, app.prices == nil {
+                return
+            }
             manager.dispatch(action: .toggleFiatOrBtc)
         }
     }

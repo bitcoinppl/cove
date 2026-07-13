@@ -20,28 +20,26 @@ struct NewPinView: View {
     @State private var pinState: PinState = .new
 
     var body: some View {
-        Group {
-            switch pinState {
-            case .new:
-                NumberPadPinView(
-                    title: "Enter New PIN",
-                    isPinCorrect: { _ in true },
-                    backAction: backAction,
-                    onUnlock: { enteredPin in
-                        withAnimation {
-                            pinState = .confirm(enteredPin)
-                        }
+        switch pinState {
+        case .new:
+            NumberPadPinView(
+                title: "Enter New PIN",
+                isPinCorrect: { _ in true },
+                backAction: backAction,
+                onUnlock: { enteredPin in
+                    withAnimation {
+                        pinState = .confirm(enteredPin)
                     }
-                )
-            case let .confirm(pinToConfirm):
-                NumberPadPinView(
-                    title: "Confirm New PIN",
-                    isPinCorrect: { $0 == pinToConfirm },
-                    showPin: false,
-                    backAction: backAction,
-                    onUnlock: onComplete
-                )
-            }
+                }
+            )
+        case let .confirm(pinToConfirm):
+            NumberPadPinView(
+                title: "Confirm New PIN",
+                isPinCorrect: { $0 == pinToConfirm },
+                showPin: false,
+                backAction: backAction,
+                onUnlock: onComplete
+            )
         }
     }
 }

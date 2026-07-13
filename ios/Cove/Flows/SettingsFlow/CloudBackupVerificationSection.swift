@@ -4,7 +4,9 @@ import SwiftUI
 
 private extension CloudBackupVerificationState? {
     var isVerifying: Bool {
-        if case .running = self { return true }
+        if case .running = self {
+            return true
+        }
         return false
     }
 
@@ -18,7 +20,9 @@ private extension CloudBackupVerificationState? {
 
 private extension CloudBackupPasskeyRepairState? {
     var isRecovering: Bool {
-        if case .running = self { return true }
+        if case .running = self {
+            return true
+        }
         return false
     }
 }
@@ -262,29 +266,28 @@ struct VerificationSection: View {
         }
     }
 
+    @ViewBuilder
     private var syncButton: some View {
-        Group {
-            Button {
-                manager.dispatch(action: .syncUnsynced)
-            } label: {
-                HStack {
-                    if case .syncing = manager.syncState {
-                        ProgressView()
-                            .padding(.trailing, 8)
-                        Text("Syncing...")
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        Text("Sync Now")
-                    }
+        Button {
+            manager.dispatch(action: .syncUnsynced)
+        } label: {
+            HStack {
+                if case .syncing = manager.syncState {
+                    ProgressView()
+                        .padding(.trailing, 8)
+                    Text("Syncing...")
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("Sync Now")
                 }
             }
-            .disabled(manager.syncState == .syncing)
+        }
+        .disabled(manager.syncState == .syncing)
 
-            if case let .failed(error) = manager.syncState {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color.statusError)
-            }
+        if case let .failed(error) = manager.syncState {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(Color.statusError)
         }
     }
 

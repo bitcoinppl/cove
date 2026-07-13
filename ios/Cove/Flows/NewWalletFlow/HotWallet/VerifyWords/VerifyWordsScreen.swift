@@ -378,7 +378,9 @@ struct VerifyWordsScreen: View {
                 }
             }
 
-            if !isMiniDevice { Spacer() }
+            if !isMiniDevice {
+                Spacer()
+            }
 
             Divider()
                 .overlay(.coveLightGray.opacity(0.50))
@@ -414,7 +416,9 @@ struct VerifyWordsScreen: View {
     }
 
     private var isReturning: Bool {
-        if case .returning = checkState { return true }
+        if case .returning = checkState {
+            return true
+        }
         return false
     }
 }

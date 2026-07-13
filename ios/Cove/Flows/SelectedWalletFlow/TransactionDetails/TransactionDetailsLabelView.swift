@@ -149,7 +149,9 @@ struct TransactionDetailsLabelView: View {
         .font(.footnote)
         .onChange(of: isFocused, initial: false) { old, new in
             // lost focused
-            if old, !new { saveLabel() }
+            if old, !new {
+                saveLabel()
+            }
         }
     }
 }

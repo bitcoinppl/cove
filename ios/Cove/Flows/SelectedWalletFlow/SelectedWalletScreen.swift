@@ -63,7 +63,9 @@ struct SelectedWalletScreen: View {
     }
 
     private var iOS26OrLater: Bool {
-        if #available(iOS 26.0, *) { return true }
+        if #available(iOS 26.0, *) {
+            return true
+        }
         return false
     }
 
@@ -458,7 +460,9 @@ struct SelectedWalletScreen: View {
 
     func handleScrollToTransaction(proxy: ScrollViewProxy) {
         guard let targetId = manager.scrolledTransactionId else { return }
-        if case .loading = manager.loadState { return }
+        if case .loading = manager.loadState {
+            return
+        }
 
         Task {
             await MainActor.run {
@@ -466,7 +470,9 @@ struct SelectedWalletScreen: View {
             }
 
             try? await Task.sleep(for: .milliseconds(500))
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                return
+            }
             await MainActor.run { manager.scrolledTransactionId = nil }
         }
     }
@@ -594,35 +600,33 @@ struct VerifyReminder: View {
     let isVerified: Bool
 
     var body: some View {
-        Group {
-            if !isVerified {
-                Button(action: {
-                    navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
-                }) {
-                    HStack(spacing: 20) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.red.opacity(0.85))
-                            .fontWeight(.semibold)
+        if !isVerified {
+            Button(action: {
+                navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
+            }) {
+                HStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.red.opacity(0.85))
+                        .fontWeight(.semibold)
 
-                        Text("backup your wallet")
-                            .fontWeight(.semibold)
-                            .font(.caption)
+                    Text("backup your wallet")
+                        .fontWeight(.semibold)
+                        .font(.caption)
 
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundStyle(.red.opacity(0.85))
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        LinearGradient(
-                            colors: [.orange.opacity(0.67), .yellow.opacity(0.96)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .foregroundStyle(.black.opacity(0.66))
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.red.opacity(0.85))
+                        .fontWeight(.semibold)
                 }
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(
+                        colors: [.orange.opacity(0.67), .yellow.opacity(0.96)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .foregroundStyle(.black.opacity(0.66))
             }
         }
     }

@@ -21,42 +21,40 @@ struct ChangePinView: View {
     @State private var pinState: PinState = .current
 
     var body: some View {
-        Group {
-            switch pinState {
-            case .current:
-                NumberPadPinView(
-                    title: "Enter Current PIN",
-                    isPinCorrect: isPinCorrect,
-                    showPin: false,
-                    backAction: backAction,
-                    onUnlock: { _ in
-                        withAnimation {
-                            pinState = .new
-                        }
+        switch pinState {
+        case .current:
+            NumberPadPinView(
+                title: "Enter Current PIN",
+                isPinCorrect: isPinCorrect,
+                showPin: false,
+                backAction: backAction,
+                onUnlock: { _ in
+                    withAnimation {
+                        pinState = .new
                     }
-                )
+                }
+            )
 
-            case .new:
-                NumberPadPinView(
-                    title: "Enter new PIN",
-                    isPinCorrect: { _ in true },
-                    backAction: backAction,
-                    onUnlock: { enteredPin in
-                        withAnimation {
-                            pinState = .confirm(enteredPin)
-                        }
+        case .new:
+            NumberPadPinView(
+                title: "Enter new PIN",
+                isPinCorrect: { _ in true },
+                backAction: backAction,
+                onUnlock: { enteredPin in
+                    withAnimation {
+                        pinState = .confirm(enteredPin)
                     }
-                )
+                }
+            )
 
-            case let .confirm(pinToConfirm):
-                NumberPadPinView(
-                    title: "Confirm New PIN",
-                    isPinCorrect: { $0 == pinToConfirm },
-                    showPin: false,
-                    backAction: backAction,
-                    onUnlock: onComplete
-                )
-            }
+        case let .confirm(pinToConfirm):
+            NumberPadPinView(
+                title: "Confirm New PIN",
+                isPinCorrect: { $0 == pinToConfirm },
+                showPin: false,
+                backAction: backAction,
+                onUnlock: onComplete
+            )
         }
     }
 }

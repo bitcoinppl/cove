@@ -487,7 +487,11 @@ struct HotWalletImportScreen: View {
     private var showingAlert: Binding<Bool> {
         Binding(
             get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
+            set: {
+                if !$0 {
+                    alertState = .none
+                }
+            }
         )
     }
 

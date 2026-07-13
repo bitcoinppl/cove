@@ -47,10 +47,14 @@ struct SwipeToSendView: View {
 
     func onChangeSendState(_: SendState, _ state: SendState) {
         // set to full
-        if state != .idle { offset = maxOffset }
+        if state != .idle {
+            offset = maxOffset
+        }
 
         // reset
-        if state == .idle { offset = 0 }
+        if state == .idle {
+            offset = 0
+        }
     }
 
     var body: some View {

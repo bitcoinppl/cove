@@ -39,8 +39,12 @@ struct SettingsRow: View {
         .padding(.vertical, 1)
         .contentShape(Rectangle())
         .onTapGesture {
-            if let onTapGesture { return onTapGesture() }
-            if let route { return app.pushRoute(Route.settings(route)) }
+            if let onTapGesture {
+                return onTapGesture()
+            }
+            if let route {
+                return app.pushRoute(Route.settings(route))
+            }
         }
     }
 }

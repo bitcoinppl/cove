@@ -9,7 +9,9 @@ import CoveCore
 
 extension Address {
     static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError> {
-        if address.isEmpty { return .failure(AddressError.EmptyAddress) }
+        if address.isEmpty {
+            return .failure(AddressError.EmptyAddress)
+        }
 
         if let network {
             return Result { try addressIsValidForNetwork(address: address, network: network) }

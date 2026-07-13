@@ -166,7 +166,9 @@ struct NumberPadPinView: View {
 
                 // 0 and Back Button
                 Button(action: {
-                    if !pin.isEmpty { pin.removeLast() }
+                    if !pin.isEmpty {
+                        pin.removeLast()
+                    }
                 }, label: {
                     Image(systemName: "delete.backward")
                         .font(.title)

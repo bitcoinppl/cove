@@ -84,7 +84,9 @@ private let navigationSettleDelayMs = 800
     }
 
     private static func requireBootstrapComplete() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" { return }
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            return
+        }
 
         let step = bootstrapProgress()
         guard step == .complete else {

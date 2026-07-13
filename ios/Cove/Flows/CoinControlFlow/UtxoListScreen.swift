@@ -73,7 +73,9 @@ struct UtxoListScreen: View {
     }
 
     var continueText: String {
-        if manager.selected.count <= 1 { return "Continue" }
+        if manager.selected.count <= 1 {
+            return "Continue"
+        }
         return "Continue (\(manager.selected.count))"
     }
 
@@ -261,7 +263,9 @@ struct UtxoListScreen: View {
     private func sortButton(for key: CoinControlListSortKey) -> some View {
         let _ = manager.sort
         let isSelected = {
-            if case .selected = manager.rust.buttonPresentation(button: key) { return true }
+            if case .selected = manager.rust.buttonPresentation(button: key) {
+                return true
+            }
             return false
         }()
 

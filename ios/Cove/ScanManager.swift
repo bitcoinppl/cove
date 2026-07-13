@@ -170,7 +170,9 @@ extension ScanManager {
             Log.debug("Imported Wallet: \(id)")
             app.alertState = TaggedItem(.importedSuccessfully)
 
-            if app.walletManager?.id != id { try app.selectWalletOrThrow(id) }
+            if app.walletManager?.id != id {
+                try app.selectWalletOrThrow(id)
+            }
 
             if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
                 try app.walletManager?.rust.setWalletType(walletType: .cold)

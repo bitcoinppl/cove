@@ -224,9 +224,15 @@ struct SendFlowHardwareScreen: View {
             )
             .onAppear {
                 let total = details.outputs().count + details.inputs().count
-                if total == 3 { inputOutputDetailsPresentationSize = .height(300) }
-                if total > 3 { inputOutputDetailsPresentationSize = .height(400) }
-                if total > 5 { inputOutputDetailsPresentationSize = .height(500) }
+                if total == 3 {
+                    inputOutputDetailsPresentationSize = .height(300)
+                }
+                if total > 3 {
+                    inputOutputDetailsPresentationSize = .height(400)
+                }
+                if total > 5 {
+                    inputOutputDetailsPresentationSize = .height(500)
+                }
             }
             .toolbar { Toolbar }
         }
@@ -403,7 +409,9 @@ struct SendFlowHardwareScreen: View {
         Binding(
             get: { confirmationState != .none },
             set: { presented in
-                if !presented { confirmationState = .none }
+                if !presented {
+                    confirmationState = .none
+                }
             }
         )
     }
@@ -502,7 +510,11 @@ struct SendFlowHardwareScreen: View {
     var showingAlert: Binding<Bool> {
         Binding(
             get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
+            set: {
+                if !$0 {
+                    alertState = .none
+                }
+            }
         )
     }
 

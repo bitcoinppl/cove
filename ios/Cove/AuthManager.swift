@@ -80,7 +80,9 @@ enum UnlockMode {
     @MainActor
     public func handleAndReturnUnlockMode(_ pin: String) -> UnlockMode {
         if AuthPin().check(pin: pin) {
-            if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
+            if Database().globalConfig().isInDecoyMode() {
+                switchToMainMode()
+            }
             unlock()
             return .main
         }

@@ -170,7 +170,11 @@ struct BackupExportView: View {
         }
         .alert("Export Failed", isPresented: .init(
             get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            set: {
+                if !$0 {
+                    errorMessage = nil
+                }
+            }
         )) {
             Button("OK") { errorMessage = nil }
         } message: {
@@ -178,7 +182,11 @@ struct BackupExportView: View {
         }
         .alert("Export Warnings", isPresented: .init(
             get: { warningMessage != nil },
-            set: { if !$0 { warningMessage = nil } }
+            set: {
+                if !$0 {
+                    warningMessage = nil
+                }
+            }
         )) {
             Button("OK") { warningMessage = nil }
         } message: {

@@ -74,17 +74,23 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var isLifecycleDisabled: Bool {
-        if case .disabled = state.lifecycle { return true }
+        if case .disabled = state.lifecycle {
+            return true
+        }
         return false
     }
 
     var isLifecycleEnabling: Bool {
-        if case .enabling = state.lifecycle { return true }
+        if case .enabling = state.lifecycle {
+            return true
+        }
         return false
     }
 
     var isLifecycleRestoring: Bool {
-        if case .restoring = state.lifecycle { return true }
+        if case .restoring = state.lifecycle {
+            return true
+        }
         return false
     }
 
@@ -157,7 +163,9 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var isDisablingCloudBackup: Bool {
-        if case .disabling = destructiveOperationState { return true }
+        if case .disabling = destructiveOperationState {
+            return true
+        }
         return false
     }
 
@@ -170,7 +178,9 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var hasPendingUploadVerification: Bool {
-        if case .awaitingUploadConfirmation = verificationState { return true }
+        if case .awaitingUploadConfirmation = verificationState {
+            return true
+        }
         return false
     }
 
@@ -179,13 +189,19 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var shouldPromptVerification: Bool {
-        if isBackgroundVerifying { return false }
-        if case .required = verificationState { return true }
+        if isBackgroundVerifying {
+            return false
+        }
+        if case .required = verificationState {
+            return true
+        }
         return false
     }
 
     var isUnverified: Bool {
-        if isBackgroundVerifying { return false }
+        if isBackgroundVerifying {
+            return false
+        }
         return shouldPromptVerification
     }
 
@@ -204,7 +220,9 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
     }
 
     var isVerificationStale: Bool {
-        if isBackgroundVerifying { return false }
+        if isBackgroundVerifying {
+            return false
+        }
         guard isCloudBackupAvailable, !isUnverified else { return false }
         guard let lastVerifiedAt else { return true }
         return Date.now.timeIntervalSince(lastVerifiedAt) >= Self.staleVerificationThreshold

@@ -9,7 +9,9 @@ struct CloudBackupDetailScreen: View {
     @State private var showReinitializeConfirmation = false
 
     private var isVerifying: Bool {
-        if case .running = manager.verificationState { return true }
+        if case .running = manager.verificationState {
+            return true
+        }
         return false
     }
 

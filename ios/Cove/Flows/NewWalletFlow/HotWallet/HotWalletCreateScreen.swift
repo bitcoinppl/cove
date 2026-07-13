@@ -45,20 +45,18 @@ struct WordsView: View {
     }
 
     var body: some View {
-        Group {
-            if sizeCategory >= .extraExtraLarge || isMiniDevice {
-                ScrollView {
-                    MainContent
-                        .frame(minHeight: screenHeight, maxHeight: .infinity)
-                }
-                .background(
-                    Color.midnightBlue
-                        .ignoresSafeArea(.all)
-                )
-
-            } else {
+        if sizeCategory >= .extraExtraLarge || isMiniDevice {
+            ScrollView {
                 MainContent
+                    .frame(minHeight: screenHeight, maxHeight: .infinity)
             }
+            .background(
+                Color.midnightBlue
+                    .ignoresSafeArea(.all)
+            )
+
+        } else {
+            MainContent
         }
     }
 

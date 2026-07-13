@@ -36,7 +36,9 @@ struct CoinControlContainer: View {
 
     @MainActor
     private func loadManager() async {
-        if walletManager != nil, manager != nil { return }
+        if walletManager != nil, manager != nil {
+            return
+        }
 
         do {
             Log.debug("Getting wallet for CoinControlRoute \(route.id())")

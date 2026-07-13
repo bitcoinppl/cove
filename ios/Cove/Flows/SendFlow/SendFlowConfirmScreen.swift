@@ -205,9 +205,13 @@ struct SendFlowConfirmScreen: View {
                 .onAppear {
                     lockingTask = Task {
                         try? await Task.sleep(for: .milliseconds(50))
-                        if Task.isCancelled { return }
+                        if Task.isCancelled {
+                            return
+                        }
 
-                        if metadata.walletType == .hot { auth.lock() }
+                        if metadata.walletType == .hot {
+                            auth.lock()
+                        }
                     }
                 }
             }
@@ -215,7 +219,9 @@ struct SendFlowConfirmScreen: View {
                 lockingTask?.cancel()
                 guard let lockedAt = auth.lockedAt else { return }
                 let sinceLocked = Date.now.timeIntervalSince(lockedAt)
-                if sinceLocked < 5 { auth.lockState = .unlocked }
+                if sinceLocked < 5 {
+                    auth.lockState = .unlocked
+                }
             }
             .alert(
                 "Sent!",

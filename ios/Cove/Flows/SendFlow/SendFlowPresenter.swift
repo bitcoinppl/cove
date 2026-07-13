@@ -38,7 +38,11 @@ import SwiftUI
     var showingAlert: Binding<Bool> {
         Binding(
             get: { self.alertState != nil && !self.disappearing },
-            set: { if !$0 { self.alertState = .none }}
+            set: {
+                if !$0 {
+                    self.alertState = .none
+                }
+            }
         )
     }
 

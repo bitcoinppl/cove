@@ -120,9 +120,15 @@ struct SendFlowDetailsView: View {
         }
         .onAppear {
             let total = details.outputs().count + details.inputs().count
-            if total == 3 { presentationSize = .height(300) }
-            if total > 3 { presentationSize = .height(400) }
-            if total > 5 { presentationSize = .height(500) }
+            if total == 3 {
+                presentationSize = .height(300)
+            }
+            if total > 3 {
+                presentationSize = .height(400)
+            }
+            if total > 5 {
+                presentationSize = .height(500)
+            }
         }
     }
 }

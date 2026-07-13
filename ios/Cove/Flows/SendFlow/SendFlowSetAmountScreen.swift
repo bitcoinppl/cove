@@ -223,7 +223,9 @@ struct SendFlowSetAmountScreen: View {
             }
 
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            if !isAlreadyValid { try? await Task.sleep(for: .milliseconds(700)) }
+            if !isAlreadyValid {
+                try? await Task.sleep(for: .milliseconds(700))
+            }
 
             await MainActor.run {
                 Log.debug(
@@ -315,7 +317,9 @@ struct SendFlowSetAmountScreen: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
                 // if keyboard opening directly to amount, dont update scroll position
-                if newField == .amount, oldField == .none { return }
+                if newField == .amount, oldField == .none {
+                    return
+                }
                 Log.debug("scrolling to \(String(describing: newField))")
                 scrollPosition.scrollTo(id: newField)
             }
@@ -391,8 +395,12 @@ struct SendFlowSetAmountScreen: View {
                     Button(action: {
                         let address = UIPasteboard.general.string ?? ""
                         sendFlowManager.dispatch(action: .changeEnteringAddress(address))
-                        if address.isEmpty { return }
-                        if !validateAddress() { return }
+                        if address.isEmpty {
+                            return
+                        }
+                        if !validateAddress() {
+                            return
+                        }
                         if !validateAmount() {
                             presenter.focusField = .amount
                             return
@@ -485,7 +493,11 @@ struct SendFlowSetAmountScreen: View {
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
                     selectedPresentationDetent =
-                        if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
+                        if feeRateOptions?.custom() == nil {
+                            .height(440)
+                        } else {
+                            .height(550)
+                        }
                     presenter.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption2)

@@ -105,7 +105,9 @@ enum ShareSheet {
     static func presentFromMenu(data: String, filename: String) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             present(data: data, filename: filename) { success in
-                if !success { Log.warn("Share sheet cancelled or failed: \(filename)") }
+                if !success {
+                    Log.warn("Share sheet cancelled or failed: \(filename)")
+                }
             }
         }
     }
@@ -115,7 +117,9 @@ enum ShareSheet {
     static func presentFromMenu(data: Data, filename: String) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             present(data: data, filename: filename) { success in
-                if !success { Log.warn("Share sheet cancelled or failed: \(filename)") }
+                if !success {
+                    Log.warn("Share sheet cancelled or failed: \(filename)")
+                }
             }
         }
     }

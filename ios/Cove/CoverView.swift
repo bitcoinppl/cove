@@ -64,7 +64,9 @@ private struct StorageErrorView: View {
                         data: StartupDiagnostics.report(errorMessage: errorMessage),
                         filename: StartupDiagnostics.filename
                     ) { success in
-                        if !success { Log.warn("Startup diagnostics share cancelled or failed") }
+                        if !success {
+                            Log.warn("Startup diagnostics share cancelled or failed")
+                        }
                     }
                 }
                 .buttonStyle(.bordered)

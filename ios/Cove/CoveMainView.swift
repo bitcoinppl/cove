@@ -178,7 +178,9 @@ struct CoveMainView: View {
             Button("Paste") {
                 app.alertState = .none
                 let text = UIPasteboard.general.string ?? ""
-                if text.isEmpty { return }
+                if text.isEmpty {
+                    return
+                }
                 do {
                     let wallet = try Wallet.newFromXpub(xpub: text)
                     try app.selectWalletOrThrow(wallet.id())
@@ -249,7 +251,9 @@ struct CoveMainView: View {
         Binding(
             get: { app.alertState != nil },
             set: { newValue in
-                if !newValue { app.alertState = .none }
+                if !newValue {
+                    app.alertState = .none
+                }
             }
         )
     }
@@ -279,55 +283,53 @@ struct CoveMainView: View {
     }
 
     var BodyView: some View {
-        Group {
-            LockView(
-                lockType: auth.type,
-                isPinCorrect: { pin in
-                    auth.handleAndReturnUnlockMode(pin) != .locked
-                },
-                showPin: false,
-                lockState: $auth.lockState,
-                onUnlock: { _ in
-                    withAnimation { showCover = false }
-                }
-            ) {
-                SidebarContainer {
-                    NavigationStack(path: $app.router.routes) {
-                        RouteView(app: app)
-                            .navigationDestination(
-                                for: Route.self,
-                                destination: { route in
-                                    RouteView(app: app, route: route)
-                                }
-                            )
-                            .toolbar {
-                                ToolbarItem(placement: .navigationBarLeading) {
-                                    Button(action: {
-                                        withAnimation {
-                                            app.toggleSidebar()
-                                        }
-                                    }) {
-                                        Image(systemName: "line.horizontal.3")
-                                            .modifier(
-                                                NavBarColorModifier(
-                                                    route: app.currentRoute,
-                                                    isPastHeader: app.isPastHeader
-                                                )
-                                            )
-                                    }
-                                    .contentShape(Rectangle())
-                                }
+        LockView(
+            lockType: auth.type,
+            isPinCorrect: { pin in
+                auth.handleAndReturnUnlockMode(pin) != .locked
+            },
+            showPin: false,
+            lockState: $auth.lockState,
+            onUnlock: { _ in
+                withAnimation { showCover = false }
+            }
+        ) {
+            SidebarContainer {
+                NavigationStack(path: $app.router.routes) {
+                    RouteView(app: app)
+                        .navigationDestination(
+                            for: Route.self,
+                            destination: { route in
+                                RouteView(app: app, route: route)
                             }
-                    }
-                    .modifier(ConditionalRouteTintModifier(route: app.router.routes.last))
+                        )
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button(action: {
+                                    withAnimation {
+                                        app.toggleSidebar()
+                                    }
+                                }) {
+                                    Image(systemName: "line.horizontal.3")
+                                        .modifier(
+                                            NavBarColorModifier(
+                                                route: app.currentRoute,
+                                                isPastHeader: app.isPastHeader
+                                            )
+                                        )
+                                }
+                                .contentShape(Rectangle())
+                            }
+                        }
                 }
+                .modifier(ConditionalRouteTintModifier(route: app.router.routes.last))
             }
-            .fullScreenCover(isPresented: $app.isLoading) {
-                FullPageLoadingView().interactiveDismissDisabled(true)
-            }
-            .fullScreenCover(isPresented: $showCover) {
-                CoverView().interactiveDismissDisabled(true)
-            }
+        }
+        .fullScreenCover(isPresented: $app.isLoading) {
+            FullPageLoadingView().interactiveDismissDisabled(true)
+        }
+        .fullScreenCover(isPresented: $showCover) {
+            CoverView().interactiveDismissDisabled(true)
         }
         .onChange(of: auth.lockState) { old, new in
             Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
@@ -396,14 +398,22 @@ struct CoveMainView: View {
             // prevent getting stuck on show cover
             coverClearTask = Task {
                 try? await Task.sleep(for: .milliseconds(100))
-                if Task.isCancelled { return }
+                if Task.isCancelled {
+                    return
+                }
 
-                if phase == .active { showCover = false }
+                if phase == .active {
+                    showCover = false
+                }
 
                 try? await Task.sleep(for: .milliseconds(200))
-                if Task.isCancelled { return }
+                if Task.isCancelled {
+                    return
+                }
 
-                if phase == .active { showCover = false }
+                if phase == .active {
+                    showCover = false
+                }
             }
         }
 
@@ -425,7 +435,9 @@ struct CoveMainView: View {
             }
 
             showCover = true
-            if auth.lockState != .locked { auth.lock() }
+            if auth.lockState != .locked {
+                auth.lock()
+            }
 
             UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }

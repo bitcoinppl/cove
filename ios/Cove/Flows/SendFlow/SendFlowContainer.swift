@@ -18,14 +18,12 @@ public struct SendFlowContainer: View {
     @State private var initCompleted = false
 
     public var body: some View {
-        Group {
-            if let manager, let sendFlowManager, initCompleted {
-                loadedContent(manager: manager, sendFlowManager: sendFlowManager)
-            } else {
-                ProgressView()
-                    .tint(.primary)
-                    .onAppear(perform: initOnAppear)
-            }
+        if let manager, let sendFlowManager, initCompleted {
+            loadedContent(manager: manager, sendFlowManager: sendFlowManager)
+        } else {
+            ProgressView()
+                .tint(.primary)
+                .onAppear(perform: initOnAppear)
         }
     }
 
@@ -74,7 +72,9 @@ public struct SendFlowContainer: View {
 
     private func initOnAppear() {
         let id = sendRoute.id()
-        if manager != nil { return }
+        if manager != nil {
+            return
+        }
 
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
@@ -102,7 +102,9 @@ public struct SendFlowContainer: View {
         Task {
             let success = await sendFlowManager.rust.waitForInit()
             await MainActor.run {
-                if success { initCompleted = true }
+                if success {
+                    initCompleted = true
+                }
             }
         }
     }
@@ -132,7 +134,11 @@ public struct SendFlowContainer: View {
     private var showingAlert: Binding<Bool> {
         Binding(
             get: { manager?.sendFlowErrorAlert != nil },
-            set: { if !$0 { manager?.sendFlowErrorAlert = .none } }
+            set: {
+                if !$0 {
+                    manager?.sendFlowErrorAlert = .none
+                }
+            }
         )
     }
 
@@ -161,8 +167,12 @@ public struct SendFlowContainer: View {
     private func applyRouteArguments(to sendFlowManager: SendFlowManager) {
         switch sendRoute {
         case let .setAmount(id: _, address: address, amount: amount):
-            if let address { sendFlowManager.setAddress(address) }
-            if let amount { sendFlowManager.setAmount(amount) }
+            if let address {
+                sendFlowManager.setAddress(address)
+            }
+            if let amount {
+                sendFlowManager.setAmount(amount)
+            }
         default:
             ()
         }

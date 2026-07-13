@@ -96,18 +96,28 @@ private struct FeeOptionView: View {
     }
 
     var fontColor: Color {
-        if isSelected { .white } else { .primary }
+        if isSelected {
+            .white
+        } else {
+            .primary
+        }
     }
 
     var strokeColor: Color {
         if colorScheme == .dark {
-            return if isSelected { Color.primary.opacity(0.75) } else {
+            return if isSelected {
+                Color.primary.opacity(0.75)
+            } else {
                 Color(UIColor.tertiaryLabel).opacity(0.6)
             }
         }
 
         // light
-        return if isSelected { Color.primary } else { Color.secondary }
+        return if isSelected {
+            Color.primary
+        } else {
+            Color.secondary
+        }
     }
 
     var isLoading: Bool {

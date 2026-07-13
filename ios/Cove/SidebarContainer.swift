@@ -193,14 +193,20 @@ struct SidebarContainer<Content: View>: View {
             syncSidebarState(isVisible: app.isSidebarVisible)
         }
         .onChange(of: app.isSidebarVisible) { _, isVisible in
-            if isVisible { app.loadWallets() }
+            if isVisible {
+                app.loadWallets()
+            }
 
             // when closing programmatically (e.g. button tap in sidebar),
             // a simultaneousGesture may have set isDragging from a slight
             // finger movement — reset it so the close animation runs
-            if !isVisible { isDragging = false }
+            if !isVisible {
+                isDragging = false
+            }
 
-            if isVisible, isDragging { return }
+            if isVisible, isDragging {
+                return
+            }
 
             updateSidebarState(isVisible: isVisible)
         }

@@ -309,12 +309,16 @@ struct CloudBackupPresentationHost<Content: View>: View {
     private var showingExistingBackupPrompt: Binding<Bool> {
         Binding(
             get: {
-                if case .existingBackupFound = coordinator.currentPresentation { return true }
+                if case .existingBackupFound = coordinator.currentPresentation {
+                    return true
+                }
                 return false
             },
             set: { isPresented in
                 guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
+                if coordinator.consumeDismissEvent() {
+                    return
+                }
                 manager.dispatch(action: .discardPendingEnableCloudBackup)
             }
         )
@@ -323,12 +327,16 @@ struct CloudBackupPresentationHost<Content: View>: View {
     private var showingPasskeyChoicePrompt: Binding<Bool> {
         Binding(
             get: {
-                if case .passkeyChoice = coordinator.currentPresentation { return true }
+                if case .passkeyChoice = coordinator.currentPresentation {
+                    return true
+                }
                 return false
             },
             set: { isPresented in
                 guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
+                if coordinator.consumeDismissEvent() {
+                    return
+                }
                 manager.dispatch(action: .dismissPasskeyChoicePrompt)
             }
         )
@@ -339,7 +347,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
             get: { coordinator.currentPresentation == .missingPasskeyReminder },
             set: { isPresented in
                 guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
+                if coordinator.consumeDismissEvent() {
+                    return
+                }
                 manager.dispatch(action: .dismissMissingPasskeyReminder)
             }
         )
@@ -350,7 +360,9 @@ struct CloudBackupPresentationHost<Content: View>: View {
             get: { coordinator.currentPresentation == .verificationPrompt },
             set: { isPresented in
                 guard !isPresented else { return }
-                if coordinator.consumeDismissEvent() { return }
+                if coordinator.consumeDismissEvent() {
+                    return
+                }
                 manager.dispatch(action: .dismissVerificationPrompt)
             }
         )
@@ -585,26 +597,38 @@ private struct CloudBackupVerificationPromptView: View {
     let onVerify: () -> Void
 
     private var isVerifying: Bool {
-        if case .running = manager.verificationState { return true }
+        if case .running = manager.verificationState {
+            return true
+        }
         return false
     }
 
     private var failure: DeepVerificationFailure? {
         guard !manager.shouldPromptVerification else { return nil }
-        if case let .failed(failure) = manager.verificationState { return failure }
+        if case let .failed(failure) = manager.verificationState {
+            return failure
+        }
         return nil
     }
 
     private var title: String {
-        if isVerifying { return "Verifying Cloud Backup" }
-        if failure != nil { return "Verification Failed" }
+        if isVerifying {
+            return "Verifying Cloud Backup"
+        }
+        if failure != nil {
+            return "Verification Failed"
+        }
 
         return "Verify"
     }
 
     private var message: String {
-        if let failure { return failure.message() }
-        if isVerifying { return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey." }
+        if let failure {
+            return failure.message()
+        }
+        if isVerifying {
+            return "Confirming your updated cloud backup can be decrypted and restored. Continuing may ask for your passkey."
+        }
 
         return "Verify your updated cloud backup now to confirm it is accessible. Continuing may ask for your passkey."
     }

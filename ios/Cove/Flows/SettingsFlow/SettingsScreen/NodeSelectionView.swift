@@ -233,7 +233,9 @@ struct NodeSelectionView: View {
         }
         .onDisappear {
             // custom esplora or electrum is selected
-            if showCustomUrlField { checkAndSaveNode() }
+            if showCustomUrlField {
+                checkAndSaveNode()
+            }
         }
         .alert(isPresented: $showParseUrlAlert) {
             Alert(

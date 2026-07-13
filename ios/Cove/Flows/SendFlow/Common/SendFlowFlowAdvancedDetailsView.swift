@@ -154,7 +154,9 @@ private struct TxRow: View {
     let model: TxRowModel
 
     var label: String? {
-        if let label = model.label { return label }
+        if let label = model.label {
+            return label
+        }
         if let utxoType = model.utxoType {
             switch utxoType {
             case .output: return "Receive Address"

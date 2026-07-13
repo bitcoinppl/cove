@@ -11,7 +11,9 @@ struct WalletSettingsSection: View {
     @State var wallets: [WalletMetadata]
 
     init(wallets: [WalletMetadata]? = nil) {
-        if let wallets { self.wallets = wallets; return }
+        if let wallets {
+            self.wallets = wallets; return
+        }
 
         do {
             self.wallets = try Database().wallets().allSortedActive()

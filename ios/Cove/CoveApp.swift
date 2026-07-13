@@ -80,7 +80,11 @@ struct CoveApp: App {
                     "Encryption Migration Issue",
                     isPresented: Binding(
                         get: { bdkMigrationWarning != nil },
-                        set: { if !$0 { bdkMigrationWarning = nil } }
+                        set: {
+                            if !$0 {
+                                bdkMigrationWarning = nil
+                            }
+                        }
                     )
                 ) {
                     Button("OK") { bdkMigrationWarning = nil }
@@ -274,7 +278,9 @@ extension CoveApp {
             guard isICloudAvailable else { return }
 
             let warning = await CloudBackupManager.shared.rust.verifyBackupIntegrity()
-            if let warning { Log.error("[STARTUP] backup integrity warning: \(warning)") }
+            if let warning {
+                Log.error("[STARTUP] backup integrity warning: \(warning)")
+            }
         }
     }
 }

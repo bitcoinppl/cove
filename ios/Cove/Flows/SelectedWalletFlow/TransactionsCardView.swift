@@ -311,12 +311,16 @@ struct ConfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
-        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
+        if index > scrollThresholdIndex {
+            manager.scrolledTransactionId = txId.description
+        }
         navigate(Route.transactionDetails(id: metadata.id, txId: txId))
     }
 
     var label: String {
-        if metadata.showLabels { return txn.label() }
+        if metadata.showLabels {
+            return txn.label()
+        }
         return txn.sentAndReceived().label()
     }
 
@@ -417,7 +421,9 @@ struct UnconfirmedTransactionView: View {
 
     private func goToTransactionDetails() {
         let txId = txn.id()
-        if index > scrollThresholdIndex { manager.scrolledTransactionId = txId.description }
+        if index > scrollThresholdIndex {
+            manager.scrolledTransactionId = txId.description
+        }
         navigate(Route.transactionDetails(id: metadata.id, txId: txId))
     }
 
@@ -543,7 +549,9 @@ struct UnsignedTransactionView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if index > scrollThresholdIndex { manager.scrolledTransactionId = txn.id().description }
+            if index > scrollThresholdIndex {
+                manager.scrolledTransactionId = txn.id().description
+            }
 
             let hardwareExportRoute =
                 RouteFactory().sendHardwareExport(

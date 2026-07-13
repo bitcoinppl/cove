@@ -84,7 +84,11 @@ struct SettingsContainer: View {
         )
         .alert("Change Network?", isPresented: Binding(
             get: { pendingNetwork != nil },
-            set: { if !$0 { pendingNetwork = nil } }
+            set: {
+                if !$0 {
+                    pendingNetwork = nil
+                }
+            }
         )) {
             Button("Yes, Change Network") {
                 if let network = pendingNetwork {

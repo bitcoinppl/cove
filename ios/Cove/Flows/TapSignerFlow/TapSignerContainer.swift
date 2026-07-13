@@ -27,7 +27,9 @@ class TapSignerManager {
     }
 
     func getOrCreateNfc(_ tapSigner: TapSigner) -> TapSignerNFC {
-        if let nfc { return nfc }
+        if let nfc {
+            return nfc
+        }
 
         let nfc = TapSignerNFC(tapSigner)
         self.nfc = nfc
@@ -55,7 +57,9 @@ class TapSignerManager {
     }
 
     func popRoute() {
-        if !path.isEmpty { path.removeLast() }
+        if !path.isEmpty {
+            path.removeLast()
+        }
     }
 
     func resetRoute(to route: TapSignerRoute) {

@@ -32,7 +32,9 @@ struct TransactionsDetailScreen: View {
     }
 
     private func loadManager() {
-        if manager != nil { return }
+        if manager != nil {
+            return
+        }
 
         do {
             Log.debug("Getting wallet manager for \(id)")
@@ -80,7 +82,9 @@ private struct TransactionDetailsLoader: View {
     }
 
     private func loadTransactionDetails() async {
-        if transactionDetails != nil { return }
+        if transactionDetails != nil {
+            return
+        }
 
         await MainActor.run {
             error = nil

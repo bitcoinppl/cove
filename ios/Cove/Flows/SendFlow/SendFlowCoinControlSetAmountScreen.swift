@@ -69,11 +69,15 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     /// validate, create final psbt and send to next screen
     private func next() {
-        if validate(true) { sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen) }
+        if validate(true) {
+            sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
+        }
     }
 
     private func dismissIfValid() {
-        if validate(true) { presenter.focusField = .none }
+        if validate(true) {
+            presenter.focusField = .none
+        }
     }
 
     /// doing it this way prevents an alert popping up when the user just goes back
@@ -90,7 +94,9 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     var offset: CGFloat {
-        if metadata.fiatOrBtc == .fiat { return 0 }
+        if metadata.fiatOrBtc == .fiat {
+            return 0
+        }
         return metadata.selectedUnit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
     }
 
@@ -252,7 +258,9 @@ struct SendFlowCoinControlSetAmountScreen: View {
                             loadingOpacity = 0
                         } completion: {
                             isLoading = false
-                            if validate() { presenter.focusField = .none }
+                            if validate() {
+                                presenter.focusField = .none
+                            }
                         }
                     }
                 }
@@ -266,8 +274,12 @@ struct SendFlowCoinControlSetAmountScreen: View {
             }
 
             await MainActor.run {
-                if !isAlreadyValid { presenter.focusField = .address }
-                if validate() { presenter.focusField = .none }
+                if !isAlreadyValid {
+                    presenter.focusField = .address
+                }
+                if validate() {
+                    presenter.focusField = .none
+                }
                 if sendFlowManager.address != nil {
                     let _ = self.validateAddress(displayAlert: true)
                 }
@@ -355,8 +367,12 @@ struct SendFlowCoinControlSetAmountScreen: View {
                     Button(action: {
                         let address = UIPasteboard.general.string ?? ""
                         sendFlowManager.dispatch(action: .changeEnteringAddress(address))
-                        if address.isEmpty { return }
-                        if !validateAddress() { return }
+                        if address.isEmpty {
+                            return
+                        }
+                        if !validateAddress() {
+                            return
+                        }
                         presenter.focusField = .none
                     }) {
                         Text("Paste")
@@ -443,7 +459,11 @@ struct SendFlowCoinControlSetAmountScreen: View {
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
                     selectedPresentationDetent =
-                        if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
+                        if feeRateOptions?.custom() == nil {
+                            .height(440)
+                        } else {
+                            .height(550)
+                        }
                     presenter.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption2)

@@ -23,39 +23,37 @@ struct WipePin: View {
     @State private var pinState: PinState = .new
 
     var body: some View {
-        Group {
-            switch pinState {
-            case .pin:
-                NumberPadPinView(
-                    title: "Enter Current PIN",
-                    isPinCorrect: auth.checkPin,
-                    showPin: false,
-                    backAction: backAction,
-                    onUnlock: { _ in
-                        withAnimation {
-                            pinState = .new
-                        }
+        switch pinState {
+        case .pin:
+            NumberPadPinView(
+                title: "Enter Current PIN",
+                isPinCorrect: auth.checkPin,
+                showPin: false,
+                backAction: backAction,
+                onUnlock: { _ in
+                    withAnimation {
+                        pinState = .new
                     }
-                )
-            case .new:
-                NumberPadPinView(
-                    title: "Enter Wipe Me PIN",
-                    isPinCorrect: { _ in true },
-                    backAction: backAction,
-                    onUnlock: { enteredPin in
-                        withAnimation {
-                            pinState = .confirm(enteredPin)
-                        }
+                }
+            )
+        case .new:
+            NumberPadPinView(
+                title: "Enter Wipe Me PIN",
+                isPinCorrect: { _ in true },
+                backAction: backAction,
+                onUnlock: { enteredPin in
+                    withAnimation {
+                        pinState = .confirm(enteredPin)
                     }
-                )
-            case let .confirm(pinToConfirm):
-                NumberPadPinView(
-                    title: "Confirm Wipe Me PIN",
-                    isPinCorrect: { $0 == pinToConfirm },
-                    backAction: backAction,
-                    onUnlock: onComplete
-                )
-            }
+                }
+            )
+        case let .confirm(pinToConfirm):
+            NumberPadPinView(
+                title: "Confirm Wipe Me PIN",
+                isPinCorrect: { $0 == pinToConfirm },
+                backAction: backAction,
+                onUnlock: onComplete
+            )
         }
     }
 }

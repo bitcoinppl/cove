@@ -2,7 +2,9 @@ import SwiftUI
 
 private extension CloudOnlyOperation {
     var operatingRecordId: String? {
-        if case let .operating(recordId) = self { return recordId }
+        if case let .operating(recordId) = self {
+            return recordId
+        }
         return nil
     }
 }
@@ -48,7 +50,9 @@ struct MissingPasskeyContent: View {
     let manager: CloudBackupManager
 
     private var isRepairing: Bool {
-        if case .running = manager.passkeyRepairState { return true }
+        if case .running = manager.passkeyRepairState {
+            return true
+        }
         return false
     }
 
@@ -386,12 +390,16 @@ struct OtherBackupsSection: View {
     @State private var recoveryResult: OtherBackupsRecoveryResult?
 
     private var isRecovering: Bool {
-        if case .recovering = manager.otherBackupsOperation { return true }
+        if case .recovering = manager.otherBackupsOperation {
+            return true
+        }
         return false
     }
 
     private var isDeleting: Bool {
-        if case .deleting = manager.otherBackupsOperation { return true }
+        if case .deleting = manager.otherBackupsOperation {
+            return true
+        }
         return false
     }
 
@@ -400,7 +408,9 @@ struct OtherBackupsSection: View {
     }
 
     private var failure: String? {
-        if case let .failed(error) = manager.otherBackupsOperation { return error }
+        if case let .failed(error) = manager.otherBackupsOperation {
+            return error
+        }
         return nil
     }
 
@@ -456,7 +466,11 @@ struct OtherBackupsSection: View {
             "Wallets Recovered",
             isPresented: Binding(
                 get: { recoveryResult != nil },
-                set: { if !$0 { recoveryResult = nil } }
+                set: {
+                    if !$0 {
+                        recoveryResult = nil
+                    }
+                }
             )
         ) {
             Button("Verify Current Passkey") {
@@ -656,7 +670,11 @@ private struct CloudOnlyActionDialogs: ViewModifier {
                 selectedWallet?.name ?? "Wallet",
                 isPresented: Binding(
                     get: { selectedWallet != nil },
-                    set: { if !$0 { selectedWallet = nil } }
+                    set: {
+                        if !$0 {
+                            selectedWallet = nil
+                        }
+                    }
                 ),
                 titleVisibility: .visible
             ) {
@@ -679,7 +697,11 @@ private struct CloudOnlyActionDialogs: ViewModifier {
                 "Delete \(walletToDelete?.name ?? "wallet")?",
                 isPresented: Binding(
                     get: { walletToDelete != nil },
-                    set: { if !$0 { walletToDelete = nil } }
+                    set: {
+                        if !$0 {
+                            walletToDelete = nil
+                        }
+                    }
                 )
             ) {
                 if let item = walletToDelete {
@@ -695,7 +717,11 @@ private struct CloudOnlyActionDialogs: ViewModifier {
                 "Can't Restore \(unsupportedRestoreWallet?.name ?? "Wallet")",
                 isPresented: Binding(
                     get: { unsupportedRestoreWallet != nil },
-                    set: { if !$0 { unsupportedRestoreWallet = nil } }
+                    set: {
+                        if !$0 {
+                            unsupportedRestoreWallet = nil
+                        }
+                    }
                 )
             ) {
                 Button("OK", role: .cancel) {}

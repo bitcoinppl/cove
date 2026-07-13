@@ -149,7 +149,11 @@ struct BackupImportView: View {
         )
         .alert("Import Failed", isPresented: .init(
             get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            set: {
+                if !$0 {
+                    errorMessage = nil
+                }
+            }
         )) {
             Button("OK") { errorMessage = nil }
         } message: {
@@ -157,9 +161,11 @@ struct BackupImportView: View {
         }
         .alert("Import Complete", isPresented: .init(
             get: { importReport != nil },
-            set: { if !$0 {
-                handleImportCompletionDismissal()
-            }}
+            set: {
+                if !$0 {
+                    handleImportCompletionDismissal()
+                }
+            }
         )) {
             Button("OK") {
                 handleImportCompletionDismissal()

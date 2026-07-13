@@ -84,7 +84,9 @@ struct LockView<Content: View>: View {
 
         // back
         let backEnabled =
-            if backAction != nil { true } else {
+            if backAction != nil {
+                true
+            } else {
                 lockType == .both && isBiometricAvailable
             }
 
@@ -97,7 +99,9 @@ struct LockView<Content: View>: View {
     }
 
     var backAction: () -> Void {
-        if let _backAction { return _backAction }
+        if let _backAction {
+            return _backAction
+        }
 
         if backEnabled {
             return {
@@ -154,7 +158,9 @@ struct LockView<Content: View>: View {
             }
         }
         .onChange(of: lockState.wrappedValue) { _, state in
-            if state == .locked { tryUnlockingView() }
+            if state == .locked {
+                tryUnlockingView()
+            }
         }
         .onChange(of: phase) { old, phase in
             if old == .inactive, phase == .background, lockType == .both {

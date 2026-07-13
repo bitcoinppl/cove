@@ -68,7 +68,9 @@ struct MainSettingsScreen: View {
     var toggleBiometric: Binding<Bool> {
         Binding(
             get: {
-                if auth.isInDecoyMode() { return isFaceIdEnabled }
+                if auth.isInDecoyMode() {
+                    return isFaceIdEnabled
+                }
                 return auth.type == AuthType.both || auth.type == AuthType.biometric
             },
             set: { enable in
@@ -107,11 +109,17 @@ struct MainSettingsScreen: View {
     var togglePin: Binding<Bool> {
         Binding(
             get: {
-                if auth.isInDecoyMode() { return isPinEnabled }
+                if auth.isInDecoyMode() {
+                    return isPinEnabled
+                }
                 return auth.type == AuthType.both || auth.type == AuthType.pin
             },
             set: { enable in
-                if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
+                if enable {
+                    sheetState = .init(.newPin)
+                } else {
+                    sheetState = .init(.removePin)
+                }
             }
         )
     }
@@ -119,7 +127,9 @@ struct MainSettingsScreen: View {
     var toggleWipeMePin: Binding<Bool> {
         Binding(
             get: {
-                if auth.isInDecoyMode() { return isWipeDataPinEnabled }
+                if auth.isInDecoyMode() {
+                    return isWipeDataPinEnabled
+                }
                 return auth.isWipeDataPinEnabled
             },
             set: { enable in
@@ -147,7 +157,9 @@ struct MainSettingsScreen: View {
                 }
 
                 // disable
-                if !enable { sheetState = .init(.removeWipeDataPin()) }
+                if !enable {
+                    sheetState = .init(.removeWipeDataPin())
+                }
             }
         )
     }
@@ -155,7 +167,9 @@ struct MainSettingsScreen: View {
     var toggleDecoyPin: Binding<Bool> {
         Binding(
             get: {
-                if auth.isInDecoyMode() { return isDecoyPinEnabled }
+                if auth.isInDecoyMode() {
+                    return isDecoyPinEnabled
+                }
                 return auth.isDecoyPinEnabled
             },
             set: { enable in
@@ -181,7 +195,9 @@ struct MainSettingsScreen: View {
                 }
 
                 // disable
-                if !enable { sheetState = .init(.removeDecoyPin()) }
+                if !enable {
+                    sheetState = .init(.removeDecoyPin())
+                }
             }
         )
     }
@@ -442,22 +458,21 @@ struct MainSettingsScreen: View {
         }
     }
 
+    @ViewBuilder
     private func cloudBackupErrorContent(message: String) -> some View {
-        Group {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "exclamationmark.icloud")
-                        .foregroundStyle(Color.statusError)
-                    Text("Cloud Backup Error")
-                }
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "exclamationmark.icloud")
+                    .foregroundStyle(Color.statusError)
+                Text("Cloud Backup Error")
             }
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
 
-            SettingsRow(title: "Review", symbol: "arrow.right") {
-                app.pushRoute(Route.settings(.cloudBackup))
-            }
+        SettingsRow(title: "Review", symbol: "arrow.right") {
+            app.pushRoute(Route.settings(.cloudBackup))
         }
     }
 
@@ -572,7 +587,11 @@ struct MainSettingsScreen: View {
     private var showingAlert: Binding<Bool> {
         Binding(
             get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
+            set: {
+                if !$0 {
+                    alertState = .none
+                }
+            }
         )
     }
 
@@ -754,9 +773,13 @@ struct MainSettingsScreen: View {
                     lockType: .biometric,
                     isPinCorrect: { _ in true },
                     onUnlock: { pin in
-                        if auth.isInDecoyMode() { return }
+                        if auth.isInDecoyMode() {
+                            return
+                        }
                         auth.dispatch(action: .enableBiometric)
-                        if !pin.isEmpty { auth.dispatch(action: .setPin(pin)) }
+                        if !pin.isEmpty {
+                            auth.dispatch(action: .setPin(pin))
+                        }
 
                         sheetState = .none
                     },
@@ -774,7 +797,9 @@ struct MainSettingsScreen: View {
             NumberPadPinView(
                 title: "Enter Current PIN",
                 isPinCorrect: { pin in
-                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    if auth.isInDecoyMode() {
+                        return auth.checkDecoyPin(pin)
+                    }
                     return auth.checkPin(pin)
                 },
 
@@ -800,7 +825,9 @@ struct MainSettingsScreen: View {
                 showPin: false,
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
-                    if auth.isInDecoyMode() { return }
+                    if auth.isInDecoyMode() {
+                        return
+                    }
                     auth.dispatch(action: .disableWipeDataPin)
                     sheetState = nextSheet
                 }
@@ -834,7 +861,9 @@ struct MainSettingsScreen: View {
         case .changePin:
             ChangePinView(
                 isPinCorrect: { pin in
-                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    if auth.isInDecoyMode() {
+                        return auth.checkDecoyPin(pin)
+                    }
                     return auth.checkPin(pin)
                 },
                 backAction: { sheetState = .none },
@@ -902,11 +931,15 @@ struct MainSettingsScreen: View {
             LockView(
                 lockType: auth.type,
                 isPinCorrect: { pin in
-                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    if auth.isInDecoyMode() {
+                        return auth.checkDecoyPin(pin)
+                    }
                     return auth.checkPin(pin)
                 },
                 onUnlock: { _ in
-                    if auth.isInDecoyMode() { sheetState = .none; return }
+                    if auth.isInDecoyMode() {
+                        sheetState = .none; return
+                    }
                     sheetState = .init(.backupExport)
                 },
                 backAction: { sheetState = .none },
@@ -1046,7 +1079,9 @@ private struct SettingsCloudBackupEnableSheet: View {
     private var showingExistingBackupPrompt: Binding<Bool> {
         Binding(
             get: {
-                if case .existingBackupFound = manager.rootPrompt { return true }
+                if case .existingBackupFound = manager.rootPrompt {
+                    return true
+                }
                 return false
             },
             set: { isPresented in
@@ -1074,12 +1109,16 @@ private struct SettingsCloudBackupEnableSheet: View {
 
     private func isEnablePasskeyChoice(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
         guard case let .passkeyChoice(intent) = rootPrompt else { return false }
-        if case .enable = intent { return true }
+        if case .enable = intent {
+            return true
+        }
         return false
     }
 
     private func isAwaitingEnablePrompt(_ rootPrompt: CloudBackupRootPrompt) -> Bool {
-        if case .existingBackupFound = rootPrompt { return true }
+        if case .existingBackupFound = rootPrompt {
+            return true
+        }
         return isEnablePasskeyChoice(rootPrompt)
     }
 

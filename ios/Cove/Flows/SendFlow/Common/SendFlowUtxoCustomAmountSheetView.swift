@@ -97,7 +97,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     private var maxSend: Double {
         var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: minSendSatsU + 1000)
-        if amount.asSats() < minSendSatsU { amount = Amount.fromSat(sats: minSendSatsU + 1000) }
+        if amount.asSats() < minSendSatsU {
+            amount = Amount.fromSat(sats: minSendSatsU + 1000)
+        }
         return amountToDouble(amount)
     }
 
@@ -243,7 +245,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         }
         .onChange(of: manager.amount) { _, new in
             guard let newAmount = new else { return }
-            if isEditing { return }
+            if isEditing {
+                return
+            }
 
             switch metadata.selectedUnit {
             case .sat: customAmount = Double(newAmount.asSats())

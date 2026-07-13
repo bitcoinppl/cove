@@ -79,7 +79,9 @@ struct TapSignerSetupSuccess: View {
                 let content = hexEncode(bytes: setup.backup)
                 let filename = "\(tapSigner.identFileNamePrefix())_backup.txt"
                 ShareSheet.present(data: content, filename: filename) { success in
-                    if !success { Log.warn("Backup export cancelled or failed") }
+                    if !success {
+                        Log.warn("Backup export cancelled or failed")
+                    }
                 }
             }) {
                 HStack {

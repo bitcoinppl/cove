@@ -104,7 +104,11 @@ struct BackupVerifyView: View {
         )
         .alert("Verification Failed", isPresented: .init(
             get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            set: {
+                if !$0 {
+                    errorMessage = nil
+                }
+            }
         )) {
             Button("OK") { errorMessage = nil }
         } message: {

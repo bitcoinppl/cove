@@ -327,9 +327,15 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var isBusy: Bool {
-        if case .running = backupManager.verificationState { return true }
-        if backupManager.hasPendingUploadVerification { return true }
-        if case .confirmingSavedPasskey = backupManager.enableFlow { return true }
+        if case .running = backupManager.verificationState {
+            return true
+        }
+        if backupManager.hasPendingUploadVerification {
+            return true
+        }
+        if case .confirmingSavedPasskey = backupManager.enableFlow {
+            return true
+        }
 
         return isEnablingCloudBackup && !needsManualPasskeyConfirmation
     }
@@ -359,7 +365,9 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 
     private var primaryButtonTitle: String {
-        if case .failed = backupManager.verificationState { return "Try Again" }
+        if case .failed = backupManager.verificationState {
+            return "Try Again"
+        }
         return needsManualPasskeyConfirmation ? "Confirm Passkey" : "Enable Cloud Backup"
     }
 

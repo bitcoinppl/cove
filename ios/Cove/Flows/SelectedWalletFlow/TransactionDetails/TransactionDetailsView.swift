@@ -248,8 +248,12 @@ struct TransactionDetailsView: View {
             .onScrollGeometryChange(for: Double.self) { geo in
                 geo.contentOffset.y
             } action: { oldValue, newValue in
-                if oldValue == newValue { return }
-                if oldValue == 0 { return }
+                if oldValue == newValue {
+                    return
+                }
+                if oldValue == 0 {
+                    return
+                }
                 let initialOffset = initialOffset ?? oldValue
                 self.initialOffset = initialOffset
                 currentOffset = initialOffset - newValue
@@ -260,7 +264,9 @@ struct TransactionDetailsView: View {
     var body: some View {
         ContentScrollView {
             VStack(spacing: 24) {
-                if sizeCategory < .extraExtraExtraLarge || isMiniDevice { Spacer() }
+                if sizeCategory < .extraExtraExtraLarge || isMiniDevice {
+                    Spacer()
+                }
 
                 Group {
                     if transactionDetails.isReceived() {
@@ -271,8 +277,12 @@ struct TransactionDetailsView: View {
                 }
 
                 Spacer()
-                if sizeCategory < .extraExtraLarge || isMiniDevice { Spacer() }
-                if !isMiniDevice, sizeCategory < .extraLarge { Spacer() }
+                if sizeCategory < .extraExtraLarge || isMiniDevice {
+                    Spacer()
+                }
+                if !isMiniDevice, sizeCategory < .extraLarge {
+                    Spacer()
+                }
 
                 Button(action: {
                     if let url = URL(string: transactionDetails.transactionUrl()) {
@@ -425,7 +435,9 @@ struct TransactionDetailsView: View {
             } catch {
                 Log.error("Error checking for confirmation: \(error)")
                 errors = errors + 1
-                if errors > 10 { break }
+                if errors > 10 {
+                    break
+                }
             }
         }
     }

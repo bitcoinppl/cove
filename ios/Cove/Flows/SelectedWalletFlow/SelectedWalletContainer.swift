@@ -16,7 +16,9 @@ struct SelectedWalletContainer: View {
     @State private var manager: WalletManager?
 
     private var iOS26OrLater: Bool {
-        if #available(iOS 26.0, *) { return true }
+        if #available(iOS 26.0, *) {
+            return true
+        }
         return false
     }
 
@@ -65,7 +67,9 @@ struct SelectedWalletContainer: View {
     }
 
     private func loadManager() {
-        if manager != nil { return }
+        if manager != nil {
+            return
+        }
 
         do {
             Log.debug("Getting wallet \(id)")

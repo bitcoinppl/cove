@@ -65,7 +65,9 @@ extension String {
     }
 
     func padLeft(with: String, toLength: Int) -> String {
-        if count >= toLength { return self }
+        if count >= toLength {
+            return self
+        }
 
         let padding = String(repeating: with, count: toLength - count)
         return padding + self
@@ -74,6 +76,10 @@ extension String {
 
 extension String? {
     init(_ fingeprint: Fingerprint?) {
-        if let fingeprint { self = String(fingeprint) } else { self = .none }
+        if let fingeprint {
+            self = String(fingeprint)
+        } else {
+            self = .none
+        }
     }
 }

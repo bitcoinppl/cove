@@ -214,7 +214,9 @@ private struct AutocompleteField: View {
     }
 
     var isFocused: Bool {
-        if focusField == nil { return number == 1 }
+        if focusField == nil {
+            return number == 1
+        }
         return focusField == ImportFieldNumber(number)
     }
 
@@ -323,7 +325,9 @@ private struct AutocompleteField: View {
                 )
             }
             .onChange(of: focusField) { _, _ in
-                if text == "" { return }
+                if text == "" {
+                    return
+                }
 
                 if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
                     state = .valid
@@ -359,20 +363,32 @@ private struct AutocompleteField: View {
                 )
 
                 // initial set to typing
-                if newText.count > oldText.count { state = .typing }
+                if newText.count > oldText.count {
+                    state = .typing
+                }
 
                 // erasing, reset state to typing
-                if oldText.count > newText.count, !filteredSuggestions.contains(newText) { return state = .typing }
+                if oldText.count > newText.count, !filteredSuggestions.contains(newText) {
+                    return state = .typing
+                }
 
                 // set to valid if it matches a word
-                if filteredSuggestions.contains(newText) { state = .valid }
+                if filteredSuggestions.contains(newText) {
+                    state = .valid
+                }
 
                 // empty is always initial, or typing
-                if newText.isEmpty, isFocused { return state = .typing }
-                if newText.isEmpty, !isFocused { return state = .initial }
+                if newText.isEmpty, isFocused {
+                    return state = .typing
+                }
+                if newText.isEmpty, !isFocused {
+                    return state = .initial
+                }
 
                 // invalid, no words match
-                if filteredSuggestions.isEmpty { return state = .invalid }
+                if filteredSuggestions.isEmpty {
+                    return state = .invalid
+                }
 
                 // if only one suggestion left and if we added a letter (not backspace)
                 // then auto select the first selection, because we want auto selection
