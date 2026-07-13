@@ -86,15 +86,17 @@ impl ReceiveAddressCache {
 /// `bitcoin::Transaction` does not implement serde natively; storing the consensus-encoded
 /// bytes avoids an orphan-impl problem while keeping the format identical to what is broadcast.
 #[derive(
-    Debug, Clone, Serialize, Deserialize, Eq, PartialEq, derive_more::From, derive_more::Into,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
 )]
 pub struct TransactionBytes(Vec<u8>);
-
-impl AsRef<[u8]> for TransactionBytes {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
 
 /// Terminal action decided for a payjoin session before the broadcast completes
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]

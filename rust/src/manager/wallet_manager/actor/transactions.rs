@@ -467,8 +467,10 @@ impl WalletActor {
                     .is_some_and(|txid| self.wallet.bdk.get_tx(txid).is_some());
 
                 if !can_cleanup {
+                    // Broadcast hasn't completed yet, re-dispatch so the user doesn't need to restart.
+                    send!(self.addr.resume_payjoin_session());
                     return Produces::ok(Err(Error::SignAndBroadcastError(
-                        "a previous payjoin session is pending recovery; please try again later"
+                        "retrying a previous payjoin broadcast; please try again in a moment"
                             .to_string(),
                     )));
                 }
@@ -1129,7 +1131,8 @@ async fn payjoin_tx_known_to_node(addr: WeakAddr<WalletActor>, txid: Txid) -> bo
         _ => return false,
     };
 
-    matches!(node_client.get_transaction(txid).await, Ok(Some(ref found)) if found.compute_txid() == txid)
+    let response = node_client.get_transaction(txid).await;
+    matches!(response, Ok(Some(ref found)) if found.compute_txid() == txid)
 }
 
 async fn broadcast_to_node_with_connection(

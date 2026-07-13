@@ -2570,7 +2570,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn send_gate_rejects_when_payjoin_session_pending_and_tx_not_in_wallet() {
+    async fn send_gate_retries_pending_terminal_action_and_rejects_new_send() {
         crate::database::test_support::init_test_database();
         let mut wallet = Wallet::preview_new_wallet();
         mark_wallet_ledger_ready(&mut wallet);
@@ -2601,9 +2601,9 @@ mod tests {
         assert!(
             matches!(
                 &outcome,
-                Err(super::Error::SignAndBroadcastError(msg)) if msg.contains("pending recovery")
+                Err(super::Error::SignAndBroadcastError(msg)) if msg.contains("retrying")
             ),
-            "expected 'pending recovery' error but got: {outcome:?}",
+            "expected 'retrying' error but got: {outcome:?}",
         );
     }
 
