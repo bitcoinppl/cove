@@ -249,6 +249,156 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertFalse(gate.operationStarted)
     }
 
+    @MainActor
+    func testMetadataIndexStartsOneQueryForConcurrentConsumers() async throws {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let first = Task { try await index.currentOrInitialRecords(timeout: 1) }
+        let second = Task { try await index.currentOrInitialRecords(timeout: 1) }
+
+        await Task.yield()
+        XCTAssertEqual(source.startCount, 1)
+
+        source.send(.finishedGathering([record]))
+
+        let firstRecords = try await first.value
+        let secondRecords = try await second.value
+        XCTAssertEqual(firstRecords, [record])
+        XCTAssertEqual(secondRecords, [record])
+        XCTAssertEqual(source.startCount, 1)
+    }
+
+    @MainActor
+    func testMetadataIndexDoesNotTreatGatheringUpdatesAsAuthoritativeAbsence() async {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let request = Task { try await index.currentOrInitialRecords(timeout: 0.02) }
+
+        await Task.yield()
+        source.send(.updated([]))
+
+        do {
+            _ = try await request.value
+            XCTFail("expected the initial gathering request to time out")
+        } catch let error as ICloudMetadataIndexError {
+            XCTAssertEqual(error, .timedOut)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    @MainActor
+    func testMetadataIndexReplacesSnapshotWhenCloudMetadataChanges() async throws {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let firstRecord = metadataRecord(name: "first.json", parentPath: "/cloud/namespace")
+        let secondRecord = metadataRecord(name: "second.json", parentPath: "/cloud/namespace")
+        let initialRequest = Task { try await index.currentOrInitialRecords(timeout: 1) }
+
+        await Task.yield()
+        source.send(.finishedGathering([firstRecord]))
+        _ = try await initialRequest.value
+        source.send(.updated([secondRecord]))
+
+        let missing = try await index.itemIfPresent(
+            named: firstRecord.name,
+            parentPath: "/cloud/namespace",
+            timeout: 1
+        )
+        let present = try await index.itemIfPresent(
+            named: secondRecord.name,
+            parentPath: "/cloud/namespace",
+            timeout: 1
+        )
+        XCTAssertNil(missing)
+        XCTAssertEqual(present, secondRecord)
+    }
+
+    @MainActor
+    func testMetadataIndexWaitsForAnItemPublishedByLaterUpdate() async throws {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let record = metadataRecord(name: "wallet.json", parentPath: "/cloud/namespace")
+        let request = Task {
+            try await index.waitForItem(
+                named: record.name,
+                parentPath: "/cloud/namespace",
+                timeout: 1
+            )
+        }
+
+        await Task.yield()
+        source.send(.finishedGathering([]))
+        source.send(.updated([record]))
+
+        let resolvedRecord = try await request.value
+        XCTAssertEqual(resolvedRecord, record)
+    }
+
+    @MainActor
+    func testMetadataIndexRemovesCancelledItemWaiter() async {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let request = Task {
+            try await index.waitForItem(
+                named: "wallet.json",
+                parentPath: "/cloud/namespace",
+                timeout: 60
+            )
+        }
+
+        await Task.yield()
+        request.cancel()
+
+        do {
+            _ = try await request.value
+            XCTFail("expected cancellation")
+        } catch is CancellationError {
+            // expected
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    @MainActor
+    func testMetadataIndexReportsQueryStartFailure() async {
+        let source = MetadataQuerySourceSpy(startsSuccessfully: false)
+        let index = ICloudMetadataIndex(source: source)
+
+        do {
+            _ = try await index.currentOrInitialRecords(timeout: 1)
+            XCTFail("expected query startup to fail")
+        } catch let error as ICloudMetadataIndexError {
+            XCTAssertEqual(error, .startFailed)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    func testMetadataProjectionFiltersByParentAndDirectChild() {
+        let records = [
+            metadataRecord(name: "alpha", parentPath: "/cloud"),
+            metadataRecord(name: "wallet.json", parentPath: "/cloud/alpha"),
+            metadataRecord(name: "nested.json", parentPath: "/cloud/alpha/nested"),
+            metadataRecord(name: "beta", parentPath: "/cloud"),
+            metadataRecord(name: "wallet.json", parentPath: "/other"),
+        ]
+
+        XCTAssertEqual(
+            ICloudMetadataProjection.subdirectoryNames(in: records, parentPath: "/cloud"),
+            ["alpha", "beta"]
+        )
+        XCTAssertEqual(
+            ICloudMetadataProjection.fileNames(
+                in: records,
+                parentPath: "/cloud/alpha",
+                prefix: "wallet"
+            ),
+            ["wallet.json"]
+        )
+    }
+
     func testSilentCloudRecoveryDeadlineIncludesBlockedContainerLookup() async {
         let gate = CancellableDispatchOperationTestGate()
         let queue = DispatchQueue(label: "cove.tests.cloud-recovery-deadline")
@@ -346,6 +496,32 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
                 return
             }
         }
+    }
+
+    private func metadataRecord(name: String, parentPath: String) -> ICloudMetadataRecord {
+        let url = URL(fileURLWithPath: parentPath).appendingPathComponent(name)
+        return ICloudMetadataRecord(name: name, url: url, resolvedPath: url.path)
+    }
+}
+
+@MainActor
+private final class MetadataQuerySourceSpy: ICloudMetadataQuerySource {
+    private let startsSuccessfully: Bool
+    private var onEvent: (@MainActor (ICloudMetadataQueryEvent) -> Void)?
+    private(set) var startCount = 0
+
+    init(startsSuccessfully: Bool = true) {
+        self.startsSuccessfully = startsSuccessfully
+    }
+
+    func start(onEvent: @escaping @MainActor (ICloudMetadataQueryEvent) -> Void) -> Bool {
+        startCount += 1
+        self.onEvent = onEvent
+        return startsSuccessfully
+    }
+
+    func send(_ event: ICloudMetadataQueryEvent) {
+        onEvent?(event)
     }
 }
 

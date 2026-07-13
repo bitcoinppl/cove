@@ -35,6 +35,10 @@ If you need one subdirectory, start with the appropriate iCloud scope and narrow
 - Do not block the same run loop you expect to deliver query notifications
 - Keep `url(forUbiquityContainerIdentifier:)` off the main thread; Apple says it may take a nontrivial amount of time
 
+Cove owns one main-actor metadata query for the lifetime of the process. The query searches the ubiquitous data scope, publishes value snapshots to async consumers, and remains running so later `didUpdate` events can satisfy uploads, downloads, listings, and sync-health checks. Do not create short-lived queries for individual operations or call `stop()` during normal app operation. Tearing down a query while CloudDocs is delivering progress notifications can race inside `NSMetadataQuery` cleanup.
+
+The initial result is authoritative only after `NSMetadataQueryDidFinishGathering`. Updates received while gathering may reveal an item early, but an empty partial snapshot must not be interpreted as proof that an item is absent.
+
 ### Cold start timing
 
 The iCloud daemon needs time after app launch to initialize its metadata index. On a fresh launch, `NSMetadataQuery` may return 0 results even though `FileManager` can see files in the ubiquity container. On subsequent launches the daemon is already warm and metadata queries work immediately.
@@ -115,11 +119,11 @@ func listItems(parentPath: String) throws -> [String] {
 
 ### Checking whether a file exists
 
-Use `NSMetadataQuery` with the right ubiquitous scope and a narrow predicate. That is the safer choice when local download state should not affect the answer.
+Read the shared metadata index and filter its snapshot by resolved parent path and filename. This is safer than checking only the local filesystem when download state should not affect the answer.
 
 ### Waiting for a specific file
 
-Use `NSMetadataQuery` with a name predicate and leave it running long enough to receive `didUpdate` events. Timeouts are app-level policy, not Apple API behavior, so pick them based on the user flow.
+Wait on the shared metadata index for a matching `didUpdate` snapshot. Timeouts are app-level policy, not Apple API behavior, so pick them based on the user flow.
 
 ### Timeouts and retries in this app
 
@@ -137,6 +141,6 @@ These numbers are project heuristics, not Apple guidance:
 3. Blocking the same run loop that should deliver query notifications
 4. Calling `url(forUbiquityContainerIdentifier:)` on the main thread. It can block UI work
 5. Treating placeholder filenames or file contents as stable API
-6. Using a broad predicate when you already know the filename or subdirectory you want
+6. Creating and tearing down a metadata query for every filename or subdirectory lookup
 7. Assuming metadata is available immediately at app launch. The daemon needs time to warm up, especially on first launch
 8. Debugging metadata queries on a dev build with stale credentials. Bump the build number or re-sign iCloud on the device if queries return 0 results

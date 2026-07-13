@@ -15,21 +15,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let progressLogInterval: TimeInterval = 1
     private static let legacyFileReadNoSuchFileError = 4
 
-    final class ObserverBox {
-        private var observers: [NSObjectProtocol] = []
-
-        func add(_ observer: NSObjectProtocol) {
-            observers.append(observer)
-        }
-
-        func removeAll() {
-            for observer in observers {
-                NotificationCenter.default.removeObserver(observer)
-            }
-            observers.removeAll()
-        }
-    }
-
     struct ResolvedMetadataItem {
         let url: URL
         let metadataPath: String?
@@ -217,7 +202,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation]
-    ) throws -> URL {
+    ) async throws -> URL {
         var lastError: Error?
         for location in locations {
             do {
@@ -226,7 +211,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                     return url
                 }
 
-                let item = try metadataItemIfPresent(
+                let item = try await metadataItemIfPresent(
                     named: url.lastPathComponent,
                     parentDirectoryURL: url.deletingLastPathComponent()
                 )
@@ -424,19 +409,19 @@ final class ICloudDriveHelper: @unchecked Sendable {
     ///
     /// Tries startDownloadingUbiquitousItem as a hint, then uses NSFileCoordinator
     /// which forces the download through a different (more reliable) path
-    func downloadFile(url: URL, recordId: String) throws -> Data {
-        try downloadData(url: url, recordId: recordId)
+    func downloadFile(url: URL, recordId: String) async throws -> Data {
+        try await downloadData(url: url, recordId: recordId)
     }
 
     // MARK: - Upload verification
 
     /// Blocks until the file is visible through iCloud metadata
-    func waitForMetadataVisibility(url: URL) throws {
+    func waitForMetadataVisibility(url: URL) async throws {
         let filename = url.lastPathComponent
         let deadline = Date().addingTimeInterval(defaultTimeout)
 
         do {
-            let resolvedItem = try waitForMetadataItem(
+            let resolvedItem = try await waitForMetadataItem(
                 named: filename,
                 parentDirectoryURL: url.deletingLastPathComponent(),
                 deadline: deadline
@@ -452,7 +437,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     }
 
     /// Blocks until the file at `url` is confirmed uploaded to iCloud, or times out
-    func waitForUpload(url: URL) throws {
+    func waitForUpload(url: URL) async throws {
         let filename = url.lastPathComponent
         Log.info("waitForUpload: waiting for \(filename)")
         let deadline = Date().addingTimeInterval(defaultTimeout)
@@ -464,7 +449,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         let resolvedItem: ResolvedMetadataItem
         do {
-            resolvedItem = try waitForMetadataItem(
+            resolvedItem = try await waitForMetadataItem(
                 named: filename,
                 parentDirectoryURL: url.deletingLastPathComponent(),
                 deadline: deadline
@@ -501,13 +486,13 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 throw Self.uploadError("iCloud upload failed for \(filename)", error: error)
             }
 
-            Thread.sleep(forTimeInterval: pollInterval)
+            try await Task.sleep(for: .seconds(pollInterval))
         }
 
         Log.info(
             "waitForUpload: timeout diagnostics \(filename) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>") diagnostics=\(uploadDiagnostics(for: resolvedItem.url))"
         )
-        logMetadataItems(
+        await logMetadataItems(
             under: url.deletingLastPathComponent(),
             reason: "waitForUpload timeout",
             focusName: filename
@@ -520,12 +505,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
     // MARK: - Download
 
-    /// Ensures the file is downloaded locally, triggering a download if evicted
-    func ensureDownloaded(url: URL, recordId: String) throws {
-        _ = try downloadData(url: url, recordId: recordId)
-    }
-
-    private func downloadData(url: URL, recordId: String) throws -> Data {
+    private func downloadData(url: URL, recordId: String) async throws -> Data {
         let filename = url.lastPathComponent
 
         if FileManager.default.fileExists(atPath: url.path), case .current = downloadState(for: url) {
@@ -537,7 +517,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         let resolvedItem: ResolvedMetadataItem
         do {
-            resolvedItem = try waitForMetadataItem(
+            resolvedItem = try await waitForMetadataItem(
                 named: filename,
                 parentDirectoryURL: url.deletingLastPathComponent(),
                 deadline: deadline
@@ -623,7 +603,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 throw Self.downloadError("iCloud download failed", error: error)
             }
 
-            Thread.sleep(forTimeInterval: pollInterval)
+            try await Task.sleep(for: .seconds(pollInterval))
         }
 
         Log.info("downloadFile: polling timed out, trying final coordinated read for \(filename)")
@@ -737,30 +717,37 @@ final class ICloudDriveHelper: @unchecked Sendable {
         return .notDownloaded
     }
 
-    /// Lists immediate subdirectory names within a parent path
-    ///
-    /// Tries FileManager first (fast, sees .icloud stubs and dataless files),
-    /// falls back to metadata query only if FileManager finds nothing
-    func listSubdirectories(
-        parentPath: String,
-        metadataTimeout: TimeInterval? = nil
-    ) throws -> [String] {
+    func locallyVisibleSubdirectoryNames(parentPath: String) -> [String] {
         let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
+        return (try? listSubdirectoriesViaFileManager(parentURL: parentURL).sorted()) ?? []
+    }
 
-        if let names = try? listSubdirectoriesViaFileManager(parentURL: parentURL), !names.isEmpty {
-            return names.sorted()
-        }
+    func metadataSubdirectoryNames(
+        parentPath: String,
+        timeout: TimeInterval? = nil
+    ) async throws -> [String] {
+        try await metadataSubdirectoryNames(
+            parentDirectoryURL: URL(fileURLWithPath: parentPath, isDirectory: true),
+            timeout: timeout ?? metadataListingTimeout
+        )
+    }
 
-        Log.info("listSubdirectories: FileManager found nothing, falling back to metadata query")
-        return try metadataSubdirectoryNames(
-            parentDirectoryURL: parentURL,
-            timeout: metadataTimeout ?? metadataListingTimeout
+    func locallyVisibleFileNames(namespacePath: String, prefix: String) -> [String] {
+        let directoryURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
+        return (try? listFilesViaFileManager(dirURL: directoryURL, prefix: prefix).sorted()) ?? []
+    }
+
+    func metadataFileNames(namespacePath: String, prefix: String) async throws -> [String] {
+        try await metadataFileNames(
+            parentDirectoryURL: URL(fileURLWithPath: namespacePath, isDirectory: true),
+            prefix: prefix
         )
     }
 
     private func listSubdirectoriesViaFileManager(parentURL: URL) throws -> [String] {
         let contents = try FileManager.default.contentsOfDirectory(
-            at: parentURL, includingPropertiesForKeys: [.isDirectoryKey],
+            at: parentURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
             options: []
         )
 
@@ -781,21 +768,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         return Array(names)
-    }
-
-    /// Lists filenames matching a prefix within a namespace directory
-    ///
-    /// Tries FileManager first (fast, sees .icloud stubs and dataless files),
-    /// falls back to metadata query only if FileManager finds nothing
-    func listFiles(namespacePath: String, prefix: String) throws -> [String] {
-        let dirURL = URL(fileURLWithPath: namespacePath, isDirectory: true)
-
-        if let names = try? listFilesViaFileManager(dirURL: dirURL, prefix: prefix), !names.isEmpty {
-            return names.sorted()
-        }
-
-        Log.info("listFiles: FileManager found nothing, falling back to metadata query prefix=\(prefix)")
-        return try metadataFileNames(parentDirectoryURL: dirURL, prefix: prefix)
     }
 
     private func listFilesViaFileManager(dirURL: URL, prefix: String) throws -> [String] {
@@ -844,14 +816,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation]
-    ) throws -> Bool {
+    ) async throws -> Bool {
         let urls = try locations.map { location in
             try backupFileReadURL(namespace: namespace, location: location)
         }
 
         for url in urls {
             let resolvedURL =
-                resolvedMetadataItemIfPresent(
+                try await resolvedMetadataItemIfPresent(
                     named: url.lastPathComponent,
                     parentDirectoryURL: url.deletingLastPathComponent()
                 )?.url ?? url
@@ -874,7 +846,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation]
-    ) throws {
+    ) async throws {
         var deletedAny = false
         var lastError: Error?
 
@@ -890,7 +862,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                     continue
                 }
 
-                let resolvedURL = try metadataItemIfPresent(
+                let resolvedURL = try await metadataItemIfPresent(
                     named: url.lastPathComponent,
                     parentDirectoryURL: url.deletingLastPathComponent()
                 )?.url

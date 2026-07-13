@@ -1,50 +1,415 @@
 import CoveCore
 import Foundation
 
-private final class MetadataQuerySession<Value> {
-    let query = NSMetadataQuery()
-    let box = ICloudDriveHelper.ObserverBox()
-    let semaphore = DispatchSemaphore(value: 0)
-    var finalizeWorkItem: DispatchWorkItem?
+struct ICloudMetadataRecord: Equatable, Sendable {
+    let name: String
+    let url: URL
+    let resolvedPath: String
 
-    private(set) var value: Value?
-    private var didSignal = false
-
-    func finish(_ value: Value, disableUpdates: Bool = false) {
-        guard !didSignal else { return }
-        didSignal = true
-        finalizeWorkItem?.cancel()
-        if disableUpdates {
-            query.disableUpdates()
-        }
-        self.value = value
-        query.stop()
-        box.removeAll()
-        semaphore.signal()
-    }
-
-    func finishOnMain(_ value: Value, disableUpdates: Bool = false) {
-        DispatchQueue.main.async {
-            self.finish(value, disableUpdates: disableUpdates)
-        }
-    }
-
-    func wait(timeout: TimeInterval) -> Value? {
-        guard semaphore.wait(timeout: .now() + timeout) != .timedOut else { return nil }
-        return value
+    func matches(name: String, parentPath: String) -> Bool {
+        self.name == name
+            && URL(fileURLWithPath: resolvedPath).deletingLastPathComponent().path == parentPath
     }
 }
 
-private struct OptionalMetadataQueryResult<Value> {
-    let value: Value?
+enum ICloudMetadataProjection {
+    static func subdirectoryNames(
+        in records: [ICloudMetadataRecord],
+        parentPath: String
+    ) -> [String] {
+        let pathPrefix = parentPath + "/"
+        var names = Set<String>()
+
+        for record in records where record.resolvedPath.hasPrefix(pathPrefix) {
+            let relativePath = String(record.resolvedPath.dropFirst(pathPrefix.count))
+            guard let firstComponent = relativePath.split(separator: "/").first else { continue }
+            names.insert(String(firstComponent))
+        }
+        return names.sorted()
+    }
+
+    static func fileNames(
+        in records: [ICloudMetadataRecord],
+        parentPath: String,
+        prefix: String
+    ) -> [String] {
+        let pathPrefix = parentPath + "/"
+        var names = Set<String>()
+
+        for record in records where record.resolvedPath.hasPrefix(pathPrefix) {
+            let relativePath = String(record.resolvedPath.dropFirst(pathPrefix.count))
+            guard !relativePath.contains("/") else { continue }
+            let name = URL(fileURLWithPath: relativePath).lastPathComponent
+            guard name.hasPrefix(prefix) else { continue }
+            names.insert(name)
+        }
+        return names.sorted()
+    }
 }
 
-final class SyncHealthObserver {
+enum ICloudMetadataQueryEvent: Sendable {
+    case finishedGathering([ICloudMetadataRecord])
+    case updated([ICloudMetadataRecord])
+}
+
+@MainActor
+protocol ICloudMetadataQuerySource: AnyObject {
+    func start(onEvent: @escaping @MainActor (ICloudMetadataQueryEvent) -> Void) -> Bool
+}
+
+@MainActor
+private final class FoundationICloudMetadataQuerySource: ICloudMetadataQuerySource {
     private let query = NSMetadataQuery()
-    private let box = ICloudDriveHelper.ObserverBox()
+    private var observers: [NSObjectProtocol] = []
+    private var didStart = false
+    private var onEvent: (@MainActor (ICloudMetadataQueryEvent) -> Void)?
+
+    func start(onEvent: @escaping @MainActor (ICloudMetadataQueryEvent) -> Void) -> Bool {
+        guard !didStart else { return true }
+
+        self.onEvent = onEvent
+        query.searchScopes = [NSMetadataQueryUbiquitousDataScope]
+        query.predicate = NSPredicate(value: true)
+
+        observers.append(
+            NotificationCenter.default.addObserver(
+                forName: .NSMetadataQueryDidFinishGathering,
+                object: query,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.onEvent?(.finishedGathering(self.snapshot()))
+                }
+            }
+        )
+        observers.append(
+            NotificationCenter.default.addObserver(
+                forName: .NSMetadataQueryDidUpdate,
+                object: query,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.onEvent?(.updated(self.snapshot()))
+                }
+            }
+        )
+
+        guard query.start() else {
+            removeObservers()
+            self.onEvent = nil
+            return false
+        }
+
+        didStart = true
+        return true
+    }
+
+    private func snapshot() -> [ICloudMetadataRecord] {
+        query.disableUpdates()
+        defer { query.enableUpdates() }
+
+        var records: [ICloudMetadataRecord] = []
+        query.enumerateResults { result, _, _ in
+            guard let item = result as? NSMetadataItem else { return }
+            guard let name = item.value(forAttribute: NSMetadataItemFSNameKey) as? String else {
+                return
+            }
+            guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { return }
+
+            let path =
+                (item.value(forAttribute: NSMetadataItemPathKey) as? String) ?? url.path
+            records.append(ICloudMetadataRecord(
+                name: name,
+                url: url,
+                resolvedPath: Self.resolvedPath(path)
+            ))
+        }
+        return records
+    }
+
+    private func removeObservers() {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        observers.removeAll()
+    }
+
+    private static func resolvedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+    }
+}
+
+enum ICloudMetadataIndexError: Error, Equatable {
+    case startFailed
+    case timedOut
+}
+
+@MainActor
+final class ICloudMetadataIndex {
+    static let shared = ICloudMetadataIndex(source: FoundationICloudMetadataQuerySource())
+
+    private enum Phase {
+        case idle
+        case gathering
+        case live
+        case failed
+    }
+
+    private struct SnapshotWaiter {
+        let continuation: CheckedContinuation<[ICloudMetadataRecord], Error>
+        let timeoutTask: Task<Void, Never>
+    }
+
+    private struct ItemWaiter {
+        let name: String
+        let parentPath: String
+        let continuation: CheckedContinuation<ICloudMetadataRecord, Error>
+        let timeoutTask: Task<Void, Never>
+    }
+
+    private let source: ICloudMetadataQuerySource
+    private var phase = Phase.idle
+    private var records: [ICloudMetadataRecord] = []
+    private var generation: UInt64 = 0
+    private var snapshotWaiters: [UUID: SnapshotWaiter] = [:]
+    private var itemWaiters: [UUID: ItemWaiter] = [:]
+    private var observers: [UUID: @MainActor @Sendable () -> Void] = [:]
+
+    init(source: ICloudMetadataQuerySource) {
+        self.source = source
+    }
+
+    func currentOrInitialRecords(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
+        try Task.checkCancellation()
+        startIfNeeded()
+
+        switch phase {
+        case .live:
+            return records
+        case .failed:
+            throw ICloudMetadataIndexError.startFailed
+        case .idle, .gathering:
+            return try await waitForInitialSnapshot(timeout: timeout)
+        }
+    }
+
+    func settledRecords(
+        timeout: TimeInterval,
+        settleInterval: TimeInterval
+    ) async throws -> [ICloudMetadataRecord] {
+        let deadline = Date().addingTimeInterval(timeout)
+        _ = try await currentOrInitialRecords(timeout: timeout)
+
+        while true {
+            try Task.checkCancellation()
+            let observedGeneration = generation
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { throw ICloudMetadataIndexError.timedOut }
+
+            try await Task.sleep(for: .seconds(min(settleInterval, remaining)))
+            guard generation == observedGeneration else { continue }
+
+            return records
+        }
+    }
+
+    func itemIfPresent(
+        named name: String,
+        parentPath: String,
+        timeout: TimeInterval
+    ) async throws -> ICloudMetadataRecord? {
+        let records = try await currentOrInitialRecords(timeout: timeout)
+        return Self.item(named: name, parentPath: parentPath, in: records)
+    }
+
+    func waitForItem(
+        named name: String,
+        parentPath: String,
+        timeout: TimeInterval
+    ) async throws -> ICloudMetadataRecord {
+        try Task.checkCancellation()
+        startIfNeeded()
+
+        if let item = Self.item(named: name, parentPath: parentPath, in: records) {
+            return item
+        }
+        if case .failed = phase {
+            throw ICloudMetadataIndexError.startFailed
+        }
+
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let timeoutTask = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(max(0, timeout)))
+                    } catch {
+                        return
+                    }
+                    self?.timeoutItemWaiter(id)
+                }
+                itemWaiters[id] = ItemWaiter(
+                    name: name,
+                    parentPath: parentPath,
+                    continuation: continuation,
+                    timeoutTask: timeoutTask
+                )
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelItemWaiter(id)
+            }
+        }
+    }
+
+    func addObserver(_ observer: @escaping @MainActor @Sendable () -> Void) -> UUID {
+        startIfNeeded()
+        let id = UUID()
+        observers[id] = observer
+        return id
+    }
+
+    func removeObserver(_ id: UUID) {
+        observers.removeValue(forKey: id)
+    }
+
+    private func startIfNeeded() {
+        guard case .idle = phase else { return }
+
+        phase = .gathering
+        let started = source.start { [weak self] event in
+            self?.apply(event)
+        }
+        guard !started else { return }
+
+        phase = .failed
+        failAllWaiters(with: ICloudMetadataIndexError.startFailed)
+    }
+
+    private func apply(_ event: ICloudMetadataQueryEvent) {
+        switch event {
+        case let .finishedGathering(records):
+            self.records = records
+            phase = .live
+            resumeSnapshotWaiters()
+        case let .updated(records):
+            self.records = records
+        }
+
+        generation &+= 1
+        resumeMatchingItemWaiters()
+
+        for observer in observers.values {
+            observer()
+        }
+    }
+
+    private func waitForInitialSnapshot(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let timeoutTask = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: .seconds(max(0, timeout)))
+                    } catch {
+                        return
+                    }
+                    self?.timeoutSnapshotWaiter(id)
+                }
+                snapshotWaiters[id] = SnapshotWaiter(
+                    continuation: continuation,
+                    timeoutTask: timeoutTask
+                )
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelSnapshotWaiter(id)
+            }
+        }
+    }
+
+    private func resumeSnapshotWaiters() {
+        let waiters = snapshotWaiters.values
+        snapshotWaiters.removeAll()
+        for waiter in waiters {
+            waiter.timeoutTask.cancel()
+            waiter.continuation.resume(returning: records)
+        }
+    }
+
+    private func resumeMatchingItemWaiters() {
+        let matches = itemWaiters.compactMap { id, waiter -> (UUID, ItemWaiter, ICloudMetadataRecord)? in
+            guard let item = Self.item(
+                named: waiter.name,
+                parentPath: waiter.parentPath,
+                in: records
+            ) else {
+                return nil
+            }
+            return (id, waiter, item)
+        }
+
+        for (id, waiter, item) in matches {
+            itemWaiters.removeValue(forKey: id)
+            waiter.timeoutTask.cancel()
+            waiter.continuation.resume(returning: item)
+        }
+    }
+
+    private func timeoutSnapshotWaiter(_ id: UUID) {
+        guard let waiter = snapshotWaiters.removeValue(forKey: id) else { return }
+        waiter.continuation.resume(throwing: ICloudMetadataIndexError.timedOut)
+    }
+
+    private func timeoutItemWaiter(_ id: UUID) {
+        guard let waiter = itemWaiters.removeValue(forKey: id) else { return }
+        waiter.continuation.resume(throwing: ICloudMetadataIndexError.timedOut)
+    }
+
+    private func cancelSnapshotWaiter(_ id: UUID) {
+        guard let waiter = snapshotWaiters.removeValue(forKey: id) else { return }
+        waiter.timeoutTask.cancel()
+        waiter.continuation.resume(throwing: CancellationError())
+    }
+
+    private func cancelItemWaiter(_ id: UUID) {
+        guard let waiter = itemWaiters.removeValue(forKey: id) else { return }
+        waiter.timeoutTask.cancel()
+        waiter.continuation.resume(throwing: CancellationError())
+    }
+
+    private func failAllWaiters(with error: Error) {
+        let snapshotWaiters = snapshotWaiters.values
+        self.snapshotWaiters.removeAll()
+        for waiter in snapshotWaiters {
+            waiter.timeoutTask.cancel()
+            waiter.continuation.resume(throwing: error)
+        }
+
+        let itemWaiters = itemWaiters.values
+        self.itemWaiters.removeAll()
+        for waiter in itemWaiters {
+            waiter.timeoutTask.cancel()
+            waiter.continuation.resume(throwing: error)
+        }
+    }
+
+    private static func item(
+        named name: String,
+        parentPath: String,
+        in records: [ICloudMetadataRecord]
+    ) -> ICloudMetadataRecord? {
+        records.first { $0.matches(name: name, parentPath: parentPath) }
+    }
+}
+
+final class SyncHealthObserver: @unchecked Sendable {
     private let settleInterval: TimeInterval
     private let onChange: @Sendable () -> Void
     private var notifyWorkItem: DispatchWorkItem?
+    private var observerID: UUID?
 
     init(settleInterval: TimeInterval, onChange: @escaping @Sendable () -> Void) {
         self.settleInterval = settleInterval
@@ -52,49 +417,29 @@ final class SyncHealthObserver {
     }
 
     func start() {
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
-            guard !query.isStarted else { return }
+            guard observerID == nil else { return }
 
-            query.searchScopes = [NSMetadataQueryUbiquitousDataScope]
-            query.predicate = NSPredicate(value: true)
-
-            box.add(
-                NotificationCenter.default.addObserver(
-                    forName: .NSMetadataQueryDidFinishGathering,
-                    object: query,
-                    queue: .main
-                ) { [weak self] _ in
-                    self?.scheduleNotify()
-                }
-            )
-            box.add(
-                NotificationCenter.default.addObserver(
-                    forName: .NSMetadataQueryDidUpdate,
-                    object: query,
-                    queue: .main
-                ) { [weak self] _ in
-                    self?.scheduleNotify()
-                }
-            )
-
-            if !query.start() {
-                box.removeAll()
+            observerID = ICloudMetadataIndex.shared.addObserver { [weak self] in
+                self?.scheduleNotify()
             }
         }
     }
 
     func stop() {
-        if Thread.isMainThread {
-            stopOnMain()
-            return
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.stopOnMain()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            notifyWorkItem?.cancel()
+            notifyWorkItem = nil
+            if let observerID {
+                ICloudMetadataIndex.shared.removeObserver(observerID)
+                self.observerID = nil
+            }
         }
     }
 
+    @MainActor
     private func scheduleNotify() {
         notifyWorkItem?.cancel()
         let workItem = DispatchWorkItem { [onChange] in
@@ -102,13 +447,6 @@ final class SyncHealthObserver {
         }
         notifyWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + settleInterval, execute: workItem)
-    }
-
-    private func stopOnMain() {
-        notifyWorkItem?.cancel()
-        notifyWorkItem = nil
-        query.stop()
-        box.removeAll()
     }
 }
 
@@ -119,285 +457,32 @@ extension ICloudDriveHelper {
         SyncHealthObserver(settleInterval: metadataSettleInterval, onChange: onChange)
     }
 
-    // MARK: - Cloud presence via NSMetadataQuery
-
-    private func startMetadataQuery(
-        _ session: MetadataQuerySession<some Any>,
-        searchScopes: [Any],
-        predicate: NSPredicate,
-        onStartFailure: @escaping () -> Void,
-        onFinishGathering: @escaping () -> Void,
-        onUpdate: @escaping () -> Void
-    ) {
-        DispatchQueue.main.async {
-            session.query.searchScopes = searchScopes
-            session.query.predicate = predicate
-
-            session.box.add(
-                NotificationCenter.default.addObserver(
-                    forName: .NSMetadataQueryDidFinishGathering,
-                    object: session.query,
-                    queue: .main
-                ) { _ in
-                    onFinishGathering()
-                }
-            )
-            session.box.add(
-                NotificationCenter.default.addObserver(
-                    forName: .NSMetadataQueryDidUpdate,
-                    object: session.query,
-                    queue: .main
-                ) { _ in
-                    onUpdate()
-                }
-            )
-
-            if !session.query.start() {
-                onStartFailure()
-            }
-        }
-    }
-
-    private func runMetadataResultQuery<Value, Failure: Error>(
-        searchScopes: [Any],
-        predicate: NSPredicate,
-        timeout: TimeInterval,
-        onStartFailure: @escaping (MetadataQuerySession<Result<Value, Failure>>) -> Void,
-        onTimeout: @escaping (MetadataQuerySession<Result<Value, Failure>>) -> Void,
-        onFinishGathering: @escaping (MetadataQuerySession<Result<Value, Failure>>) -> Void,
-        onUpdate: @escaping (MetadataQuerySession<Result<Value, Failure>>) -> Void
-    ) -> Result<Value, Failure>? {
-        let session = MetadataQuerySession<Result<Value, Failure>>()
-
-        startMetadataQuery(
-            session,
-            searchScopes: searchScopes,
-            predicate: predicate,
-            onStartFailure: { onStartFailure(session) },
-            onFinishGathering: { onFinishGathering(session) },
-            onUpdate: { onUpdate(session) }
-        )
-
-        guard let value = session.wait(timeout: timeout) else {
-            onTimeout(session)
-            _ = session.wait(timeout: 1)
-            return nil
-        }
-
-        return value
-    }
-
-    private func runMetadataOptionalQuery<Value>(
-        searchScopes: [Any],
-        predicate: NSPredicate,
-        timeout: TimeInterval,
-        onStartFailure: @escaping (MetadataQuerySession<OptionalMetadataQueryResult<Value>>) -> Void,
-        onTimeout: @escaping (MetadataQuerySession<OptionalMetadataQueryResult<Value>>) -> Void,
-        onFinishGathering: @escaping (MetadataQuerySession<OptionalMetadataQueryResult<Value>>) -> Void,
-        onUpdate: @escaping (MetadataQuerySession<OptionalMetadataQueryResult<Value>>) -> Void
-    ) -> (didComplete: Bool, value: Value?) {
-        let session = MetadataQuerySession<OptionalMetadataQueryResult<Value>>()
-
-        startMetadataQuery(
-            session,
-            searchScopes: searchScopes,
-            predicate: predicate,
-            onStartFailure: { onStartFailure(session) },
-            onFinishGathering: { onFinishGathering(session) },
-            onUpdate: { onUpdate(session) }
-        )
-
-        guard let result = session.wait(timeout: timeout) else {
-            onTimeout(session)
-            _ = session.wait(timeout: 1)
-            return (false, nil)
-        }
-
-        return (true, result.value)
-    }
-
-    /// Runs an NSMetadataQuery and returns all matching items
-    ///
-    /// Must NOT be called from the main thread
-    func metadataQuery(
-        predicate: NSPredicate,
-        searchScopes: [Any] = [NSMetadataQueryUbiquitousDataScope],
-        timeout: TimeInterval? = nil
-    ) throws -> [NSMetadataItem] {
-        let effectiveTimeout = timeout ?? defaultTimeout
-        let finishQuery = {
-            (session: MetadataQuerySession<Result<[NSMetadataItem], CloudStorageError>>, reason: String)
-            in
-            let results = (0 ..< session.query.resultCount).compactMap {
-                session.query.result(at: $0) as? NSMetadataItem
-            }
-            Log.info(
-                "metadataQuery: finalized reason=\(reason) count=\(results.count) predicate=\(predicate.predicateFormat)"
-            )
-            session.finish(.success(results), disableUpdates: true)
-        }
-
-        Log.info("metadataQuery: starting predicate=\(predicate.predicateFormat)")
-        let result = runMetadataResultQuery(
-            searchScopes: searchScopes,
-            predicate: predicate,
-            timeout: effectiveTimeout,
-            onStartFailure: { session in
-                session.box.removeAll()
-                session.finish(.failure(.NotAvailable("failed to start iCloud metadata query")))
-            },
-            onTimeout: { session in
-                session.finishOnMain(.failure(.Offline("iCloud metadata query timed out")))
-            },
-            onFinishGathering: {
-                (session: MetadataQuerySession<Result<[NSMetadataItem], CloudStorageError>>) in
-                Log.info(
-                    "metadataQuery: finish gathering count=\(session.query.resultCount) predicate=\(predicate.predicateFormat)"
-                )
-                self.scheduleFinalize(session, finishQuery: finishQuery, reason: "finish")
-            },
-            onUpdate: {
-                (session: MetadataQuerySession<Result<[NSMetadataItem], CloudStorageError>>) in
-                Log.info(
-                    "metadataQuery: update count=\(session.query.resultCount) predicate=\(predicate.predicateFormat)"
-                )
-                self.scheduleFinalize(session, finishQuery: finishQuery, reason: "update")
-            }
-        )
-
-        guard let result else { throw CloudStorageError.Offline("iCloud metadata query timed out") }
-
-        switch result {
-        case let .success(results):
-            return results
-        case let .failure(error):
-            throw error
-        }
-    }
-
-    private func scheduleFinalize<Value>(
-        _ session: MetadataQuerySession<Value>,
-        finishQuery: @escaping (MetadataQuerySession<Value>, String) -> Void,
-        reason: String
-    ) {
-        DispatchQueue.main.async {
-            let scheduleFinalize = { (reason: String) in
-                session.finalizeWorkItem?.cancel()
-                let workItem = DispatchWorkItem {
-                    finishQuery(session, reason)
-                }
-                session.finalizeWorkItem = workItem
-                DispatchQueue.main.asyncAfter(
-                    deadline: .now() + self.metadataSettleInterval,
-                    execute: workItem
-                )
-            }
-            scheduleFinalize(reason)
-        }
-    }
-
-    /// Authoritatively checks whether a file exists in iCloud (finds evicted files too)
-    ///
-    /// Must NOT be called from the main thread
-    func fileExistsInCloud(name: String) throws -> Bool {
-        let predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, name)
-        let results = try metadataQuery(predicate: predicate)
-        return !results.isEmpty
-    }
-
-    /// Resolve symlinks so /var and /private/var compare correctly
-    private static func resolvedPath(_ path: String) -> String {
-        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-    }
-
-    private static func metadataPath(for item: NSMetadataItem) -> String? {
-        if let path = item.value(forAttribute: NSMetadataItemPathKey) as? String {
-            return resolvedPath(path)
-        }
-        if let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL {
-            return resolvedPath(url.path)
-        }
-        return nil
-    }
-
-    private static func resolvedItem(
-        named name: String,
-        under resolvedParent: String,
-        in query: NSMetadataQuery
-    ) -> ResolvedMetadataItem? {
-        let prefix = resolvedParent + "/"
-
-        for index in 0 ..< query.resultCount {
-            guard let item = query.result(at: index) as? NSMetadataItem else { continue }
-            guard let itemName = item.value(forAttribute: NSMetadataItemFSNameKey) as? String else { continue }
-            guard itemName == name else { continue }
-            guard let metadataURL = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { continue }
-            let metadataPath = Self.metadataPath(for: item)
-            if let metadataPath, metadataPath.hasPrefix(prefix) {
-                return ResolvedMetadataItem(url: metadataURL, metadataPath: metadataPath)
-            }
-        }
-
-        return nil
-    }
-
-    private static func metadataItemSummary(_ item: NSMetadataItem) -> String {
-        let name = (item.value(forAttribute: NSMetadataItemFSNameKey) as? String) ?? "<unknown>"
-        let path = metadataPath(for: item) ?? "<no-path>"
-        let url =
-            ((item.value(forAttribute: NSMetadataItemURLKey) as? URL)?.path) ?? "<no-url>"
-        return "name=\(name) path=\(path) url=\(url)"
-    }
-
-    private static func metadataItemSummaries(in query: NSMetadataQuery) -> [String] {
-        (0 ..< query.resultCount).compactMap { index in
-            guard let item = query.result(at: index) as? NSMetadataItem else {
-                return nil
-            }
-            return metadataItemSummary(item)
-        }
+    func fileExistsInCloud(name: String) async throws -> Bool {
+        let records = try await metadataRecords(timeout: defaultTimeout)
+        return records.contains { $0.name == name }
     }
 
     func logMetadataItems(
         under parentDirectoryURL: URL,
         reason: String,
         focusName: String
-    ) {
+    ) async {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
-        let finish = { (session: MetadataQuerySession<OptionalMetadataQueryResult<Void>>) in
-            let summaries = Self.metadataItemSummaries(in: session.query)
+        do {
+            let records = try await metadataRecords(timeout: metadataListingTimeout)
+            let matchingRecords = records.filter { $0.resolvedPath.hasPrefix(resolvedParent + "/") }
             Log.info(
-                "metadataItems: reason=\(reason) focus=\(focusName) parent=\(resolvedParent) count=\(summaries.count)"
+                "metadataItems: reason=\(reason) focus=\(focusName) parent=\(resolvedParent) count=\(matchingRecords.count)"
             )
-            for summary in summaries {
-                Log.info("metadataItems: \(summary)")
-            }
-            session.finish(OptionalMetadataQueryResult(value: ()))
-        }
-
-        let result = runMetadataOptionalQuery(
-            searchScopes: [NSMetadataQueryUbiquitousDataScope],
-            predicate: NSPredicate(value: true),
-            timeout: 5,
-            onStartFailure: { session in
+            for record in matchingRecords {
                 Log.info(
-                    "metadataItems: failed to start reason=\(reason) focus=\(focusName) parent=\(resolvedParent)"
+                    "metadataItems: name=\(record.name) path=\(record.resolvedPath) url=\(record.url.path)"
                 )
-                session.box.removeAll()
-                session.finish(OptionalMetadataQueryResult(value: ()))
-            },
-            onTimeout: { session in
-                session.finishOnMain(OptionalMetadataQueryResult(value: ()))
-            },
-            onFinishGathering: finish,
-            onUpdate: finish
-        )
-
-        guard result.didComplete else {
+            }
+        } catch {
             Log.info(
-                "metadataItems: timed out reason=\(reason) focus=\(focusName) parent=\(resolvedParent)"
+                "metadataItems: failed reason=\(reason) focus=\(focusName) parent=\(resolvedParent) error=\(error.localizedDescription)"
             )
-            return
         }
     }
 
@@ -405,218 +490,98 @@ extension ICloudDriveHelper {
         named name: String,
         parentDirectoryURL: URL,
         deadline: Date
-    ) throws -> ResolvedMetadataItem {
+    ) async throws -> ResolvedMetadataItem {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
-        let predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, name)
-        let finish = {
-            (
-                session: MetadataQuerySession<Result<ResolvedMetadataItem, MetadataLookupError>>,
-                item: ResolvedMetadataItem?,
-                error: MetadataLookupError?
-            ) in
-            if let error {
-                session.finish(.failure(error))
-                return
-            }
-
-            if let item {
-                session.finish(.success(item))
-                return
-            }
-
-            session.finish(
-                .failure(.missingURL("iCloud metadata query finished without a URL for \(name)"))
-            )
-        }
-
-        let evaluate = {
-            (
-                session: MetadataQuerySession<Result<ResolvedMetadataItem, MetadataLookupError>>,
-                reason: String
-            ) in
-            if let item = Self.resolvedItem(
+        do {
+            let record = try await ICloudMetadataIndex.shared.waitForItem(
                 named: name,
-                under: resolvedParent,
-                in: session.query
-            ) {
-                Log.info(
-                    "metadataLookup: resolved name=\(name) reason=\(reason) url=\(item.url.path) metadataPath=\(item.metadataPath ?? "<unknown>")"
-                )
-                finish(session, item, nil)
-                return
-            }
-
-            Log.info(
-                "metadataLookup: no match yet name=\(name) reason=\(reason) count=\(session.query.resultCount) parent=\(resolvedParent)"
+                parentPath: resolvedParent,
+                timeout: max(0, deadline.timeIntervalSinceNow)
             )
-            for summary in Self.metadataItemSummaries(in: session.query) {
-                Log.info("metadataLookup: item \(summary)")
-            }
-        }
-
-        Log.info(
-            "metadataLookup: starting name=\(name) parent=\(resolvedParent) predicate=\(predicate.predicateFormat)"
-        )
-        let result = runMetadataResultQuery(
-            searchScopes: [NSMetadataQueryUbiquitousDataScope],
-            predicate: predicate,
-            timeout: deadline.timeIntervalSinceNow,
-            onStartFailure: { session in
-                finish(
-                    session,
-                    nil,
-                    .startFailed("failed to start iCloud metadata query for \(name)")
-                )
-            },
-            onTimeout: { session in
-                session.finishOnMain(
-                    .failure(.timedOut("iCloud metadata query timed out for \(name)"))
-                )
-            },
-            onFinishGathering: { session in
-                evaluate(session, "finish")
-            },
-            onUpdate: { session in
-                evaluate(session, "update")
-            }
-        )
-
-        guard let result else { throw MetadataLookupError.timedOut("iCloud metadata query timed out for \(name)") }
-
-        switch result {
-        case let .failure(failure):
-            throw failure
-        case let .success(resolvedItem):
-            return resolvedItem
+            Log.info(
+                "metadataLookup: resolved name=\(name) url=\(record.url.path) metadataPath=\(record.resolvedPath)"
+            )
+            return ResolvedMetadataItem(url: record.url, metadataPath: record.resolvedPath)
+        } catch ICloudMetadataIndexError.startFailed {
+            throw MetadataLookupError.startFailed("failed to start iCloud metadata query for \(name)")
+        } catch ICloudMetadataIndexError.timedOut {
+            throw MetadataLookupError.timedOut("iCloud metadata query timed out for \(name)")
         }
     }
 
     func resolvedMetadataItemIfPresent(
         named name: String,
         parentDirectoryURL: URL
-    ) -> ResolvedMetadataItem? {
-        let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
-        let predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, name)
-
-        let result: (didComplete: Bool, value: ResolvedMetadataItem?) = runMetadataOptionalQuery(
-            searchScopes: [NSMetadataQueryUbiquitousDataScope],
-            predicate: predicate,
-            timeout: 5,
-            onStartFailure: { session in
-                session.finish(OptionalMetadataQueryResult(value: nil))
-            },
-            onTimeout: { session in
-                session.finishOnMain(OptionalMetadataQueryResult(value: nil))
-            },
-            onFinishGathering: { session in
-                let match = Self.resolvedItem(
-                    named: name,
-                    under: resolvedParent,
-                    in: session.query
-                )
-                session.finish(OptionalMetadataQueryResult(value: match))
-            },
-            onUpdate: { session in
-                let match = Self.resolvedItem(
-                    named: name,
-                    under: resolvedParent,
-                    in: session.query
-                )
-                session.finish(OptionalMetadataQueryResult(value: match))
-            }
-        )
-
-        guard result.didComplete else { return nil }
-        return result.value
+    ) async throws -> ResolvedMetadataItem? {
+        do {
+            return try await metadataItemIfPresent(
+                named: name,
+                parentDirectoryURL: parentDirectoryURL
+            )
+        } catch let error as CancellationError {
+            throw error
+        } catch {
+            return nil
+        }
     }
 
     func metadataItemIfPresent(
         named name: String,
         parentDirectoryURL: URL
-    ) throws -> ResolvedMetadataItem? {
+    ) async throws -> ResolvedMetadataItem? {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
-        let predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, name)
-        let items = try metadataQuery(
-            predicate: predicate,
-            searchScopes: [NSMetadataQueryUbiquitousDataScope],
-            timeout: 5
-        )
-
-        for item in items {
-            guard
-                let match = Self.resolvedMetadataItem(
-                    from: item,
-                    named: name,
-                    under: resolvedParent
-                )
-            else {
-                continue
+        do {
+            guard let record = try await ICloudMetadataIndex.shared.itemIfPresent(
+                named: name,
+                parentPath: resolvedParent,
+                timeout: metadataListingTimeout
+            ) else {
+                return nil
             }
-            return match
+            return ResolvedMetadataItem(url: record.url, metadataPath: record.resolvedPath)
+        } catch ICloudMetadataIndexError.startFailed {
+            throw MetadataLookupError.startFailed("failed to start iCloud metadata query for \(name)")
+        } catch ICloudMetadataIndexError.timedOut {
+            throw MetadataLookupError.timedOut("iCloud metadata query timed out for \(name)")
         }
-
-        return nil
-    }
-
-    private func metadataNames(
-        parentDirectoryURL: URL,
-        timeout: TimeInterval,
-        transform: (String) -> String?
-    ) throws -> [String] {
-        let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
-        let pathPrefix = resolvedParent + "/"
-        let items = try metadataQuery(
-            predicate: NSPredicate(value: true),
-            timeout: timeout
-        )
-        var names = Set<String>()
-
-        for item in items {
-            guard let metadataPath = Self.metadataPath(for: item) else { continue }
-            guard metadataPath.hasPrefix(pathPrefix) else { continue }
-
-            let relativePath = String(metadataPath.dropFirst(pathPrefix.count))
-            guard let name = transform(relativePath) else { continue }
-            names.insert(name)
-        }
-
-        return names.sorted()
     }
 
     func metadataSubdirectoryNames(
         parentDirectoryURL: URL,
         timeout: TimeInterval
-    ) throws -> [String] {
-        try metadataNames(parentDirectoryURL: parentDirectoryURL, timeout: timeout) { relativePath in
-            guard let firstComponent = relativePath.split(separator: "/").first else { return nil }
-            return String(firstComponent)
+    ) async throws -> [String] {
+        let records = try await metadataRecords(timeout: timeout)
+        let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
+        return ICloudMetadataProjection.subdirectoryNames(
+            in: records,
+            parentPath: resolvedParent
+        )
+    }
+
+    func metadataFileNames(parentDirectoryURL: URL, prefix: String) async throws -> [String] {
+        let records = try await metadataRecords(timeout: metadataListingTimeout)
+        let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
+        return ICloudMetadataProjection.fileNames(
+            in: records,
+            parentPath: resolvedParent,
+            prefix: prefix
+        )
+    }
+
+    private func metadataRecords(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
+        do {
+            return try await ICloudMetadataIndex.shared.settledRecords(
+                timeout: timeout,
+                settleInterval: metadataSettleInterval
+            )
+        } catch ICloudMetadataIndexError.startFailed {
+            throw CloudStorageError.NotAvailable("failed to start iCloud metadata query")
+        } catch ICloudMetadataIndexError.timedOut {
+            throw CloudStorageError.Offline("iCloud metadata query timed out")
         }
     }
 
-    func metadataFileNames(parentDirectoryURL: URL, prefix: String) throws -> [String] {
-        try metadataNames(
-            parentDirectoryURL: parentDirectoryURL,
-            timeout: metadataListingTimeout
-        ) { relativePath in
-            guard !relativePath.contains("/") else { return nil }
-            let name = URL(fileURLWithPath: relativePath).lastPathComponent
-            guard name.hasPrefix(prefix) else { return nil }
-            return name
-        }
-    }
-
-    private static func resolvedMetadataItem(
-        from item: NSMetadataItem,
-        named name: String,
-        under resolvedParent: String
-    ) -> ResolvedMetadataItem? {
-        let prefix = resolvedParent + "/"
-        guard let itemName = item.value(forAttribute: NSMetadataItemFSNameKey) as? String else { return nil }
-        guard itemName == name else { return nil }
-        guard let metadataURL = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { return nil }
-        let metadataPath = Self.metadataPath(for: item)
-        guard let metadataPath, metadataPath.hasPrefix(prefix) else { return nil }
-
-        return ResolvedMetadataItem(url: metadataURL, metadataPath: metadataPath)
+    private static func resolvedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     }
 }
