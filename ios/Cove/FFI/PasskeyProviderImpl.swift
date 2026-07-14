@@ -200,6 +200,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
                 name: user.name,
                 userID: user.id
             )
+
+            // keep registration and PRF assertions on the same verified-user policy
+            request.userVerificationPreference = .required
             request.displayName = user.displayName
             request.prf = .checkForSupport
 
@@ -305,6 +308,8 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
                 request.allowedCredentials = []
             }
 
+            // PRF derives different secrets for verified and unverified requests
+            request.userVerificationPreference = .required
             request.prf = .inputValues(.init(saltInput1: prfSalt))
 
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
