@@ -1,8 +1,8 @@
 use ahash::HashMap;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use cove_util::ResultExt as _;
-use tracing::{error, warn};
+use tracing::warn;
 use zeroize::Zeroizing;
 
 use super::{
@@ -93,72 +93,21 @@ impl RustCloudBackupManager {
 
     async fn is_pending_upload_confirmed(
         &self,
-        completion: &PendingVerificationCompletion,
+        _completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
         sync_state: Option<&PersistedCloudBlobState>,
     ) -> bool {
         match upload {
             PendingVerificationUpload::MasterKeyWrapper => {
-                Self::remote_pending_upload_exists_or_log(completion, upload).await
+                matches!(sync_state, Some(PersistedCloudBlobState::Confirmed(_)))
             }
             PendingVerificationUpload::Wallet { .. } => match sync_state {
                 Some(PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
                     revision_hash,
                     ..
                 })) => revision_hash.as_str() == upload.target_revision(sync_state),
-
-                Some(PersistedCloudBlobState::Failed(_)) => {
-                    Self::remote_pending_upload_exists_or_log(completion, upload).await
-                }
-
-                Some(PersistedCloudBlobState::UploadedPendingConfirmation(_)) => {
-                    Self::remote_pending_upload_exists_or_log(completion, upload).await
-                }
-
                 _ => false,
             },
-        }
-    }
-
-    async fn remote_pending_upload_exists_or_log(
-        completion: &PendingVerificationCompletion,
-        upload: &PendingVerificationUpload,
-    ) -> bool {
-        match Self::remote_pending_upload_exists(completion, upload).await {
-            Ok(exists) => exists,
-            Err(error) => {
-                let expected_revision = upload.expected_revision();
-                error!(
-                    "remote_pending_upload_exists failed for pending upload expected_revision={expected_revision}: {error:?}"
-                );
-                false
-            }
-        }
-    }
-
-    async fn remote_pending_upload_exists(
-        completion: &PendingVerificationCompletion,
-        upload: &PendingVerificationUpload,
-    ) -> Result<bool, CloudStorageError> {
-        let cloud = CloudStorage::global_silent_client();
-        let result = match upload {
-            PendingVerificationUpload::MasterKeyWrapper => {
-                cloud.download_master_key_backup(completion.namespace_id().to_string()).await
-            }
-            PendingVerificationUpload::Wallet { record_id, .. } => {
-                cloud
-                    .download_wallet_backup(
-                        completion.namespace_id().to_string(),
-                        record_id.to_string(),
-                    )
-                    .await
-            }
-        };
-
-        match result {
-            Ok(_) => Ok(true),
-            Err(CloudStorageError::NotFound(_)) => Ok(false),
-            Err(error) => Err(error),
         }
     }
 

@@ -244,13 +244,10 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         data: Data,
         policy _: CloudAccessPolicy
     ) async throws {
-        let url = try await run {
+        try await run {
             let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
-            return url
         }
-
-        try await helper.waitForMetadataVisibility(url: url)
     }
 
     func uploadWalletBackup(
@@ -260,13 +257,10 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         data: Data,
         policy _: CloudAccessPolicy
     ) async throws {
-        let url = try await run {
+        try await run {
             let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
-            return url
         }
-
-        try await helper.waitForMetadataVisibility(url: url)
     }
 
     // MARK: - Download

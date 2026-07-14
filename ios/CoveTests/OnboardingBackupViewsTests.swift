@@ -25,4 +25,22 @@ final class OnboardingBackupViewsTests: XCTestCase {
             orderedWords
         )
     }
+
+    func testOnboardingCloudBackupCanFinishWhileUploadConfirmationIsPending() {
+        XCTAssertTrue(
+            shouldCompleteOnboardingCloudBackup(
+                passkeyState: .available,
+                verificationState: .awaitingUploadConfirmation
+            )
+        )
+    }
+
+    func testOnboardingCloudBackupDoesNotFinishWithoutAnAvailablePasskey() {
+        XCTAssertFalse(
+            shouldCompleteOnboardingCloudBackup(
+                passkeyState: .missing,
+                verificationState: .awaitingUploadConfirmation
+            )
+        )
+    }
 }

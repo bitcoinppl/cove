@@ -306,6 +306,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     func writeForUpload(data: Data, to url: URL) throws {
         guard !FileManager.default.fileExists(atPath: url.path) else {
             try coordinatedWrite(data: data, to: url)
+            try validateLocallyStagedUpload(data: data, at: url)
             return
         }
 
@@ -351,6 +352,17 @@ final class ICloudDriveHelper: @unchecked Sendable {
         if let error = coordinatorError ?? moveError {
             throw Self.uploadError("setUbiquitous failed", error: error)
         }
+
+        try validateLocallyStagedUpload(data: data, at: url)
+    }
+
+    private func validateLocallyStagedUpload(data: Data, at url: URL) throws {
+        let stagedData = try coordinatedRead(from: url)
+        guard stagedData == data else {
+            throw CloudStorageError.UploadFailed("local iCloud handoff validation failed")
+        }
+
+        Log.info("writeForUpload: validated local iCloud handoff for \(url.lastPathComponent)")
     }
 
     func coordinatedDelete(at url: URL, missingItemID: String) throws {
@@ -411,96 +423,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
     /// which forces the download through a different (more reliable) path
     func downloadFile(url: URL, recordId: String) async throws -> Data {
         try await downloadData(url: url, recordId: recordId)
-    }
-
-    // MARK: - Upload verification
-
-    /// Blocks until the file is visible through iCloud metadata
-    func waitForMetadataVisibility(url: URL) async throws {
-        let filename = url.lastPathComponent
-        let deadline = Date().addingTimeInterval(defaultTimeout)
-
-        do {
-            let resolvedItem = try await waitForMetadataItem(
-                named: filename,
-                parentDirectoryURL: url.deletingLastPathComponent(),
-                deadline: deadline
-            )
-            if resolvedItem.url != url {
-                Log.info(
-                    "waitForMetadataVisibility: using metadata URL for \(filename) local=\(url.path) metadata=\(resolvedItem.url.path)"
-                )
-            }
-        } catch {
-            throw Self.uploadError("iCloud metadata lookup failed for \(filename)", error: error)
-        }
-    }
-
-    /// Blocks until the file at `url` is confirmed uploaded to iCloud, or times out
-    func waitForUpload(url: URL) async throws {
-        let filename = url.lastPathComponent
-        Log.info("waitForUpload: waiting for \(filename)")
-        let deadline = Date().addingTimeInterval(defaultTimeout)
-
-        if case .uploaded = uploadState(for: url) {
-            Log.info("waitForUpload: \(filename) already uploaded on local URL")
-            return
-        }
-
-        let resolvedItem: ResolvedMetadataItem
-        do {
-            resolvedItem = try await waitForMetadataItem(
-                named: filename,
-                parentDirectoryURL: url.deletingLastPathComponent(),
-                deadline: deadline
-            )
-        } catch {
-            throw Self.uploadError("iCloud metadata lookup failed for \(filename)", error: error)
-        }
-
-        if resolvedItem.url != url {
-            Log.info(
-                "waitForUpload: using metadata URL for \(filename) local=\(url.path) metadata=\(resolvedItem.url.path)"
-            )
-        }
-
-        var lastProgressLog = Date.distantPast
-
-        while Date() < deadline {
-            let state = uploadState(for: resolvedItem.url)
-            let now = Date()
-
-            if now.timeIntervalSince(lastProgressLog) >= progressLogInterval {
-                Log.info(
-                    "waitForUpload: \(filename) state=\(state) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>") diagnostics=\(uploadDiagnostics(for: resolvedItem.url))"
-                )
-                lastProgressLog = now
-            }
-
-            if case .uploaded = state {
-                Log.info("waitForUpload: \(filename) uploaded")
-                return
-            }
-
-            if case let .failed(error) = state {
-                throw Self.uploadError("iCloud upload failed for \(filename)", error: error)
-            }
-
-            try await Task.sleep(for: .seconds(pollInterval))
-        }
-
-        Log.info(
-            "waitForUpload: timeout diagnostics \(filename) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>") diagnostics=\(uploadDiagnostics(for: resolvedItem.url))"
-        )
-        await logMetadataItems(
-            under: url.deletingLastPathComponent(),
-            reason: "waitForUpload timeout",
-            focusName: filename
-        )
-
-        throw CloudStorageError.Offline(
-            "iCloud upload timed out for \(filename) after \(defaultTimeout)s"
-        )
     }
 
     // MARK: - Download
@@ -658,34 +580,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         return .uploading
-    }
-
-    private func uploadDiagnostics(for url: URL) -> String {
-        let exists = FileManager.default.fileExists(atPath: url.path)
-        let fileSize: String =
-            if exists,
-            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-            let size = attributes[.size] as? NSNumber {
-                size.stringValue
-            } else {
-                "nil"
-            }
-
-        guard
-            let values = try? url.resourceValues(forKeys: [
-                .isUbiquitousItemKey,
-                .ubiquitousItemIsUploadingKey,
-                .ubiquitousItemIsUploadedKey,
-                .ubiquitousItemUploadingErrorKey,
-            ])
-        else {
-            return "exists=\(exists) fileSize=\(fileSize) values=<unavailable>"
-        }
-
-        let errorDescription = values.ubiquitousItemUploadingError?.localizedDescription ?? "nil"
-
-        return
-            "exists=\(exists) fileSize=\(fileSize) isUbiquitous=\(String(describing: values.isUbiquitousItem)) isUploading=\(String(describing: values.ubiquitousItemIsUploading)) isUploaded=\(String(describing: values.ubiquitousItemIsUploaded)) uploadingError=\(errorDescription)"
     }
 
     private func downloadState(for url: URL) -> DownloadState {

@@ -19,10 +19,10 @@ use super::test_support::*;
 use super::*;
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudBlobFailureIssue,
-    CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, PersistedCloudBackupState,
-    PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-    PersistedDisablingCloudBackup,
+    CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
+    CloudBlobFailureIssue, CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup,
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
@@ -4548,6 +4548,7 @@ async fn pending_upload_verification_blocks_on_cloud_authorization() {
 
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
+    globals.cloud.set_master_key_backup(namespace_id.clone(), vec![1, 2, 3]);
     globals
         .cloud
         .fail_master_key_download_authorization_required(namespace_id, "authorization required");
@@ -5368,7 +5369,7 @@ async fn pending_upload_verification_preserves_newer_dirty_state() {
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState::wallet(
-            namespace_id,
+            namespace_id.clone(),
             metadata.id.clone(),
             record_id.clone(),
             PersistedCloudBlobState::UploadedPendingConfirmation(
@@ -5381,6 +5382,7 @@ async fn pending_upload_verification_preserves_newer_dirty_state() {
             ),
         ))
         .unwrap();
+    globals.cloud.set_wallet_backup(namespace_id, record_id.clone(), vec![1, 2, 3]);
     globals.cloud.dirty_wallet_on_next_backup_check(metadata.id.clone());
 
     let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
@@ -5738,6 +5740,7 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
         namespace_id.clone(),
         vec![PendingVerificationUpload::master_key_wrapper()],
     ));
+    globals.cloud.set_master_key_backup(namespace_id.clone(), vec![1, 2, 3]);
     globals
         .cloud
         .fail_master_key_download_authorization_required(namespace_id, "authorization required");
@@ -5841,6 +5844,50 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
         PendingUploadVerificationState::Confirming
     );
     assert!(matches!(manager.model_snapshot().verification, VerificationState::Idle));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_upload_verification_does_not_read_locally_staged_master_key_as_remote() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let expected_master_json = vec![1, 2, 3];
+    let expected_revision = master_key_wrapper_revision_hash(&expected_master_json);
+    persist_pending_master_key_confirmation(namespace_id.clone(), expected_revision.clone());
+    globals.cloud.set_master_key_backup(namespace_id, expected_master_json);
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
+    let downloads_before = globals.cloud.master_key_download_attempt_count();
+
+    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
+
+    assert!(has_more_pending);
+    assert_eq!(globals.cloud.master_key_download_attempt_count(), downloads_before);
+    let pending = Database::global()
+        .cloud_blob_sync_states
+        .get(cove_cspp::backup_data::MASTER_KEY_RECORD_ID)
+        .unwrap()
+        .expect("pending master key sync state");
+    assert!(matches!(pending.state, PersistedCloudBlobState::UploadedPendingConfirmation(_)));
+
+    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
+    let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
+
+    assert!(!has_more_pending);
+    assert!(globals.cloud.master_key_download_attempt_count() > downloads_before);
+    let confirmed = Database::global()
+        .cloud_blob_sync_states
+        .get(cove_cspp::backup_data::MASTER_KEY_RECORD_ID)
+        .unwrap()
+        .expect("confirmed master key sync state");
+    assert!(matches!(
+        confirmed.state,
+        PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState { revision_hash, .. })
+            if revision_hash == expected_revision
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]

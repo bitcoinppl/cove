@@ -425,8 +425,8 @@ private struct OnboardingCloudBackupDetailsStepView: View {
         guard !didReportEnabled else { return }
         guard
             shouldCompleteOnboardingCloudBackup(
-                configuredState: backupManager.configuredState,
-                hasPendingUploadVerification: backupManager.hasPendingUploadVerification
+                passkeyState: backupManager.passkeyState,
+                verificationState: backupManager.verificationState
             )
         else { return }
         didReportEnabled = true
@@ -434,43 +434,65 @@ private struct OnboardingCloudBackupDetailsStepView: View {
     }
 }
 
-private func shouldCompleteOnboardingCloudBackup(
-    configuredState: CloudBackupConfiguredState?,
-    hasPendingUploadVerification: Bool
+func shouldCompleteOnboardingCloudBackup(
+    passkeyState: CloudBackupPasskeyState?,
+    verificationState: CloudBackupVerificationState?
 ) -> Bool {
-    guard let configuredState else { return false }
-    guard case .available = configuredState.passkey else { return false }
-    guard !hasPendingUploadVerification else { return false }
-    guard case let .verified(report: report, lastVerifiedAt: _) = configuredState.verification,
-          report != nil
-    else { return false }
+    guard case .available = passkeyState else { return false }
 
-    return true
+    switch verificationState {
+    case .awaitingUploadConfirmation:
+        return true
+    case let .verified(report: report, lastVerifiedAt: _):
+        return report != nil
+    default:
+        return false
+    }
 }
 
 struct OnboardingCloudBackupSuccessView: View {
+    @State private var backupManager = CloudBackupManager.shared
+
     let onContinue: () -> Void
+
+    private var isUploading: Bool {
+        backupManager.hasPendingUploadVerification
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
 
             OnboardingStatusHero(
-                systemImage: "checkmark",
-                tint: .lightGreen,
-                fillColor: Color.lightGreen.opacity(0.12),
+                systemImage: isUploading ? "icloud.and.arrow.up" : "checkmark",
+                tint: isUploading ? .blue : .lightGreen,
+                fillColor: (isUploading ? Color.blue : Color.lightGreen).opacity(0.12),
                 iconSize: 26
             )
 
             Spacer()
                 .frame(height: 36)
 
-            Text("Cloud Backup enabled successfully")
+            Text(isUploading ? "Cloud Backup is uploading" : "Cloud Backup enabled successfully")
                 .font(OnboardingRecoveryTypography.compactTitle)
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 24)
+
+            if isUploading {
+                Spacer()
+                    .frame(height: 16)
+
+                Text(
+                    "Setup is complete. Keep Cove connected to iCloud. Your backup can be restored after the upload finishes."
+                )
+                .font(.body)
+                .foregroundStyle(.coveLightGray)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 28)
+            }
 
             Spacer(minLength: 0)
 
