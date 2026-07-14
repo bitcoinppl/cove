@@ -75,8 +75,8 @@ struct CloudRestoreOfferView: View {
             .padding(.top, 12)
             .padding(.bottom, 26)
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical, alignment: .center)
         }
+        .defaultScrollAnchor(.center, for: .alignment)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
         .animation(.easeInOut(duration: 0.3), value: warningMessage)
@@ -305,6 +305,18 @@ struct CloudRestoreOfferView: View {
 }
 
 #Preview("Backup Found Provider Hint") {
+    CloudRestoreOfferView(
+        onRestore: {},
+        onSkip: {},
+        providerHint: CloudRestoreProviderHint(
+            providerName: "Apple Passwords",
+            registeredAt: 1_777_612_800,
+            nameSuffix: "09IX"
+        )
+    )
+}
+
+#Preview("Backup Found Provider Hint - iPhone SE", traits: .fixedLayout(width: 375, height: 667)) {
     CloudRestoreOfferView(
         onRestore: {},
         onSkip: {},
