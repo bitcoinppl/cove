@@ -42,7 +42,7 @@ const IOS_SIMULATOR_DERIVED_DATA_DIR: &str = "Cove-simulator-run";
 const IOS_DEVICE_DERIVED_DATA_DIR: &str = "Cove-device-run";
 const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
-const IOS_CONNECTED_DEVICE_FILTER: &str = "state == \"connected\"";
+const IOS_CONNECTED_DEVICE_FILTER: &str = "connectionProperties.tunnelState == \"connected\"";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
 const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
@@ -973,16 +973,7 @@ fn resolve_connected_device(sh: &Shell, selector: &str) -> Result<ResolvedDevice
 }
 
 fn resolve_connected_device_by_udid(sh: &Shell, udid: &str) -> Result<ResolvedDevice> {
-    let device_names = connected_device_names(sh)?;
-
-    for device_name in device_names {
-        let device = resolve_connected_device(sh, &device_name)?;
-        if device.destination == format!("platform=iOS,id={udid}") {
-            return Ok(device);
-        }
-    }
-
-    color_eyre::eyre::bail!("No connected iOS device found for udid={udid}");
+    resolve_connected_device(sh, udid)
 }
 
 fn first_connected_device_name(sh: &Shell) -> Result<String> {
@@ -1000,12 +991,16 @@ fn connected_device_names(sh: &Shell) -> Result<Vec<String>> {
     .read()
     .wrap_err("Failed to list connected iOS devices")?;
 
-    Ok(output
+    Ok(parse_device_names(&output))
+}
+
+fn parse_device_names(output: &str) -> Vec<String> {
+    output
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty())
+        .filter(|line| !line.is_empty() && *line != "No devices found.")
         .map(ToOwned::to_owned)
-        .collect())
+        .collect()
 }
 
 fn parse_device_details(output: &str) -> Result<ResolvedDevice> {
@@ -1028,7 +1023,8 @@ fn parse_device_detail(output: &str, prefix: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_aasa_webcredentials_app, normalize_pem_text, simulator_line_matches_device,
+        ensure_aasa_webcredentials_app, normalize_pem_text, parse_device_names,
+        simulator_line_matches_device,
     };
 
     const VALID_PEM: &str = "\
@@ -1036,6 +1032,16 @@ mod tests {
 ABC123
 -----END PRIVATE KEY-----
 ";
+
+    #[test]
+    fn device_names_ignore_devicectl_empty_result_message() {
+        assert!(parse_device_names("No devices found.\n").is_empty());
+    }
+
+    #[test]
+    fn device_names_include_connected_devices() {
+        assert_eq!(parse_device_names("Praveen’s iPhone\n"), ["Praveen’s iPhone"]);
+    }
 
     #[test]
     fn simulator_line_matches_exact_booted_device_name() {
