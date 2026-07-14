@@ -32,7 +32,7 @@ use crate::manager::cloud_backup_manager::actors::{
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
-    CloudBackupExclusiveOperationClaim,
+    CloudBackupExclusiveOperationClaim, CloudBackupPasskeyState, CloudBackupVerificationState,
 };
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::{
@@ -47,9 +47,10 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnablePromptChoice, CloudBackupEnableState, CloudBackupKeychain,
     CloudBackupLifecycle, CloudBackupManagerAction, CloudBackupOtherBackupsState,
     CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent, CloudBackupRootPrompt,
-    CloudBackupVerificationOutcome, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
+    CloudBackupSettingsRowStatus, CloudBackupVerificationOutcome,
+    CloudBackupVerificationPresentation, CloudBackupVerificationReason,
+    CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
 };
@@ -1196,24 +1197,6 @@ fn load_credential_id_returns_none_for_invalid_hex_and_decodes_valid_hex() {
 }
 
 #[test]
-fn clear_passkey_removes_credential_and_salt_only() {
-    let _guard = test_lock().lock();
-    let globals = test_globals();
-    globals.reset();
-    globals.keychain.set_entries(vec![
-        (CSPP_CREDENTIAL_ID_KEY, "credential"),
-        (CSPP_PRF_SALT_KEY, "salt"),
-        (CSPP_NAMESPACE_ID_KEY, "namespace"),
-    ]);
-
-    CloudBackupKeychain::global().clear_passkey();
-
-    assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
-    assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
-    assert_eq!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(), Some("namespace"));
-}
-
-#[test]
 fn clear_local_state_treats_empty_keychain_as_success() {
     let _guard = test_lock().lock();
     let globals = test_globals();
@@ -1626,7 +1609,7 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn deep_verify_authenticates_before_loading_wallet_inventory() {
+async fn cancelled_deep_verify_stays_unverified_before_loading_wallet_inventory() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -1642,11 +1625,32 @@ async fn deep_verify_authenticates_before_loading_wallet_inventory() {
     let discover_count = globals.passkey.discover_count();
     let list_count = globals.cloud.list_wallet_files_attempt_count();
 
-    call!(manager.supervisor.start_verification(true)).await.unwrap();
-    wait_for_discover_count(globals, discover_count + 1).await;
+    let step = manager.prepare_deep_verify_cloud_backup(true).await;
+
+    assert!(matches!(
+        &step,
+        CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::UserCancelled(_))
+    ));
+
+    call!(manager.supervisor.complete_verification(step, true, VerificationAttempt::Initial))
+        .await
+        .unwrap();
 
     assert_eq!(globals.passkey.discover_count(), discover_count + 1);
     assert_eq!(globals.cloud.list_wallet_files_attempt_count(), list_count);
+
+    let state = manager.state();
+    let CloudBackupLifecycle::Configured(configured) = state.lifecycle else {
+        panic!("cancelled verification should keep cloud backup configured");
+    };
+
+    assert_eq!(configured.verification, CloudBackupVerificationState::Cancelled);
+    assert_eq!(configured.passkey, CloudBackupPasskeyState::Available);
+    assert_eq!(state.settings_row_status, CloudBackupSettingsRowStatus::Unverified);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Unverified
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

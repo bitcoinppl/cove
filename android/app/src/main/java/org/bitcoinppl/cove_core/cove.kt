@@ -37666,6 +37666,9 @@ sealed class CloudBackupVerificationState {
     object AwaitingUploadConfirmation : CloudBackupVerificationState()
 
 
+    object Cancelled : CloudBackupVerificationState()
+
+
     data class Failed(
         val v1: org.bitcoinppl.cove_core.DeepVerificationFailure) : CloudBackupVerificationState()
 
@@ -37699,7 +37702,8 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
             3 -> CloudBackupVerificationState.Required
             4 -> CloudBackupVerificationState.Running
             5 -> CloudBackupVerificationState.AwaitingUploadConfirmation
-            6 -> CloudBackupVerificationState.Failed(
+            6 -> CloudBackupVerificationState.Cancelled
+            7 -> CloudBackupVerificationState.Failed(
                 FfiConverterTypeDeepVerificationFailure.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -37739,6 +37743,12 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 4UL
             )
         }
+        is CloudBackupVerificationState.Cancelled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupVerificationState.Failed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -37772,8 +37782,12 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 buf.putInt(5)
                 Unit
             }
-            is CloudBackupVerificationState.Failed -> {
+            is CloudBackupVerificationState.Cancelled -> {
                 buf.putInt(6)
+                Unit
+            }
+            is CloudBackupVerificationState.Failed -> {
+                buf.putInt(7)
                 FfiConverterTypeDeepVerificationFailure.write(value.v1, buf)
                 Unit
             }

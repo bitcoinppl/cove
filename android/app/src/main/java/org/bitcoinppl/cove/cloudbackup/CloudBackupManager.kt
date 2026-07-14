@@ -243,6 +243,14 @@ class CloudBackupManager private constructor(
             !hasPendingUploadVerification &&
                 verificationState is CloudBackupVerificationState.Required
 
+    val isUnverified: Boolean
+        get() =
+            !hasPendingUploadVerification &&
+                (
+                    verificationState is CloudBackupVerificationState.Required ||
+                        verificationState is CloudBackupVerificationState.Cancelled
+                )
+
     val isConfigured: Boolean
         get() = state.lifecycle is CloudBackupLifecycle.Configured
 
@@ -257,7 +265,7 @@ class CloudBackupManager private constructor(
             }
 
     val isVerificationStale: Boolean
-        get() = lastVerifiedAt == null && isCloudBackupAvailable && !shouldPromptVerification
+        get() = lastVerifiedAt == null && isCloudBackupAvailable && !isUnverified
 
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {

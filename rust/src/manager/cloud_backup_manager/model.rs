@@ -397,7 +397,10 @@ impl CloudBackupReducerState {
             return CloudBackupSettingsRowStatus::Confirming;
         }
 
-        if matches!(self.configured.verification, CloudBackupVerificationState::Required) {
+        if matches!(
+            self.configured.verification,
+            CloudBackupVerificationState::Required | CloudBackupVerificationState::Cancelled
+        ) {
             return CloudBackupSettingsRowStatus::Unverified;
         }
 
@@ -473,6 +476,7 @@ impl CloudBackupReducerState {
                 VerificationState::PasskeyConfirmed
             }
             CloudBackupVerificationState::Running => VerificationState::Verifying,
+            CloudBackupVerificationState::Cancelled => VerificationState::Cancelled,
             CloudBackupVerificationState::Failed(failure) => {
                 VerificationState::Failed(failure.clone())
             }
@@ -738,9 +742,8 @@ impl CloudBackupReducerState {
 
     fn resolve_verification(&mut self, verification: VerificationState) {
         self.configured.verification = match verification {
-            VerificationState::Idle | VerificationState::Cancelled => {
-                self.idle_verification_state()
-            }
+            VerificationState::Idle => self.idle_verification_state(),
+            VerificationState::Cancelled => CloudBackupVerificationState::Cancelled,
             VerificationState::Verifying => CloudBackupVerificationState::Running,
             VerificationState::Verified(report) => CloudBackupVerificationState::Verified {
                 report: Some(report),
@@ -1038,6 +1041,7 @@ pub enum CloudBackupVerificationState {
     Required,
     Running,
     AwaitingUploadConfirmation,
+    Cancelled,
     Failed(DeepVerificationFailure),
 }
 
@@ -1536,6 +1540,21 @@ mod tests {
             configured_state(CloudBackupVerificationState::Required, CloudSyncHealth::AllUploaded);
 
         assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Unverified);
+    }
+
+    #[test]
+    fn cancelled_verification_stays_distinct_and_projects_unverified() {
+        let mut state = configured_state(
+            CloudBackupVerificationState::NotVerified,
+            CloudSyncHealth::AllUploaded,
+        );
+
+        state.resolve_verification(VerificationState::Cancelled);
+
+        assert_eq!(state.configured.verification, CloudBackupVerificationState::Cancelled);
+        assert_eq!(state.verification(), VerificationState::Cancelled);
+        assert_eq!(state.settings_row_status(), CloudBackupSettingsRowStatus::Unverified);
+        assert_eq!(state.configured.passkey, CloudBackupPasskeyState::Available);
     }
 
     #[test]

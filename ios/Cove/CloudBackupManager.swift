@@ -202,7 +202,10 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         if isBackgroundVerifying {
             return false
         }
-        return shouldPromptVerification
+        switch verificationState {
+        case .required, .cancelled: return true
+        default: return false
+        }
     }
 
     var isConfigured: Bool {

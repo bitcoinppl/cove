@@ -44,14 +44,14 @@ import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.DeepVerificationReport
 
 @Composable
-private fun CancelledVerificationRecoveryContent(
+internal fun CancelledVerificationRecoveryContent(
     manager: CloudBackupManager,
 ) {
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ErrorStateCard(
             icon = Icons.Default.WarningAmber,
-            title = "Verification was cancelled",
-            body = "Try verification again or create a new passkey if your old one was deleted.",
+            title = "Cloud Backup Not Verified",
+            body = "If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey.",
         )
 
         SectionHeader("Verification")
@@ -132,6 +132,10 @@ internal fun VerificationSection(
                 PasskeyConfirmedSectionContent(manager)
             }
 
+            CloudBackupVerificationState.Cancelled -> {
+                CancelledVerificationRecoveryContent(manager)
+            }
+
             is CloudBackupVerificationState.Failed -> {
                 CloudBackupGlassCard(
                     modifier =
@@ -190,8 +194,8 @@ private fun CancelledVerificationActions(
     manager: CloudBackupManager,
 ) {
     MaterialSettingsItem(
-        title = "Verification was cancelled",
-        subtitle = "Try verification again or create a new passkey if your old one was deleted",
+        title = "Verify Now",
+        subtitle = "Try again with your current passkey",
         onClick = {
             manager.dispatch(
                 CloudBackupManagerAction.StartVerification(
@@ -203,7 +207,8 @@ private fun CancelledVerificationActions(
     )
     MaterialDivider()
     MaterialSettingsItem(
-        title = "Create New Passkey",
+        title = "Add New Passkey",
+        subtitle = "Use this if your previous passkey was deleted",
         onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
         leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
     )

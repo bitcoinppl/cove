@@ -21825,6 +21825,7 @@ public enum CloudBackupVerificationState: Equatable, Hashable {
     case required
     case running
     case awaitingUploadConfirmation
+    case cancelled
     case failed(DeepVerificationFailure
     )
 
@@ -21859,7 +21860,9 @@ public struct FfiConverterTypeCloudBackupVerificationState: FfiConverterRustBuff
 
         case 5: return .awaitingUploadConfirmation
 
-        case 6: return .failed(try FfiConverterTypeDeepVerificationFailure.read(from: &buf)
+        case 6: return .cancelled
+
+        case 7: return .failed(try FfiConverterTypeDeepVerificationFailure.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -21892,8 +21895,12 @@ public struct FfiConverterTypeCloudBackupVerificationState: FfiConverterRustBuff
             writeInt(&buf, Int32(5))
 
 
-        case let .failed(v1):
+        case .cancelled:
             writeInt(&buf, Int32(6))
+
+
+        case let .failed(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeDeepVerificationFailure.write(v1, into: &buf)
 
         }
