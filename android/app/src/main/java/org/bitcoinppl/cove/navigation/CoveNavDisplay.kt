@@ -190,16 +190,11 @@ private fun LoadAndResetContent(
     app: AppManager,
     route: Route.LoadAndReset,
 ) {
-    val nextRoutes = route.resetTo.map { it.route() }
-    val loadingTimeMs = route.afterMillis.toLong()
-
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }
 
     LaunchedEffect(route) {
-        val generation = app.captureLoadAndResetGeneration()
-        delay(loadingTimeMs)
-        app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+        app.completeLoadAndReset(route)
     }
 }

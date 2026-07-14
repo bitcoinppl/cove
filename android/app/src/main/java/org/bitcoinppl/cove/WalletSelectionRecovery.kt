@@ -1,6 +1,76 @@
 package org.bitcoinppl.cove
 
 import kotlin.coroutines.cancellation.CancellationException
+import org.bitcoinppl.cove_core.types.WalletId
+
+internal enum class LoadAndResetPreparation {
+    ReadyToReset,
+    RouteRedirected,
+}
+
+internal sealed interface WalletRoutePreparation {
+    data class Ready(
+        val manager: WalletManager,
+    ) : WalletRoutePreparation
+
+    data object RouteRedirected : WalletRoutePreparation
+}
+
+internal enum class WalletManagerBootstrapDecision {
+    Install,
+    UseCached,
+    Cancel;
+
+    companion object {
+        fun resolve(
+            targetId: WalletId,
+            capturedGeneration: Long,
+            currentGeneration: Long,
+            cachedWalletId: WalletId?,
+        ): WalletManagerBootstrapDecision =
+            when {
+                cachedWalletId == targetId -> UseCached
+                capturedGeneration != currentGeneration -> Cancel
+                else -> Install
+            }
+    }
+}
+
+internal class WalletTransitionRecovery private constructor(
+    val requestedId: WalletId,
+    private val candidates: List<WalletId>,
+) {
+    private val attemptedIds = linkedSetOf<WalletId>()
+
+    fun nextCandidate(): WalletId? =
+        candidates.firstOrNull { candidate -> attemptedIds.add(candidate) }
+
+    fun isFallback(id: WalletId): Boolean = id != requestedId
+
+    companion object {
+        fun create(
+            requestedId: WalletId,
+            cachedId: WalletId?,
+            displayedIds: List<WalletId>,
+        ): WalletTransitionRecovery =
+            WalletTransitionRecovery(
+                requestedId = requestedId,
+                candidates = listOfNotNull(requestedId, cachedId) + displayedIds,
+            )
+    }
+}
+
+internal inline fun <Manager> getOrCreateWalletManagerAtomically(
+    cachedManager: Manager?,
+    requestedId: WalletId,
+    id: (Manager) -> WalletId,
+    create: () -> Manager,
+    install: (Manager) -> Manager,
+): Manager {
+    if (cachedManager != null && id(cachedManager) == requestedId) return cachedManager
+
+    return install(create())
+}
 
 internal sealed interface WalletSelectionRecoveryResult {
     data object Recovered : WalletSelectionRecoveryResult

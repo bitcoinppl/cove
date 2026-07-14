@@ -5,10 +5,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
@@ -108,6 +115,7 @@ class AppManager private constructor() : FfiReconcile {
     // call getWalletManager, this avoids recreating the actor and reconciler each time
     internal var walletManager: WalletManager? = null
         private set
+    private var walletManagerCacheGeneration = 0L
 
     internal var sendFlowManager: SendFlowManager? = null
         private set
@@ -144,39 +152,100 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     /**
-     * set the cached wallet manager instance
-     */
-    internal fun setWalletManager(manager: WalletManager) {
-        Log.d(tag, "setting wallet manager for wallet ${manager.id}")
-        walletManager = manager
-    }
-
-    /**
      * get or create wallet manager for the given wallet id
      * caches the instance so we don't recreate unnecessarily
      */
     fun getWalletManager(id: WalletId): WalletManager {
-        walletManager?.let {
-            if (it.id == id) {
-                Log.d(tag, "found and using wallet manager for $id")
-                return it
+        if (walletManager?.id == id) {
+            Log.d(tag, "found and using wallet manager for $id")
+        }
+
+        return getOrCreateWalletManagerAtomically(
+            cachedManager = walletManager,
+            requestedId = id,
+            id = WalletManager::id,
+            create = {
+                Log.d(tag, "creating wallet manager for $id; cached=${walletManager?.id}")
+                try {
+                    WalletManager(id = id)
+                } catch (e: Exception) {
+                    Log.e(tag, "Failed to create wallet manager", e)
+                    throw e
+                }
+            },
+            install = ::installWalletManager,
+        )
+    }
+
+    suspend fun prepareWalletManager(
+        id: WalletId,
+        isCurrent: () -> Boolean = { true },
+    ): WalletManager {
+        val (cachedManager, cacheGeneration) =
+            withContext(Dispatchers.Main.immediate) {
+                if (!isCurrent()) {
+                    throw CancellationException("Wallet route changed before loading $id")
+                }
+
+                walletManager?.takeIf { it.id == id } to walletManagerCacheGeneration
             }
+        if (cachedManager != null) return cachedManager
 
-            // selecting a different wallet is the boundary for ending in-flight scans
-            Log.d(tag, "closing old wallet manager for ${it.id}")
-            it.close()
+        val bootstrap =
+            withContext(NonCancellable + Dispatchers.IO) {
+                WalletManager.bootstrap(id)
+            }
+        var installed = false
+
+        try {
+            return withContext(Dispatchers.Main.immediate) {
+                coroutineContext.ensureActive()
+                if (!isCurrent()) {
+                    throw CancellationException("Wallet route changed while loading $id")
+                }
+
+                when (
+                    WalletManagerBootstrapDecision.resolve(
+                        targetId = id,
+                        capturedGeneration = cacheGeneration,
+                        currentGeneration = walletManagerCacheGeneration,
+                        cachedWalletId = walletManager?.id,
+                    )
+                ) {
+                    WalletManagerBootstrapDecision.UseCached ->
+                        return@withContext checkNotNull(walletManager)
+                    WalletManagerBootstrapDecision.Cancel ->
+                        throw CancellationException("Wallet manager cache changed while loading $id")
+                    WalletManagerBootstrapDecision.Install -> Unit
+                }
+
+                val manager = bootstrap.install()
+                installed = true
+                installWalletManager(manager)
+            }
+        } finally {
+            if (!installed) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    bootstrap.close()
+                }
+            }
+        }
+    }
+
+    private fun installWalletManager(manager: WalletManager): WalletManager {
+        val previousManager = walletManager
+        if (previousManager?.id == manager.id) {
+            manager.close()
+            return previousManager
         }
 
-        Log.d(tag, "did not find wallet manager for $id, creating new: ${walletManager?.id}")
+        Log.d(tag, "installing wallet manager for ${manager.id}")
+        walletManager = manager
+        walletManagerCacheGeneration += 1
+        clearSendFlowManager()
+        previousManager?.close()
 
-        return try {
-            val manager = WalletManager(id = id)
-            walletManager = manager
-            manager
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to create wallet manager", e)
-            throw e
-        }
+        return manager
     }
 
     /**
@@ -202,12 +271,14 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun clearWalletManager() {
+        val hadWalletManager = walletManager != null
         try {
             walletManager?.close()
         } catch (e: Exception) {
             Log.w(tag, "Error closing WalletManager: ${e.message}")
         }
         walletManager = null
+        if (hadWalletManager) walletManagerCacheGeneration += 1
     }
 
     private fun clearSendFlowManager() {
@@ -277,6 +348,7 @@ class AppManager private constructor() : FfiReconcile {
         needsOnboarding = rust.needsOnboarding()
         walletManager = null
         sendFlowManager = null
+        walletManagerCacheGeneration += 1
 
         withRustOr(null) {
             state()
@@ -537,6 +609,114 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
+
+    suspend fun completeLoadAndReset(route: Route.LoadAndReset) = coroutineScope {
+        val generation = captureLoadAndResetGeneration()
+        val nextRoutes = route.resetTo.map { it.route() }
+        val selectedWalletId = (nextRoutes.firstOrNull() as? Route.SelectedWallet)?.v1
+        val preparation =
+            async {
+                when (selectedWalletId?.let { prepareWalletRoute(it, generation) }) {
+                    is WalletRoutePreparation.Ready, null ->
+                        LoadAndResetPreparation.ReadyToReset
+                    WalletRoutePreparation.RouteRedirected ->
+                        LoadAndResetPreparation.RouteRedirected
+                }
+            }
+        val minimumDelay = async { delay(route.afterMillis.toLong()) }
+
+        val preparationResult = preparation.await()
+        minimumDelay.await()
+
+        if (preparationResult == LoadAndResetPreparation.ReadyToReset) {
+            resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+        }
+    }
+
+    internal suspend fun prepareWalletRoute(
+        walletId: WalletId,
+        generation: GenerationToken,
+    ): WalletRoutePreparation {
+        val cachedId =
+            withContext(Dispatchers.Main.immediate) {
+                walletManager?.id
+            }
+        val displayedIds =
+            withContext(Dispatchers.IO) {
+                runCatching { database.wallets().all() }
+                    .getOrElse { emptyList() }
+                    .map(WalletMetadata::id)
+            }
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = walletId,
+                cachedId = cachedId,
+                displayedIds = displayedIds,
+            )
+
+        while (true) {
+            val candidateId = recovery.nextCandidate() ?: break
+
+            val manager = try {
+                prepareWalletManager(candidateId) {
+                    isNavigationGenerationCurrent(generation)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: WalletManagerException.DatabaseCorruption) {
+                Log.e(tag, "Wallet database corrupted for ${error.`id`}: ${error.`error`}", error)
+                withContext(Dispatchers.Main.immediate) {
+                    alertState =
+                        TaggedItem(
+                            AppAlertState.WalletDatabaseCorrupted(
+                                walletId = error.`id`,
+                                error = error.`error`,
+                            ),
+                        )
+                }
+                continue
+            } catch (error: Exception) {
+                Log.e(tag, "Unable to prepare wallet $candidateId", error)
+                continue
+            }
+
+            if (!isNavigationGenerationCurrent(generation)) {
+                throw CancellationException("Wallet route changed while loading $candidateId")
+            }
+
+            if (!recovery.isFallback(candidateId)) {
+                return WalletRoutePreparation.Ready(manager)
+            }
+
+            try {
+                withContext(Dispatchers.Main.immediate) {
+                    dispatchResult(AppAction.SelectWallet(candidateId)).getOrThrow()
+                    isSidebarVisible = false
+                }
+
+                return WalletRoutePreparation.RouteRedirected
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e(tag, "Unable to select fallback wallet $candidateId", error)
+            }
+        }
+
+        if (!isNavigationGenerationCurrent(generation)) {
+            throw CancellationException("Wallet route changed while recovering wallet selection")
+        }
+
+        withContext(Dispatchers.IO) {
+            runCatching { database.globalConfig().clearSelectedWallet() }
+                .onFailure { Log.e(tag, "Unable to clear selected wallet", it) }
+        }
+        withContext(Dispatchers.Main.immediate) {
+            clearWalletManager()
+            resetRoute(RouteFactory().newWalletSelect())
+        }
+
+        return WalletRoutePreparation.RouteRedirected
+    }
 
     fun resetAfterLoadingIfCurrent(
         generation: GenerationToken,

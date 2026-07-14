@@ -5,9 +5,140 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class WalletSelectionRecoveryTest {
+    @Test
+    fun recoveryTriesRequestedThenCachedThenWalletDisplayOrder() {
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = "wallet-b",
+                cachedId = "wallet-a",
+                displayedIds = listOf("wallet-c", "wallet-a", "wallet-b", "wallet-d"),
+            )
+
+        assertEquals("wallet-b", recovery.nextCandidate())
+        assertEquals("wallet-a", recovery.nextCandidate())
+        assertEquals("wallet-c", recovery.nextCandidate())
+        assertEquals("wallet-d", recovery.nextCandidate())
+        assertEquals(null, recovery.nextCandidate())
+    }
+
+    @Test
+    fun recoveryExhaustionDoesNotRetryAttemptedWallets() {
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = "wallet-a",
+                cachedId = "wallet-a",
+                displayedIds = listOf("wallet-a", "wallet-a"),
+            )
+
+        assertEquals("wallet-a", recovery.nextCandidate())
+        assertEquals(null, recovery.nextCandidate())
+    }
+
+    @Test
+    fun atomicCacheCreationFailureLeavesCachedManagerInstalled() {
+        val cached = TestWalletManager("wallet-a")
+        var installed: TestWalletManager? = cached
+
+        try {
+            getOrCreateWalletManagerAtomically(
+                cachedManager = cached,
+                requestedId = "wallet-b",
+                id = TestWalletManager::id,
+                create = { throw IllegalStateException("wallet-b failed") },
+                install = {
+                    installed = it
+                    it
+                },
+            )
+            fail("Expected wallet creation to fail")
+        } catch (_: IllegalStateException) {
+            assertSame(cached, installed)
+        }
+    }
+
+    @Test
+    fun atomicCacheInstallsCandidateOnlyAfterCreationSucceeds() {
+        val events = mutableListOf<String>()
+        val candidate = TestWalletManager("wallet-b")
+
+        val result =
+            getOrCreateWalletManagerAtomically(
+                cachedManager = TestWalletManager("wallet-a"),
+                requestedId = candidate.id,
+                id = TestWalletManager::id,
+                create = {
+                    events += "created"
+                    candidate
+                },
+                install = {
+                    events += "installed"
+                    it
+                },
+            )
+
+        assertSame(candidate, result)
+        assertEquals(listOf("created", "installed"), events)
+    }
+
+    @Test
+    fun atomicCacheReusesMatchingManagerWithoutCreation() {
+        val cached = TestWalletManager("wallet-a")
+
+        val result =
+            getOrCreateWalletManagerAtomically(
+                cachedManager = cached,
+                requestedId = cached.id,
+                id = TestWalletManager::id,
+                create = { error("must not create") },
+                install = { error("must not install") },
+            )
+
+        assertSame(cached, result)
+    }
+
+    @Test
+    fun completedBootstrapUsesMatchingCacheEvenWhenGenerationChanged() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 2,
+                cachedWalletId = "wallet-b",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.UseCached, decision)
+    }
+
+    @Test
+    fun completedBootstrapCancelsWhenAnotherWalletChangedTheCache() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 2,
+                cachedWalletId = "wallet-c",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Cancel, decision)
+    }
+
+    @Test
+    fun completedBootstrapInstallsWhenCacheIsUnchanged() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 1,
+                cachedWalletId = "wallet-a",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Install, decision)
+    }
+
     @Test
     fun recoversWalletSelectionWithoutPoppingRoute() {
         var didPopRoute = false
@@ -111,3 +242,7 @@ class WalletSelectionRecoveryTest {
         )
     }
 }
+
+private data class TestWalletManager(
+    val id: String,
+)

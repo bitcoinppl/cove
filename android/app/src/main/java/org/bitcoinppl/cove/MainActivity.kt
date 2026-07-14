@@ -802,7 +802,6 @@ private fun GlobalAlertDialog(
                         onDismiss()
                         try {
                             app.selectWalletOrThrow(state.walletId)
-                            app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
                             app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
@@ -984,7 +983,6 @@ private fun GlobalAlertDialog(
                         try {
                             app.selectWalletOrThrow(state.walletId)
                             onDismiss()
-                            app.resetRoute(Route.SelectedWallet(state.walletId))
                         } catch (e: Exception) {
                             Log.e("GlobalAlert", "Failed to select wallet", e)
                             app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
@@ -1158,7 +1156,6 @@ private fun GlobalAlertDialog(
                                     Wallet.newFromXpub(xpub = text.trim()).use { wallet ->
                                         val id = wallet.id()
                                         app.selectWalletOrThrow(id)
-                                        app.resetRoute(Route.SelectedWallet(id))
                                     }
                                 } catch (e: Exception) {
                                     app.alertState =

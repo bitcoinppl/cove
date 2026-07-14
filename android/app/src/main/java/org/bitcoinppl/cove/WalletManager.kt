@@ -137,25 +137,85 @@ class WalletManager :
     private val requiredWalletMetadata: WalletMetadata
         get() = walletMetadata ?: error("wallet metadata is not initialized")
 
+    internal class Bootstrap private constructor(
+        private val rust: RustWalletManager,
+        val id: WalletId,
+        private val metadata: WalletMetadata,
+        private val ledgerState: WalletLedgerState,
+        private val balancePresentation: BalancePresentation,
+        private val unsignedTransactions: List<UnsignedTransaction>,
+        private val loadState: WalletLoadState,
+    ) : Closeable {
+        private val consumed = AtomicBoolean(false)
+
+        fun install(): WalletManager {
+            check(consumed.compareAndSet(false, true)) { "Wallet manager bootstrap already consumed" }
+
+            return WalletManager(
+                walletId = id,
+                rustManager = rust,
+                metadata = metadata,
+                ledgerState = ledgerState,
+                balancePresentation = balancePresentation,
+                unsignedTransactions = unsignedTransactions,
+                loadState = loadState,
+            )
+        }
+
+        override fun close() {
+            if (!consumed.compareAndSet(false, true)) return
+
+            rust.shutdown()
+            rust.close()
+        }
+
+        companion object {
+            fun create(id: WalletId): Bootstrap {
+                val rust = RustWalletManager(id)
+
+                return try {
+                    val metadata = rust.walletMetadata()
+                    val ledgerState = rust.ledgerState()
+                    val balancePresentation = rust.balancePresentation(WalletScanStatus.Idle)
+                    val unsignedTransactions =
+                        runCatching { rust.getUnsignedTransactions() }.getOrElse { emptyList() }
+                    val loadState = rust.initialLoadState().toPlatformLoadState()
+
+                    Bootstrap(
+                        rust = rust,
+                        id = id,
+                        metadata = metadata,
+                        ledgerState = ledgerState,
+                        balancePresentation = balancePresentation,
+                        unsignedTransactions = unsignedTransactions,
+                        loadState = loadState,
+                    )
+                } catch (error: Exception) {
+                    rust.shutdown()
+                    rust.close()
+                    throw error
+                }
+            }
+        }
+    }
+
     // private constructor - use companion factory methods
     private constructor(
         walletId: WalletId,
         rustManager: RustWalletManager,
         metadata: WalletMetadata,
+        ledgerState: WalletLedgerState,
+        balancePresentation: BalancePresentation,
+        unsignedTransactions: List<UnsignedTransaction>,
+        loadState: WalletLoadState,
     ) {
         this.id = walletId
         this.rust = rustManager
         this.walletMetadata = metadata
-        this.ledgerState = rustManager.ledgerState()
-        this.balancePresentationState = rustManager.balancePresentation(WalletScanStatus.Idle)
-        this.unsignedTransactions = runCatching { rustManager.getUnsignedTransactions() }.getOrElse { emptyList() }
-
-        // set initial load state from Rust cached data
-        loadState = when (val rustLoadState = rustManager.initialLoadState()) {
-            is org.bitcoinppl.cove_core.WalletLoadState.Loading -> WalletLoadState.LOADING
-            is org.bitcoinppl.cove_core.WalletLoadState.Scanning -> WalletLoadState.SCANNING(rustLoadState.v1)
-            is org.bitcoinppl.cove_core.WalletLoadState.Loaded -> WalletLoadState.LOADED(rustLoadState.v1)
-        }
+        this.ledgerState = ledgerState
+        this.balancePresentationState = balancePresentation
+        this.unsignedTransactions = unsignedTransactions
+        this.loadState = loadState
 
         rustManager.listenForUpdates(this)
     }
@@ -163,18 +223,20 @@ class WalletManager :
     companion object {
         // create from wallet ID
         operator fun invoke(id: WalletId): WalletManager {
-            val rust = RustWalletManager(id)
-            val metadata = rust.walletMetadata()
+            val bootstrap = Bootstrap.create(id)
+            val manager = bootstrap.install()
             android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
-            return WalletManager(id, rust, metadata)
+            return manager
         }
+
+        internal fun bootstrap(id: WalletId): Bootstrap = Bootstrap.create(id)
 
         // create from xpub
         fun fromXpub(xpub: String): WalletManager {
             val rust = RustWalletManager.tryNewFromXpub(xpub)
             val metadata = rust.walletMetadata()
             android.util.Log.d("WalletManager", "Initialized WalletManager from xpub")
-            return WalletManager(metadata.id, rust, metadata)
+            return install(rust, metadata)
         }
 
         // create from TapSigner
@@ -193,14 +255,29 @@ class WalletManager :
                 )
             val metadata = rust.walletMetadata()
             android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
-            return WalletManager(metadata.id, rust, metadata)
+            return install(rust, metadata)
         }
 
         internal fun previewNew(): WalletManager {
             val rust = RustWalletManager.previewNewWallet()
             val metadata = rust.walletMetadata()
-            return WalletManager(metadata.id, rust, metadata)
+            return install(rust, metadata)
         }
+
+        private fun install(
+            rust: RustWalletManager,
+            metadata: WalletMetadata,
+        ): WalletManager =
+            WalletManager(
+                walletId = metadata.id,
+                rustManager = rust,
+                metadata = metadata,
+                ledgerState = rust.ledgerState(),
+                balancePresentation = rust.balancePresentation(WalletScanStatus.Idle),
+                unsignedTransactions =
+                    runCatching { rust.getUnsignedTransactions() }.getOrElse { emptyList() },
+                loadState = rust.initialLoadState().toPlatformLoadState(),
+            )
     }
 
     private fun logDebug(message: String) {
@@ -755,3 +832,10 @@ sealed class WalletLoadState {
         val txns: List<Transaction>,
     ) : WalletLoadState()
 }
+
+private fun org.bitcoinppl.cove_core.WalletLoadState.toPlatformLoadState(): WalletLoadState =
+    when (this) {
+        is org.bitcoinppl.cove_core.WalletLoadState.Loading -> WalletLoadState.LOADING
+        is org.bitcoinppl.cove_core.WalletLoadState.Scanning -> WalletLoadState.SCANNING(v1)
+        is org.bitcoinppl.cove_core.WalletLoadState.Loaded -> WalletLoadState.LOADED(v1)
+    }

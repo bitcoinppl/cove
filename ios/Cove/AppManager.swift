@@ -7,6 +7,71 @@ private let walletModeChangeDelayMs = 250
 private let sidebarNavigationDelayMs = 250
 private let navigationSettleDelayMs = 800
 
+enum LoadAndResetPreparationOutcome {
+    case ready
+    case redirected
+}
+
+enum WalletTargetPreparationOutcome {
+    case ready(WalletManager)
+    case redirected
+}
+
+enum WalletManagerCacheLoadDecision: Equatable {
+    case installLoaded
+    case useCached
+    case cancelLoaded
+
+    static func resolve(
+        targetId: WalletId,
+        capturedGeneration: UInt64,
+        currentGeneration: UInt64,
+        cachedWalletId: WalletId?
+    ) -> Self {
+        if cachedWalletId == targetId {
+            return .useCached
+        }
+
+        guard capturedGeneration == currentGeneration else {
+            return .cancelLoaded
+        }
+
+        return .installLoaded
+    }
+}
+
+struct WalletTransitionRecoveryPlan {
+    private(set) var attemptedIds: [WalletId] = []
+
+    mutating func recordAttempt(_ id: WalletId) {
+        guard !attemptedIds.contains(id) else { return }
+        attemptedIds.append(id)
+    }
+
+    func candidates(cachedWalletId: WalletId?, displayedIds: [WalletId]) -> [WalletId] {
+        let orderedIds = [cachedWalletId].compactMap(\.self) + displayedIds
+
+        return orderedIds.reduce(into: []) { candidates, id in
+            guard !attemptedIds.contains(id), !candidates.contains(id) else { return }
+            candidates.append(id)
+        }
+    }
+}
+
+func getOrCreateWalletManagerAtomically<Manager>(
+    cachedManager: Manager?,
+    requestedId: WalletId,
+    id: (Manager) -> WalletId,
+    create: () throws -> Manager,
+    install: (Manager) -> Manager
+) rethrows -> Manager {
+    if let cachedManager, id(cachedManager) == requestedId {
+        return cachedManager
+    }
+
+    return try install(create())
+}
+
 @Observable final class AppManager: FfiReconcile {
     static let shared = makeShared()
 
@@ -56,6 +121,8 @@ private let navigationSettleDelayMs = 800
     /// call getWalletManager, this avoids recreating the actor and reconciler each time
     @ObservationIgnored
     var walletManager: WalletManager?
+    @ObservationIgnored
+    private var walletManagerCacheGeneration: UInt64 = 0
     /// Background time is tied to the cached wallet manager, not a route instance
     @ObservationIgnored
     private var initialScanBackgroundTask: UIBackgroundTaskIdentifier = .invalid
@@ -121,19 +188,98 @@ private let navigationSettleDelayMs = 800
     }
 
     public func getWalletManager(id: WalletId) throws -> WalletManager {
-        if let walletManager, walletManager.id == id {
+        try getOrCreateWalletManagerAtomically(
+            cachedManager: walletManager,
+            requestedId: id,
+            id: { $0.id },
+            create: {
+                logger.debug(
+                    "did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")"
+                )
+                return try WalletManager(id: id)
+            },
+            install: installWalletManager
+        )
+    }
+
+    @MainActor
+    func ensureWalletManagerLoaded(
+        id: WalletId,
+        isCurrent: @MainActor () -> Bool = { true }
+    ) async throws -> WalletManager {
+        guard isCurrent() else { throw CancellationError() }
+
+        if let walletManager = cachedWalletManager(id: id) {
             logger.debug("found and using vm for \(id)")
             return walletManager
         }
 
+        let cacheGeneration = walletManagerCacheGeneration
         logger.debug(
-            "did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")"
+            "did not find vm for \(id), loading new vm: \(walletManager?.id ?? "none")"
         )
-        clearWalletManager()
 
-        let walletManager = try WalletManager(id: id)
-        observeInitialScanLifecycle(for: walletManager)
+        let loadedWalletManager = try await WalletManager.load(id: id)
+
+        do {
+            try Task.checkCancellation()
+        } catch {
+            loadedWalletManager.close()
+            throw error
+        }
+
+        guard isCurrent() else {
+            loadedWalletManager.close()
+            throw CancellationError()
+        }
+
+        switch WalletManagerCacheLoadDecision.resolve(
+            targetId: id,
+            capturedGeneration: cacheGeneration,
+            currentGeneration: walletManagerCacheGeneration,
+            cachedWalletId: walletManager?.id
+        ) {
+        case .installLoaded:
+            return installWalletManager(loadedWalletManager)
+        case .useCached:
+            loadedWalletManager.close()
+            guard let walletManager = cachedWalletManager(id: id) else {
+                throw CancellationError()
+            }
+
+            return walletManager
+        case .cancelLoaded:
+            loadedWalletManager.close()
+            throw CancellationError()
+        }
+    }
+
+    private func cachedWalletManager(id: WalletId) -> WalletManager? {
+        guard let walletManager, walletManager.id == id else { return nil }
+        return walletManager
+    }
+
+    private func installWalletManager(_ walletManager: WalletManager) -> WalletManager {
+        if let existing = self.walletManager {
+            if existing === walletManager {
+                return walletManager
+            }
+
+            if existing.id == walletManager.id {
+                walletManager.close()
+                return existing
+            }
+        }
+
+        let previousManager = self.walletManager
+        endInitialScanBackgroundTask()
+        previousManager?.setInitialScanLifecycleChanged(nil)
+        clearSendFlowManager()
         self.walletManager = walletManager
+        walletManagerCacheGeneration &+= 1
+        observeInitialScanLifecycle(for: walletManager)
+        previousManager?.close()
+
         return walletManager
     }
 
@@ -247,11 +393,17 @@ private let navigationSettleDelayMs = 800
 
     func clearWalletManager(id: WalletId? = nil) {
         if id == nil {
+            let hadWalletManager = walletManager != nil
             endInitialScanBackgroundTask()
             walletManager?.setInitialScanLifecycleChanged(nil)
             walletManager?.close()
             walletManager = nil
             clearSendFlowManager()
+
+            if hadWalletManager {
+                walletManagerCacheGeneration &+= 1
+            }
+
             return
         }
 
@@ -260,6 +412,7 @@ private let navigationSettleDelayMs = 800
             walletManager?.setInitialScanLifecycleChanged(nil)
             walletManager?.close()
             walletManager = nil
+            walletManagerCacheGeneration &+= 1
         }
 
         clearSendFlowManager(id: id)
@@ -337,9 +490,6 @@ private let navigationSettleDelayMs = 800
     private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
         try rust.dispatch(action: .selectWallet(id: id))
         isSidebarVisible = false
-
-        // prewarm the app-owned manager before the queued route update renders the destination
-        _ = try getWalletManager(id: id)
     }
 
     func trySelectLatestOrNewWallet() {
@@ -539,6 +689,104 @@ private let navigationSettleDelayMs = 800
     @MainActor
     func captureLoadAndResetGeneration() -> GenerationToken {
         navigationGenerations.capture()
+    }
+
+    @MainActor
+    func prepareLoadAndResetTarget(
+        generation: GenerationToken,
+        routes: [Route]
+    ) async throws -> LoadAndResetPreparationOutcome {
+        guard case let .selectedWallet(id) = routes.first else { return .ready }
+
+        switch try await prepareWalletTarget(id: id, generation: generation) {
+        case .ready:
+            return .ready
+        case .redirected:
+            return .redirected
+        }
+    }
+
+    @MainActor
+    func prepareSelectedWallet(
+        id: WalletId,
+        generation: GenerationToken
+    ) async throws -> WalletTargetPreparationOutcome {
+        try await prepareWalletTarget(id: id, generation: generation)
+    }
+
+    @MainActor
+    private func prepareWalletTarget(
+        id: WalletId,
+        generation: GenerationToken
+    ) async throws -> WalletTargetPreparationOutcome {
+        var recoveryPlan = WalletTransitionRecoveryPlan()
+        var candidateId = id
+
+        while true {
+            recoveryPlan.recordAttempt(candidateId)
+
+            do {
+                let manager = try await ensureWalletManagerLoaded(id: candidateId) {
+                    self.isNavigationGenerationCurrent(generation)
+                }
+
+                guard isNavigationGenerationCurrent(generation) else {
+                    throw CancellationError()
+                }
+
+                if candidateId == id {
+                    return .ready(manager)
+                }
+
+                do {
+                    try selectWalletWithoutNavigationGeneration(candidateId)
+                    return .redirected
+                } catch {
+                    logger.error("Unable to select recovery wallet \(candidateId): \(error)")
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                handleWalletPreparationError(error, walletId: candidateId)
+            }
+
+            guard let nextId = recoveryPlan.candidates(
+                cachedWalletId: walletManager?.id,
+                displayedIds: wallets.map(\.id)
+            ).first else {
+                recoverFromExhaustedWalletTransition(generation: generation)
+                return .redirected
+            }
+
+            candidateId = nextId
+        }
+    }
+
+    @MainActor
+    private func handleWalletPreparationError(_ error: Error, walletId: WalletId) {
+        if case let WalletManagerError.DatabaseCorruption(corruptedId, errorMessage) = error {
+            logger.error("Wallet database corrupted for \(corruptedId): \(errorMessage)")
+            alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: corruptedId, error: errorMessage)
+            )
+            return
+        }
+
+        logger.error("Unable to prepare wallet \(walletId): \(error)")
+    }
+
+    @MainActor
+    private func recoverFromExhaustedWalletTransition(generation: GenerationToken) {
+        guard isNavigationGenerationCurrent(generation) else { return }
+
+        do {
+            try database.globalConfig().clearSelectedWallet()
+        } catch {
+            logger.error("Unable to clear selected wallet after recovery exhausted: \(error)")
+        }
+
+        clearWalletManager()
+        resetRoute(to: .newWallet(.select))
     }
 
     @MainActor

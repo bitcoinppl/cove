@@ -8,7 +8,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
 import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.SelectedWalletContainer
@@ -93,19 +92,12 @@ private fun LoadAndResetContainer(
     app: AppManager,
     route: Route.LoadAndReset,
 ) {
-    val nextRoutes = route.resetTo.map { it.route() }
-    val loadingTimeMs = route.afterMillis.toLong()
-
     // show loading indicator
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }
 
-    // execute reset after delay
     LaunchedEffect(route) {
-        val generation = app.captureLoadAndResetGeneration()
-        delay(loadingTimeMs)
-
-        app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+        app.completeLoadAndReset(route)
     }
 }

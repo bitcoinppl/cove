@@ -41,6 +41,33 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     let notify: () -> Void
 }
 
+private struct WalletManagerBootstrap: @unchecked Sendable {
+    let id: WalletId
+    let rust: RustWalletManager
+    let loadState: WalletLoadState
+    let ledgerState: WalletLedgerState
+    let balancePresentation: BalancePresentation
+    let walletMetadata: WalletMetadata
+    let unsignedTransactions: [UnsignedTransaction]
+
+    init(id: WalletId) throws {
+        let rust = try RustWalletManager(id: id)
+        let scanStatus = WalletScanStatus.idle
+
+        self.id = id
+        self.rust = rust
+        self.loadState = rust.initialLoadState()
+        self.ledgerState = rust.ledgerState()
+        self.balancePresentation = rust.balancePresentation(scanStatus: scanStatus)
+        self.walletMetadata = rust.walletMetadata()
+        self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
+    }
+
+    func close() {
+        rust.shutdown()
+    }
+}
+
 @Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -90,21 +117,37 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
     /// scroll position for transaction list (persists across navigation)
     var scrolledTransactionId: String?
 
-    init(id: WalletId) throws {
-        self.id = id
-        let rust = try RustWalletManager(id: id)
-        let loadState = rust.initialLoadState()
+    convenience init(id: WalletId) throws {
+        try self.init(bootstrap: WalletManagerBootstrap(id: id))
+    }
 
-        self.rust = rust
-        self.loadState = loadState
+    @MainActor
+    static func load(id: WalletId) async throws -> WalletManager {
+        let bootstrap = try await Task.detached(priority: .userInitiated) {
+            try WalletManagerBootstrap(id: id)
+        }.value
+
+        do {
+            try Task.checkCancellation()
+        } catch {
+            bootstrap.close()
+            throw error
+        }
+
+        return WalletManager(bootstrap: bootstrap)
+    }
+
+    private init(bootstrap: WalletManagerBootstrap) {
+        self.id = bootstrap.id
+        self.rust = bootstrap.rust
+        self.loadState = bootstrap.loadState
         self.scanStatus = .idle
-        self.ledgerState = rust.ledgerState()
-        self.balancePresentation = rust.balancePresentation(scanStatus: .idle)
+        self.ledgerState = bootstrap.ledgerState
+        self.balancePresentation = bootstrap.balancePresentation
+        self.walletMetadata = bootstrap.walletMetadata
+        self.unsignedTransactions = bootstrap.unsignedTransactions
 
-        walletMetadata = rust.walletMetadata()
-        unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
-
-        rust.listenForUpdates(reconciler: WeakReconciler(self))
+        bootstrap.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
     func close() {
@@ -201,6 +244,10 @@ private struct InitialScanLifecycleChangedHandler: @unchecked Sendable {
 
     func forceWalletScan() async {
         await rust.forceWalletScan()
+    }
+
+    func startWalletScan() async throws {
+        try await rust.startWalletScan()
     }
 
     func firstAddress() async throws -> AddressInfo {

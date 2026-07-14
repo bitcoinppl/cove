@@ -54,51 +54,30 @@ struct SelectedWalletContainer: View {
                 FullPageLoadingView(title: "Loading wallet...")
             }
         }
-        .onAppear(perform: loadManager)
-        .task {
-            guard let manager else { return }
-
-            do {
-                try await manager.rust.startWalletScan()
-            } catch {
-                Log.error("Wallet Scan Failed \(error.localizedDescription)")
+        .task(id: id) {
+            if manager?.id != id {
+                manager = nil
             }
-        }
-    }
 
-    private func loadManager() {
-        if manager != nil {
-            return
-        }
+            let generation = app.captureLoadAndResetGeneration()
 
-        do {
-            Log.debug("Getting wallet \(id)")
-            manager = try app.getWalletManager(id: id)
-        } catch {
-            handleManagerError(error)
-        }
-    }
-
-    private func handleManagerError(_ error: Error) {
-        switch error {
-        case let WalletManagerError.DatabaseCorruption(walletId, errorMessage):
-            Log.error("Wallet database corrupted for \(walletId): \(errorMessage)")
-            app.alertState = TaggedItem(
-                .walletDatabaseCorrupted(walletId: walletId, error: errorMessage)
-            )
-        default:
-            Log.error("Something went very wrong: \(error)")
             do {
-                let wallets = try Database().wallets().all()
-                let wallet = wallets.first(where: { $0.id != id })
+                switch try await app.prepareSelectedWallet(id: id, generation: generation) {
+                case let .ready(manager):
+                    self.manager = manager
 
-                if let wallet {
-                    try app.selectWalletOrThrow(wallet.id)
-                } else {
-                    app.loadAndReset(to: Route.newWallet(.select))
+                    do {
+                        try await manager.startWalletScan()
+                    } catch {
+                        Log.error("Wallet Scan Failed \(error.localizedDescription)")
+                    }
+                case .redirected:
+                    return
                 }
+            } catch is CancellationError {
+                return
             } catch {
-                app.loadAndReset(to: Route.newWallet(.select))
+                Log.error("Unable to prepare selected wallet \(id): \(error)")
             }
         }
     }

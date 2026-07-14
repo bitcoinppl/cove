@@ -20,6 +20,7 @@
 		C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */; };
 		C0B000162F00000000000001 /* PasskeyProviderImplTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000172F00000000000001 /* PasskeyProviderImplTests.swift */; };
 		C0B000182F00000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000192F00000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */; };
+		C0B0001A2F00000000000001 /* WalletTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001B2F00000000000001 /* WalletTransitionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +65,7 @@
 		C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingBackupViewsTests.swift; sourceTree = "<group>"; };
 		C0B000172F00000000000001 /* PasskeyProviderImplTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyProviderImplTests.swift; sourceTree = "<group>"; };
 		C0B000192F00000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupIOSSafetyHelpersTests.swift; sourceTree = "<group>"; };
+		C0B0001B2F00000000000001 /* WalletTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransitionTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -128,6 +130,7 @@
 				C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */,
 				C0B000172F00000000000001 /* PasskeyProviderImplTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
+				C0B0001B2F00000000000001 /* WalletTransitionTests.swift */,
 				C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */,
 			);
 			path = CoveTests;
@@ -315,6 +318,7 @@
 				C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */,
 				C0B000162F00000000000001 /* PasskeyProviderImplTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
+				C0B0001A2F00000000000001 /* WalletTransitionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

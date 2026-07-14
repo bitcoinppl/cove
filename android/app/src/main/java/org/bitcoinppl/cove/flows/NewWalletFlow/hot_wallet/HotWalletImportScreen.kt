@@ -78,7 +78,6 @@ import org.bitcoinppl.cove_core.Bip39WordSpecificAutocomplete
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.ImportWalletException
 import org.bitcoinppl.cove_core.NumberOfBip39Words
-import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.groupedPlainWordsOf
 import org.bitcoinppl.cove_core.types.WalletId
 
@@ -222,10 +221,8 @@ fun HotWalletImportScreen(
     fun importWallet(wordsToImport: List<List<String>> = enteredWords) {
         try {
             val walletMetadata = manager.importWallet(wordsToImport)
-            app.clearWalletManager()
             onImported?.invoke(walletMetadata.id) ?: run {
                 app.selectWalletOrThrow(walletMetadata.id)
-                app.resetRoute(Route.SelectedWallet(walletMetadata.id))
             }
         } catch (e: ImportWalletException.InvalidWordGroup) {
             Log.d("HotWalletImport", "Invalid word group while importing hot wallet")
@@ -527,11 +524,9 @@ fun HotWalletImportScreen(
                             onClick = {
                                 alertState = AlertState.None
                                 duplicateWalletId?.let { walletId ->
-                                    app.clearWalletManager()
                                     manager.close()
                                     onImported?.invoke(walletId) ?: run {
                                         app.selectWalletOrThrow(walletId)
-                                        app.resetRoute(Route.SelectedWallet(walletId))
                                     }
                                 }
                             },

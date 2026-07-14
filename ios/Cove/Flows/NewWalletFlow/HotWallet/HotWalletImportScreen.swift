@@ -235,8 +235,6 @@ struct HotWalletImportScreen: View {
             }
 
             try app.selectWalletOrThrow(walletMetadata.id)
-            app.walletManager = nil
-            app.resetRoute(to: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {
             case let .InvalidWordGroup(error):
@@ -529,7 +527,6 @@ struct HotWalletImportScreen: View {
 
                         do {
                             try app.selectWalletOrThrow(walletId)
-                            app.resetRoute(to: .selectedWallet(walletId))
                         } catch {
                             app.alertState = TaggedItem(.general(
                                 title: "Unable to Select Wallet",

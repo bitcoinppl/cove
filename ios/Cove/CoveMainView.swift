@@ -184,7 +184,6 @@ struct CoveMainView: View {
                 do {
                     let wallet = try Wallet.newFromXpub(xpub: text)
                     try app.selectWalletOrThrow(wallet.id())
-                    app.resetRoute(to: .selectedWallet(wallet.id()))
                 } catch {
                     DispatchQueue.main.async {
                         app.alertState = .init(
