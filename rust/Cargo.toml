@@ -31,6 +31,7 @@ data-encoding = "2.11.0"
 # parsing
 winnow = { version = "1.0.2", features = ["simd"] }
 memchr = "2.8.0"
+unicode-normalization = "0.1.25"
 url = "2.5.8"
 
 # qr
@@ -51,11 +52,12 @@ rand = "0.10.1"
 
 # compression
 ruzstd = "0.8.3"
+flate2 = "1.1.9"
 
 # bdk / bitcoin
 bitcoin = { version = "0.32.9" }
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39", "file_store", "rusqlite"] }
-bip39 = { version = "2.2.2", features = ["zeroize"] }
+bip39 = { version = "2.2.2", features = ["all-languages", "zeroize"] }
 bip329 = "0.6.0"
 payjoin = { version = "0.25.0", default-features = false, features = ["v2"] }
 pubport = { version = "0.6.0" }
@@ -242,6 +244,7 @@ hmac = { workspace = true }
 
 # compression
 ruzstd = { workspace = true }
+flate2 = { workspace = true }
 
 # fast hashmap
 ahash = { workspace = true }
@@ -255,6 +258,7 @@ rustls = { version = "0.23.40", features = ["ring"], default-features = false }
 # parsing
 winnow = { workspace = true }
 memchr = { workspace = true }
+unicode-normalization = { workspace = true }
 
 # encoding / decoding 
 hex = { workspace = true }

@@ -38,8 +38,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.BuildConfig
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
@@ -72,7 +74,18 @@ fun AboutSettingsScreen(
     var showWipeCloudDialog by remember { mutableStateOf(false) }
     var wipeCloudResult by remember { mutableStateOf<WipeCloudResult?>(null) }
     var showResetLocalStateDialog by remember { mutableStateOf(false) }
+    var showSendDiagnostics by remember { mutableStateOf(false) }
+    var showSubmittedDiagnostics by remember { mutableStateOf(false) }
+    var sendDiagnosticsSubmitting by remember { mutableStateOf(false) }
     var resetLocalStateMessage by remember { mutableStateOf<String?>(null) }
+    val isInDecoyMode = Auth.isInDecoyMode()
+    var submittedDiagnosticsLoadState by remember {
+        mutableStateOf<SubmittedDiagnosticsLoadState>(
+            SubmittedDiagnosticsLoadState.Loaded(emptyList()),
+        )
+    }
+    var submittedDiagnosticsRefreshId by remember { mutableIntStateOf(0) }
+    var submittedDiagnosticsRefreshJob by remember { mutableStateOf<Job?>(null) }
     var isBetaEnabled by remember {
         mutableStateOf(
             Database().globalFlag().getBoolConfig(GlobalFlagKey.BETA_FEATURES_ENABLED)
@@ -85,6 +98,40 @@ fun AboutSettingsScreen(
             delay(2000)
             buildTapCount = 0
         }
+    }
+
+    fun refreshSubmittedDiagnostics() {
+        submittedDiagnosticsRefreshId++
+        val refreshId = submittedDiagnosticsRefreshId
+        submittedDiagnosticsRefreshJob?.cancel()
+
+        if (Auth.isInDecoyMode()) {
+            submittedDiagnosticsLoadState = SubmittedDiagnosticsLoadState.Loaded(emptyList())
+            return
+        }
+
+        submittedDiagnosticsRefreshJob = coroutineScope.launch {
+            val loadState = loadSubmittedDiagnosticsRecords()
+
+            if (refreshId != submittedDiagnosticsRefreshId) {
+                return@launch
+            }
+
+            submittedDiagnosticsLoadState =
+                if (Auth.isInDecoyMode()) {
+                    SubmittedDiagnosticsLoadState.Loaded(emptyList())
+                } else {
+                    loadState
+                }
+        }
+    }
+
+    LaunchedEffect(isInDecoyMode) {
+        if (isInDecoyMode) {
+            showSubmittedDiagnostics = false
+        }
+
+        refreshSubmittedDiagnostics()
     }
 
     AboutSettingsContent(
@@ -106,6 +153,18 @@ fun AboutSettingsScreen(
                 data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
             }
             context.startActivity(intent)
+        },
+        showSendDiagnostics = !isInDecoyMode,
+        onSendDiagnosticsClick = {
+            if (!isInDecoyMode) showSendDiagnostics = true
+        },
+        showSubmittedDiagnostics =
+            !isInDecoyMode && submittedDiagnosticsLoadState.shouldShowAboutEntry,
+        submittedDiagnosticsSummary = submittedDiagnosticsSummary(submittedDiagnosticsLoadState),
+        onSubmittedDiagnosticsClick = {
+            if (!isInDecoyMode && submittedDiagnosticsLoadState.shouldShowAboutEntry) {
+                showSubmittedDiagnostics = true
+            }
         },
         onWipeCloudBackupClick = { showWipeCloudDialog = true },
         onResetLocalBackupStateClick = { showResetLocalStateDialog = true },
@@ -253,6 +312,41 @@ fun AboutSettingsScreen(
             },
         )
     }
+
+    val dismissSendDiagnostics = {
+        if (!sendDiagnosticsSubmitting) {
+            showSendDiagnostics = false
+            refreshSubmittedDiagnostics()
+        }
+    }
+
+    if (showSendDiagnostics && !isInDecoyMode) {
+        FullScreenSettingsModal(
+            onDismiss = dismissSendDiagnostics,
+            dismissEnabled = !sendDiagnosticsSubmitting,
+        ) {
+            SendDiagnosticsSheet(
+                onDismiss = dismissSendDiagnostics,
+                onSubmittingChange = { sendDiagnosticsSubmitting = it },
+            )
+        }
+    }
+
+    val dismissSubmittedDiagnostics = {
+        showSubmittedDiagnostics = false
+        refreshSubmittedDiagnostics()
+    }
+
+    if (showSubmittedDiagnostics && !isInDecoyMode) {
+        FullScreenSettingsModal(
+            onDismiss = dismissSubmittedDiagnostics,
+        ) {
+            SubmittedDiagnosticsScreen(
+                onDismiss = dismissSubmittedDiagnostics,
+                onRecordsChanged = { refreshSubmittedDiagnostics() },
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -266,6 +360,11 @@ internal fun AboutSettingsContent(
     onBack: () -> Unit,
     onBuildNumberClick: () -> Unit,
     onFeedbackClick: () -> Unit,
+    showSendDiagnostics: Boolean,
+    onSendDiagnosticsClick: () -> Unit,
+    showSubmittedDiagnostics: Boolean,
+    submittedDiagnosticsSummary: String,
+    onSubmittedDiagnosticsClick: () -> Unit,
     onWipeCloudBackupClick: () -> Unit,
     onResetLocalBackupStateClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -326,6 +425,22 @@ internal fun AboutSettingsContent(
                             valueStyle = MaterialTheme.typography.bodySmall,
                             onClick = onFeedbackClick,
                         )
+                        if (showSendDiagnostics) {
+                            MaterialDivider()
+                            AboutRow(
+                                label = "Send Diagnostics",
+                                onClick = onSendDiagnosticsClick,
+                            )
+                        }
+                        if (showSubmittedDiagnostics) {
+                            MaterialDivider()
+                            AboutRow(
+                                label = "Submitted Diagnostics",
+                                value = submittedDiagnosticsSummary,
+                                valueStyle = MaterialTheme.typography.bodySmall,
+                                onClick = onSubmittedDiagnosticsClick,
+                            )
+                        }
                     }
                 }
 
@@ -388,11 +503,38 @@ internal fun AboutSettingsPreviewContent() {
             onBack = { },
             onBuildNumberClick = { },
             onFeedbackClick = { },
+            showSendDiagnostics = true,
+            onSendDiagnosticsClick = { },
+            showSubmittedDiagnostics = true,
+            submittedDiagnosticsSummary = "3 reports",
+            onSubmittedDiagnosticsClick = { },
             onWipeCloudBackupClick = { },
             onResetLocalBackupStateClick = { },
         )
     }
 }
+
+private fun diagnosticsReportCountText(count: Int): String =
+    if (count == 1) {
+        "1 report"
+    } else {
+        "$count reports"
+    }
+
+private val SubmittedDiagnosticsLoadState.shouldShowAboutEntry: Boolean
+    get() =
+        when (this) {
+            SubmittedDiagnosticsLoadState.Loading -> false
+            is SubmittedDiagnosticsLoadState.Loaded -> records.isNotEmpty()
+            is SubmittedDiagnosticsLoadState.Failed -> true
+        }
+
+private fun submittedDiagnosticsSummary(state: SubmittedDiagnosticsLoadState): String =
+    when (state) {
+        SubmittedDiagnosticsLoadState.Loading -> "Loading"
+        is SubmittedDiagnosticsLoadState.Loaded -> diagnosticsReportCountText(state.records.size)
+        is SubmittedDiagnosticsLoadState.Failed -> "Unavailable"
+    }
 
 @Composable
 private fun DebugRow(
@@ -434,7 +576,7 @@ private suspend fun debugWipeCloudBackup(context: Context): WipeCloudResult {
 @Composable
 private fun AboutRow(
     label: String,
-    value: String,
+    value: String? = null,
     onClick: (() -> Unit)? = null,
     valueStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge,
 ) {
@@ -452,10 +594,12 @@ private fun AboutRow(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
         )
-        Text(
-            text = value,
-            style = valueStyle,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        value?.let {
+            Text(
+                text = it,
+                style = valueStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

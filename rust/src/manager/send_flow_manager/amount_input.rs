@@ -39,7 +39,7 @@ impl RustSendFlowManager {
 
         let handler = BtcOnChangeHandler::new(state.clone());
         let changes = handler.on_change(&old, &new);
-        debug!("btc_on_change_handler changes: {changes:?}");
+        trace!("btc_on_change_handler changes: {changes:?}");
 
         let btc_on_change::Changeset { entering_amount_btc, max_selected, amount_btc, amount_fiat } =
             changes;
@@ -93,7 +93,7 @@ impl RustSendFlowManager {
         old_value: String,
         new_value: String,
     ) -> Option<()> {
-        debug!("fiat_field_changed {old_value} --> {new_value}");
+        trace!("fiat_field_changed {old_value} --> {new_value}");
         if old_value == new_value {
             return None;
         }
@@ -113,7 +113,7 @@ impl RustSendFlowManager {
             return None;
         };
 
-        debug!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
+        trace!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
         let fiat_on_change::Changeset {
             entering_fiat_amount,
             fiat_value,

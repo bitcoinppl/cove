@@ -266,6 +266,8 @@ fn ensure_storage_bootstrapped_internal(track_progress: bool) -> Result<u32, App
 /// Returns the pre-recovery BDK database count for use by attempt_bdk_migration
 fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     crate::logging::init();
+    attach_persistent_diagnostics_logging();
+
     if track_progress {
         set_step(BootstrapStep::DerivingEncryptionKey);
     }
@@ -374,6 +376,12 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
 
     info!("Storage bootstrap complete");
     Ok(bdk_count)
+}
+
+fn attach_persistent_diagnostics_logging() {
+    if let Err(error) = cove_common::logging::capture::attach_to_default_logs_dir() {
+        warn!("Failed to attach persistent Rust diagnostics logging: {error}");
+    }
 }
 
 /// Returns the absolute path to the root data directory

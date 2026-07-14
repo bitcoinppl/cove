@@ -3,6 +3,7 @@
 
 pub mod cbor;
 pub mod cloud_backup;
+pub mod diagnostics_reports;
 pub mod encrypted_backend;
 pub mod error;
 pub mod global_cache;
@@ -24,6 +25,7 @@ use arc_swap::ArcSwap;
 use cloud_backup::{
     CloudBackupStateTable, CloudBlobSyncStateTable, ensure_table_type_compatibility,
 };
+use diagnostics_reports::DiagnosticsReportsTable;
 use global_cache::GlobalCacheTable;
 use global_config::{GlobalConfigKey, GlobalConfigTable};
 use global_flag::GlobalFlagTable;
@@ -53,6 +55,7 @@ pub struct Database {
     pub wallets: WalletsTable,
     pub unsigned_transactions: UnsignedTransactionsTable,
     pub historical_prices: HistoricalPriceTable,
+    pub diagnostics_reports: DiagnosticsReportsTable,
 }
 
 #[uniffi::export]
@@ -82,10 +85,22 @@ impl Database {
         self.historical_prices.clone()
     }
 
+    pub fn diagnostics_reports(&self) -> DiagnosticsReportsTable {
+        self.diagnostics_reports.clone()
+    }
+
     pub fn dangerous_reset_all_data(&self) {
-        if let Err(error) = std::fs::remove_file(database_location()) {
-            error!("unable to delete database cove_main error: {error}");
-            return;
+        match std::fs::remove_file(database_location()) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                error!("unable to delete database cove_main error: {error}");
+                return;
+            }
+        }
+
+        if let Err(error) = cove_common::logging::capture::clear_default_logs_dir() {
+            error!("unable to clear diagnostics logs during data reset: {error}");
         }
 
         let db = Self::init().expect("failed to reinitialize database after reset");
@@ -136,6 +151,7 @@ impl Database {
         let cloud_blob_sync_states = CloudBlobSyncStateTable::new(main_db_arc.clone(), &write_txn);
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
         let historical_prices = HistoricalPriceTable::new(main_db_arc.clone(), &write_txn);
+        let diagnostics_reports = DiagnosticsReportsTable::new(main_db_arc.clone(), &write_txn);
 
         write_txn.commit()?;
 
@@ -148,6 +164,7 @@ impl Database {
             wallets,
             unsigned_transactions,
             historical_prices,
+            diagnostics_reports,
         };
 
         database.backfill_onboarding_complete_from_legacy_state();

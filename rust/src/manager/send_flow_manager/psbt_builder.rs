@@ -1,6 +1,6 @@
 use act_zero::call;
 use cove_types::{amount::Amount, psbt::Psbt};
-use tracing::debug;
+use tracing::trace;
 
 use crate::{transaction::FeeRate, wallet::Address};
 
@@ -13,7 +13,7 @@ impl RustSendFlowManager {
         amount: Option<Amount>,
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
-        debug!("build_psbt");
+        trace!("build_psbt");
         let mode = self.state.lock().mode.clone();
 
         match mode {
@@ -30,7 +30,7 @@ impl RustSendFlowManager {
         amount: Option<Amount>,
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
-        debug!("build_psbt_for_amount");
+        trace!("build_psbt_for_amount");
 
         let (amount, address) = {
             let state = self.state.lock();
@@ -74,7 +74,7 @@ impl RustSendFlowManager {
         address: Option<Address>,
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
-        debug!("build_psbt_for_utxo_list");
+        trace!("build_psbt_for_coin_control");
 
         let (address, amount) = {
             let state = self.state.lock();

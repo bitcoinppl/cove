@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
-use tracing::debug;
+use tracing::trace;
 
 use crate::{fee_client::FEE_CLIENT, transaction::FeeRate, wallet::Address};
 
@@ -89,7 +89,7 @@ impl RustSendFlowManager {
     }
 
     pub(crate) async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
-        debug!("get_or_update_fee_rate_options");
+        trace!("get_or_update_fee_rate_options");
 
         let mut sender = self.reconciler.deferred_sender();
 
@@ -100,7 +100,7 @@ impl RustSendFlowManager {
             (address, amount_sats)
         };
 
-        debug!("get_or_update_fee_rate_options: {address:?}, {amount_sats:?}");
+        trace!("get_or_update_fee_rate_options: {address:?}, {amount_sats:?}");
         let wallet_actor = self.wallet_actor();
         let state = self.state.clone();
 

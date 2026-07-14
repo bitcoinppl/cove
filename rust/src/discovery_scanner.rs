@@ -20,7 +20,7 @@ use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
 use flume::Sender;
 use pubport::formats::Json;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// Default number of addresses to scan
 const DEFAULT_SCAN_LIMIT: u32 = 200;
@@ -478,7 +478,7 @@ impl WalletDiscoveryWorker {
                     }
 
                     current_address += 1;
-                    debug!("checked {current_address} addresses for {wallet_type}");
+                    trace!("checked {current_address} addresses for {wallet_type}");
 
                     // every 5 addresses, save the scan state
                     if current_address.is_multiple_of(5) {

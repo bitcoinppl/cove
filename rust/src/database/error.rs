@@ -1,6 +1,7 @@
 use super::{
-    global_cache::GlobalCacheTableError, global_config::GlobalConfigTableError,
-    global_flag::GlobalFlagTableError, historical_price::HistoricalPriceTableError,
+    diagnostics_reports::DiagnosticsReportsTableError, global_cache::GlobalCacheTableError,
+    global_config::GlobalConfigTableError, global_flag::GlobalFlagTableError,
+    historical_price::HistoricalPriceTableError,
     unsigned_transactions::UnsignedTransactionsTableError, wallet::WalletTableError,
 };
 
@@ -49,6 +50,9 @@ pub enum DatabaseError {
 
     #[error(transparent)]
     HistoricalPrice(#[from] HistoricalPriceTableError),
+
+    #[error(transparent)]
+    DiagnosticsReports(#[from] DiagnosticsReportsTableError),
 
     #[error("unable to serialize or deserialize: {0}")]
     Serialization(#[from] SerdeError),

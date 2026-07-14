@@ -157,7 +157,7 @@ struct BackupExportView: View {
                 do {
                     try FileManager.default.removeItem(at: url)
                 } catch {
-                    print("Warning: failed to delete temp backup file: \(error.localizedDescription)")
+                    Log.warn("Failed to delete temp backup file: \(error.localizedDescription)")
                 }
                 tempFileURL = nil
             }
@@ -363,7 +363,7 @@ struct BackupExportView: View {
                         do {
                             try FileManager.default.removeItem(at: fileURL)
                         } catch {
-                            print("Warning: failed to delete temp backup file: \(error.localizedDescription)")
+                            Log.warn("Failed to delete temp backup file: \(error.localizedDescription)")
                         }
                         tempFileURL = nil
 

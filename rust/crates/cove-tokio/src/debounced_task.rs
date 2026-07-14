@@ -8,7 +8,7 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
-use tracing::debug;
+use tracing::trace;
 
 use crate::abortable_task::AbortableTask;
 
@@ -61,14 +61,14 @@ where
         // drop the previous task (aborts it)
         let had_previous = self.task.swap(None).is_some();
         if had_previous {
-            debug!("[{name}] debounce cancelled previous pending task (replace #{replace_num})");
+            trace!("[{name}] debounce cancelled previous pending task (replace #{replace_num})");
         }
 
         let task = Arc::new(AbortableTask::spawn(async move {
-            debug!("[{name}] debounce waiting {debounce:?} (replace #{replace_num})");
+            trace!("[{name}] debounce waiting {debounce:?} (replace #{replace_num})");
             tokio::time::sleep(debounce).await;
             let exec_num = execute_count.fetch_add(1, Ordering::Relaxed) + 1;
-            debug!("[{name}] debounce executing (exec #{exec_num}, after replace #{replace_num})");
+            trace!("[{name}] debounce executing (exec #{exec_num}, after replace #{replace_num})");
             fut.await
         }));
 

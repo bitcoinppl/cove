@@ -18,12 +18,16 @@ struct WipeCloudResult: Equatable {
 
 struct AboutScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
     @State private var buildTapCount = 0
     @State private var buildTapTimer: Timer? = nil
     @State private var isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
     @State private var alertState: TaggedItem<AboutAlertState>? = nil
+    @State private var isSendDiagnosticsPresented = false
+    @State private var isSubmittedDiagnosticsPresented = false
+    @State private var submittedDiagnosticsLoadState: SubmittedDiagnosticsLoadState = .loaded([])
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -105,6 +109,32 @@ struct AboutScreen: View {
                             .font(.footnote)
                     }
                 }
+
+                if !auth.isInDecoyMode() {
+                    Button {
+                        isSendDiagnosticsPresented = true
+                    } label: {
+                        HStack {
+                            Text("Send Diagnostics")
+                                .foregroundStyle(.primary)
+                        }
+                    }
+
+                    if submittedDiagnosticsLoadState.shouldShowSubmittedDiagnostics {
+                        Button {
+                            isSubmittedDiagnosticsPresented = true
+                        } label: {
+                            HStack {
+                                Text("Submitted Diagnostics")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(submittedDiagnosticsLoadState.submittedDiagnosticsSummary)
+                                    .foregroundStyle(.secondary)
+                                    .font(.footnote)
+                            }
+                        }
+                    }
+                }
             }
 
             #if DEBUG
@@ -124,8 +154,45 @@ struct AboutScreen: View {
             #endif
         }
         .navigationTitle("About")
+        .task { refreshSubmittedDiagnostics() }
+        .onChange(of: isSendDiagnosticsPresented) { _, isPresented in
+            guard !isPresented else { return }
+
+            refreshSubmittedDiagnostics()
+        }
+        .onChange(of: auth.isInDecoyMode()) { _, _ in
+            refreshSubmittedDiagnostics()
+        }
         .onDisappear { buildTapTimer?.invalidate(); buildTapTimer = nil }
+        .sheet(isPresented: $isSendDiagnosticsPresented) {
+            SendDiagnosticsSheet()
+        }
+        .sheet(isPresented: $isSubmittedDiagnosticsPresented, onDismiss: refreshSubmittedDiagnostics) {
+            SubmittedDiagnosticsSheet(
+                loadState: submittedDiagnosticsLoadState,
+                onRecordsChanged: refreshSubmittedDiagnostics
+            )
+        }
         .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
+    }
+
+    private func refreshSubmittedDiagnostics() {
+        guard !auth.isInDecoyMode() else {
+            submittedDiagnosticsLoadState = .loaded([])
+            isSubmittedDiagnosticsPresented = false
+            return
+        }
+
+        Task {
+            let loadState = await loadSubmittedDiagnosticsHistory()
+            guard !auth.isInDecoyMode() else {
+                submittedDiagnosticsLoadState = .loaded([])
+                isSubmittedDiagnosticsPresented = false
+                return
+            }
+
+            submittedDiagnosticsLoadState = loadState
+        }
     }
 
     private nonisolated static func debugWipeCloudBackup() -> WipeCloudResult {
@@ -152,5 +219,6 @@ struct AboutScreen: View {
     NavigationStack {
         AboutScreen()
             .environment(AppManager.shared)
+            .environment(AuthManager.shared)
     }
 }

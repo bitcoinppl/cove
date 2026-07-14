@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use act_zero::*;
 use bitcoin::{Transaction, Txid};
 use cove_types::Network;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 use crate::{
     manager::wallet_manager::actor::WalletActor,
@@ -85,7 +85,7 @@ impl TransactionWatcher {
             loop {
                 let Ok(true) = call!(addr.should_keep_watching()).await else { break };
 
-                debug!("checking txn: {tx_id}");
+                trace!("checking txn: {tx_id}");
                 let result = call!(addr.check_txn(client.clone())).await;
 
                 match result {
@@ -100,7 +100,7 @@ impl TransactionWatcher {
 
                     // sleep for the normal wait time before checking again
                     Ok(WatchResult::Continue) => {
-                        debug!("continue watching, waiting for {}", normal_wait_time.as_secs());
+                        trace!("continue watching, waiting for {}", normal_wait_time.as_secs());
                         tokio::time::sleep(normal_wait_time).await;
                     }
 

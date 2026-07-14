@@ -368,13 +368,24 @@ fun MainSettingsScreen(
 }
 
 @Composable
-private fun FullScreenSettingsModal(
+@Suppress("FunctionNaming")
+internal fun FullScreenSettingsModal(
     onDismiss: () -> Unit,
+    dismissEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        onDismissRequest = {
+            if (dismissEnabled) {
+                onDismiss()
+            }
+        },
+        properties =
+            DialogProperties(
+                dismissOnBackPress = dismissEnabled,
+                dismissOnClickOutside = dismissEnabled,
+                usePlatformDefaultWidth = false,
+            ),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
