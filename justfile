@@ -1,4 +1,13 @@
-# List available recipes
+# Runtime tags describe warm, incremental runs on a development machine:
+# - [quick]: normally finishes within one minute
+# - [bounded]: normally finishes within five minutes
+# - [long]: may take longer than five minutes
+# - [indefinite]: keeps running until stopped
+# - [external]: completion depends on a device, network service, or user interaction
+# - [variable]: runtime depends on the arguments passed to the wrapper
+# Cold caches can move quick commands into bounded and bounded commands into long
+
+# [quick] List available recipes
 [default]
 list:
     @just --list
@@ -7,18 +16,18 @@ list:
 # utilities
 # ------------------------------------------------------------------------------
 
-# Run an xtask command
+# [variable] Run an xtask command
 [group('utils')]
 xtask *args:
     cd rust && cargo xtask {{ args }}
 
-# Rebase current branch onto new-base after choosing the old squash-merged base
+# [bounded] Rebase current branch onto new-base after choosing the old squash-merged base
 [group('utils')]
 rebase new_base="master":
     just xtask rebase "{{ new_base }}"
 
-# Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 # Requires MNEMONIC env var (set in .envrc or pass directly)
+# [quick, external] Sign a PSBT and output all formats (base64, hex, binary, bbqr-gif, ur-gif)
 [group('utils')]
 [script('bash')]
 sign-psbt psbt:
@@ -47,14 +56,14 @@ alias sp := sign-psbt
 # ci
 # ------------------------------------------------------------------------------
 
-# Full build and verification for all platforms
+# [long] Full build and verification for all platforms
 [group('ci')]
 full:
     just bidd && just ba && just ci && just compile
 
 alias f := full
 
-# Run all CI checks
+# [long] Run all CI checks
 [group('ci')]
 [script('bash')]
 [working-directory('rust')]
@@ -66,32 +75,59 @@ ci:
     just compile
     just test
 
-# Regenerate UniFFI bindings in GitHub Actions for committed branch changes
+# [external] Regenerate UniFFI bindings in GitHub Actions for committed branch changes
 [group('ci')]
 regenerate-bindings:
     just xtask regenerate-bindings
 
 alias rb := regenerate-bindings
 
+# [variable, external] Run mobile artifact producer or consumer commands
+[group('ci')]
+mobile-artifact *args:
+    just xtask mobile-artifact {{ args }}
+
+# [external] Trigger Android and iOS mobile artifacts for a pushed ref
+[group('ci')]
+mobile-artifact-trigger ref platform="both":
+    just mobile-artifact trigger --platform "{{ platform }}" --ref "{{ ref }}"
+
+# [external] Install latest matching Android mobile artifact
+[group('ci')]
+mobile-artifact-install-android ref:
+    just mobile-artifact install-android --ref "{{ ref }}"
+
+# [external] Fetch latest matching iOS CoveCore mobile artifact
+[group('ci')]
+mobile-artifact-fetch-ios-core ref:
+    just mobile-artifact fetch-ios-core --ref "{{ ref }}"
+
 # ------------------------------------------------------------------------------
 # build
 # ------------------------------------------------------------------------------
 
-# Build Android debug APK
+# [long] Build Android debug Rust FFI and Kotlin bindings for all ABIs
 [group('build')]
 build-android:
     just xtask build-android debug && just say "done android"
 
 alias ba := build-android
 
-# Build Android release APK
+# [bounded, external] Build Android debug Rust FFI and Kotlin bindings for the connected device ABI
+[group('build')]
+build-android-connected-device:
+    just xtask build-android debug --connected-device && just say "done android connected device"
+
+alias bad := build-android-connected-device
+
+# [long] Build Android release APK
 [group('build')]
 build-android-release:
     just xtask build-android release-speed && just say "done android release"
 
 alias bar := build-android-release
 
-# Build signed AAB for Google Play, copy to Downloads
+# [long, external] Build signed AAB for Google Play, copy to Downloads
 [group('build')]
 bundle-android: build-android-release
     cd android && ./gradlew --stop
@@ -99,28 +135,28 @@ bundle-android: build-android-release
 
 alias bua := bundle-android
 
-# Build iOS debug for simulator
+# [long] Build iOS debug for simulator
 [group('build')]
 build-ios profile="debug" *flags="":
     just xtask build-ios {{ profile }} {{ flags }} && just say "done ios"
 
 alias bi := build-ios
 
-# Build iOS release for device
+# [long] Build iOS release for device
 [group('build')]
 build-ios-release:
     just xtask build-ios release-speed --device && just say "done ios release"
 
 alias bir := build-ios-release
 
-# Bump iOS build, build release bindings, then upload to TestFlight
 # keep this path aligned with Xcode archives; passkeys fail in TestFlight if CLI signing diverges
 # xtask verifies Apple's AASA CDN before upload
+# [long, external] Bump iOS build, build release bindings, then upload to TestFlight
 [group('build')]
 testflight:
     just xtask testflight
 
-# Build iOS debug for device
+# [long] Build iOS debug for device
 [group('build')]
 build-ios-debug-device:
     just xtask build-ios debug --device && just say "done ios device"
@@ -129,18 +165,18 @@ alias bidd := build-ios-debug-device
 
 alias gen-swift := build-ios
 
-# Compile both iOS and Android
+# [long] Compile both iOS and Android
 [group('build')]
 @compile:
     just compile-ios && just compile-android
 
-# Compile iOS for simulator
+# [bounded] Compile iOS for simulator
 [group('build')]
 [working-directory('ios')]
 compile-ios:
     xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build && just notf "done compile ios"
 
-# Compile Android debug
+# [bounded] Compile Android debug
 [group('build')]
 [working-directory('android')]
 compile-android:
@@ -150,38 +186,41 @@ compile-android:
 # test
 # ------------------------------------------------------------------------------
 
-# Run manual Android full-launch onboarding UI tests
+# [external] Run iOS and Android manual UI tests
 [group('test')]
-[script('bash')]
-[working-directory('android')]
+ui-manual:
+    just android-ui-manual && just ios-ui-background
+
+# Use this for ad hoc device UI testing:
+#   just android-stay-awake ./gradlew :app:connectedUiTestDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.LayoutRegressionTest
+#
+# Focused instrumentation tests should use AndroidDeviceStayAwakeRule when the
+# stay-awake behavior belongs in the test itself
+# [variable, external] Run an Android device command from android/ with stay-awake enabled
+[group('test')]
+android-stay-awake *command:
+    just xtask android-stay-awake -- {{ command }}
+
+# [external] Run manual Android full-launch onboarding UI tests
+[group('test')]
 android-ui-manual:
-    set -e
-
-    cleanup() {
-        adb uninstall org.bitcoinppl.cove.uitest.test >/dev/null 2>&1 || true
-        adb uninstall org.bitcoinppl.cove.uitest >/dev/null 2>&1 || true
-    }
-
-    trap cleanup EXIT
-
-    ./gradlew :app:connectedUiTestDebugAndroidTest \
-        -Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest
+    just xtask android-ui-manual
 
 alias aum := android-ui-manual
 
-# Update Android Compose preview screenshot references
+# [bounded] Update Android Compose preview screenshot references
 [group('test')]
 [working-directory('android')]
 android-preview-screenshots-update:
     ./gradlew :app:updateDevDebugScreenshotTest
 
-# Validate Android Compose preview screenshots
+# [bounded] Validate Android Compose preview screenshots
 [group('test')]
 [working-directory('android')]
 android-preview-screenshots-validate:
     ./gradlew :app:validateDevDebugScreenshotTest
 
-# Run manual iOS full-launch UI tests without opening Simulator
+# [external] Run manual iOS full-launch UI tests without opening Simulator
 [group('test')]
 [script('bash')]
 ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
@@ -189,7 +228,7 @@ ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITes
 
 alias iub := ios-ui-background
 
-# Run manual iOS full-launch UI tests with Simulator visible
+# [external] Run manual iOS full-launch UI tests with Simulator visible
 [group('test')]
 [script('bash')]
 ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
@@ -197,31 +236,31 @@ ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITes
 
 alias iuf := ios-ui-foreground
 
-# Run all tests
+# [bounded] Run all tests
 [group('test')]
 [working-directory('rust')]
 test test="" flags="":
     cargo nextest run {{ test }} --workspace {{ flags }}
 
-# Run tests the same way as GitHub Actions
+# [bounded] Run tests the same way as GitHub Actions
 [group('test')]
 [working-directory('rust')]
 test-gh test="" flags="":
     cargo test {{ test }} --workspace {{ flags }}
 
-# Run tests with cargo test
+# [bounded] Run tests with cargo test
 [group('test')]
 [working-directory('rust')]
 ctest test="" flags="":
     cargo test {{ test }} --workspace -- {{ flags }}
 
-# Run tests with bacon
+# [indefinite] Run tests with bacon
 [group('test')]
 [working-directory('rust')]
 btest test="":
     bacon nextest -- {{ test }} --workspace
 
-# Watch and re-run tests on file changes
+# [indefinite] Watch and re-run tests on file changes
 [group('test')]
 watch-test test="" flags="":
     watchexec --exts rs just test {{ test }} {{ flags }}
@@ -233,35 +272,36 @@ alias wtest := watch-test
 # lint
 # ------------------------------------------------------------------------------
 
-# Lint all platforms
+# [bounded] Lint all platforms
 [group('lint')]
 @lint *flags="":
     just lint-rust {{ flags }} && just lint-swift {{ flags }} && just lint-android {{ flags }}
 
-# Lint Rust code
+# [quick] Lint Rust code
 [group('lint')]
 [working-directory('rust')]
 lint-rust *flags="":
     cargo clippy --all-targets --all-features -- -D warnings {{ flags }}
 
-# Lint Android code
+# [bounded] Lint Android code
 [group('lint')]
 [working-directory('android')]
 lint-android *flags="":
     ./gradlew ktlintCheck {{ flags }}
+    ./gradlew detekt
 
-# Lint Swift code
+# [quick] Lint Swift code
 [group('lint')]
 lint-swift *flags="":
     swiftformat --lint ios --swiftversion 6 {{ flags }}
 
-# Run clippy
+# [quick] Run clippy
 [group('lint')]
 [working-directory('rust')]
 clippy *flags="":
     cargo clippy {{ flags }}
 
-# Run pedantic clippy checks (excluding must_use, truncation, single_match, if_not_else, needless_continue, option_if_let_else)
+# [bounded] Run pedantic clippy checks (excluding must_use, truncation, single_match, if_not_else, needless_continue, option_if_let_else)
 [group('lint')]
 [working-directory('rust')]
 pedantic *flags="":
@@ -279,7 +319,7 @@ pedantic *flags="":
         -A clippy::needless_pass_by_value \
         {{ flags }}
 
-# Run full pedantic clippy checks without any allows
+# [bounded] Run full pedantic clippy checks without any allows
 [group('lint')]
 [working-directory('rust')]
 pedantic-all *flags="":
@@ -289,7 +329,7 @@ pedantic-all *flags="":
 # format
 # ------------------------------------------------------------------------------
 
-# Format all platforms
+# [quick] Format all platforms
 [group('format')]
 @fmt:
     just fmt-rust && just fmt-swift && just fmt-android
@@ -321,32 +361,32 @@ fmt-android:
 # dev
 # ------------------------------------------------------------------------------
 
-# Run bacon clippy watcher
+# [indefinite] Run bacon clippy watcher
 [group('dev')]
 [working-directory('rust')]
 bacon:
     bacon clippy
 
-# Run bacon check watcher
+# [indefinite] Run bacon check watcher
 [group('dev')]
 [working-directory('rust')]
 bcheck:
     bacon check
 
-# Run cargo check
+# [bounded] Run cargo check
 [group('dev')]
 [working-directory('rust')]
 check *flags="--workspace --all-targets --all-features":
     cargo check {{ flags }}
 
-# Watch and rebuild iOS on file changes
+# [indefinite] Watch and rebuild iOS on file changes
 [group('dev')]
 watch-build profile="debug" *flags="":
     watchexec --exts rs just build-ios {{ profile }} {{ flags }}
 
 alias wb := watch-build
 
-# Apply cargo fix
+# [bounded] Apply cargo fix
 [group('dev')]
 [working-directory('rust')]
 fix *flags="":
@@ -356,7 +396,7 @@ fix *flags="":
 # release
 # ------------------------------------------------------------------------------
 
-# Bump version (type: major, minor, patch, build)
+# [quick] Bump version (type: major, minor, patch, build)
 [group('release')]
 bump type targets="":
     just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
@@ -365,7 +405,7 @@ bump type targets="":
 # xcode
 # ------------------------------------------------------------------------------
 
-# Clean Xcode caches
+# [bounded] Clean Xcode caches
 [group('xcode')]
 [working-directory('ios')]
 xcode-clean:
@@ -374,7 +414,7 @@ xcode-clean:
 
 alias xc := xcode-clean
 
-# Reset Xcode completely
+# [long, external] Reset Xcode completely
 [confirm("This will kill Xcode and delete caches. Continue?")]
 [group('xcode')]
 [script('bash')]
@@ -395,7 +435,7 @@ alias xr := xcode-reset
 # util
 # ------------------------------------------------------------------------------
 
-# Clean all build artifacts
+# [bounded] Clean all build artifacts
 [confirm("Delete all build artifacts?")]
 [group('util')]
 [script('bash')]
@@ -406,32 +446,47 @@ clean:
     rm -rf ../ios/Cove
     rm -rf target
 
-# Update cargo dependencies
+# [external] Update cargo dependencies
 [group('util')]
 [working-directory('rust')]
 update pkg="":
     cargo update {{ pkg }}
 
-# Run Android app
+# [external] Run Android app
 [group('util')]
 run-android profile="debug":
     just xtask run-android {{ profile }} && just notf "done run android"
 
 alias ra := run-android
 
-# Launch installed Android app
+# [long, external] Rebuild Android bindings, then install and run the Android app
+[group('util')]
+build-run-android:
+    just ba && just ra
+
+alias bra := build-run-android
+
+# [long, external] Rebuild, install, and run iOS and Android apps
+[group('util')]
+build-run-all:
+    just bri && just bra
+
+alias brall := build-run-all
+
+# [quick, external] Launch installed Android app
 [group('util')]
 launch-android:
     adb shell am start -W -n org.bitcoinppl.cove.dev/org.bitcoinppl.cove.MainActivity
 
 alias la := launch-android
 
-# Clear Android app data and launch installed app
+# [quick, external] Clear Android app data and launch installed app
 [group('util')]
 reset-run-android:
     just reset-android
     just launch-android
 
+# [quick, external] Clear Android app data
 [group('util')]
 reset-android:
     adb shell pm clear org.bitcoinppl.cove.dev
@@ -439,7 +494,14 @@ reset-android:
 alias rra := reset-run-android
 alias rea := reset-android
 
-# Build and clean install Android (rebuilds native libs, clears Gradle cache)
+# [quick, external] Download Android screenshots into _scratch and delete them from the device
+[group('util')]
+download-android-screenshots:
+    just xtask download-android-screenshots
+
+alias das := download-android-screenshots
+
+# [long, external] Build and clean install Android (rebuilds native libs, clears Gradle cache)
 [group('util')]
 [working-directory('android')]
 install-android-clean:
@@ -447,20 +509,22 @@ install-android-clean:
 
 alias iac := install-android-clean
 
-# Run iOS app
+# [external] Run iOS app with existing generated bindings
 [group('util')]
 run-ios *args:
     just xtask run-ios {{ args }} && just notf "done run ios"
 
 alias ri := run-ios
 
+# [long, external] Rebuild iOS bindings, then install and run the iOS app
 [group('util')]
 build-run-ios:
     just bidd && just ri
 
 alias bri := build-run-ios
+alias ib := build-run-ios
 
-# Show logcat for cove process
+# [indefinite, external] Show logcat for Cove process
 [group('util')]
 logcat:
     #!/usr/bin/env bash
