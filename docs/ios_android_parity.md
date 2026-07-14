@@ -242,8 +242,12 @@ Only pre-presentation platform unavailability receives bounded automatic retry.
 Presented failure, cancellation, mismatch, unsupported provider, invalid result,
 and no credential do not retry automatically. Only the typed no-credential
 result may continue into the owning enable or repair flow's explicit
-registration step; every other failure stops. Interactive native sheets have
-no global watchdog.
+registration step; every other failure stops. iOS bounds interactive
+Authentication Services registration and assertion requests to five minutes,
+then cancels the controller on the main queue and reports a presented platform
+authorization failure. Its separate non-interactive presence probe keeps the
+one-second indeterminate timeout. Android retains its platform-owned interactive
+request lifetime.
 
 ### Restore All parity
 

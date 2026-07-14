@@ -29638,6 +29638,47 @@ public object FfiConverterTypeCloudBackupPasskeyHint: FfiConverterRustBuffer<Clo
 
 
 /**
+ * Privacy-safe recovery state for an interrupted Cloud Backup enable
+ */
+data class CloudBackupPendingEnableRecovery (
+    var `supportCode`: kotlin.String
+    ,
+    var `cleanup`: CloudBackupPendingEnableCleanupState
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPendingEnableRecovery: FfiConverterRustBuffer<CloudBackupPendingEnableRecovery> {
+    override fun read(buf: ByteBuffer): CloudBackupPendingEnableRecovery {
+        return CloudBackupPendingEnableRecovery(
+            FfiConverterString.read(buf),
+            FfiConverterTypeCloudBackupPendingEnableCleanupState.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupPendingEnableRecovery) = (
+            FfiConverterString.allocationSize(value.`supportCode`) +
+            FfiConverterTypeCloudBackupPendingEnableCleanupState.allocationSize(value.`cleanup`)
+    )
+
+    override fun write(value: CloudBackupPendingEnableRecovery, buf: ByteBuffer) {
+            FfiConverterString.write(value.`supportCode`, buf)
+            FfiConverterTypeCloudBackupPendingEnableCleanupState.write(value.`cleanup`, buf)
+    }
+}
+
+
+
+/**
  * Completed and total counts for long-running cloud backup work
  */
 data class CloudBackupProgress (
@@ -36858,6 +36899,15 @@ sealed class CloudBackupLifecycle {
         companion object
     }
 
+    data class PendingEnableRecovery(
+        val v1: org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery) : CloudBackupLifecycle()
+
+    {
+
+
+        companion object
+    }
+
     data class Failed(
         val v1: org.bitcoinppl.cove_core.CloudBackupFailure) : CloudBackupLifecycle()
 
@@ -36893,7 +36943,10 @@ public object FfiConverterTypeCloudBackupLifecycle : FfiConverterRustBuffer<Clou
             4 -> CloudBackupLifecycle.Configured(
                 FfiConverterTypeCloudBackupConfiguredState.read(buf),
                 )
-            5 -> CloudBackupLifecycle.Failed(
+            5 -> CloudBackupLifecycle.PendingEnableRecovery(
+                FfiConverterTypeCloudBackupPendingEnableRecovery.read(buf),
+                )
+            6 -> CloudBackupLifecycle.Failed(
                 FfiConverterTypeCloudBackupFailure.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -36928,6 +36981,13 @@ public object FfiConverterTypeCloudBackupLifecycle : FfiConverterRustBuffer<Clou
                 + FfiConverterTypeCloudBackupConfiguredState.allocationSize(value.v1)
             )
         }
+        is CloudBackupLifecycle.PendingEnableRecovery -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeCloudBackupPendingEnableRecovery.allocationSize(value.v1)
+            )
+        }
         is CloudBackupLifecycle.Failed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -36958,8 +37018,13 @@ public object FfiConverterTypeCloudBackupLifecycle : FfiConverterRustBuffer<Clou
                 FfiConverterTypeCloudBackupConfiguredState.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupLifecycle.Failed -> {
+            is CloudBackupLifecycle.PendingEnableRecovery -> {
                 buf.putInt(5)
+                FfiConverterTypeCloudBackupPendingEnableRecovery.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupLifecycle.Failed -> {
+                buf.putInt(6)
                 FfiConverterTypeCloudBackupFailure.write(value.v1, buf)
                 Unit
             }
@@ -37007,6 +37072,9 @@ sealed class CloudBackupManagerAction {
 
 
     object DiscardPendingEnableCloudBackup : CloudBackupManagerAction()
+
+
+    object ConfirmPendingEnableCleanup : CloudBackupManagerAction()
 
 
     object DismissPasskeyChoicePrompt : CloudBackupManagerAction()
@@ -37153,43 +37221,44 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 )
             4 -> CloudBackupManagerAction.ConfirmSavedPasskey
             5 -> CloudBackupManagerAction.DiscardPendingEnableCloudBackup
-            6 -> CloudBackupManagerAction.DismissPasskeyChoicePrompt
-            7 -> CloudBackupManagerAction.DismissMissingPasskeyReminder
-            8 -> CloudBackupManagerAction.RestoreFromCloudBackup
-            9 -> CloudBackupManagerAction.CancelRestore
-            10 -> CloudBackupManagerAction.StartVerification(
+            6 -> CloudBackupManagerAction.ConfirmPendingEnableCleanup
+            7 -> CloudBackupManagerAction.DismissPasskeyChoicePrompt
+            8 -> CloudBackupManagerAction.DismissMissingPasskeyReminder
+            9 -> CloudBackupManagerAction.RestoreFromCloudBackup
+            10 -> CloudBackupManagerAction.CancelRestore
+            11 -> CloudBackupManagerAction.StartVerification(
                 FfiConverterTypeCloudBackupVerificationSource.read(buf),
                 )
-            11 -> CloudBackupManagerAction.StartVerificationDiscoverable(
+            12 -> CloudBackupManagerAction.StartVerificationDiscoverable(
                 FfiConverterTypeCloudBackupVerificationSource.read(buf),
                 )
-            12 -> CloudBackupManagerAction.DismissVerificationPrompt
-            13 -> CloudBackupManagerAction.RecreateManifest
-            14 -> CloudBackupManagerAction.ReinitializeBackup
-            15 -> CloudBackupManagerAction.RepairPasskey
-            16 -> CloudBackupManagerAction.RepairPasskeyNoDiscovery
-            17 -> CloudBackupManagerAction.SyncUnsynced
-            18 -> CloudBackupManagerAction.FetchCloudOnly
-            19 -> CloudBackupManagerAction.RestoreCloudWallet(
+            13 -> CloudBackupManagerAction.DismissVerificationPrompt
+            14 -> CloudBackupManagerAction.RecreateManifest
+            15 -> CloudBackupManagerAction.ReinitializeBackup
+            16 -> CloudBackupManagerAction.RepairPasskey
+            17 -> CloudBackupManagerAction.RepairPasskeyNoDiscovery
+            18 -> CloudBackupManagerAction.SyncUnsynced
+            19 -> CloudBackupManagerAction.FetchCloudOnly
+            20 -> CloudBackupManagerAction.RestoreCloudWallet(
                 FfiConverterTypeRecordId.read(buf),
                 )
-            20 -> CloudBackupManagerAction.StartRestoreAll
-            21 -> CloudBackupManagerAction.RetryRestoreAllRemaining
-            22 -> CloudBackupManagerAction.CancelRestoreAll
-            23 -> CloudBackupManagerAction.DeleteCloudWallet(
+            21 -> CloudBackupManagerAction.StartRestoreAll
+            22 -> CloudBackupManagerAction.RetryRestoreAllRemaining
+            23 -> CloudBackupManagerAction.CancelRestoreAll
+            24 -> CloudBackupManagerAction.DeleteCloudWallet(
                 FfiConverterTypeRecordId.read(buf),
                 )
-            24 -> CloudBackupManagerAction.RecoverOtherBackups
-            25 -> CloudBackupManagerAction.DeleteOtherBackups
-            26 -> CloudBackupManagerAction.DisableCloudBackup
-            27 -> CloudBackupManagerAction.KeepCloudBackupEnabled
-            28 -> CloudBackupManagerAction.RefreshDetail
-            29 -> CloudBackupManagerAction.EnterDetail
-            30 -> CloudBackupManagerAction.CloseDetail
-            31 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
+            25 -> CloudBackupManagerAction.RecoverOtherBackups
+            26 -> CloudBackupManagerAction.DeleteOtherBackups
+            27 -> CloudBackupManagerAction.DisableCloudBackup
+            28 -> CloudBackupManagerAction.KeepCloudBackupEnabled
+            29 -> CloudBackupManagerAction.RefreshDetail
+            30 -> CloudBackupManagerAction.EnterDetail
+            31 -> CloudBackupManagerAction.CloseDetail
+            32 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            32 -> CloudBackupManagerAction.AcceptEnablePrompt(
+            33 -> CloudBackupManagerAction.AcceptEnablePrompt(
                 FfiConverterTypeCloudBackupEnablePromptChoice.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -37225,6 +37294,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             )
         }
         is CloudBackupManagerAction.DiscardPendingEnableCloudBackup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.ConfirmPendingEnableCleanup -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -37425,117 +37500,121 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 buf.putInt(5)
                 Unit
             }
-            is CloudBackupManagerAction.DismissPasskeyChoicePrompt -> {
+            is CloudBackupManagerAction.ConfirmPendingEnableCleanup -> {
                 buf.putInt(6)
                 Unit
             }
-            is CloudBackupManagerAction.DismissMissingPasskeyReminder -> {
+            is CloudBackupManagerAction.DismissPasskeyChoicePrompt -> {
                 buf.putInt(7)
                 Unit
             }
-            is CloudBackupManagerAction.RestoreFromCloudBackup -> {
+            is CloudBackupManagerAction.DismissMissingPasskeyReminder -> {
                 buf.putInt(8)
                 Unit
             }
-            is CloudBackupManagerAction.CancelRestore -> {
+            is CloudBackupManagerAction.RestoreFromCloudBackup -> {
                 buf.putInt(9)
                 Unit
             }
-            is CloudBackupManagerAction.StartVerification -> {
+            is CloudBackupManagerAction.CancelRestore -> {
                 buf.putInt(10)
-                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupManagerAction.StartVerificationDiscoverable -> {
+            is CloudBackupManagerAction.StartVerification -> {
                 buf.putInt(11)
                 FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupManagerAction.DismissVerificationPrompt -> {
+            is CloudBackupManagerAction.StartVerificationDiscoverable -> {
                 buf.putInt(12)
+                FfiConverterTypeCloudBackupVerificationSource.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupManagerAction.RecreateManifest -> {
+            is CloudBackupManagerAction.DismissVerificationPrompt -> {
                 buf.putInt(13)
                 Unit
             }
-            is CloudBackupManagerAction.ReinitializeBackup -> {
+            is CloudBackupManagerAction.RecreateManifest -> {
                 buf.putInt(14)
                 Unit
             }
-            is CloudBackupManagerAction.RepairPasskey -> {
+            is CloudBackupManagerAction.ReinitializeBackup -> {
                 buf.putInt(15)
                 Unit
             }
-            is CloudBackupManagerAction.RepairPasskeyNoDiscovery -> {
+            is CloudBackupManagerAction.RepairPasskey -> {
                 buf.putInt(16)
                 Unit
             }
-            is CloudBackupManagerAction.SyncUnsynced -> {
+            is CloudBackupManagerAction.RepairPasskeyNoDiscovery -> {
                 buf.putInt(17)
                 Unit
             }
-            is CloudBackupManagerAction.FetchCloudOnly -> {
+            is CloudBackupManagerAction.SyncUnsynced -> {
                 buf.putInt(18)
                 Unit
             }
-            is CloudBackupManagerAction.RestoreCloudWallet -> {
+            is CloudBackupManagerAction.FetchCloudOnly -> {
                 buf.putInt(19)
+                Unit
+            }
+            is CloudBackupManagerAction.RestoreCloudWallet -> {
+                buf.putInt(20)
                 FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.StartRestoreAll -> {
-                buf.putInt(20)
-                Unit
-            }
-            is CloudBackupManagerAction.RetryRestoreAllRemaining -> {
                 buf.putInt(21)
                 Unit
             }
-            is CloudBackupManagerAction.CancelRestoreAll -> {
+            is CloudBackupManagerAction.RetryRestoreAllRemaining -> {
                 buf.putInt(22)
                 Unit
             }
-            is CloudBackupManagerAction.DeleteCloudWallet -> {
+            is CloudBackupManagerAction.CancelRestoreAll -> {
                 buf.putInt(23)
+                Unit
+            }
+            is CloudBackupManagerAction.DeleteCloudWallet -> {
+                buf.putInt(24)
                 FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.RecoverOtherBackups -> {
-                buf.putInt(24)
-                Unit
-            }
-            is CloudBackupManagerAction.DeleteOtherBackups -> {
                 buf.putInt(25)
                 Unit
             }
-            is CloudBackupManagerAction.DisableCloudBackup -> {
+            is CloudBackupManagerAction.DeleteOtherBackups -> {
                 buf.putInt(26)
                 Unit
             }
-            is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
+            is CloudBackupManagerAction.DisableCloudBackup -> {
                 buf.putInt(27)
                 Unit
             }
-            is CloudBackupManagerAction.RefreshDetail -> {
+            is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
                 buf.putInt(28)
                 Unit
             }
-            is CloudBackupManagerAction.EnterDetail -> {
+            is CloudBackupManagerAction.RefreshDetail -> {
                 buf.putInt(29)
                 Unit
             }
-            is CloudBackupManagerAction.CloseDetail -> {
+            is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(30)
                 Unit
             }
-            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+            is CloudBackupManagerAction.CloseDetail -> {
                 buf.putInt(31)
+                Unit
+            }
+            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+                buf.putInt(32)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.AcceptEnablePrompt -> {
-                buf.putInt(32)
+                buf.putInt(33)
                 FfiConverterTypeCloudBackupEnablePromptChoice.write(value.v1, buf)
                 Unit
             }
@@ -37966,6 +38045,44 @@ public object FfiConverterTypeCloudBackupPasskeyState : FfiConverterRustBuffer<C
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Availability of local-only cleanup for an interrupted Cloud Backup enable
+ */
+
+enum class CloudBackupPendingEnableCleanupState {
+
+    SUPPORT_ONLY,
+    AVAILABLE,
+    CLEANING;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupPendingEnableCleanupState: FfiConverterRustBuffer<CloudBackupPendingEnableCleanupState> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupPendingEnableCleanupState.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupPendingEnableCleanupState) = 4UL
+
+    override fun write(value: CloudBackupPendingEnableCleanupState, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -38571,6 +38688,9 @@ sealed class CloudBackupSettingsRowStatus {
     object DriveUnavailable : CloudBackupSettingsRowStatus()
 
 
+    object RecoveryRequired : CloudBackupSettingsRowStatus()
+
+
     data class Error(
         val v1: kotlin.String) : CloudBackupSettingsRowStatus()
 
@@ -38619,10 +38739,11 @@ public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuf
             12 -> CloudBackupSettingsRowStatus.Syncing
             13 -> CloudBackupSettingsRowStatus.NoFiles
             14 -> CloudBackupSettingsRowStatus.DriveUnavailable
-            15 -> CloudBackupSettingsRowStatus.Error(
+            15 -> CloudBackupSettingsRowStatus.RecoveryRequired
+            16 -> CloudBackupSettingsRowStatus.Error(
                 FfiConverterString.read(buf),
                 )
-            16 -> CloudBackupSettingsRowStatus.AuthorizationRequired(
+            17 -> CloudBackupSettingsRowStatus.AuthorizationRequired(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -38714,6 +38835,12 @@ public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuf
                 4UL
             )
         }
+        is CloudBackupSettingsRowStatus.RecoveryRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupSettingsRowStatus.Error -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -38788,13 +38915,17 @@ public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuf
                 buf.putInt(14)
                 Unit
             }
-            is CloudBackupSettingsRowStatus.Error -> {
+            is CloudBackupSettingsRowStatus.RecoveryRequired -> {
                 buf.putInt(15)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.Error -> {
+                buf.putInt(16)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is CloudBackupSettingsRowStatus.AuthorizationRequired -> {
-                buf.putInt(16)
+                buf.putInt(17)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
