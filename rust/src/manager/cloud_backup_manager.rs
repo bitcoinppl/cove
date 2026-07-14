@@ -84,8 +84,9 @@ pub(crate) use self::model::{
     CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus,
 };
 pub use self::model::{
-    CloudBackupInventoryIncompleteReason, CloudBackupLifecycle, CloudBackupRestoreAllState,
-    CloudBackupRestoreFlow,
+    CloudBackupInventoryIncompleteReason, CloudBackupLifecycle,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
+    CloudBackupRestoreAllState, CloudBackupRestoreFlow,
 };
 pub(crate) use self::ops::{
     CloudBackupDisablePreparation, CloudBackupEnablePasskeyPreparation,
@@ -142,6 +143,7 @@ pub enum CloudBackupManagerAction {
     EnableCloudBackupNoDiscovery(CloudBackupEnableContext),
     ConfirmSavedPasskey,
     DiscardPendingEnableCloudBackup,
+    ConfirmPendingEnableCleanup,
     DismissPasskeyChoicePrompt,
     DismissMissingPasskeyReminder,
     RestoreFromCloudBackup,
@@ -282,6 +284,15 @@ impl RustCloudBackupManager {
 
     pub(crate) fn project_enable_context_started(&self, context: CloudBackupEnableContext) {
         self.apply_model_event(CloudBackupStateReducerEvent::EnableContextStarted(context));
+    }
+
+    pub(crate) fn project_pending_enable_recovery(
+        &self,
+        recovery: CloudBackupPendingEnableRecovery,
+    ) {
+        self.apply_model_event(CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(
+            recovery,
+        ));
     }
 
     fn has_in_flight_lifecycle(status: &CloudBackupStatus) -> bool {
@@ -867,6 +878,7 @@ impl RustCloudBackupManager {
             | CloudBackupLifecycle::Enabling(_)
             | CloudBackupLifecycle::Restoring(_)
             | CloudBackupLifecycle::Configured(_)
+            | CloudBackupLifecycle::PendingEnableRecovery(_)
             | CloudBackupLifecycle::Failed(_) => CloudBackupOnboardingCompletionReadiness::NotReady,
         }
     }

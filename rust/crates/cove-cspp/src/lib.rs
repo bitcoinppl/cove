@@ -110,6 +110,8 @@ mod serde_helpers;
 pub mod store;
 pub mod wallet_crypto;
 
-pub use cspp::{Cspp, MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
+pub use cspp::{
+    Cspp, MasterKeyPromotionActiveState, MasterKeyPromotionEvidence, MasterKeyPromotionStatus,
+};
 pub use error::CsppError;
 pub use store::CsppStore;

@@ -8,7 +8,7 @@ use crate::manager::cloud_backup_manager::{
     PendingUploadVerificationState, RecoveryState, SyncState, VerificationState,
 };
 
-use super::{CloudBackupLifecycle, CloudBackupRestoreFlow};
+use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupAcceptedEnablePrompt {
@@ -77,6 +77,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     ExclusiveOperationFinished(CloudBackupExclusiveOperationClaim),
     EnableContextStarted(CloudBackupEnableContext),
     RuntimeStatusReconciled(CloudBackupStatus),
+    PendingEnableRecoveryProjected(CloudBackupPendingEnableRecovery),
     ExistingBackupFoundPromptSet {
         context: CloudBackupEnableContext,
         passkey_hint: Option<CloudBackupPasskeyHint>,

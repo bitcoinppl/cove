@@ -163,10 +163,6 @@ impl NamespacePasskeyMatcher {
             return Ok(NamespaceMatchOutcome::Inconclusive);
         }
 
-        if downloaded.is_empty() && had_unsupported_versions {
-            return Ok(NamespaceMatchOutcome::UnsupportedVersions);
-        }
-
         Ok(NamespaceMatchOutcome::NoMatch)
     }
 }

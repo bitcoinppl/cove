@@ -30,6 +30,7 @@ pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
     CloudBackupEnableFlow, CloudBackupFailure, CloudBackupInventoryIncompleteReason,
     CloudBackupLifecycle, CloudBackupPasskeyRepairState, CloudBackupPasskeyState,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupSyncState,
     CloudBackupVerificationState, LoadedCloudBackupDetail,
 };
@@ -122,6 +123,7 @@ enum CloudBackupLifecyclePhase {
     Enabling(CloudBackupEnableFlow),
     Restoring(CloudBackupRestoreFlow),
     Configured,
+    PendingEnableRecovery(CloudBackupPendingEnableRecovery),
     Failed(CloudBackupFailure),
 }
 
@@ -192,6 +194,9 @@ impl CloudBackupReducerState {
             }
             CloudBackupLifecyclePhase::Configured => {
                 CloudBackupLifecycle::Configured(self.public_configured_state())
+            }
+            CloudBackupLifecyclePhase::PendingEnableRecovery(recovery) => {
+                CloudBackupLifecycle::PendingEnableRecovery(recovery.clone())
             }
             CloudBackupLifecyclePhase::Failed(failure) => {
                 CloudBackupLifecycle::Failed(failure.clone())
@@ -329,6 +334,7 @@ impl CloudBackupReducerState {
             CloudBackupLifecyclePhase::Disabled
             | CloudBackupLifecyclePhase::Enabling(_)
             | CloudBackupLifecyclePhase::Restoring(_)
+            | CloudBackupLifecyclePhase::PendingEnableRecovery(_)
             | CloudBackupLifecyclePhase::Failed(_) => CloudBackupRootPrompt::None,
         }
     }
@@ -467,6 +473,9 @@ impl CloudBackupReducerState {
                     CloudBackupStatus::UnsupportedPasskeyProvider
                 }
             },
+            CloudBackupLifecyclePhase::PendingEnableRecovery(_) => {
+                CloudBackupStatus::Error("Cloud Backup recovery required".into())
+            }
             CloudBackupLifecyclePhase::Failed(failure) => {
                 CloudBackupStatus::Error(failure.message.clone())
             }
@@ -474,6 +483,10 @@ impl CloudBackupReducerState {
     }
 
     fn settings_row_status(&self) -> CloudBackupSettingsRowStatus {
+        if matches!(self.phase, CloudBackupLifecyclePhase::PendingEnableRecovery(_)) {
+            return CloudBackupSettingsRowStatus::RecoveryRequired;
+        }
+
         match self.status() {
             CloudBackupStatus::Disabled => return CloudBackupSettingsRowStatus::Disabled,
             CloudBackupStatus::Disabling => return CloudBackupSettingsRowStatus::Disabling,
@@ -1251,6 +1264,10 @@ impl CloudBackupStateReducer {
             }
             CloudBackupStateReducerEvent::RuntimeStatusReconciled(status) => {
                 self.state.apply_status(status);
+            }
+            CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(recovery) => {
+                self.state.active_enable_context = None;
+                self.state.phase = CloudBackupLifecyclePhase::PendingEnableRecovery(recovery);
             }
             CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
                 context,

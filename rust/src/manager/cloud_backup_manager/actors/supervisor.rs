@@ -55,7 +55,8 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
     CloudBackupInventoryIncompleteReason, CloudBackupKeepEnabledPreparation,
     CloudBackupNoDiscoveryEnablePreparation, CloudBackupOtherBackupsOutcome,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPreparedCloudWalletDelete,
+    CloudBackupPasskeyChoiceIntent, CloudBackupPendingEnableCleanupState,
+    CloudBackupPendingEnableRecovery, CloudBackupPreparedCloudWalletDelete,
     CloudBackupPreparedRestoreAll, CloudBackupReadyEnableUpload,
     CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
     CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
@@ -64,10 +65,10 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupWalletStatus, CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport,
     DeepVerificationResult, EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
     OtherBackupsOperation, PendingEnableJournal, PendingEnableJournalPhase,
-    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
-    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
-    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
-    blocking_cloud_error,
+    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
+    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
+    RecoveryAction, RecoveryState, RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState,
+    VerificationState, WalletId, blocking_cloud_error,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -851,6 +852,7 @@ impl CloudBackupSupervisor {
 
         match result {
             CloudBackupDetailInventorySnapshotResult::Success(snapshot) => {
+                // retain locally known rows while the authoritative inventory check completes
                 if self.detail_workflow.is_latest_refresh(claim)
                     && let Some(provisional_detail) = snapshot.provisional_detail.clone()
                 {

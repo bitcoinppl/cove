@@ -212,6 +212,7 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
+            // the worker already projected the must-stop failure and continuing could overwrite it
             Err(error) if restore_all_must_stop(&error) => {}
             Err(error) => {
                 manager.apply_cloud_only_restore_failure(wallet.record_id, error.reader_message());

@@ -23,6 +23,7 @@ pub enum CloudBackupSettingsRowStatus {
     Syncing,
     NoFiles,
     DriveUnavailable,
+    RecoveryRequired,
     Error(String),
     AuthorizationRequired(String),
 }
@@ -91,6 +92,7 @@ pub enum CloudBackupManagerAction {
     EnableCloudBackupNoDiscovery(CloudBackupEnableContext),
     ConfirmSavedPasskey,
     DiscardPendingEnableCloudBackup,
+    ConfirmPendingEnableCleanup,
     DismissPasskeyChoicePrompt,
     DismissMissingPasskeyReminder,
     RestoreFromCloudBackup,

@@ -170,6 +170,21 @@ pub struct CloudBackupFailure {
     pub message: String,
 }
 
+/// Availability of local-only cleanup for an interrupted Cloud Backup enable
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupPendingEnableCleanupState {
+    SupportOnly,
+    Available,
+    Cleaning,
+}
+
+/// Privacy-safe recovery state for an interrupted Cloud Backup enable
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupPendingEnableRecovery {
+    pub support_code: String,
+    pub cleanup: CloudBackupPendingEnableCleanupState,
+}
+
 /// Public top-level cloud backup lifecycle
 #[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -178,5 +193,6 @@ pub enum CloudBackupLifecycle {
     Enabling(CloudBackupEnableFlow),
     Restoring(CloudBackupRestoreFlow),
     Configured(CloudBackupConfiguredState),
+    PendingEnableRecovery(CloudBackupPendingEnableRecovery),
     Failed(CloudBackupFailure),
 }

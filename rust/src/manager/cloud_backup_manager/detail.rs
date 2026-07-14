@@ -180,6 +180,9 @@ impl RustCloudBackupManager {
             A::DiscardPendingEnableCloudBackup => {
                 self.discard_pending_enable_cloud_backup();
             }
+            A::ConfirmPendingEnableCleanup => {
+                send!(self.supervisor.confirm_pending_enable_cleanup());
+            }
             A::DismissPasskeyChoicePrompt => self.clear_passkey_choice_prompt(),
             A::DismissMissingPasskeyReminder => self.dismiss_missing_passkey_prompt(),
             A::RestoreFromCloudBackup => self.restore_from_cloud_backup(),

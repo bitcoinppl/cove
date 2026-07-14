@@ -413,21 +413,38 @@ impl PendingEnableCoordinator {
         })?;
 
         if let Err(source) = cspp.promote_staged_master_key() {
-            return self
-                .restore_pending_enable_local_promotion_for_retry()
-                .and(Err(CloudBackupError::internal_context("promote staged master key", source)));
+            let original = CloudBackupError::internal_context("promote staged master key", source);
+            return Err(Self::retain_promotion_error(
+                original,
+                self.restore_pending_enable_local_promotion_for_retry(),
+            ));
         }
         if let Err(source) = cloud_keychain.save_passkey_and_namespace(
             &expected_passkey.credential_id,
             expected_passkey.prf_salt,
             journal.namespace_id(),
         ) {
-            return self.restore_pending_enable_local_promotion_for_retry().and(Err(
-                CloudBackupError::internal_context("promote Cloud Backup passkey metadata", source),
+            let original =
+                CloudBackupError::internal_context("promote Cloud Backup passkey metadata", source);
+            return Err(Self::retain_promotion_error(
+                original,
+                self.restore_pending_enable_local_promotion_for_retry(),
             ));
         }
 
         Ok(())
+    }
+
+    fn retain_promotion_error(
+        original: CloudBackupError,
+        rollback: Result<(), CloudBackupError>,
+    ) -> CloudBackupError {
+        match rollback {
+            Ok(()) => original,
+            Err(rollback) => CloudBackupError::Internal(
+                format!("{original}; pending enable rollback also failed: {rollback}").into(),
+            ),
+        }
     }
 
     pub(crate) fn restore_pending_enable_local_promotion_for_retry(
@@ -613,5 +630,32 @@ impl PendingEnableCoordinator {
         expected: &[MasterKeyPromotionStatus],
     ) -> Result<bool, CloudBackupError> {
         Ok(expected.contains(&self.promotion_status()?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rollback_success_preserves_original_promotion_error() {
+        let error = PendingEnableCoordinator::retain_promotion_error(
+            CloudBackupError::Internal("original promotion failure".into()),
+            Ok(()),
+        );
+
+        assert_eq!(error.to_string(), "internal error: original promotion failure");
+    }
+
+    #[test]
+    fn rollback_failure_retains_both_errors() {
+        let error = PendingEnableCoordinator::retain_promotion_error(
+            CloudBackupError::Internal("original promotion failure".into()),
+            Err(CloudBackupError::Internal("rollback failure".into())),
+        );
+        let message = error.to_string();
+
+        assert!(message.contains("original promotion failure"));
+        assert!(message.contains("rollback failure"));
     }
 }

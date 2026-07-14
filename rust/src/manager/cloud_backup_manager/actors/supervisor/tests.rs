@@ -15,9 +15,11 @@ use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey, WalletRestoreOutcome,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupOtherBackupsState, CloudBackupStore, CloudOnlyState,
-    PendingEnableJournal, PendingEnableNamespaceOwnership, PendingEnableJournalPhase,
-    PendingEnablePasskeyMetadata, PendingEnableSessionMaterial,
+    CloudBackupDetail, CloudBackupLifecycle, CloudBackupOtherBackupsState,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
+    CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
+    PendingEnableNamespaceOwnership, PendingEnableJournalPhase, PendingEnablePasskeyMetadata,
+    PendingEnableSessionMaterial,
 };
 use crate::manager::deferred_sender::SingleOrMany;
 use crate::network::Network;
@@ -2189,6 +2191,16 @@ async fn pending_enable_restart_fails_closed_on_conflicting_completion() {
             cove_cspp::MasterKeyPromotionActiveState::Staged
         )
     );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
+        }) if support_code == "CB-PE-004"
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2209,6 +2221,286 @@ async fn pending_enable_restart_fails_closed_on_unowned_cspp_staging() {
         cspp.master_key_promotion_status().unwrap(),
         cove_cspp::MasterKeyPromotionStatus::Staged
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_restart_projects_privacy_safe_recovery_lifecycle() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::Available,
+        }) if support_code == "CB-PE-001"
+    ));
+    assert_eq!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_remote_delete() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_master_key(&active_master_key).unwrap();
+    cloud_keychain
+        .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &active_master_key.namespace_id())
+        .unwrap();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_enabled_cloud_backup_state(Some(0)))
+        .unwrap();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    let remote_deletes_before = globals.cloud.delete_namespace_attempt_count();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::Available,
+        }) if support_code == "CB-PE-001"
+    ));
+
+    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+
+    assert_eq!(
+        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+        active_master_key.as_bytes()
+    );
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), remote_deletes_before);
+    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn no_journal_staged_cleanup_revalidates_before_discarding() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+    cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            cleanup: CloudBackupPendingEnableCleanupState::Available,
+            ..
+        })
+    ));
+    cspp.promote_staged_master_key().unwrap();
+
+    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
+        }) if support_code == "CB-PE-001"
+    ));
+    assert!(matches!(
+        cspp.master_key_promotion_status().unwrap(),
+        MasterKeyPromotionStatus::Pending(_)
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_restart_projects_promotion_mismatch_as_support_only() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    let mut journal = PendingEnableJournal::staged(
+        CloudBackupEnableContext::settings_manual(),
+        staged_master_key.namespace_id(),
+        PendingEnableNamespaceOwnership::FreshOwned,
+        cloud_keychain.snapshot_passkey_metadata(),
+    );
+    assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+        provider_hint: None,
+    }));
+    cloud_keychain.save_pending_enable_journal(&journal).unwrap();
+    cspp.promote_staged_master_key().unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
+        }) if support_code == "CB-PE-003"
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_restart_projects_unreadable_evidence_without_diagnostics() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    globals.keychain.set_entries(vec![(
+        crate::manager::cloud_backup_manager::keychain::CSPP_PENDING_ENABLE_JOURNAL_KEY,
+        "not valid journal json",
+    )]);
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    let CloudBackupLifecycle::PendingEnableRecovery(recovery) = manager.state().lifecycle else {
+        panic!("expected pending enable recovery");
+    };
+    assert_eq!(recovery.support_code, "CB-PE-005");
+    assert_eq!(recovery.cleanup, CloudBackupPendingEnableCleanupState::SupportOnly);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_remote_data() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let prior_master_key = cove_cspp::master_key::MasterKey::generate();
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_master_key(&prior_master_key).unwrap();
+    cloud_keychain
+        .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
+        .unwrap();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_enabled_cloud_backup_state(Some(0)))
+        .unwrap();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    cloud_keychain
+        .save_pending_enable_journal(&PendingEnableJournal::staged(
+            CloudBackupEnableContext::settings_manual(),
+            staged_master_key.namespace_id(),
+            PendingEnableNamespaceOwnership::FreshOwned,
+            previous_metadata.clone(),
+        ))
+        .unwrap();
+    let remote_deletes_before = globals.cloud.delete_namespace_attempt_count();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+
+    assert_eq!(
+        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+        prior_master_key.as_bytes()
+    );
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
+    assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), remote_deletes_before);
+    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_cleanup_revalidates_stale_evidence_before_mutating() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    cloud_keychain
+        .save_pending_enable_journal(&PendingEnableJournal::staged(
+            CloudBackupEnableContext::settings_manual(),
+            "ffffffffffffffffffffffffffffffff".into(),
+            PendingEnableNamespaceOwnership::FreshOwned,
+            cloud_keychain.snapshot_passkey_metadata(),
+        ))
+        .unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::SupportOnly,
+        }) if support_code == "CB-PE-002"
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    cloud_keychain
+        .save_pending_enable_journal(&PendingEnableJournal::staged(
+            CloudBackupEnableContext::settings_manual(),
+            staged_master_key.namespace_id(),
+            PendingEnableNamespaceOwnership::FreshOwned,
+            cloud_keychain.snapshot_passkey_metadata(),
+        ))
+        .unwrap();
+    globals.keychain.fail_delete_at(3);
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::Available,
+        }) if support_code == "CB-PE-006"
+    ));
+    assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_some());
 }
 
 #[tokio::test(flavor = "current_thread")]

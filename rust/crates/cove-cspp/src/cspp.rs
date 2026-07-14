@@ -39,6 +39,14 @@ pub enum MasterKeyPromotionStatus {
     Pending(MasterKeyPromotionActiveState),
 }
 
+/// Privacy-preserving comparison of promotion material with caller-owned namespaces
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MasterKeyPromotionEvidence {
+    pub status: MasterKeyPromotionStatus,
+    pub staged_matches_expected: bool,
+    pub prior_matches_expected: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct StoredMasterKeyEntries {
     encryption_key_and_nonce: Option<String>,
@@ -392,6 +400,32 @@ impl<S: CsppStore> Cspp<S> {
         };
 
         Ok(MasterKeyPromotionStatus::Pending(active_state))
+    }
+
+    /// Compares promotion material without returning either stored namespace
+    pub fn master_key_promotion_evidence(
+        &self,
+        expected_staged_namespace: &str,
+        expected_prior_namespace: Option<&str>,
+    ) -> Result<MasterKeyPromotionEvidence, CsppError> {
+        let _guard = INIT_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let status = self.master_key_promotion_status()?;
+        let staged_matches_expected = self
+            .load_staged_master_key()?
+            .is_some_and(|key| key.namespace_id() == expected_staged_namespace);
+        let prior_entries = match self.load_promotion_journal()? {
+            Some(journal) => journal.prior,
+            None => self.read_active_entries(),
+        };
+        let prior_matches_expected = match expected_prior_namespace {
+            Some(expected) => {
+                prior_entries.is_complete()
+                    && Self::decrypt_entries(&prior_entries)?.namespace_id() == expected
+            }
+            None => prior_entries.is_absent(),
+        };
+
+        Ok(MasterKeyPromotionEvidence { status, staged_matches_expected, prior_matches_expected })
     }
 
     /// Loads the master key directly from the store, bypassing the in-memory cache
