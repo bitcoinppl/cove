@@ -44,7 +44,6 @@ struct CloudCheckContent: View {
 
 struct OnboardingWelcomeScreen: View {
     let errorMessage: String?
-    let cloudRestoreState: OnboardingCloudRestoreState
     let onRestoreFromCoveBackup: () -> Void
     let onContinue: () -> Void
 
@@ -56,12 +55,6 @@ struct OnboardingWelcomeScreen: View {
         ) {
             if let errorMessage {
                 OnboardingInlineMessage(text: errorMessage)
-            }
-
-            if cloudRestoreState == .checking {
-                OnboardingCloudCheckStatus(
-                    text: "Checking iCloud for an existing Cove backup…"
-                )
             }
 
             Button("Get Started", action: onContinue)

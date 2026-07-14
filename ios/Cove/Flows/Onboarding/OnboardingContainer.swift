@@ -79,7 +79,6 @@ struct OnboardingContainer: View {
         case .welcome:
             OnboardingWelcomeScreen(
                 errorMessage: manager.state.errorMessage,
-                cloudRestoreState: manager.state.cloudRestoreState,
                 onRestoreFromCoveBackup: { manager.dispatch(.openCloudRestore) },
                 onContinue: { manager.dispatch(.continueFromWelcome) }
             )
