@@ -172,6 +172,22 @@ enum SilentNamespaceRecoveryProbe {
     }
 }
 
+enum ICloudEventuallyConsistentListing {
+    static func merged(
+        local: [String],
+        metadata: Result<[String], Error>
+    ) throws -> [String] {
+        switch metadata {
+        case let .success(metadata):
+            return Array(Set(local + metadata)).sorted()
+        case .failure where !local.isEmpty:
+            return Array(Set(local)).sorted()
+        case let .failure(error):
+            throw error
+        }
+    }
+}
+
 final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     private let helper = ICloudDriveHelper.shared
     private let queue = DispatchQueue(
@@ -214,26 +230,67 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         parentPath: String,
         metadataTimeout: TimeInterval? = nil
     ) async throws -> [String] {
-        let names = try await runCancellable {
+        let localNames = try await runCancellable {
             self.helper.locallyVisibleSubdirectoryNames(parentPath: parentPath)
         }
-        guard names.isEmpty else { return names }
 
-        Log.info("listSubdirectories: FileManager found nothing, falling back to metadata query")
-        return try await helper.metadataSubdirectoryNames(
-            parentPath: parentPath,
-            timeout: metadataTimeout
-        )
+        do {
+            let metadataNames = try await helper.metadataSubdirectoryNames(
+                parentPath: parentPath,
+                timeout: metadataTimeout
+            )
+            let mergedNames = try ICloudEventuallyConsistentListing.merged(
+                local: localNames,
+                metadata: .success(metadataNames)
+            )
+            Log.info(
+                "listSubdirectories: local_count=\(localNames.count) metadata_count=\(metadataNames.count) merged_count=\(mergedNames.count)"
+            )
+            return mergedNames
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            let mergedNames = try ICloudEventuallyConsistentListing.merged(
+                local: localNames,
+                metadata: .failure(error)
+            )
+            Log.warn(
+                "listSubdirectories: metadata lookup failed, using local view local_count=\(localNames.count) merged_count=\(mergedNames.count) error=\(error.localizedDescription)"
+            )
+            return mergedNames
+        }
     }
 
     private func listFiles(namespacePath: String, prefix: String) async throws -> [String] {
-        let names = try await runCancellable {
+        let localNames = try await runCancellable {
             self.helper.locallyVisibleFileNames(namespacePath: namespacePath, prefix: prefix)
         }
-        guard names.isEmpty else { return names }
 
-        Log.info("listFiles: FileManager found nothing, falling back to metadata query prefix=\(prefix)")
-        return try await helper.metadataFileNames(namespacePath: namespacePath, prefix: prefix)
+        do {
+            let metadataNames = try await helper.metadataFileNames(
+                namespacePath: namespacePath,
+                prefix: prefix
+            )
+            let mergedNames = try ICloudEventuallyConsistentListing.merged(
+                local: localNames,
+                metadata: .success(metadataNames)
+            )
+            Log.info(
+                "listFiles: prefix=\(prefix) local_count=\(localNames.count) metadata_count=\(metadataNames.count) merged_count=\(mergedNames.count)"
+            )
+            return mergedNames
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            let mergedNames = try ICloudEventuallyConsistentListing.merged(
+                local: localNames,
+                metadata: .failure(error)
+            )
+            Log.warn(
+                "listFiles: metadata lookup failed, using local view prefix=\(prefix) local_count=\(localNames.count) merged_count=\(mergedNames.count) error=\(error.localizedDescription)"
+            )
+            return mergedNames
+        }
     }
 
     // MARK: - Upload

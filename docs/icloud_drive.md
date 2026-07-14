@@ -103,17 +103,25 @@ Apple documents placeholder behavior and download-status keys, but not the exact
 
 ### Listing files or directories
 
-Start with `FileManager` if you only need what is already visible in the local container and you want a fast path. Fall back to `NSMetadataQuery` when you need authoritative discovery or when the local container is still empty.
+Treat `FileManager` and `NSMetadataQuery` as eventually consistent views of the same container. Always merge and deduplicate the locally staged names with the settled metadata snapshot, then sort the result. A nonempty local view is not authoritative because metadata may already contain a newer namespace or file that has not materialized locally.
+
+If metadata lookup fails, use the local view only when it contains usable results and log that discovery is degraded. Propagate the metadata error when neither view provides a result.
 
 ```swift
-func listItems(parentPath: String) throws -> [String] {
-    // fast path - use what is already visible locally
-    if let names = try? listViaFileManager(parentPath), !names.isEmpty {
-        return names
-    }
+func listItems(parentPath: String) async throws -> [String] {
+    let localNames = try listViaFileManager(parentPath)
 
-    // authoritative fallback - ask iCloud metadata directly
-    return try listViaMetadataQuery(parentPath)
+    do {
+        let metadataNames = try await listViaMetadataQuery(parentPath)
+        return Array(Set(localNames + metadataNames)).sorted()
+    } catch {
+        guard !localNames.isEmpty else {
+            throw error
+        }
+
+        logDegradedListing(error)
+        return localNames.sorted()
+    }
 }
 ```
 
@@ -130,7 +138,7 @@ Wait on the shared metadata index for a matching `didUpdate` snapshot. Timeouts 
 These numbers are project heuristics, not Apple guidance:
 
 - `60s` for operations that need to find one specific file, like upload or download flows
-- `5s` for listing or discovery, where `FileManager` already gives us the fast path
+- `5s` for listing or discovery, limiting metadata waits while retaining a usable local view as a degraded fallback
 - Onboarding cloud check uses 7 attempts with escalating delays (1, 2, 2, 3, 5, 10s) to give the iCloud daemon time to warm up on cold start
 - Short timeouts with more retries work better than one long timeout because the daemon may need a few seconds after launch to initialize
 

@@ -423,6 +423,61 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         )
     }
 
+    func testEventuallyConsistentListingMergesStaleLocalAndNewMetadataViews() throws {
+        let names = try ICloudEventuallyConsistentListing.merged(
+            local: ["old-1password"],
+            metadata: .success(["new-apple-passwords"])
+        )
+
+        XCTAssertEqual(names, ["new-apple-passwords", "old-1password"])
+    }
+
+    func testEventuallyConsistentListingSupportsMetadataOnlyAndLocalOnlyViews() throws {
+        XCTAssertEqual(
+            try ICloudEventuallyConsistentListing.merged(
+                local: [],
+                metadata: .success(["metadata-only"])
+            ),
+            ["metadata-only"]
+        )
+        XCTAssertEqual(
+            try ICloudEventuallyConsistentListing.merged(
+                local: ["local-only"],
+                metadata: .success([])
+            ),
+            ["local-only"]
+        )
+    }
+
+    func testEventuallyConsistentListingDeduplicatesAndSortsViews() throws {
+        let names = try ICloudEventuallyConsistentListing.merged(
+            local: ["beta", "alpha", "beta"],
+            metadata: .success(["gamma", "alpha"])
+        )
+
+        XCTAssertEqual(names, ["alpha", "beta", "gamma"])
+    }
+
+    func testEventuallyConsistentListingUsesLocalViewWhenMetadataFails() throws {
+        let names = try ICloudEventuallyConsistentListing.merged(
+            local: ["beta", "alpha"],
+            metadata: .failure(CloudStorageError.Offline("metadata unavailable"))
+        )
+
+        XCTAssertEqual(names, ["alpha", "beta"])
+    }
+
+    func testEventuallyConsistentListingPropagatesMetadataFailureWithoutLocalView() {
+        XCTAssertThrowsError(
+            try ICloudEventuallyConsistentListing.merged(
+                local: [],
+                metadata: .failure(CloudStorageError.Offline("metadata unavailable"))
+            )
+        ) { error in
+            XCTAssertEqual(error as? CloudStorageError, .Offline("metadata unavailable"))
+        }
+    }
+
     func testSilentCloudRecoveryDeadlineIncludesBlockedContainerLookup() async {
         let gate = CancellableDispatchOperationTestGate()
         let queue = DispatchQueue(label: "cove.tests.cloud-recovery-deadline")

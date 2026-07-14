@@ -39,7 +39,8 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
+    NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDetailResult,
@@ -636,6 +637,187 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
         matches.into_iter().map(|matched| matched.namespace_id).collect::<Vec<_>>();
 
     assert_eq!(matched_namespaces, vec![first_namespace, second_namespace]);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_session_authenticates_new_namespace_after_discovery_refresh() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let selected_prf_key = [7u8; 32];
+    let old_master_key = cove_cspp::master_key::MasterKey::generate();
+    let new_master_key = cove_cspp::master_key::MasterKey::generate();
+    let old_namespace = old_master_key.namespace_id();
+    let new_namespace = new_master_key.namespace_id();
+    let old_encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&old_master_key, &[8; 32], &[1; 32])
+            .unwrap();
+    let new_encrypted = cove_cspp::master_key_crypto::encrypt_master_key(
+        &new_master_key,
+        &selected_prf_key,
+        &[2; 32],
+    )
+    .unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(old_namespace.clone(), serde_json::to_vec(&old_encrypted).unwrap());
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: selected_prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    );
+    let mut session = matcher.start_session();
+    let first = session.match_snapshot(std::slice::from_ref(&old_namespace)).await.unwrap();
+
+    assert!(matches!(first, NamespaceMatchSnapshotOutcome::Continue));
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+
+    globals
+        .cloud
+        .set_master_key_backup(new_namespace.clone(), serde_json::to_vec(&new_encrypted).unwrap());
+    globals.passkey.set_authenticate_result(Ok(selected_prf_key.to_vec()));
+
+    let refreshed = session.match_snapshot(&[old_namespace, new_namespace.clone()]).await.unwrap();
+    let NamespaceMatchSnapshotOutcome::Matched(matches) = refreshed else {
+        panic!("expected refreshed namespace to match");
+    };
+
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].namespace_id, new_namespace);
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_session_does_not_prompt_for_unchanged_wrapper() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[8; 32], &[1; 32]).unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![7; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    );
+    let mut session = matcher.start_session();
+
+    let first = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
+    let unchanged = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
+
+    assert!(matches!(first, NamespaceMatchSnapshotOutcome::Continue));
+    assert!(matches!(unchanged, NamespaceMatchSnapshotOutcome::Continue));
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_session_does_not_repeat_discovery_after_missing_credential() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let stale =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[8; 32], &[1; 32]).unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&stale).unwrap());
+    globals.passkey.set_discover_result(Err(PasskeyError::NoCredentialFound));
+
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    );
+    let mut session = matcher.start_session();
+    let first = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
+
+    let changed =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[2; 32]).unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&changed).unwrap());
+
+    let refreshed = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
+
+    assert!(matches!(first, NamespaceMatchSnapshotOutcome::Continue));
+    assert!(matches!(refreshed, NamespaceMatchSnapshotOutcome::Continue));
+    assert!(matches!(session.finish(), NamespaceMatchOutcome::NoMatch));
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_session_preserves_cloud_failures_as_inconclusive() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    );
+    let mut session = matcher.start_session();
+    session.note_namespace_discovery_failure();
+
+    let snapshot = session.match_snapshot(&[]).await.unwrap();
+
+    assert!(matches!(snapshot, NamespaceMatchSnapshotOutcome::Continue));
+    assert!(matches!(session.finish(), NamespaceMatchOutcome::Inconclusive));
+    assert_eq!(globals.passkey.discover_count(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_session_retries_changed_wrapper_in_same_namespace() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let selected_prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let stale =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[8; 32], &[1; 32]).unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&stale).unwrap());
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: selected_prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let matcher = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    );
+    let mut session = matcher.start_session();
+    let first = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
+    assert!(matches!(first, NamespaceMatchSnapshotOutcome::Continue));
+
+    let changed =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &selected_prf_key, &[2; 32])
+            .unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), serde_json::to_vec(&changed).unwrap());
+    globals.passkey.set_authenticate_result(Ok(selected_prf_key.to_vec()));
+
+    let refreshed = session.match_snapshot(std::slice::from_ref(&namespace)).await.unwrap();
+    assert!(matches!(refreshed, NamespaceMatchSnapshotOutcome::Matched(_)));
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 1);
 }
 
 #[test]

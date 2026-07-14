@@ -85,9 +85,9 @@ pub(crate) struct PreparedWalletBackup {
 }
 
 pub(crate) use passkey::{
-    NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
-    PasskeyMaterialOutcome, PlatformAuthorizationRetrier, delay_before_new_passkey_auth,
-    map_wrapper_repair_passkey_error,
+    NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer, PasskeyMaterialOutcome, PlatformAuthorizationRetrier,
+    delay_before_new_passkey_auth, map_wrapper_repair_passkey_error,
 };
 pub(crate) use payload::{
     decode_cloud_labels_jsonl, prepare_wallet_backup, wallet_metadata_change_requires_upload,

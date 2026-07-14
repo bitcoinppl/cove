@@ -1,4 +1,5 @@
 import AuthenticationServices
+import CryptoKit
 
 @_exported import CoveCore
 import Foundation
@@ -52,8 +53,11 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
     }
 
     private func credentialSummary(_ credentialId: Data) -> String {
-        let prefix = credentialId.prefix(4).map { String(format: "%02x", $0) }.joined()
-        return "len=\(credentialId.count) prefix=\(prefix)"
+        let fingerprint = SHA256.hash(data: credentialId)
+            .prefix(6)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "len=\(credentialId.count) fingerprint=\(fingerprint)"
     }
 
     /// PRF is guaranteed on iOS 18.4+ (our minimum deployment target)
