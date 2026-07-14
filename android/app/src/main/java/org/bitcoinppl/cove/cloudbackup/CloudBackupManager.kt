@@ -26,6 +26,7 @@ import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
+import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
 import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
@@ -143,6 +144,9 @@ class CloudBackupManager private constructor(
 
     val lifecycleFailureMessage: String?
         get() = (state.lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message
+
+    val pendingEnableRecovery: CloudBackupPendingEnableRecovery?
+        get() = (state.lifecycle as? CloudBackupLifecycle.PendingEnableRecovery)?.v1
 
     val isLifecycleDisabled: Boolean
         get() = state.lifecycle is CloudBackupLifecycle.Disabled

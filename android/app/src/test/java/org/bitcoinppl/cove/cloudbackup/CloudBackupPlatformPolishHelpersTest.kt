@@ -73,6 +73,10 @@ class CloudBackupPlatformPolishHelpersTest {
             cloudBackupSettingsSeverity(CloudBackupSettingsRowStatus.AuthorizationRequired("sign in")),
         )
         assertEquals(
+            CloudBackupSettingsSeverity.WARNING,
+            cloudBackupSettingsSeverity(CloudBackupSettingsRowStatus.RecoveryRequired),
+        )
+        assertEquals(
             CloudBackupSettingsSeverity.ERROR,
             cloudBackupSettingsSeverity(CloudBackupSettingsRowStatus.Error("upload failed")),
         )

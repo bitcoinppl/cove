@@ -110,6 +110,8 @@ private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
         is CloudBackupSettingsRowStatus.Syncing -> stringResource(R.string.cloud_backup_status_syncing)
         is CloudBackupSettingsRowStatus.NoFiles -> stringResource(R.string.cloud_backup_status_no_files)
         is CloudBackupSettingsRowStatus.DriveUnavailable -> stringResource(R.string.cloud_backup_status_drive_unavailable)
+        is CloudBackupSettingsRowStatus.RecoveryRequired ->
+            stringResource(R.string.cloud_backup_status_recovery_required)
         is CloudBackupSettingsRowStatus.AuthorizationRequired ->
             stringResource(R.string.cloud_backup_status_drive_authorization_required, status.v1)
         is CloudBackupSettingsRowStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.v1)

@@ -1,4 +1,29 @@
 import SwiftUI
+import UIKit
+
+func cloudBackupPendingEnableCleanupIsAvailable(
+    _ state: CloudBackupPendingEnableCleanupState
+) -> Bool {
+    state == .available
+}
+
+func cloudBackupPendingEnableSupportEmailURL(
+    supportCode: String,
+    appVersion: String
+) -> URL? {
+    var components = URLComponents()
+    components.scheme = "mailto"
+    components.path = "feedback@covebitcoinwallet.com"
+    components.queryItems = [
+        URLQueryItem(name: "subject", value: "Cove Cloud Backup recovery \(supportCode)"),
+        URLQueryItem(
+            name: "body",
+            value: "Support code: \(supportCode)\nPlatform: iOS\nApp version: \(appVersion)"
+        ),
+    ]
+
+    return components.url
+}
 
 struct SettingsCloudBackupEnableSheet: View {
     @State private var manager = CloudBackupManager.shared
@@ -137,7 +162,15 @@ struct SettingsCloudBackupEnableSheet: View {
 
     var body: some View {
         ZStack {
-            if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
+            if let recovery = manager.pendingEnableRecovery {
+                CloudBackupPendingEnableRecoveryView(
+                    recovery: recovery,
+                    onRemoveIncompleteSetup: {
+                        manager.dispatch(action: .confirmPendingEnableCleanup)
+                    },
+                    onCancel: onDismiss
+                )
+            } else if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
                 CloudBackupEnableConfirmationView(
                     onContinue: {
                         manager.dispatch(action: .confirmSavedPasskey)
@@ -204,6 +237,158 @@ struct SettingsCloudBackupEnableSheet: View {
             }
         } message: {
             Text(existingBackupMessage)
+        }
+    }
+}
+
+private struct CloudBackupPendingEnableRecoveryView: View {
+    @Environment(\.openURL) private var openURL
+
+    let recovery: CloudBackupPendingEnableRecovery
+    let onRemoveIncompleteSetup: () -> Void
+    let onCancel: () -> Void
+
+    @State private var showRemovalConfirmation = false
+
+    private var isCleaning: Bool {
+        recovery.cleanup == .cleaning
+    }
+
+    private var canRemoveIncompleteSetup: Bool {
+        cloudBackupPendingEnableCleanupIsAvailable(recovery.cleanup)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            CloudBackupEnableCancelButton(isBusy: isCleaning, onCancel: onCancel)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    recoveryHeader
+                    recoveryExplanation
+                    supportCodeCard
+                    recoveryActions
+                }
+                .padding()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(CloudBackupEnableBackground())
+        .confirmationDialog(
+            "Remove incomplete Cloud Backup setup?",
+            isPresented: $showRemovalConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Incomplete Setup", role: .destructive) {
+                onRemoveIncompleteSetup()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This removes only local data from the interrupted setup. Your active Cloud Backup key, cloud data, and wallets on this device will be preserved."
+            )
+        }
+    }
+
+    private var recoveryHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "exclamationmark.icloud.fill")
+                .font(.system(size: 42))
+                .foregroundStyle(Color.statusWarning)
+
+            Text("Cloud Backup Needs Recovery")
+                .font(.largeTitle.weight(.semibold))
+                .foregroundStyle(.white)
+
+            Text("Cloud Backup setup was interrupted and its local recovery records do not match.")
+                .font(.footnote)
+                .foregroundStyle(.coveLightGray.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var recoveryExplanation: some View {
+        Text(
+            canRemoveIncompleteSetup
+                ? "Cove verified that the incomplete local setup can be removed without changing your active backup or cloud data."
+                : "Contact support and include the code below. Don’t change Cloud Backup settings until the recovery state has been reviewed."
+        )
+        .font(.callout)
+        .foregroundStyle(.white.opacity(0.85))
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.duskBlue.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var supportCodeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Support code")
+                .font(.caption)
+                .foregroundStyle(.coveLightGray)
+
+            Text(recovery.supportCode)
+                .font(.title3.monospaced().weight(.semibold))
+                .foregroundStyle(.white)
+                .accessibilityIdentifier("cloudBackup.recovery.supportCode")
+
+            HStack {
+                Button {
+                    UIPasteboard.general.string = recovery.supportCode
+                } label: {
+                    Label("Copy Code", systemImage: "doc.on.doc")
+                }
+
+                Spacer()
+
+                Button {
+                    contactSupport()
+                } label: {
+                    Label("Contact Support", systemImage: "envelope")
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(.white)
+        }
+        .padding(16)
+        .background(Color.duskBlue.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var recoveryActions: some View {
+        if isCleaning {
+            HStack {
+                Spacer()
+                ProgressView("Removing incomplete setup...")
+                    .tint(.white)
+                    .foregroundStyle(.white)
+                Spacer()
+            }
+            .padding(.vertical)
+        } else if canRemoveIncompleteSetup {
+            Button(role: .destructive) {
+                showRemovalConfirmation = true
+            } label: {
+                Text("Remove Incomplete Setup")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(OnboardingSecondaryButtonStyle(
+                backgroundColor: Color.red.opacity(0.12),
+                foregroundColor: .red.opacity(0.95),
+                borderColor: Color.red.opacity(0.22)
+            ))
+            .accessibilityIdentifier("cloudBackup.recovery.removeIncompleteSetup")
+        }
+    }
+
+    private func contactSupport() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        if let url = cloudBackupPendingEnableSupportEmailURL(
+            supportCode: recovery.supportCode,
+            appVersion: version
+        ) {
+            openURL(url)
         }
     }
 }

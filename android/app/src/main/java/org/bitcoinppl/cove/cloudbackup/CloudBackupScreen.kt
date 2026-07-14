@@ -175,6 +175,17 @@ internal fun CloudBackupScreenFrame(
     val isConfigured = manager.isConfigured
     val lifecycle = manager.lifecycle
 
+    if (lifecycle is CloudBackupLifecycle.PendingEnableRecovery) {
+        CloudBackupPendingEnableRecoveryContent(
+            recovery = lifecycle.v1,
+            onConfirmCleanup = {
+                manager.dispatch(CloudBackupManagerAction.ConfirmPendingEnableCleanup)
+            },
+            onCancel = onBack,
+        )
+        return
+    }
+
     if (shouldShowCloudBackupEnableOnboarding(manager, lifecycle)) {
         CloudBackupSettingsEnableOnboarding(
             manager = manager,

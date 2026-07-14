@@ -4,6 +4,67 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
+    func testInteractiveRequestTimeoutCancelsOnMainQueueAndReturnsPresentedFailure() {
+        let delegate = PasskeyDelegate(context: .registration, timeout: 0.01)
+        let cancellation = expectation(description: "controller cancelled")
+
+        XCTAssertThrowsError(
+            try delegate.waitForResult {
+                XCTAssertTrue(Thread.isMainThread)
+                cancellation.fulfill()
+            }
+        ) { error in
+            guard case let PasskeyError.RequestFailed(operation, reason) = error,
+                  operation == .registration,
+                  case .platformAuthorizationFailedAfterPresentation = reason
+            else {
+                XCTFail("expected registration timeout to be a post-presentation platform failure")
+                return
+            }
+        }
+
+        wait(for: [cancellation], timeout: 1)
+    }
+
+    func testLateCallbackCannotReplaceTimeoutResult() {
+        let delegate = PasskeyDelegate(context: .authenticateAssertion, timeout: 0.01)
+        let cancellation = expectation(description: "controller cancelled")
+
+        XCTAssertThrowsError(
+            try delegate.waitForResult {
+                cancellation.fulfill()
+            }
+        )
+        wait(for: [cancellation], timeout: 1)
+
+        let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
+            relyingPartyIdentifier: "example.com"
+        ).createCredentialAssertionRequest(challenge: Data(count: 32))
+
+        delegate.authorizationController(
+            controller: ASAuthorizationController(authorizationRequests: [request]),
+            didCompleteWithError: NSError(
+                domain: "PasskeyProviderImplTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "late callback"]
+            )
+        )
+
+        XCTAssertThrowsError(
+            try delegate.waitForResult {
+                XCTFail("terminal timeout must not schedule cancellation twice")
+            }
+        ) { error in
+            guard case let PasskeyError.RequestFailed(operation, reason) = error,
+                  operation == .authenticateAssertion,
+                  case .platformAuthorizationFailedAfterPresentation = reason
+            else {
+                XCTFail("expected the original timeout result")
+                return
+            }
+        }
+    }
+
     func testFailedBeforePresentationIsRetryablePlatformFailure() {
         let failure = passkeyAuthorizationFailure(
             for: .failed,

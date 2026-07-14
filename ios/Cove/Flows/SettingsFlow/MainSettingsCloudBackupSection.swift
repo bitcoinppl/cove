@@ -19,6 +19,8 @@ struct MainSettingsCloudBackupSection: View {
                     MainSettingsCloudBackupEnablingRow()
                 case .restoring:
                     MainSettingsCloudBackupRestoringRow()
+                case .pendingEnableRecovery:
+                    cloudBackupRecoveryContent()
                 case let .failed(failure):
                     cloudBackupErrorContent(message: failure.message)
                 case .configured:
@@ -28,6 +30,24 @@ struct MainSettingsCloudBackupSection: View {
                     )
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func cloudBackupRecoveryContent() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "exclamationmark.icloud")
+                    .foregroundStyle(Color.statusWarning)
+                Text("Cloud Backup Needs Recovery")
+            }
+            Text("Open to review interrupted setup")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        SettingsRow(title: "Review", symbol: "arrow.right") {
+            onEnable()
         }
     }
 
@@ -175,6 +195,14 @@ struct MainSettingsCloudBackupEnabledStatus: View {
                 symbol: "exclamationmark.icloud",
                 title: "iCloud Drive Unavailable",
                 message: "Open to review Cloud Backup",
+                color: Color.statusWarning
+            )
+
+        case .recoveryRequired:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "Cloud Backup Needs Recovery",
+                message: "Open to review interrupted setup",
                 color: Color.statusWarning
             )
 

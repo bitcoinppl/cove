@@ -98,6 +98,11 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         return failure.message
     }
 
+    var pendingEnableRecovery: CloudBackupPendingEnableRecovery? {
+        guard case let .pendingEnableRecovery(recovery) = state.lifecycle else { return nil }
+        return recovery
+    }
+
     var isLifecycleDisabled: Bool {
         if case .disabled = state.lifecycle { return true }
         return false

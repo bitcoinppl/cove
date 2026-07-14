@@ -36,6 +36,7 @@ internal fun cloudBackupSettingsSeverity(
         is CloudBackupSettingsRowStatus.NoFiles,
         is CloudBackupSettingsRowStatus.DriveUnavailable,
         is CloudBackupSettingsRowStatus.AuthorizationRequired,
+        is CloudBackupSettingsRowStatus.RecoveryRequired,
         -> CloudBackupSettingsSeverity.WARNING
         is CloudBackupSettingsRowStatus.Error -> CloudBackupSettingsSeverity.ERROR
     }

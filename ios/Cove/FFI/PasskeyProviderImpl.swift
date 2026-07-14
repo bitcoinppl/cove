@@ -3,7 +3,7 @@ import AuthenticationServices
 @_exported import CoveCore
 import Foundation
 
-private enum PasskeyOperationContext: Equatable {
+enum PasskeyOperationContext: Equatable {
     case registration
     case discoverAssertion
     case authenticateAssertion
@@ -219,8 +219,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             return ctrl
         }
 
-        _ = controller
-        let credential = try delegate.waitForResult()
+        let credential = try delegate.waitForResult {
+            controller.cancel()
+        }
 
         guard
             let registration =
@@ -320,8 +321,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             return ctrl
         }
 
-        _ = controller
-        let credential = try delegate.waitForResult()
+        let credential = try delegate.waitForResult {
+            controller.cancel()
+        }
 
         guard
             let assertion =
@@ -389,23 +391,46 @@ private func passkeyPresentationAnchor() -> ASPresentationAnchor {
     return ASPresentationAnchor()
 }
 
-private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
+final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     ASAuthorizationControllerPresentationContextProviding
 {
+    static let interactiveRequestTimeout: TimeInterval = 5 * 60
+
     private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private let timeout: TimeInterval
     private var result: Result<ASAuthorizationCredential, Error>?
     private let context: PasskeyOperationContext
     private var didRequestPresentationAnchor = false
 
-    init(context: PasskeyOperationContext) {
+    init(
+        context: PasskeyOperationContext,
+        timeout: TimeInterval = PasskeyDelegate.interactiveRequestTimeout
+    ) {
         self.context = context
+        self.timeout = timeout
     }
 
-    func waitForResult() throws -> ASAuthorizationCredential {
-        // interactive system sheets own their lifetime and complete through the delegate
-        semaphore.wait()
+    func waitForResult(
+        cancelController: @escaping @Sendable () -> Void
+    ) throws -> ASAuthorizationCredential {
+        let waitResult = semaphore.wait(timeout: .now() + timeout)
 
-        guard let result else {
+        if waitResult == .timedOut {
+            let timeoutError = PasskeyError.RequestFailed(
+                operation: context.operation,
+                reason: .platformAuthorizationFailedAfterPresentation
+            )
+
+            if complete(with: .failure(timeoutError)) {
+                Log.warn(
+                    "[PASSKEY] \(context.logDescription) timed out after \(timeout)s"
+                )
+                DispatchQueue.main.async(execute: cancelController)
+            }
+        }
+
+        guard let result = lock.withLock({ result }) else {
             throw PasskeyError.RequestFailed(
                 operation: context.operation,
                 reason: .unknown(diagnosticMessage: "no result received from delegate")
@@ -415,7 +440,9 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        didRequestPresentationAnchor = true
+        lock.withLock {
+            didRequestPresentationAnchor = true
+        }
 
         return passkeyPresentationAnchor()
     }
@@ -424,15 +451,22 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         controller _: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Log.info("[PASSKEY] \(context.logDescription) completed credential_type=\(type(of: authorization.credential))")
-        result = .success(authorization.credential)
-        semaphore.signal()
+        if complete(with: .success(authorization.credential)) {
+            Log.info("[PASSKEY] \(context.logDescription) completed credential_type=\(type(of: authorization.credential))")
+        }
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
+        let didRequestPresentationAnchor = lock.withLock {
+            self.didRequestPresentationAnchor
+        }
+        let result: Result<ASAuthorizationCredential, Error>
+        let logMessage: String
+        let shouldWarn: Bool
+
         switch error as? ASAuthorizationError {
         case let authError?:
             switch passkeyAuthorizationFailure(
@@ -441,31 +475,55 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
                 diagnosticMessage: error.localizedDescription
             ) {
             case .userCancelled:
-                Log.info(
-                    "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
-                )
                 result = .failure(PasskeyError.UserCancelled)
+                logMessage = "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                shouldWarn = false
             case let .requestFailed(reason):
-                Log.warn(
-                    "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
-                )
                 result = .failure(
                     PasskeyError.RequestFailed(
                         operation: context.operation,
                         reason: reason
                     )
                 )
+                logMessage = "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                shouldWarn = true
             }
         case nil:
-            Log.warn("[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)")
             result = .failure(
                 PasskeyError.RequestFailed(
                     operation: context.operation,
                     reason: .unknown(diagnosticMessage: error.localizedDescription)
                 )
             )
+            logMessage = "[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)"
+            shouldWarn = true
         }
-        semaphore.signal()
+
+        guard complete(with: result) else { return }
+
+        if shouldWarn {
+            Log.warn(logMessage)
+        } else {
+            Log.info(logMessage)
+        }
+    }
+
+    @discardableResult
+    private func complete(
+        with result: Result<ASAuthorizationCredential, Error>
+    ) -> Bool {
+        let didComplete = lock.withLock {
+            guard self.result == nil else { return false }
+
+            self.result = result
+            return true
+        }
+
+        if didComplete {
+            semaphore.signal()
+        }
+
+        return didComplete
     }
 }
 

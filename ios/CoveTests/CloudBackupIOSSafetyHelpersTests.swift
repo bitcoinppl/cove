@@ -3,6 +3,27 @@ import CoveCore
 import XCTest
 
 final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
+    func testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly() {
+        XCTAssertTrue(cloudBackupPendingEnableCleanupIsAvailable(.available))
+        XCTAssertFalse(cloudBackupPendingEnableCleanupIsAvailable(.supportOnly))
+        XCTAssertFalse(cloudBackupPendingEnableCleanupIsAvailable(.cleaning))
+    }
+
+    func testPendingEnableRecoverySupportEmailContainsOnlySafeContext() throws {
+        let url = try XCTUnwrap(cloudBackupPendingEnableSupportEmailURL(
+            supportCode: "CB-PE-004",
+            appVersion: "1.3.0"
+        ))
+        let decoded = try XCTUnwrap(url.absoluteString.removingPercentEncoding)
+
+        XCTAssertTrue(decoded.contains("CB-PE-004"))
+        XCTAssertTrue(decoded.contains("Platform: iOS"))
+        XCTAssertTrue(decoded.contains("App version: 1.3.0"))
+        XCTAssertFalse(decoded.contains("namespace"))
+        XCTAssertFalse(decoded.contains("credential"))
+        XCTAssertFalse(decoded.contains("account"))
+    }
+
     func testPendingUploadAccessibilityStatusDistinguishesActionableStates() {
         XCTAssertEqual(
             cloudBackupPendingUploadAccessibilityStatus(
