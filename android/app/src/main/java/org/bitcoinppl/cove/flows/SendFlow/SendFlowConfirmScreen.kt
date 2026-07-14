@@ -12,6 +12,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +38,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -152,42 +155,63 @@ fun SendFlowConfirmScreen(
                         walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                     },
                 )
-                Column(
+                BoxWithConstraints(
                     modifier =
                         Modifier
                             .fillMaxHeight()
                             .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 16.dp),
                 ) {
-                    AmountWidget(
-                        amount = sendingAmount,
-                        denomination = sendingAmountDenomination,
-                        dollarText = dollarEquivalentText,
-                        accountShort = accountShort,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                    SummaryWidget(
-                        address = address,
-                        networkFee = networkFee,
-                        willReceive = willReceive,
-                        willPay = willPay,
-                        onAddressClick = { sheetState = SheetState.AdvancedDetails },
-                    )
-                    Spacer(Modifier.weight(1f))
-                    SwipeToSendStub(
-                        text = stringResource(R.string.action_swipe_to_send),
-                        sendState = sendState,
-                        onComplete = onSwipeToSend,
-                        containerColor = MaterialTheme.coveColors.swipeTrackBg,
-                        targetContainerColor = MaterialTheme.coveColors.midnightBtn,
-                        knobColor = MaterialTheme.coveColors.midnightBtn,
-                        textColor = MaterialTheme.colorScheme.onSurface,
-                        targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
+                    Column(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 24.dp),
-                    )
+                                .heightIn(min = maxHeight)
+                                .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column {
+                            AmountWidget(
+                                amount = sendingAmount,
+                                denomination = sendingAmountDenomination,
+                                dollarText = dollarEquivalentText,
+                                accountShort = accountShort,
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                            SummaryWidget(
+                                address = address,
+                                networkFee = networkFee,
+                                willReceive = willReceive,
+                                willPay = willPay,
+                                onAddressClick = { sheetState = SheetState.AdvancedDetails },
+                            )
+                        }
+
+                        Column {
+                            SwipeToSendStub(
+                                text = stringResource(R.string.action_swipe_to_send),
+                                sendState = sendState,
+                                onComplete = onSwipeToSend,
+                                containerColor = MaterialTheme.coveColors.swipeTrackBg,
+                                targetContainerColor = MaterialTheme.coveColors.midnightBtn,
+                                knobColor = MaterialTheme.coveColors.midnightBtn,
+                                textColor = MaterialTheme.colorScheme.onSurface,
+                                targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .navigationBarsPadding()
+                                        .padding(bottom = 24.dp)
+                                        .testTag("sendFlowConfirm.swipeToSend"),
+                            )
+
+                            Spacer(
+                                Modifier
+                                    .height(1.dp)
+                                    .testTag("sendFlowConfirm.bottomPadding"),
+                            )
+                        }
+                    }
                 }
             }
         }

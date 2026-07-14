@@ -5,15 +5,21 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -45,6 +51,7 @@ import android.view.WindowManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -199,116 +206,130 @@ fun HotWalletCreateScreen(
                 alpha = 0.5f,
             )
 
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
             ) {
-                // pager for word groups
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { page ->
-                        WordCardView(
-                            words = groupedWords[page],
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp),
-                        )
-                    }
-
-                    // page indicator
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        DotMenuViewCircle(
-                            count = groupedWords.size,
-                            currentIndex = currentPage,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                // bottom section
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
+                            .heightIn(min = maxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(top = 20.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    // pager for word groups
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        DotMenuView(
-                            count = 5,
-                            currentIndex = 2,
-                        )
-                        Spacer(Modifier.weight(1f))
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { page ->
+                            WordCardView(
+                                words = groupedWords[page],
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp),
+                            )
+                        }
+
+                        // page indicator
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            DotMenuViewCircle(
+                                count = groupedWords.size,
+                                currentIndex = currentPage,
+                            )
+                        }
                     }
 
-                    Text(
-                        text = stringResource(R.string.label_recovery_words_title),
-                        color = Color.White,
-                        fontSize = 38.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 42.sp,
-                    )
+                    // bottom section
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 20.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            DotMenuView(
+                                count = 5,
+                                currentIndex = 2,
+                            )
+                            Spacer(Modifier.weight(1f))
+                        }
 
-                    Text(
-                        text = stringResource(R.string.label_recovery_words_body),
-                        color = CoveColor.coveLightGray,
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                        Text(
+                            text = stringResource(R.string.label_recovery_words_title),
+                            color = Color.White,
+                            fontSize = 38.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 42.sp,
+                        )
 
-                    Text(
-                        text = stringResource(R.string.label_recovery_words_secure_note),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                        Text(
+                            text = stringResource(R.string.label_recovery_words_body),
+                            color = CoveColor.coveLightGray,
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
 
-                    HorizontalDivider(
-                        color = CoveColor.coveLightGray.copy(alpha = 0.50f),
-                        thickness = 1.dp,
-                    )
+                        Text(
+                            text = stringResource(R.string.label_recovery_words_secure_note),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
 
-                    ImageButton(
-                        text =
-                            if (isLastPage) {
-                                stringResource(R.string.btn_save_wallet)
-                            } else {
-                                stringResource(R.string.btn_next)
-                            },
-                        onClick = {
-                            if (isLastPage) {
-                                handleSaveWallet()
-                            } else {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(currentPage + 1)
+                        HorizontalDivider(
+                            color = CoveColor.coveLightGray.copy(alpha = 0.50f),
+                            thickness = 1.dp,
+                        )
+
+                        ImageButton(
+                            text =
+                                if (isLastPage) {
+                                    stringResource(R.string.btn_save_wallet)
+                                } else {
+                                    stringResource(R.string.btn_next)
+                                },
+                            onClick = {
+                                if (isLastPage) {
+                                    handleSaveWallet()
+                                } else {
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(currentPage + 1)
+                                    }
                                 }
-                            }
-                        },
-                        enabled = !isSaving,
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary,
-                                contentColor = CoveColor.midnightBlue,
-                            ),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                            },
+                            enabled = !isSaving,
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = CoveColor.btnPrimary,
+                                    contentColor = CoveColor.midnightBlue,
+                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .testTag("hotWalletCreate.primaryAction"),
+                        )
+
+                        Spacer(
+                            Modifier
+                                .height(16.dp)
+                                .testTag("hotWalletCreate.bottomPadding"),
+                        )
+                    }
                 }
             }
         }
