@@ -1102,6 +1102,14 @@ impl CloudBackupReducerState {
             (CloudBackupDetailState::Complete { state }, cloud_only) => {
                 state.cloud_only = cloud_only;
             }
+            (CloudBackupDetailState::Checking { retained }, CloudOnlyState::Loaded { wallets }) => {
+                let Some(mut state) = retained.take() else {
+                    return;
+                };
+
+                state.cloud_only = CloudOnlyState::Loaded { wallets };
+                self.configured.detail = CloudBackupDetailState::Complete { state };
+            }
             (detail, CloudOnlyState::Loading) => {
                 let retained = match detail {
                     CloudBackupDetailState::Complete { state } => Some(state.clone()),
@@ -1128,7 +1136,6 @@ impl CloudBackupReducerState {
                 *detail = CloudBackupDetailState::NotLoaded;
             }
             (CloudBackupDetailState::NotLoaded, CloudOnlyState::Loaded { .. })
-            | (CloudBackupDetailState::Checking { .. }, CloudOnlyState::Loaded { .. })
             | (CloudBackupDetailState::Failed { .. }, CloudOnlyState::Loaded { .. }) => {}
         }
     }
@@ -1731,6 +1738,42 @@ mod tests {
         assert_eq!(
             restore_all_state(&failed),
             CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn completed_cloud_only_fetch_restores_complete_detail_with_loaded_wallets() {
+        let mut model = configured_model_with_cloud_only(vec![cloud_only_wallet(
+            "stale-wallet",
+            CloudBackupWalletStatus::DeletedFromDevice,
+        )]);
+        let loaded_wallets = vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+        ];
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Loading,
+            ))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Complete { state } = configured.detail else {
+            panic!("expected complete detail after cloud-only fetch");
+        };
+
+        assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets: loaded_wallets });
+        assert_eq!(
+            configured.restore_all,
+            CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
     }
 

@@ -276,7 +276,7 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&master_key).unwrap();
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         master_key.namespace_id(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -424,7 +424,7 @@ fn prepare_pending_enable_discard_fixture(
         credential_id: vec![1, 2, 3],
         provider_hint: None,
     };
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         namespace.clone(),
         ownership,

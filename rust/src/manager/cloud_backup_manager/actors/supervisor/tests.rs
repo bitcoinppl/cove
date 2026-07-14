@@ -8,7 +8,8 @@ use crate::database::cloud_backup::PersistedDisablingCloudBackup;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     async_test_lock, configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state, test_globals,
-    wait_for_test_condition, wallet_entry_with_labels, xpub_only_wallet_metadata,
+    staged_pending_enable_journal, wait_for_test_condition, wallet_entry_with_labels,
+    xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
 use crate::manager::cloud_backup_manager::wallets::{
@@ -192,7 +193,7 @@ fn prepare_test_enable_local_promotion(
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(master_key).unwrap();
 
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         finalization.context,
         finalization.namespace_id.clone(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -237,7 +238,7 @@ fn prepare_test_enable_recovery_local_promotion(
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(master_key).unwrap();
 
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         finalization.context,
         finalization.namespace_id.clone(),
         PendingEnableNamespaceOwnership::RecoveredExisting,
@@ -1919,6 +1920,33 @@ async fn enable_upload_finalization_projects_success_after_durable_pending_compl
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn pending_enable_restart_discards_stage_interrupted_after_ownership_claim() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cloud_keychain
+        .save_pending_enable_journal(&PendingEnableJournal::staging(
+            CloudBackupEnableContext::settings_manual(),
+            staged_master_key.namespace_id(),
+            PendingEnableNamespaceOwnership::RecoveredExisting,
+            cloud_keychain.snapshot_passkey_metadata(),
+        ))
+        .unwrap();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.recover_pending_enable_after_restart(&manager).unwrap();
+
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
+    assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn pending_enable_restart_discards_only_unregistered_staged_material() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
@@ -1933,7 +1961,7 @@ async fn pending_enable_restart_discards_only_unregistered_staged_material() {
     let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     cloud_keychain
-        .save_pending_enable_journal(&PendingEnableJournal::staged(
+        .save_pending_enable_journal(&staged_pending_enable_journal(
             CloudBackupEnableContext::settings_manual(),
             staged_master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
@@ -1966,7 +1994,7 @@ async fn pending_enable_restart_hydrates_registered_passkey_for_manual_confirmat
     let expected_namespace = staged_master_key.namespace_id();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     let passkey = test_staged_passkey(vec![1, 2, 3]);
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         expected_namespace.clone(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -2012,7 +2040,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
     let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
     cspp.save_staged_master_key(&recovered_master_key).unwrap();
     let passkey = test_staged_passkey(vec![1, 2, 3]);
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         recovered_master_key.namespace_id(),
         PendingEnableNamespaceOwnership::RecoveredExisting,
@@ -2045,7 +2073,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
 
     cspp.save_staged_master_key(&recovered_master_key).unwrap();
-    let mut promoted_journal = PendingEnableJournal::staged(
+    let mut promoted_journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         recovered_master_key.namespace_id(),
         PendingEnableNamespaceOwnership::RecoveredExisting,
@@ -2337,7 +2365,7 @@ async fn pending_enable_restart_projects_promotion_mismatch_as_support_only() {
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     let staged_master_key = cove_cspp::master_key::MasterKey::generate();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         staged_master_key.namespace_id(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -2409,7 +2437,7 @@ async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_re
         .unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     cloud_keychain
-        .save_pending_enable_journal(&PendingEnableJournal::staged(
+        .save_pending_enable_journal(&staged_pending_enable_journal(
             CloudBackupEnableContext::settings_manual(),
             staged_master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
@@ -2444,7 +2472,7 @@ async fn pending_enable_cleanup_revalidates_stale_evidence_before_mutating() {
     let staged_master_key = cove_cspp::master_key::MasterKey::generate();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     cloud_keychain
-        .save_pending_enable_journal(&PendingEnableJournal::staged(
+        .save_pending_enable_journal(&staged_pending_enable_journal(
             CloudBackupEnableContext::settings_manual(),
             "ffffffffffffffffffffffffffffffff".into(),
             PendingEnableNamespaceOwnership::FreshOwned,
@@ -2478,7 +2506,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
     let staged_master_key = cove_cspp::master_key::MasterKey::generate();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     cloud_keychain
-        .save_pending_enable_journal(&PendingEnableJournal::staged(
+        .save_pending_enable_journal(&staged_pending_enable_journal(
             CloudBackupEnableContext::settings_manual(),
             staged_master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
@@ -2972,6 +3000,38 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
     supervisor.complete_cloud_only_fetch_request(7, Ok(Vec::new())).await.unwrap();
 
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_progress() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    prepare_restore_all_marker(&manager);
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let claim = supervisor
+        .begin_exclusive_operation(
+            &manager,
+            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
+        )
+        .unwrap();
+    supervisor.active_operation.start_restore_all(RestoreAllRun {
+        claim,
+        cancellation: Arc::new(AtomicBool::new(false)),
+    });
+    manager.apply_restore_all_started(claim, 2);
+    supervisor.active_cloud_only_fetch_request = Some(10);
+
+    supervisor.complete_cloud_only_fetch_request(10, Ok(Vec::new())).await.unwrap();
+
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+    assert!(matches!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::Running { total: 2, .. }
+    ));
+    assert_eq!(supervisor.active_operation, Some(claim));
 }
 
 #[tokio::test(flavor = "current_thread")]

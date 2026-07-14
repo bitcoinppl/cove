@@ -1,4 +1,3 @@
-use super::restore_all::reconcile_restore_all_after_cloud_only_fetch;
 use super::*;
 
 impl CloudBackupSupervisor {
@@ -74,7 +73,7 @@ impl CloudBackupSupervisor {
                 manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
                     items,
                 ));
-                reconcile_restore_all_after_cloud_only_fetch(&manager, eligible_count);
+                self.reconcile_restore_all_after_cloud_only_fetch(&manager, eligible_count);
             }
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");

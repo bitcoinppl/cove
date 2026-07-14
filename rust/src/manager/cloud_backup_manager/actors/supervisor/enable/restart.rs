@@ -131,6 +131,12 @@ impl CloudBackupSupervisor {
             CloudBackupError::internal_context("load pending enable during restart", source)
         })?;
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        if let Some(journal) = journal.as_ref()
+            && matches!(journal.phase(), PendingEnableJournalPhase::Staging)
+        {
+            return Self::discard_staging_pending_enable(&cloud_keychain, &cspp);
+        }
+
         let promotion_status = cspp.master_key_promotion_status().map_err(|source| {
             CloudBackupError::internal_context(
                 "inspect staged master key during pending enable restart",
@@ -148,6 +154,9 @@ impl CloudBackupSupervisor {
         };
 
         match journal.phase() {
+            PendingEnableJournalPhase::Staging => {
+                Self::discard_staging_pending_enable(&cloud_keychain, &cspp)
+            }
             PendingEnableJournalPhase::Staged => Self::discard_staged_pending_enable(
                 &cloud_keychain,
                 &cspp,
@@ -183,6 +192,24 @@ impl CloudBackupSupervisor {
                     promotion_status,
                 ),
         }
+    }
+
+    fn discard_staging_pending_enable(
+        cloud_keychain: &CloudBackupKeychain,
+        cspp: &cove_cspp::Cspp<Keychain>,
+    ) -> Result<(), CloudBackupError> {
+        cspp.discard_staged_master_key().map_err(|source| {
+            CloudBackupError::internal_context(
+                "discard interrupted pending enable staging during restart",
+                source,
+            )
+        })?;
+        cloud_keychain.delete_pending_enable_journal().map_err(|source| {
+            CloudBackupError::internal_context(
+                "clear interrupted pending enable ownership during restart",
+                source,
+            )
+        })
     }
 
     fn discard_staged_pending_enable(
@@ -228,7 +255,8 @@ impl CloudBackupSupervisor {
                 MasterKeyPromotionStatus::Staged
                     | MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
             ),
-            PendingEnableJournalPhase::Staged
+            PendingEnableJournalPhase::Staging
+            | PendingEnableJournalPhase::Staged
             | PendingEnableJournalPhase::LocalPromotionStarted(_) => false,
         };
         if !valid_status {
@@ -344,7 +372,7 @@ impl CloudBackupSupervisor {
                     | MasterKeyPromotionStatus::None
             ),
             PendingEnableJournalPhase::LocalPromotionStarted(_) => true,
-            PendingEnableJournalPhase::Staged => false,
+            PendingEnableJournalPhase::Staging | PendingEnableJournalPhase::Staged => false,
         };
         if !valid_status {
             return Err(Self::pending_enable_restart_mismatch(
@@ -742,7 +770,8 @@ impl CloudBackupSupervisor {
         status: MasterKeyPromotionStatus,
     ) -> bool {
         match phase {
-            PendingEnableJournalPhase::Staged
+            PendingEnableJournalPhase::Staging
+            | PendingEnableJournalPhase::Staged
             | PendingEnableJournalPhase::PasskeyRegistered(_)
             | PendingEnableJournalPhase::RemoteWritesStarted(_) => matches!(
                 status,

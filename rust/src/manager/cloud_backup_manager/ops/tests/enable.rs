@@ -931,7 +931,7 @@ async fn onboarding_relaunch_readiness_fails_closed_during_pending_enable_recove
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     let staged_master_key = cove_cspp::master_key::MasterKey::generate();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
-    let journal = PendingEnableJournal::staged(
+    let journal = staged_pending_enable_journal(
         CloudBackupEnableContext {
             saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
             verification_source: CloudBackupVerificationSource::Onboarding,
@@ -1256,7 +1256,7 @@ async fn enable_force_new_consumes_staged_session() {
         credential_id: vec![1, 2, 3],
         provider_hint: None,
     };
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         master_key.namespace_id(),
         PendingEnableNamespaceOwnership::FreshOwned,

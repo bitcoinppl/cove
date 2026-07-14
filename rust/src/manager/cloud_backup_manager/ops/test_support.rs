@@ -31,13 +31,32 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupKeychain, CloudBackupStore, PendingEnableSession, PendingUploadVerificationState,
-    actors::restore::RestoreOperation,
+    CloudBackupEnableContext, CloudBackupKeychain, CloudBackupStore, PendingEnableJournal,
+    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
+    PendingUploadVerificationState, actors::restore::RestoreOperation,
 };
+
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+
+pub(crate) fn staged_pending_enable_journal(
+    context: CloudBackupEnableContext,
+    namespace_id: String,
+    namespace_ownership: PendingEnableNamespaceOwnership,
+    previous_metadata: PendingEnableLocalMetadataSnapshot,
+) -> PendingEnableJournal {
+    let mut journal = PendingEnableJournal::staging(
+        context,
+        namespace_id,
+        namespace_ownership,
+        previous_metadata,
+    );
+    assert!(journal.mark_staged());
+
+    journal
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct MockStore {

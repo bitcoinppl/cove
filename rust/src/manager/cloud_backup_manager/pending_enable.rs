@@ -40,6 +40,7 @@ impl From<&UnpersistedPrfKey> for PendingEnablePasskeyMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum PendingEnableJournalPhase {
+    Staging,
     Staged,
     PasskeyRegistered(PendingEnablePasskeyMetadata),
     RemoteWritesStarted(PendingEnablePasskeyMetadata),
@@ -70,7 +71,7 @@ pub(crate) struct PendingEnableJournal {
 }
 
 impl PendingEnableJournal {
-    pub(crate) fn staged(
+    pub(crate) fn staging(
         context: CloudBackupEnableContext,
         namespace_id: String,
         namespace_ownership: PendingEnableNamespaceOwnership,
@@ -81,7 +82,7 @@ impl PendingEnableJournal {
             context,
             namespace_id,
             namespace_ownership,
-            phase: PendingEnableJournalPhase::Staged,
+            phase: PendingEnableJournalPhase::Staging,
             previous_metadata,
         }
     }
@@ -108,7 +109,7 @@ impl PendingEnableJournal {
 
     pub(crate) fn passkey(&self) -> Option<&PendingEnablePasskeyMetadata> {
         match &self.phase {
-            PendingEnableJournalPhase::Staged => None,
+            PendingEnableJournalPhase::Staging | PendingEnableJournalPhase::Staged => None,
             PendingEnableJournalPhase::PasskeyRegistered(passkey)
             | PendingEnableJournalPhase::RemoteWritesStarted(passkey)
             | PendingEnableJournalPhase::LocalPromotionStarted(passkey) => Some(passkey),
@@ -117,6 +118,19 @@ impl PendingEnableJournal {
 
     pub(crate) fn previous_metadata(&self) -> &PendingEnableLocalMetadataSnapshot {
         &self.previous_metadata
+    }
+
+    pub(crate) fn mark_staged(&mut self) -> bool {
+        match &self.phase {
+            PendingEnableJournalPhase::Staging => {
+                self.phase = PendingEnableJournalPhase::Staged;
+                true
+            }
+            PendingEnableJournalPhase::Staged => true,
+            PendingEnableJournalPhase::PasskeyRegistered(_)
+            | PendingEnableJournalPhase::RemoteWritesStarted(_)
+            | PendingEnableJournalPhase::LocalPromotionStarted(_) => false,
+        }
     }
 
     pub(crate) fn register_passkey(&mut self, passkey: PendingEnablePasskeyMetadata) -> bool {
@@ -128,6 +142,7 @@ impl PendingEnableJournal {
             PendingEnableJournalPhase::PasskeyRegistered(current)
             | PendingEnableJournalPhase::RemoteWritesStarted(current)
             | PendingEnableJournalPhase::LocalPromotionStarted(current) => *current == passkey,
+            PendingEnableJournalPhase::Staging => false,
         }
     }
 
@@ -139,7 +154,7 @@ impl PendingEnableJournal {
             }
             PendingEnableJournalPhase::RemoteWritesStarted(_)
             | PendingEnableJournalPhase::LocalPromotionStarted(_) => true,
-            PendingEnableJournalPhase::Staged => false,
+            PendingEnableJournalPhase::Staging | PendingEnableJournalPhase::Staged => false,
         }
     }
 
@@ -150,9 +165,9 @@ impl PendingEnableJournal {
                 true
             }
             PendingEnableJournalPhase::LocalPromotionStarted(_) => true,
-            PendingEnableJournalPhase::Staged | PendingEnableJournalPhase::PasskeyRegistered(_) => {
-                false
-            }
+            PendingEnableJournalPhase::Staging
+            | PendingEnableJournalPhase::Staged
+            | PendingEnableJournalPhase::PasskeyRegistered(_) => false,
         }
     }
 
@@ -163,9 +178,9 @@ impl PendingEnableJournal {
                 true
             }
             PendingEnableJournalPhase::RemoteWritesStarted(_) => true,
-            PendingEnableJournalPhase::Staged | PendingEnableJournalPhase::PasskeyRegistered(_) => {
-                false
-            }
+            PendingEnableJournalPhase::Staging
+            | PendingEnableJournalPhase::Staged
+            | PendingEnableJournalPhase::PasskeyRegistered(_) => false,
         }
     }
 }

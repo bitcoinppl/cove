@@ -78,29 +78,32 @@ impl PendingEnableCoordinator {
             }
         }
 
-        cspp.save_staged_master_key(master_key).map_err(|source| {
-            CloudBackupError::internal_context("stage recovered master key", source)
-        })?;
-        let mut journal = PendingEnableJournal::staged(
+        let mut journal = PendingEnableJournal::staging(
             context,
             namespace_id.to_owned(),
             PendingEnableNamespaceOwnership::RecoveredExisting,
             cloud_keychain.snapshot_passkey_metadata(),
         );
-        if !journal.register_passkey(recovered_passkey) {
-            let _ = cspp.discard_staged_master_key();
+        cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
+            CloudBackupError::internal_context("claim recovered pending enable ownership", source)
+        })?;
+        if let Err(source) = cspp.save_staged_master_key(master_key) {
+            let original = CloudBackupError::internal_context("stage recovered master key", source);
 
-            return Err(CloudBackupError::Internal(
+            return Err(self.rollback_owned_stage(original));
+        }
+        if !journal.mark_staged() || !journal.register_passkey(recovered_passkey) {
+            let original = CloudBackupError::Internal(
                 "could not record recovered Cloud Backup passkey".into(),
-            ));
+            );
+
+            return Err(self.rollback_owned_stage(original));
         }
         if let Err(source) = cloud_keychain.save_pending_enable_journal(&journal) {
-            let _ = cspp.discard_staged_master_key();
+            let original =
+                CloudBackupError::internal_context("save recovered pending enable", source);
 
-            return Err(CloudBackupError::internal_context(
-                "save recovered pending enable",
-                source,
-            ));
+            return Err(self.rollback_owned_stage(original));
         }
 
         Ok(())
@@ -245,18 +248,31 @@ impl PendingEnableCoordinator {
         }
 
         let master_key = MasterKey::generate();
-        cspp.save_staged_master_key(&master_key).map_err(|source| {
-            CloudBackupError::internal_context("stage fresh master key", source)
-        })?;
-        let journal = PendingEnableJournal::staged(
+        let mut journal = PendingEnableJournal::staging(
             context,
             master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
             cloud_keychain.snapshot_passkey_metadata(),
         );
+        cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
+            CloudBackupError::internal_context("claim pending enable ownership", source)
+        })?;
+        if let Err(source) = cspp.save_staged_master_key(&master_key) {
+            let original = CloudBackupError::internal_context("stage fresh master key", source);
+
+            return Err(self.rollback_owned_stage(original));
+        }
+        if !journal.mark_staged() {
+            let original = CloudBackupError::Internal(
+                "pending Cloud Backup enable ownership could not be staged".into(),
+            );
+
+            return Err(self.rollback_owned_stage(original));
+        }
         if let Err(source) = cloud_keychain.save_pending_enable_journal(&journal) {
-            let _ = cspp.discard_staged_master_key();
-            return Err(CloudBackupError::internal_context("save pending enable", source));
+            let original = CloudBackupError::internal_context("save pending enable", source);
+
+            return Err(self.rollback_owned_stage(original));
         }
 
         Ok((master_key, context))
@@ -447,6 +463,32 @@ impl PendingEnableCoordinator {
         }
     }
 
+    fn rollback_owned_stage(&self, original: CloudBackupError) -> CloudBackupError {
+        let staged_rollback = self.cspp().discard_staged_master_key().map_err(|source| {
+            CloudBackupError::internal_context("discard failed pending enable stage", source)
+        });
+        let journal_rollback =
+            self.cloud_keychain().delete_pending_enable_journal().map_err(|source| {
+                CloudBackupError::internal_context("clear failed pending enable ownership", source)
+            });
+        let cleanup_errors = [staged_rollback.err(), journal_rollback.err()]
+            .into_iter()
+            .flatten()
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        if cleanup_errors.is_empty() {
+            return original;
+        }
+
+        CloudBackupError::Internal(
+            format!(
+                "{original}; pending enable stage rollback also failed: {}",
+                cleanup_errors.join("; ")
+            )
+            .into(),
+        )
+    }
+
     pub(crate) fn restore_pending_enable_local_promotion_for_retry(
         &self,
     ) -> Result<(), CloudBackupError> {
@@ -539,6 +581,11 @@ impl PendingEnableCoordinator {
 
         let cspp = self.cspp();
         match journal.phase() {
+            PendingEnableJournalPhase::Staging => {
+                return Err(CloudBackupError::Internal(
+                    "pending Cloud Backup enable staging must recover before cleanup".into(),
+                ));
+            }
             PendingEnableJournalPhase::LocalPromotionStarted(_) => {
                 if !matches!(self.promotion_status()?, MasterKeyPromotionStatus::Pending(_)) {
                     return Err(CloudBackupError::Internal(

@@ -362,7 +362,7 @@ fn pending_enable_journal_roundtrips_without_prf_output() {
     ]);
 
     let cloud_keychain = CloudBackupKeychain::global();
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         "fresh-namespace".into(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -389,7 +389,7 @@ fn pending_enable_journal_rejects_unknown_version() {
     globals.reset();
 
     let cloud_keychain = CloudBackupKeychain::global();
-    let journal = PendingEnableJournal::staged(
+    let journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         "fresh-namespace".into(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -414,7 +414,7 @@ fn pending_enable_journal_rejects_out_of_order_or_conflicting_transitions() {
     let globals = test_globals();
     globals.reset();
 
-    let mut journal = PendingEnableJournal::staged(
+    let mut journal = staged_pending_enable_journal(
         CloudBackupEnableContext::settings_manual(),
         "fresh-namespace".into(),
         PendingEnableNamespaceOwnership::FreshOwned,
@@ -491,7 +491,7 @@ fn clear_local_state_removes_master_key_and_passkey_metadata() {
     cspp.save_master_key(&master_key).unwrap();
     cloud_keychain.save_passkey_and_namespace(&[1, 2, 3], [4; 32], "test-namespace").unwrap();
     cloud_keychain
-        .save_pending_enable_journal(&PendingEnableJournal::staged(
+        .save_pending_enable_journal(&staged_pending_enable_journal(
             CloudBackupEnableContext::settings_manual(),
             "pending-namespace".into(),
             PendingEnableNamespaceOwnership::FreshOwned,

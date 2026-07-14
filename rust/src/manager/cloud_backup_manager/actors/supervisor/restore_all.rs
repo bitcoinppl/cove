@@ -14,31 +14,34 @@ pub(crate) fn restore_all_marker_matches_active_namespace(
     manager.current_namespace_id().ok().as_deref() == Some(marker.namespace_id.as_str())
 }
 
-pub(crate) fn reconcile_restore_all_after_cloud_only_fetch(
-    manager: &RustCloudBackupManager,
-    eligible_count: usize,
-) {
-    if !restore_all_marker_matches_active_namespace(manager) {
-        return;
-    }
+impl CloudBackupSupervisor {
+    pub(crate) fn reconcile_restore_all_after_cloud_only_fetch(
+        &self,
+        manager: &RustCloudBackupManager,
+        eligible_count: usize,
+    ) {
+        if self.active_operation.is_restore_all()
+            || !restore_all_marker_matches_active_namespace(manager)
+        {
+            return;
+        }
 
-    if eligible_count != 0 {
-        manager.apply_restore_all_retry_required();
-        return;
-    }
-
-    match CloudBackupStore::global().clear_restore_all_marker() {
-        Ok(_) => manager.reset_restore_all(),
-        Err(error) => {
-            manager.apply_cloud_only_operation(CloudOnlyOperation::Failed {
-                error: error.reader_message(),
-            });
+        if eligible_count != 0 {
             manager.apply_restore_all_retry_required();
+            return;
+        }
+
+        match CloudBackupStore::global().clear_restore_all_marker() {
+            Ok(_) => manager.reset_restore_all(),
+            Err(error) => {
+                manager.apply_cloud_only_operation(CloudOnlyOperation::Failed {
+                    error: error.reader_message(),
+                });
+                manager.apply_restore_all_retry_required();
+            }
         }
     }
-}
 
-impl CloudBackupSupervisor {
     pub(crate) fn begin_restore_all_operation(&mut self, retry: bool) {
         let Some(manager) = self.manager() else { return };
         let Some(addr) = self.addr() else { return };

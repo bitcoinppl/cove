@@ -232,6 +232,10 @@ impl ActiveOperation {
         self.0.is_some()
     }
 
+    fn is_restore_all(&self) -> bool {
+        matches!(self.0.as_ref(), Some(ActiveOperationRun::RestoreAll(_)))
+    }
+
     fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self.0.as_ref()? {
             ActiveOperationRun::Standard(claim) => Some(*claim),
