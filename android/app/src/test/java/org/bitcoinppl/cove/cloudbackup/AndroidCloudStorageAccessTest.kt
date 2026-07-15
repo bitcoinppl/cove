@@ -891,6 +891,7 @@ class AndroidCloudStorageAccessTest {
         val error = runCatching { verifyDriveAccountBinding(store, mismatch) }.exceptionOrNull()
 
         assertTrue(error is DriveAccountBindingException.Mismatch)
+        assertEquals(first, store.selectedIdentity())
     }
 
     @Test
@@ -934,6 +935,78 @@ class AndroidCloudStorageAccessTest {
 
         assertEquals(second, store.selectedIdentity())
     }
+
+    @Test
+    fun explicitDriveAccountSelectionReplacesStaleBinding() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply {
+                selectedAccount = replacement
+            }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val selected = storage.selectAccountForCloudBackup()
+
+            assertEquals(replacement, selected)
+            assertEquals(replacement, store.selectedIdentity())
+            assertEquals(1, authorization.selectionRequests)
+            assertTrue(authorization.accessRequests.isEmpty())
+        }
+
+    @Test
+    fun cancelledDriveAccountSelectionPreservesExistingBinding() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply {
+                selectionError = AuthorizationRequiredException("google drive authorization was cancelled")
+            }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val error = captureError {
+                storage.selectAccountForCloudBackup()
+            }
+
+            assertTrue(error is AuthorizationRequiredException)
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(1, authorization.selectionRequests)
+            assertTrue(authorization.accessRequests.isEmpty())
+        }
+
+    @Test
+    fun unresolvedDriveAccountSelectionPreservesExistingBinding() =
+        runBlocking {
+            TestDriveServer().use { server ->
+                server.enqueue(HttpURLConnection.HTTP_OK, "{}")
+
+                val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+                val store = TestDriveAccountBindingStore(original)
+                val authorization = RecordingDriveAuthorization().apply {
+                    selectedAccount = null
+                }
+                val storage = AndroidCloudStorageAccess(
+                    driveAuthorization = authorization,
+                    accountBindingStore = store,
+                    driveApiEndpoints = DriveApiEndpoints(
+                        aboutEndpoint = "${server.baseUrl}/about",
+                        filesEndpoint = "${server.baseUrl}/files",
+                        uploadEndpoint = "${server.baseUrl}/upload",
+                    ),
+                    drivePathNamesProvider = { testDrivePathNames },
+                )
+
+                val error = captureError {
+                    storage.selectAccountForCloudBackup()
+                }
+
+                assertTrue(error is DriveAccountBindingException.MissingIdentity)
+                assertEquals(original, store.selectedIdentity())
+                assertEquals(listOf("selected-token"), authorization.clearedTokens)
+                assertEquals(listOf("/about"), server.requests().map { it.path.substringBefore("?") })
+            }
+        }
 
     @Test
     fun driveAccountBindingRejectsMissingIdentityWhenNoAccountIsSelected() {
@@ -1065,6 +1138,27 @@ class AndroidCloudStorageAccessTest {
         }
 
     @Test
+    fun explicitDriveAccountSelectionInvalidatesCachedBoundToken() =
+        runBlocking {
+            val delegate = RecordingDriveAuthorization()
+            val authorization = CachingDriveAuthorization(
+                delegate = delegate,
+                elapsedRealtime = { 0 },
+                cacheWindowMs = 1_000,
+            )
+
+            assertEquals("token-1", authorization.accessToken(interactive = false).token)
+
+            delegate.selectedToken = "selected-token"
+            assertEquals("selected-token", authorization.selectAccount().token)
+
+            delegate.token = "token-2"
+            assertEquals("token-2", authorization.accessToken(interactive = false).token)
+            assertEquals(listOf(false, false), delegate.accessRequests)
+            assertEquals(1, delegate.selectionRequests)
+        }
+
+    @Test
     fun clearingDriveAccountBindingInvalidatesCachedToken() =
         runBlocking {
             val first = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
@@ -1149,6 +1243,25 @@ class AndroidCloudStorageAccessTest {
         assertTrue(error is CloudStorageException.AuthorizationRequired)
         assertEquals(
             "google drive authorization timed out",
+            (error as CloudStorageException.AuthorizationRequired).v1,
+        )
+    }
+
+    @Test
+    fun missingBoundGoogleCredentialSuggestsAccountSwitch() {
+        val apiError =
+            ApiException(
+                Status(
+                    CommonStatusCodes.CANCELED,
+                    "[28433] Cannot find a matching credential.",
+                ),
+            )
+
+        val error = mapDriveListError(apiError)
+
+        assertTrue(error is CloudStorageException.AuthorizationRequired)
+        assertEquals(
+            "the selected Google account is no longer available; switch Google accounts to continue",
             (error as CloudStorageException.AuthorizationRequired).v1,
         )
     }
@@ -1465,12 +1578,23 @@ class AndroidCloudStorageAccessTest {
     private class RecordingDriveAuthorization : DriveAuthorization {
         var token = "token-1"
         var account: DriveAccountIdentity? = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        var selectedToken = "selected-token"
+        var selectedAccount: DriveAccountIdentity? = account
+        var selectionError: Throwable? = null
         val accessRequests = mutableListOf<Boolean>()
+        var selectionRequests = 0
         val clearedTokens = mutableListOf<String>()
 
         override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
             accessRequests.add(interactive)
             return DriveAccessToken(token = token, account = account)
+        }
+
+        override suspend fun selectAccount(): DriveAccessToken {
+            selectionRequests += 1
+            selectionError?.let { throw it }
+
+            return DriveAccessToken(token = selectedToken, account = selectedAccount)
         }
 
         override suspend fun clearToken(token: String) {

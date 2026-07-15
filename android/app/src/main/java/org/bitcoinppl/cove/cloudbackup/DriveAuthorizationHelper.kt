@@ -231,6 +231,8 @@ internal fun clearCloudBackupDriveAccountBinding(context: Context) {
 internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): DriveAccessToken
 
+    suspend fun selectAccount(): DriveAccessToken = accessToken(interactive = true)
+
     suspend fun updateCachedToken(accessToken: DriveAccessToken) = Unit
 
     /**
@@ -289,6 +291,12 @@ internal class CachingDriveAuthorization(
         }
     }
 
+    override suspend fun selectAccount(): DriveAccessToken =
+        tokenMutex.withLock {
+            cachedAccessToken = null
+            delegate.selectAccount()
+        }
+
     override suspend fun updateCachedToken(accessToken: DriveAccessToken) {
         tokenMutex.withLock {
             val cached = cachedAccessToken ?: return@withLock
@@ -326,14 +334,35 @@ internal class DriveAuthorizationHelper(
     private val client by lazy { Identity.getAuthorizationClient(appContext) }
     private val requestedScopes = listOf(Scope(DRIVE_APP_DATA_SCOPE))
 
-    override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
+    override suspend fun accessToken(interactive: Boolean): DriveAccessToken =
+        authorize(
+            account = selectedAccount()?.androidAccount(),
+            prompt = AuthorizationRequest.Prompt.NOT_SET,
+            interactive = interactive,
+        )
+
+    // explicit switching must omit the saved account so a stale credential cannot suppress the chooser
+    override suspend fun selectAccount(): DriveAccessToken =
+        authorize(
+            account = null,
+            prompt = AuthorizationRequest.Prompt.SELECT_ACCOUNT,
+            interactive = true,
+        )
+
+    private suspend fun authorize(
+        account: Account?,
+        prompt: Int,
+        interactive: Boolean,
+    ): DriveAccessToken {
         val requestBuilder =
             AuthorizationRequest
                 .builder()
                 .setRequestedScopes(requestedScopes)
 
-        val selectedIdentity = selectedAccount()
-        selectedIdentity?.androidAccount()?.let(requestBuilder::setAccount)
+        account?.let(requestBuilder::setAccount)
+        if (prompt != AuthorizationRequest.Prompt.NOT_SET) {
+            requestBuilder.setPrompt(prompt)
+        }
 
         val authorizationResult = client
             .authorize(requestBuilder.build())

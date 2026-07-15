@@ -32,6 +32,7 @@ class CoveApplication : Application() {
     private var connectivity: Connectivity? = null
     private var passkeyAccess: PasskeyAccess? = null
     private var cloudStorage: CloudStorage? = null
+    private var cloudStorageAccess: AndroidCloudStorageAccess? = null
     private var connectivityMonitor: ConnectivityMonitor? = null
     private var bootstrapCompleted = false
 
@@ -57,7 +58,9 @@ class CoveApplication : Application() {
             connectivityMonitor = ConnectivityMonitor(this)
             connectivity = Connectivity(connectivityMonitor!!)
             passkeyAccess = PasskeyAccess(AndroidPasskeyProvider(this))
-            cloudStorage = CloudStorage(AndroidCloudStorageAccess(this))
+            val androidCloudStorageAccess = AndroidCloudStorageAccess(this)
+            cloudStorageAccess = androidCloudStorageAccess
+            cloudStorage = CloudStorage(androidCloudStorageAccess)
             CloudBackupManager.setOnCloudBackupDisabled {
                 clearCloudBackupDriveAccountBinding(this)
             }
@@ -68,6 +71,11 @@ class CoveApplication : Application() {
         }
 
         // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
+    }
+
+    internal suspend fun selectCloudBackupDriveAccount() {
+        checkNotNull(cloudStorageAccess) { "cloud storage access is not initialized" }
+            .selectAccountForCloudBackup()
     }
 
     /// Called from MainActivity after bootstrap completes on the main thread
@@ -124,6 +132,7 @@ class CoveApplication : Application() {
         try {
             cloudStorage?.close()
             cloudStorage = null
+            cloudStorageAccess = null
             Log.d(TAG, "CloudStorage FFI object closed")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing CloudStorage FFI object", e)

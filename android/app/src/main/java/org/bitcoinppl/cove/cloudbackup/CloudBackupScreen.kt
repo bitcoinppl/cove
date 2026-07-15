@@ -30,10 +30,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.CoveApplication
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
@@ -51,14 +56,24 @@ fun CloudBackupScreen(
 ) {
     val manager = remember { CloudBackupManager.getInstance() }
     val coordinator = LocalCloudBackupPresentationCoordinator.current
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     var showRecreateConfirmation by remember { mutableStateOf(false) }
     var showReinitializeConfirmation by remember { mutableStateOf(false) }
+    var showAccountSwitchConfirmation by remember { mutableStateOf(false) }
+    var isSwitchingAccount by remember { mutableStateOf(false) }
+    var accountSwitchError by remember { mutableStateOf<String?>(null) }
     var wasLifecycleDisabled by remember(manager) { mutableStateOf(manager.isLifecycleDisabled) }
 
     val isLifecycleDisabled = manager.isLifecycleDisabled
     val isReturningToSettingsAfterDisable = !wasLifecycleDisabled && isLifecycleDisabled
-    val detailDialogBlocker = showRecreateConfirmation || showReinitializeConfirmation
+    val detailDialogBlocker =
+        showRecreateConfirmation ||
+            showReinitializeConfirmation ||
+            showAccountSwitchConfirmation ||
+            isSwitchingAccount ||
+            accountSwitchError != null
 
     DisposableEffect(coordinator, detailDialogBlocker) {
         coordinator?.setBlocker(
@@ -95,6 +110,7 @@ fun CloudBackupScreen(
             onBack = { app.popRoute() },
             onRecreate = { showRecreateConfirmation = true },
             onReinitialize = { showReinitializeConfirmation = true },
+            onSwitchAccount = { showAccountSwitchConfirmation = true },
         )
     }
 
@@ -143,6 +159,62 @@ fun CloudBackupScreen(
             },
         )
     }
+
+    if (showAccountSwitchConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showAccountSwitchConfirmation = false },
+            title = { Text("Switch Google Account?") },
+            text = {
+                Text(
+                    "Choose a different Google account, then Cove will reinitialize Cloud Backup in that account. This replaces the current Cove backup in the selected account. Backups in the previously selected account will not be deleted.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showAccountSwitchConfirmation = false
+                        isSwitchingAccount = true
+                        coroutineScope.launch {
+                            try {
+                                (context.applicationContext as CoveApplication)
+                                    .selectCloudBackupDriveAccount()
+                                manager.dispatch(CloudBackupManagerAction.ReinitializeBackup)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Throwable) {
+                                accountSwitchError = driveAccountSelectionErrorMessage(error)
+                            } finally {
+                                isSwitchingAccount = false
+                            }
+                        }
+                    },
+                ) { Text("Choose Account") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccountSwitchConfirmation = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (isSwitchingAccount) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Choosing Google Account") },
+            text = { Text("Waiting for Google Drive account selection") },
+            confirmButton = {},
+        )
+    }
+
+    accountSwitchError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { accountSwitchError = null },
+            title = { Text("Google Account Wasn't Switched") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { accountSwitchError = null }) { Text("OK") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -152,11 +224,13 @@ internal fun CloudBackupScreenFrame(
     onBack: () -> Unit,
     onRecreate: () -> Unit,
     onReinitialize: () -> Unit,
+    onSwitchAccount: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = cloudBackupVisualColors()
     var isMenuOpen by remember { mutableStateOf(false) }
     val isConfigured = manager.isConfigured
+    val canSwitchAccount = isConfigured || manager.isCloudBackupEnabled
     val lifecycle = manager.lifecycle
 
     if (shouldShowCloudBackupEnableOnboarding(manager, lifecycle)) {
@@ -201,6 +275,15 @@ internal fun CloudBackupScreenFrame(
                         expanded = isMenuOpen,
                         onDismissRequest = { isMenuOpen = false },
                     ) {
+                        if (canSwitchAccount) {
+                            DropdownMenuItem(
+                                text = { Text("Switch Google Account") },
+                                onClick = {
+                                    isMenuOpen = false
+                                    onSwitchAccount()
+                                },
+                            )
+                        }
                         if (isConfigured) {
                             DropdownMenuItem(
                                 text = { Text("Recreate Backup Index") },
