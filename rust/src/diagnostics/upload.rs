@@ -13,8 +13,10 @@ use super::DiagnosticsUploadReport;
 const PRODUCTION_UPLOAD_URL: &str = "https://diagnostics.covebitcoinwallet.com/reports";
 // this identifies public mobile clients and must not be trusted as an authorization credential
 const PUBLIC_APP_TOKEN: &str = "v1.cove-mobile-2026-07";
-const PRODUCTION_RECIPIENT: &str = "age10mdkqr5jsuy0y98ezkxe9pyd3n42f7eusjx3fe5gmf38ssh8xyws4pe5lq";
-const ENCRYPTION_KEY_ID: &str = "cove-diagnostics-2026-07";
+const PRODUCTION_ENCRYPTION_KEY: DiagnosticsEncryptionKey = DiagnosticsEncryptionKey {
+    id: "cove-diagnostics-2026-07",
+    recipient: "age10mdkqr5jsuy0y98ezkxe9pyd3n42f7eusjx3fe5gmf38ssh8xyws4pe5lq",
+};
 const AGE_CONTENT_TYPE: &str = "application/age";
 const ENCRYPTION_KEY_ID_HEADER: HeaderName = HeaderName::from_static("x-cove-diagnostics-key-id");
 const MAX_REPORT_JSON_BYTES: usize = 32 * 1024 * 1024;
@@ -24,6 +26,12 @@ const MAX_STATUS_BODY_BYTES: usize = 2 * 1024;
 const MAX_UPLOAD_ATTEMPTS: usize = 2;
 const UPLOAD_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
 const UPLOAD_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+#[derive(Clone, Copy)]
+struct DiagnosticsEncryptionKey {
+    id: &'static str,
+    recipient: &'static str,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum UploadError {
@@ -140,10 +148,9 @@ struct UploadResponse {
     id: String,
 }
 
-pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<String, UploadError> {
-    let report = report.clone();
+pub(crate) async fn submit_report(report: DiagnosticsUploadReport) -> Result<String, UploadError> {
     let body = cove_tokio::unblock::run_blocking(move || {
-        let recipient = production_recipient()?;
+        let recipient = production_recipient(PRODUCTION_ENCRYPTION_KEY)?;
 
         encrypted_gzipped_json(&report, &recipient)
     })
@@ -151,7 +158,7 @@ pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<St
     let client = cove_http::new_client_without_redirects().map_err(UploadError::Client)?;
 
     for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
-        match submit_report_once(&client, &body, ENCRYPTION_KEY_ID).await {
+        match submit_report_once(&client, &body, PRODUCTION_ENCRYPTION_KEY).await {
             Ok(report_id) => return Ok(report_id),
             Err(error) if attempt < MAX_UPLOAD_ATTEMPTS && upload_error_is_retryable(&error) => {
                 tracing::warn!(
@@ -170,14 +177,14 @@ pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<St
 async fn submit_report_once(
     client: &reqwest::Client,
     body: &[u8],
-    key_id: &str,
+    encryption_key: DiagnosticsEncryptionKey,
 ) -> Result<String, UploadError> {
     let mut response = client
         .post(upload_url())
         .timeout(UPLOAD_ATTEMPT_TIMEOUT)
         .bearer_auth(PUBLIC_APP_TOKEN)
         .header(CONTENT_TYPE, AGE_CONTENT_TYPE)
-        .header(ENCRYPTION_KEY_ID_HEADER, key_id)
+        .header(ENCRYPTION_KEY_ID_HEADER, encryption_key.id)
         .body(body.to_vec())
         .send()
         .await
@@ -226,8 +233,10 @@ fn encrypted_gzipped_json(
     age::encrypt(recipient, &gzipped).map_err(UploadError::Encrypt)
 }
 
-fn production_recipient() -> Result<x25519::Recipient, UploadError> {
-    x25519::Recipient::from_str(PRODUCTION_RECIPIENT)
+fn production_recipient(
+    encryption_key: DiagnosticsEncryptionKey,
+) -> Result<x25519::Recipient, UploadError> {
+    x25519::Recipient::from_str(encryption_key.recipient)
         .map_err(|error| UploadError::InvalidRecipient(error.to_string()))
 }
 
@@ -466,7 +475,10 @@ mod tests {
 
     #[test]
     fn production_recipient_is_valid() {
-        assert_eq!(production_recipient().unwrap().to_string(), PRODUCTION_RECIPIENT);
+        assert_eq!(
+            production_recipient(PRODUCTION_ENCRYPTION_KEY).unwrap().to_string(),
+            PRODUCTION_ENCRYPTION_KEY.recipient
+        );
     }
 
     #[test]
@@ -577,7 +589,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(&report()).await.unwrap_err();
+        let error = submit_report(report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::Status { status, .. } if status.is_server_error()));
         assert!(error.user_message().contains("may have been received"));
@@ -591,7 +603,7 @@ mod tests {
             redirect_server("http://127.0.0.1:0/reports").await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(&report()).await.unwrap_err();
+        let error = submit_report(report()).await.unwrap_err();
 
         server.abort();
 
@@ -612,7 +624,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(&report()).await.unwrap_err();
+        let error = submit_report(report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::DecodeResponse(_)));
         assert!(error.user_message().contains("may have been received"));
@@ -629,7 +641,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(&report()).await.unwrap_err();
+        let error = submit_report(report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::InvalidResponse(_)));
         assert!(error.user_message().contains("may have been received"));
@@ -645,7 +657,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(&report()).await.unwrap_err();
+        let error = submit_report(report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::Status { status: StatusCode::PAYLOAD_TOO_LARGE, .. }));
         assert!(error.user_message().contains("too large to submit"));
@@ -662,7 +674,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(&report()).await.unwrap_err();
+        let error = submit_report(report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::ResponseTooLarge { .. }));
         assert!(error.user_message().contains("may have been received"));
