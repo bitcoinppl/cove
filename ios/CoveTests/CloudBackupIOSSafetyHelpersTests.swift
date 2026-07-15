@@ -236,67 +236,98 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         )
     }
 
-    func testICloudInventoryAlwaysUnionsLocalAndAuthoritativeNames() throws {
-        var queriedAuthoritativeInventory = false
+    @MainActor
+    func testMetadataIndexStartsOneQueryForConcurrentConsumers() async throws {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let first = Task { try await index.currentOrInitialRecords(timeout: 1) }
+        let second = Task { try await index.currentOrInitialRecords(timeout: 1) }
 
-        let names = try ICloudInventoryUnion.load {
-            ["bbbb", "aaaa"]
-        } authoritativeInventory: {
-            queriedAuthoritativeInventory = true
-            return ["aaaa", "cccc"]
-        }
+        await Task.yield()
+        XCTAssertEqual(source.startCount, 1)
 
-        XCTAssertTrue(queriedAuthoritativeInventory)
-        XCTAssertEqual(names, ["aaaa", "bbbb", "cccc"])
+        source.send(.finishedGathering([record]))
+
+        let firstRecords = try await first.value
+        let secondRecords = try await second.value
+
+        XCTAssertEqual(firstRecords, [record])
+        XCTAssertEqual(secondRecords, [record])
+        XCTAssertEqual(source.startCount, 1)
     }
 
-    func testICloudInventoryKeepsLocalNamesAfterEmptyAuthoritativeResult() throws {
-        var queriedAuthoritativeInventory = false
-
-        let names = try ICloudInventoryUnion.load {
-            ["aaaa"]
-        } authoritativeInventory: {
-            queriedAuthoritativeInventory = true
-            return []
+    @MainActor
+    func testMetadataIndexWaitsForAnItemPublishedByLaterUpdate() async throws {
+        let source = MetadataQuerySourceSpy()
+        let index = ICloudMetadataIndex(source: source)
+        let record = metadataRecord(name: "wallet.json", parentPath: "/cloud/namespace")
+        let request = Task {
+            try await index.waitForItem(
+                named: record.name,
+                parentPath: "/cloud/namespace",
+                timeout: 1
+            )
         }
 
-        XCTAssertTrue(queriedAuthoritativeInventory)
-        XCTAssertEqual(names, ["aaaa"])
+        await Task.yield()
+        source.send(.finishedGathering([]))
+        source.send(.updated([record]))
+
+        let matchedRecord = try await request.value
+
+        XCTAssertEqual(matchedRecord, record)
     }
 
-    func testICloudInventoryDoesNotPromoteLocalNamesWhenAuthoritativeListingFails() {
+    @MainActor
+    func testMetadataIndexRetriesAfterQueryStartFailure() async throws {
+        let source = MetadataQuerySourceSpy(startResults: [false, true])
+        let index = ICloudMetadataIndex(source: source)
+
+        do {
+            _ = try await index.currentOrInitialRecords(timeout: 1)
+            XCTFail("expected first query startup to fail")
+        } catch let error as ICloudMetadataIndexError {
+            XCTAssertEqual(error, .startFailed)
+        }
+
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let retry = Task { try await index.currentOrInitialRecords(timeout: 1) }
+
+        await Task.yield()
+        XCTAssertEqual(source.startCount, 2)
+        source.send(.finishedGathering([record]))
+
+        let records = try await retry.value
+
+        XCTAssertEqual(records, [record])
+    }
+
+    func testEventuallyConsistentListingMergesLocalAndMetadataViews() throws {
+        let names = try ICloudEventuallyConsistentListing.merged(
+            local: ["old-1password"],
+            metadata: .success(["new-apple-passwords"])
+        )
+
+        XCTAssertEqual(names, ["new-apple-passwords", "old-1password"])
+    }
+
+    func testEventuallyConsistentListingDeduplicatesAndSortsViews() throws {
+        let names = try ICloudEventuallyConsistentListing.merged(
+            local: ["beta", "alpha", "beta"],
+            metadata: .success(["gamma", "alpha"])
+        )
+
+        XCTAssertEqual(names, ["alpha", "beta", "gamma"])
+    }
+
+    func testEventuallyConsistentListingRequiresMetadataForCompleteInventory() {
         XCTAssertThrowsError(
-            try ICloudInventoryUnion.load {
-                ["aaaa"]
-            } authoritativeInventory: {
-                throw CloudStorageError.Offline("metadata query timed out")
-            }
+            try ICloudEventuallyConsistentListing.merged(
+                local: ["local-only"],
+                metadata: .failure(CloudStorageError.Offline("metadata unavailable"))
+            )
         )
-    }
-
-    func testICloudInventoryNormalizesAndDeduplicatesEvictedStubs() {
-        XCTAssertEqual(
-            ICloudInventoryUnion.normalizedNames([".aaaa.icloud", "aaaa", "bbbb"]),
-            ["aaaa", "bbbb"]
-        )
-    }
-
-    func testMetadataSettleSchedulerCoalescesUpdatesUntilTheLatestWindow() {
-        var enqueuedWork: [DispatchWorkItem] = []
-        var notifications: [String] = []
-        let scheduler = MetadataSettleScheduler { _, workItem in
-            enqueuedWork.append(workItem)
-        }
-
-        scheduler.schedule(after: 0.5) {
-            notifications.append("stale")
-        }
-        scheduler.schedule(after: 0.5) {
-            notifications.append("latest")
-        }
-        enqueuedWork.forEach { $0.perform() }
-
-        XCTAssertEqual(notifications, ["latest"])
     }
 
     func testCloudBackupDetailStateRetainsRowsButOnlyCompleteEnablesActions() {
@@ -499,6 +530,36 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
                 return
             }
         }
+    }
+
+    private func metadataRecord(name: String, parentPath: String) -> ICloudMetadataRecord {
+        let url = URL(fileURLWithPath: parentPath).appendingPathComponent(name)
+        return ICloudMetadataRecord(name: name, url: url, resolvedPath: url.path)
+    }
+}
+
+@MainActor
+private final class MetadataQuerySourceSpy: ICloudMetadataQuerySource {
+    private let startResults: [Bool]
+    private var onEvent: (@MainActor (ICloudMetadataQueryEvent) -> Void)?
+    private(set) var startCount = 0
+
+    init(startResults: [Bool] = [true]) {
+        precondition(!startResults.isEmpty)
+        self.startResults = startResults
+    }
+
+    func start(onEvent: @escaping @MainActor (ICloudMetadataQueryEvent) -> Void) -> Bool {
+        let result = startResults[min(startCount, startResults.count - 1)]
+        startCount += 1
+        guard result else { return false }
+
+        self.onEvent = onEvent
+        return true
+    }
+
+    func send(_ event: ICloudMetadataQueryEvent) {
+        onEvent?(event)
     }
 }
 
