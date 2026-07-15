@@ -159,6 +159,7 @@ struct MockCloudState {
     wallet_files: HashMap<String, Vec<String>>,
     master_key_backups: HashMap<String, Vec<u8>>,
     master_key_download_errors: HashMap<String, CloudStorageError>,
+    master_key_download_attempts: usize,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
@@ -178,6 +179,7 @@ struct MockCloudState {
     wallet_file_snapshots: HashMap<String, CloudStorageInventorySnapshot>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallets_pending_confirmation: bool,
+    uploaded_master_key_pending_confirmation: bool,
     uploaded_wallet_backups: Vec<(String, String)>,
     wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
@@ -412,6 +414,10 @@ impl MockCloudStorage {
         self.state.lock().uploaded_wallets_pending_confirmation = enabled;
     }
 
+    pub(crate) fn set_uploaded_master_key_pending_confirmation(&self, enabled: bool) {
+        self.state.lock().uploaded_master_key_pending_confirmation = enabled;
+    }
+
     pub(crate) fn uploaded_wallet_backup_count(&self) -> usize {
         self.state.lock().uploaded_wallet_backups.len()
     }
@@ -444,6 +450,10 @@ impl MockCloudStorage {
 
     pub(crate) fn wallet_backup_download_attempt_count(&self) -> usize {
         self.state.lock().wallet_backup_download_attempts
+    }
+
+    pub(crate) fn master_key_download_attempt_count(&self) -> usize {
+        self.state.lock().master_key_download_attempts
     }
 
     pub(crate) fn wallet_backup_download_attempt_count_for_record(
@@ -568,12 +578,13 @@ impl CloudStorageAccess for MockCloudStorage {
         _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        if let Some(error) = self.state.lock().master_key_download_errors.get(&namespace).cloned() {
+        let mut state = self.state.lock();
+        state.master_key_download_attempts += 1;
+        if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
             return Err(error);
         }
 
-        self.state
-            .lock()
+        state
             .master_key_backups
             .get(&namespace)
             .cloned()
@@ -781,6 +792,12 @@ impl CloudStorageAccess for MockCloudStorage {
     ) -> Result<bool, CloudStorageError> {
         let state = self.state.lock();
         if record_id == MASTER_KEY_RECORD_ID {
+            if state.uploaded_master_key_pending_confirmation
+                && state.master_key_backups.contains_key(&namespace)
+            {
+                return Ok(false);
+            }
+
             return Ok(state.master_key_backups.contains_key(&namespace));
         }
 
