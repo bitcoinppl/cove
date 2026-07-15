@@ -437,6 +437,11 @@ private fun driveQueryParameter(value: String): String =
 
 private object UnboundDriveAccountTokenCacheKey
 
+internal enum class DriveAccountSelectionOutcome {
+    Changed,
+    Unchanged,
+}
+
 internal fun driveAccountTokenCacheKey(store: DriveAccountBindingStore): Any =
     store.selectedIdentity() ?: UnboundDriveAccountTokenCacheKey
 
@@ -465,7 +470,8 @@ class AndroidCloudStorageAccess internal constructor(
     private val childFolderMutexes = ConcurrentHashMap<String, Mutex>()
     private val drivePathNames: DrivePathNames by lazy(drivePathNamesProvider)
 
-    internal suspend fun selectAccountForCloudBackup(transitionId: ULong): DriveAccountIdentity {
+    internal suspend fun selectAccountForCloudBackup(transitionId: ULong): DriveAccountSelectionOutcome {
+        val previouslySelectedIdentity = accountBindingStore.selectedIdentity()
         val unresolvedAccess = driveAuthorization.selectAccount()
         val access =
             try {
@@ -487,6 +493,16 @@ class AndroidCloudStorageAccess internal constructor(
             throw DriveAccountBindingException.MissingIdentity()
         }
 
+        if (previouslySelectedIdentity?.matches(identity) == true) {
+            val enriched = previouslySelectedIdentity.verifiedMerge(identity)
+            if (enriched != previouslySelectedIdentity) {
+                accountBindingStore.bindIdentity(enriched)
+            }
+
+            logDriveDebug("selected google drive account is already bound to Cloud Backup")
+            return DriveAccountSelectionOutcome.Unchanged
+        }
+
         if (!accountBindingStore.stageIdentity(transitionId, identity)) {
             if (!accountBindingStore.rollbackStagedIdentity(transitionId)) {
                 logDriveWarning("failed to clear unstaged drive account")
@@ -502,7 +518,7 @@ class AndroidCloudStorageAccess internal constructor(
 
         logDriveDebug("staged google drive account for Cloud Backup")
 
-        return identity
+        return DriveAccountSelectionOutcome.Changed
     }
 
     internal fun pendingAccountSwitchTransitionId(): ULong? {

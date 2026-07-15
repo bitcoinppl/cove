@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.DriveAccountSelectionOutcome
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.device.Device
@@ -78,10 +79,11 @@ class CoveApplication : Application() {
         // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
     }
 
-    internal suspend fun selectCloudBackupDriveAccount(transitionId: ULong) {
+    internal suspend fun selectCloudBackupDriveAccount(
+        transitionId: ULong,
+    ): DriveAccountSelectionOutcome =
         checkNotNull(cloudStorageAccess) { "cloud storage access is not initialized" }
             .selectAccountForCloudBackup(transitionId)
-    }
 
     /// Called from MainActivity after bootstrap completes on the main thread
     fun onBootstrapComplete() {

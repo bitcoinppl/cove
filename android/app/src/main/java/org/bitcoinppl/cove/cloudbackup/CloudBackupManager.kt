@@ -297,14 +297,24 @@ class CloudBackupManager private constructor(
         }
     }
 
-    suspend fun switchDriveAccount(selectAccount: suspend (ULong) -> Unit) {
+    internal suspend fun switchDriveAccount(
+        selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
+    ) {
         check(driveAccountSwitchCallbacks?.pendingTransitionId?.invoke() == null) {
             "a Google Drive account switch is already being recovered"
         }
         val transitionId = withRustSuspend { beginDriveAccountSwitch() }
 
         try {
-            selectAccount(transitionId)
+            val selection = selectAccount(transitionId)
+            if (selection == DriveAccountSelectionOutcome.Unchanged) {
+                val rolledBack = withContext(NonCancellable) {
+                    rollbackDriveAccountSwitch(transitionId)
+                }
+                check(rolledBack) { "unchanged Google Drive account switch could not be released" }
+                return
+            }
+
             withRustSuspend { continueDriveAccountSwitch(transitionId) }
         } catch (error: CancellationException) {
             withContext(NonCancellable) {
@@ -319,22 +329,23 @@ class CloudBackupManager private constructor(
         }
     }
 
-    private suspend fun rollbackDriveAccountSwitch(transitionId: ULong) {
+    private suspend fun rollbackDriveAccountSwitch(transitionId: ULong): Boolean {
         val cancelled = runCatching { withRustSuspend { cancelDriveAccountSwitch(transitionId) } }
             .onFailure { error -> Log.w(TAG, "failed to cancel drive account switch", error) }
             .isSuccess
         if (!cancelled) {
-            return
+            return false
         }
 
         val rolledBack = driveAccountSwitchCallbacks?.rollback?.invoke(transitionId) == true
         if (!rolledBack) {
             Log.e(TAG, "failed to roll back staged drive account")
-            return
+            return false
         }
 
-        runCatching { withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) } }
+        return runCatching { withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) } }
             .onFailure { error -> Log.w(TAG, "failed to confirm drive account rollback", error) }
+            .isSuccess
     }
 
     fun syncPersistedState() {

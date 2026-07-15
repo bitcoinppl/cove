@@ -947,14 +947,38 @@ class AndroidCloudStorageAccessTest {
             }
             val storage = AndroidCloudStorageAccess(authorization, store)
 
-            val selected = storage.selectAccountForCloudBackup(1UL)
+            val outcome = storage.selectAccountForCloudBackup(1UL)
 
-            assertEquals(replacement, selected)
+            assertEquals(DriveAccountSelectionOutcome.Changed, outcome)
             assertEquals(replacement, store.selectedIdentity())
             assertEquals(original, store.committedIdentity())
             assertEquals(1UL, store.pendingTransitionId())
             assertTrue(storage.commitAccountSwitch(1UL))
             assertEquals(replacement, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+            assertEquals(1, authorization.selectionRequests)
+            assertTrue(authorization.accessRequests.isEmpty())
+        }
+
+    @Test
+    fun selectingBoundDriveAccountDoesNotStageReinitialization() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val refreshed = DriveAccountIdentity(
+                googleAccountId = "account-1",
+                drivePermissionId = "permission-1",
+                email = "person@example.com",
+            )
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply {
+                selectedAccount = refreshed
+            }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val outcome = storage.selectAccountForCloudBackup(1UL)
+
+            assertEquals(DriveAccountSelectionOutcome.Unchanged, outcome)
+            assertEquals(refreshed, store.committedIdentity())
             assertEquals(null, store.pendingTransitionId())
             assertEquals(1, authorization.selectionRequests)
             assertTrue(authorization.accessRequests.isEmpty())
