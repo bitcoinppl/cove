@@ -252,6 +252,28 @@ pub(crate) enum CloudBackupDisableOutcome {
 pub enum CloudBackupReconcileMessage {
     Lifecycle(Box<CloudBackupLifecycle>, CloudBackupSettingsRowStatus),
     EnableCompleted(CloudBackupEnableContext),
+    /// Android must atomically commit its staged Google Drive identity
+    DriveAccountSwitchCommitRequired(u64),
+    /// Android must atomically discard its staged Google Drive identity
+    DriveAccountSwitchRollbackRequired(u64),
+}
+
+/// Failure to coordinate an Android Google Drive account transition
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum CloudBackupDriveAccountSwitchError {
+    /// Another exclusive Cloud Backup operation owns the supervisor
+    #[error("another cloud backup operation is already in progress")]
+    Busy,
+    /// Cloud Backup has no configured state to move to another account
+    #[error("cloud backup is not configured")]
+    NotConfigured,
+    /// The supplied transition does not own the current operation
+    #[error("invalid Google Drive account switch transition")]
+    InvalidTransition,
+    /// Persistence or actor coordination failed
+    #[error("internal Google Drive account switch error: {0}")]
+    Internal(String),
 }
 
 /// Restore summary shown after cloud backup onboarding restore completes
@@ -1303,14 +1325,15 @@ impl RustCloudBackupManager {
             return true;
         }
 
-        // keep this DB read so restarts and direct disable recovery preserve the write fence
-        Self::load_persisted_state().is_disabling()
+        // keep this DB read so restarts preserve destructive-operation write fences
+        let persisted = Self::load_persisted_state();
+        persisted.is_disabling() || persisted.drive_account_switch().is_some()
     }
 
     pub(crate) fn ensure_cloud_backup_writes_allowed(&self) -> Result<(), CloudBackupError> {
         if self.cloud_backup_writes_blocked() {
             return Err(CloudBackupError::Deferred(
-                "cloud backup writes are paused while disabling cloud backup".into(),
+                "cloud backup writes are paused during an exclusive operation".into(),
             ));
         }
 
@@ -2692,6 +2715,11 @@ impl RustCloudBackupManager {
                 operation_id: disabling.disable_generation,
             }));
         }
+        if let Some(account_switch) = db_state.drive_account_switch() {
+            send!(self.cloud_writes.block(CloudBackupWriteBlocker::DriveAccountSwitch {
+                transition_id: account_switch.transition_id,
+            }));
+        }
         if !self.has_in_flight_operation() {
             self.reconcile_runtime_status(Self::runtime_status_for(&db_state));
         }
@@ -2712,6 +2740,65 @@ impl RustCloudBackupManager {
         send!(self.supervisor.wake_pending_upload_verifier());
         self.start_pending_upload_verification_loop();
         self.refresh_sync_health();
+    }
+
+    /// Claim the exclusive operation and return after all prior cloud writes drain
+    pub async fn begin_drive_account_switch(
+        &self,
+    ) -> Result<u64, CloudBackupDriveAccountSwitchError> {
+        call!(self.supervisor.begin_drive_account_switch())
+            .await
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+    }
+
+    /// Continue the claimed transition after Android durably stages the selected account
+    pub async fn continue_drive_account_switch(
+        &self,
+        transition_id: u64,
+    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+        call!(self.supervisor.continue_drive_account_switch(transition_id))
+            .await
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+    }
+
+    /// Move an unstarted account transition to its rollback phase
+    pub async fn cancel_drive_account_switch(
+        &self,
+        transition_id: u64,
+    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+        call!(self.supervisor.cancel_drive_account_switch(transition_id))
+            .await
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+    }
+
+    /// Release the transition after Android commits its staged account
+    pub async fn confirm_drive_account_switch_committed(
+        &self,
+        transition_id: u64,
+    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+        call!(self.supervisor.confirm_drive_account_switch_committed(transition_id))
+            .await
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+    }
+
+    /// Release the transition after Android discards its staged account
+    pub async fn confirm_drive_account_switch_rolled_back(
+        &self,
+        transition_id: u64,
+    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+        call!(self.supervisor.confirm_drive_account_switch_rolled_back(transition_id))
+            .await
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+    }
+
+    /// Reconcile persisted Rust and Android transition state after process startup
+    pub async fn reconcile_drive_account_switch(
+        &self,
+        pending_transition_id: Option<u64>,
+    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+        call!(self.supervisor.reconcile_drive_account_switch(pending_transition_id))
+            .await
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
     }
 
     /// Check if cloud backup is enabled, used as nav guard
@@ -3218,6 +3305,7 @@ mod tests {
             verification,
             sync: PersistedBackupSyncState { last_sync: None, wallet_count: None },
             pending_verification_completion: None,
+            drive_account_switch: None,
         })
     }
 

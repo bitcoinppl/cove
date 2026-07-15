@@ -25,8 +25,10 @@ use super::write::{
     CloudBackupWriteResultReceiver, CloudBackupWriteSupervisor,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedDisablingCloudBackup};
+use crate::database::cloud_backup::{
+    PersistedCloudBackupState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
+};
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
@@ -45,8 +47,8 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupDetailResult,
-    CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupEnableContext,
-    CloudBackupEnableOutcome, CloudBackupEnablePasskeyPreparation,
+    CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupDriveAccountSwitchError,
+    CloudBackupEnableContext, CloudBackupEnableOutcome, CloudBackupEnablePasskeyPreparation,
     CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
     CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation, CloudBackupError,
     CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
@@ -64,6 +66,7 @@ use crate::manager::cloud_backup_manager::{
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
+mod account_switch;
 mod cloud_only;
 mod disable;
 mod enable;

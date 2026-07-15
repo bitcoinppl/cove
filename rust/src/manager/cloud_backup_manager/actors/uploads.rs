@@ -500,6 +500,7 @@ mod tests {
             },
             sync: PersistedBackupSyncState { last_sync: None, wallet_count: None },
             pending_verification_completion: None,
+            drive_account_switch: None,
         };
         Database::global()
             .cloud_backup_state

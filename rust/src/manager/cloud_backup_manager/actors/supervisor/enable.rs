@@ -164,12 +164,21 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn start_reinitialize_backup_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::ReinitializeBackup)
         else {
             return;
         };
+
+        self.start_reinitialize_backup_operation_with_claim(manager, claim);
+    }
+
+    pub(crate) fn start_reinitialize_backup_operation_with_claim(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        let Some(addr) = self.addr() else { return };
 
         manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Started(
             RecoveryAction::ReinitializeBackup,
@@ -1094,16 +1103,24 @@ impl CloudBackupSupervisor {
             }
         }
 
+        if self.drive_account_switch_reinitialization_finished(manager, claim, false) {
+            return;
+        }
+
         self.active_operation = None;
         manager.project_exclusive_operation_finished(claim);
     }
 
-    fn finish_enable_operation(
+    pub(crate) fn finish_enable_operation(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
+            if self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
+                return;
+            }
+
             manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
             let runtime_status = RustCloudBackupManager::runtime_status_for(
                 &RustCloudBackupManager::load_persisted_state(),

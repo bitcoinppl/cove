@@ -109,6 +109,10 @@ impl CloudBackupExclusiveOperationClaim {
     pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
         self.operation
     }
+
+    pub(crate) fn generation(self) -> u64 {
+        self.generation
+    }
 }
 
 impl Default for CloudBackupReducerState {

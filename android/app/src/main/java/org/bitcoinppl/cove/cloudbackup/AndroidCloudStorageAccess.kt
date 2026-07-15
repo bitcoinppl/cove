@@ -465,7 +465,7 @@ class AndroidCloudStorageAccess internal constructor(
     private val childFolderMutexes = ConcurrentHashMap<String, Mutex>()
     private val drivePathNames: DrivePathNames by lazy(drivePathNamesProvider)
 
-    internal suspend fun selectAccountForCloudBackup(): DriveAccountIdentity {
+    internal suspend fun selectAccountForCloudBackup(transitionId: ULong): DriveAccountIdentity {
         val unresolvedAccess = driveAuthorization.selectAccount()
         val access =
             try {
@@ -487,11 +487,41 @@ class AndroidCloudStorageAccess internal constructor(
             throw DriveAccountBindingException.MissingIdentity()
         }
 
-        accountBindingStore.bindIdentity(identity)
-        logDriveDebug("selected google drive account for Cloud Backup")
+        if (!accountBindingStore.stageIdentity(transitionId, identity)) {
+            if (!accountBindingStore.rollbackStagedIdentity(transitionId)) {
+                logDriveWarning("failed to clear unstaged drive account")
+            }
+            runCatching {
+                driveAuthorization.clearToken(access.token)
+            }.onFailure { error ->
+                logDriveWarning("failed to clear unstaged drive token", error)
+            }
+
+            throw IllegalStateException("google drive account selection could not be saved")
+        }
+
+        logDriveDebug("staged google drive account for Cloud Backup")
 
         return identity
     }
+
+    internal fun pendingAccountSwitchTransitionId(): ULong? {
+        val transitionId = accountBindingStore.pendingTransitionId() ?: return null
+        if (accountBindingStore.isIdentityStaged(transitionId)) {
+            return transitionId
+        }
+
+        check(accountBindingStore.rollbackStagedIdentity(transitionId)) {
+            "incomplete google drive account selection could not be cleared"
+        }
+        return null
+    }
+
+    internal fun commitAccountSwitch(transitionId: ULong): Boolean =
+        accountBindingStore.commitStagedIdentity(transitionId)
+
+    internal fun rollbackAccountSwitch(transitionId: ULong): Boolean =
+        accountBindingStore.rollbackStagedIdentity(transitionId)
 
     private fun CloudAccessPolicy.allowsConsent(): Boolean =
         this == CloudAccessPolicy.CONSENT_ALLOWED

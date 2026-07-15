@@ -937,7 +937,7 @@ class AndroidCloudStorageAccessTest {
     }
 
     @Test
-    fun explicitDriveAccountSelectionReplacesStaleBinding() =
+    fun explicitDriveAccountSelectionStagesReplacementUntilCommit() =
         runBlocking {
             val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
             val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
@@ -947,10 +947,15 @@ class AndroidCloudStorageAccessTest {
             }
             val storage = AndroidCloudStorageAccess(authorization, store)
 
-            val selected = storage.selectAccountForCloudBackup()
+            val selected = storage.selectAccountForCloudBackup(1UL)
 
             assertEquals(replacement, selected)
             assertEquals(replacement, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(1UL, store.pendingTransitionId())
+            assertTrue(storage.commitAccountSwitch(1UL))
+            assertEquals(replacement, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
             assertEquals(1, authorization.selectionRequests)
             assertTrue(authorization.accessRequests.isEmpty())
         }
@@ -966,13 +971,90 @@ class AndroidCloudStorageAccessTest {
             val storage = AndroidCloudStorageAccess(authorization, store)
 
             val error = captureError {
-                storage.selectAccountForCloudBackup()
+                storage.selectAccountForCloudBackup(1UL)
             }
 
             assertTrue(error is AuthorizationRequiredException)
             assertEquals(original, store.selectedIdentity())
             assertEquals(1, authorization.selectionRequests)
             assertTrue(authorization.accessRequests.isEmpty())
+        }
+
+    @Test
+    fun rolledBackDriveAccountSelectionRestoresCommittedBinding() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply {
+                selectedAccount = replacement
+            }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            storage.selectAccountForCloudBackup(7UL)
+
+            assertTrue(storage.rollbackAccountSwitch(7UL))
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+        }
+
+    @Test
+    fun driveAccountIdentityEnrichmentUpdatesStagedIdentityWithoutCommittingIt() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val staged = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+        val enriched = DriveAccountIdentity(
+            googleAccountId = "account-2",
+            drivePermissionId = "permission-2",
+            email = "other@example.com",
+        )
+        val store = TestDriveAccountBindingStore(original)
+        assertTrue(store.stageIdentity(7UL, staged))
+
+        verifyDriveAccountBinding(store, enriched)
+
+        assertEquals(original, store.committedIdentity())
+        assertEquals(enriched, store.selectedIdentity())
+        assertEquals(7UL, store.pendingTransitionId())
+    }
+
+    @Test
+    fun incompletePendingDriveAccountSelectionIsRolledBackBeforeReconciliation() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+        val store = TestDriveAccountBindingStore(original)
+        assertTrue(store.stageIdentity(7UL, replacement))
+        store.stagedIdentityAvailable = false
+        val storage = AndroidCloudStorageAccess(RecordingDriveAuthorization(), store)
+
+        assertEquals(null, storage.pendingAccountSwitchTransitionId())
+        assertEquals(original, store.selectedIdentity())
+        assertEquals(null, store.pendingTransitionId())
+    }
+
+    @Test
+    fun failedDriveAccountStagingPreservesCommittedBindingAndClearsSelectedToken() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original).apply {
+                stageSucceeds = false
+                retainFailedStage = true
+            }
+            val authorization = RecordingDriveAuthorization().apply {
+                selectedAccount = replacement
+            }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val error = captureError {
+                storage.selectAccountForCloudBackup(7UL)
+            }
+
+            assertTrue(error is IllegalStateException)
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+            assertEquals(listOf("selected-token"), authorization.clearedTokens)
         }
 
     @Test
@@ -998,7 +1080,7 @@ class AndroidCloudStorageAccessTest {
                 )
 
                 val error = captureError {
-                    storage.selectAccountForCloudBackup()
+                    storage.selectAccountForCloudBackup(1UL)
                 }
 
                 assertTrue(error is DriveAccountBindingException.MissingIdentity)
@@ -1742,14 +1824,61 @@ class AndroidCloudStorageAccessTest {
     private class TestDriveAccountBindingStore(
         private var identity: DriveAccountIdentity? = null,
     ) : DriveAccountBindingStore {
-        override fun selectedIdentity(): DriveAccountIdentity? = identity
+        private var pending: Pair<ULong, DriveAccountIdentity>? = null
+        var stageSucceeds = true
+        var retainFailedStage = false
+        var stagedIdentityAvailable = true
+
+        override fun selectedIdentity(): DriveAccountIdentity? = pending?.second ?: identity
+
+        fun committedIdentity(): DriveAccountIdentity? = identity
 
         override fun bindIdentity(identity: DriveAccountIdentity) {
+            if (pending != null) {
+                pending = pending?.first?.let { it to identity }
+                return
+            }
+
             this.identity = identity
+        }
+
+        override fun pendingTransitionId(): ULong? = pending?.first
+
+        override fun isIdentityStaged(transitionId: ULong): Boolean =
+            stagedIdentityAvailable && pending?.let { it.first == transitionId } == true
+
+        override fun stageIdentity(
+            transitionId: ULong,
+            identity: DriveAccountIdentity,
+        ): Boolean {
+            if (!stageSucceeds) {
+                if (retainFailedStage) {
+                    pending = transitionId to identity
+                }
+
+                return false
+            }
+
+            pending = transitionId to identity
+            return true
+        }
+
+        override fun commitStagedIdentity(transitionId: ULong): Boolean {
+            val staged = pending?.takeIf { it.first == transitionId } ?: return false
+            identity = staged.second
+            pending = null
+            return true
+        }
+
+        override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
+            if (pending?.first != transitionId) return pending == null
+            pending = null
+            return true
         }
 
         override fun clearIdentity() {
             identity = null
+            pending = null
         }
     }
 }

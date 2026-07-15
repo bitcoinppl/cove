@@ -176,9 +176,8 @@ fun CloudBackupScreen(
                         isSwitchingAccount = true
                         coroutineScope.launch {
                             try {
-                                (context.applicationContext as CoveApplication)
-                                    .selectCloudBackupDriveAccount()
-                                manager.dispatch(CloudBackupManagerAction.ReinitializeBackup)
+                                val application = context.applicationContext as CoveApplication
+                                manager.switchDriveAccount(application::selectCloudBackupDriveAccount)
                             } catch (error: CancellationException) {
                                 throw error
                             } catch (error: Throwable) {

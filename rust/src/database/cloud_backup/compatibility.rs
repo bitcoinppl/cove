@@ -95,6 +95,7 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
                 wallet_count: state.wallet_count,
             },
             pending_verification_completion: state.pending_verification_completion,
+            drive_account_switch: None,
         })
     }
 }
@@ -423,7 +424,8 @@ mod tests {
         CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, PersistedBackupSyncState,
         PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBackupStatus,
         PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
-        PersistedPasskeyState, PersistedPendingVerificationUpload,
+        PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
+        PersistedPendingVerificationUpload,
     };
 
     fn configured_state(
@@ -437,6 +439,7 @@ mod tests {
             verification,
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
+            drive_account_switch: None,
         })
     }
 
@@ -484,6 +487,29 @@ mod tests {
         assert_eq!(encoded["backup"]["data"]["sync"]["wallet_count"], 2);
         assert!(encoded.get("status").is_none());
         assert!(encoded.get("last_sync").is_none());
+    }
+
+    #[test]
+    fn cloud_backup_state_round_trips_drive_account_switch_without_changing_record_version() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            Some(10),
+            Some(2),
+        );
+        state.set_drive_account_switch(PersistedDriveAccountSwitch {
+            transition_id: 7,
+            phase: PersistedDriveAccountSwitchPhase::Reinitializing,
+        });
+
+        let encoded = serde_json::to_value(&state).unwrap();
+        let decoded: PersistedCloudBackupState = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["version"], 2);
+        assert_eq!(decoded, state);
     }
 
     #[test]

@@ -175,6 +175,7 @@ impl PersistedCloudBackupState {
                 wallet_count: Some(wallet_count),
             },
             pending_verification_completion: self.pending_verification_completion().cloned(),
+            drive_account_switch: self.drive_account_switch().copied(),
         })
     }
 
@@ -191,7 +192,22 @@ impl PersistedCloudBackupState {
                 wallet_count: Some(wallet_count),
             },
             pending_verification_completion: None,
+            drive_account_switch: None,
         })
+    }
+
+    /// Marks Cloud Backup enabled without discarding an in-progress Drive account transition
+    pub(crate) fn mark_enabled_reset_verification_preserving_transition(
+        &self,
+        last_sync: u64,
+        wallet_count: u32,
+    ) -> Self {
+        let mut state = Self::mark_enabled_reset_verification(last_sync, wallet_count);
+        if let Some(account_switch) = self.drive_account_switch().copied() {
+            state.set_drive_account_switch(account_switch);
+        }
+
+        state
     }
 
     pub fn mark_verified_at(&mut self, verified_at: u64) {
@@ -257,6 +273,43 @@ impl PersistedCloudBackupState {
 
         configured.pending_verification_completion.take().is_some()
     }
+
+    /// Returns the in-progress Drive account transition, if one exists
+    pub(crate) fn drive_account_switch(&self) -> Option<&PersistedDriveAccountSwitch> {
+        match self {
+            Self::Configured(configured) => configured.drive_account_switch.as_ref(),
+            Self::Disabled | Self::Disabling(_) | Self::Corrupted { .. } => None,
+        }
+    }
+
+    /// Replaces the in-progress Drive account transition for configured Cloud Backup state
+    pub(crate) fn set_drive_account_switch(
+        &mut self,
+        account_switch: PersistedDriveAccountSwitch,
+    ) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+
+        configured.drive_account_switch = Some(account_switch);
+        true
+    }
+
+    /// Clears the matching Drive account transition
+    pub(crate) fn clear_drive_account_switch(&mut self, transition_id: u64) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+        if configured
+            .drive_account_switch
+            .is_none_or(|account_switch| account_switch.transition_id != transition_id)
+        {
+            return false;
+        }
+
+        configured.drive_account_switch = None;
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -280,6 +333,33 @@ pub struct PersistedConfiguredCloudBackup {
     pub sync: PersistedBackupSyncState,
     #[serde(default)]
     pub pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
+    /// In-progress Android Google Drive account transition
+    #[serde(default)]
+    pub drive_account_switch: Option<PersistedDriveAccountSwitch>,
+}
+
+/// Durable coordination state for changing the Android Google Drive account
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedDriveAccountSwitch {
+    /// Opaque identifier shared with the Android account-binding store
+    pub transition_id: u64,
+    /// Current two-phase transition step
+    pub phase: PersistedDriveAccountSwitchPhase,
+}
+
+/// Durable phase of a Google Drive account transition
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PersistedDriveAccountSwitchPhase {
+    /// Rust owns the write fence while Android presents account selection
+    AwaitingAccountSelection,
+    /// The staged Android account owns operation-scoped reinitialization writes
+    Reinitializing,
+    /// Reinitialization succeeded and Android must commit the staged account
+    AwaitingAccountCommitSucceeded,
+    /// Reinitialization failed after using the staged account, which must still be committed
+    AwaitingAccountCommitFailed,
+    /// Android must discard the staged account before Rust releases the write fence
+    AwaitingAccountRollback,
 }
 
 impl PersistedConfiguredCloudBackup {

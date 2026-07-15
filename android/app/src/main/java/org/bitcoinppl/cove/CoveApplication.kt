@@ -64,6 +64,11 @@ class CoveApplication : Application() {
             CloudBackupManager.setOnCloudBackupDisabled {
                 clearCloudBackupDriveAccountBinding(this)
             }
+            CloudBackupManager.setDriveAccountSwitchCallbacks(
+                pendingTransitionId = androidCloudStorageAccess::pendingAccountSwitchTransitionId,
+                commit = androidCloudStorageAccess::commitAccountSwitch,
+                rollback = androidCloudStorageAccess::rollbackAccountSwitch,
+            )
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize keychain and device", e)
@@ -73,9 +78,9 @@ class CoveApplication : Application() {
         // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
     }
 
-    internal suspend fun selectCloudBackupDriveAccount() {
+    internal suspend fun selectCloudBackupDriveAccount(transitionId: ULong) {
         checkNotNull(cloudStorageAccess) { "cloud storage access is not initialized" }
-            .selectAccountForCloudBackup()
+            .selectAccountForCloudBackup(transitionId)
     }
 
     /// Called from MainActivity after bootstrap completes on the main thread
