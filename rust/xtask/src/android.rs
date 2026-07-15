@@ -539,8 +539,8 @@ fn validate_store_release_apk_path(
     apk_path: &Path,
     expected_version: &AndroidReleaseVersion,
 ) -> Result<()> {
-    validate_apk_signature(&apk_path)?;
-    validate_apk_badging(&apk_path, expected_version)?;
+    validate_apk_signature(apk_path)?;
+    validate_apk_badging(apk_path, expected_version)?;
 
     print_success("Store release APK validation successful");
 
