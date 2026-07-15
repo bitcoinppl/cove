@@ -268,10 +268,13 @@ class OnboardingBranchScreensTest {
             OnboardingCloudBackupStepContent(
                 backupManager = manager,
                 branch = OnboardingBranch.NEW_USER,
-                onEnable = { selected = "enable" },
-                onEnabled = { selected = "enabled" },
-                onSkip = { selected = "skip" },
-                dispatch = { selected = "cleanup" },
+                actions =
+                    OnboardingCloudBackupStepActions(
+                        onEnable = { selected = "enable" },
+                        onEnabled = { selected = "enabled" },
+                        onSkip = { selected = "skip" },
+                        dispatch = { selected = "cleanup" },
+                    ),
             )
         }
 

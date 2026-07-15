@@ -59,9 +59,37 @@ internal fun CloudBackupPendingEnableRecoveryContent(
     onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showConfirmation by remember { mutableStateOf(false) }
+
+    RecoveryScreen(
+        recovery = recovery,
+        onCancel = onCancel,
+        onCopySupportCode = { copySupportCode(context, recovery.supportCode) },
+        onContactSupport = { contactSupport(context, recovery.supportCode) },
+        onRequestCleanup = { showConfirmation = true },
+    )
+
+    if (showConfirmation) {
+        CleanupConfirmationDialog(
+            onConfirm = {
+                showConfirmation = false
+                onConfirmCleanup()
+            },
+            onDismiss = { showConfirmation = false },
+        )
+    }
+}
+
+@Composable
+private fun RecoveryScreen(
+    recovery: CloudBackupPendingEnableRecovery,
+    onCancel: () -> Unit,
+    onCopySupportCode: () -> Unit,
+    onContactSupport: () -> Unit,
+    onRequestCleanup: () -> Unit,
+) {
     val isCleaning = recovery.cleanup == CloudBackupPendingEnableCleanupState.CLEANING
     val canRemove = recovery.cleanup == CloudBackupPendingEnableCleanupState.AVAILABLE
-    var showConfirmation by remember { mutableStateOf(false) }
 
     OnboardingBackground {
         Column(
@@ -73,135 +101,167 @@ internal fun CloudBackupPendingEnableRecoveryContent(
                     .padding(horizontal = 24.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Text(
-                    text = "Cancel",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier =
-                        Modifier
-                            .clickable(enabled = !isCleaning, onClick = onCancel)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
+            CancelButton(isCleaning = isCleaning, onCancel = onCancel)
+            RecoveryHeader()
+            RecoveryExplanation(canRemove = canRemove)
+            SupportCodeCard(
+                supportCode = recovery.supportCode,
+                onCopySupportCode = onCopySupportCode,
+                onContactSupport = onContactSupport,
+            )
+            RecoveryAction(
+                isCleaning = isCleaning,
+                canRemove = canRemove,
+                onRequestCleanup = onRequestCleanup,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CancelButton(isCleaning: Boolean, onCancel: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Text(
+            text = "Cancel",
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier =
+                Modifier
+                    .clickable(enabled = !isCleaning, onClick = onCancel)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun RecoveryHeader() {
+    OnboardingStatusHero(icon = Icons.Default.CloudOff)
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "Cloud Backup Needs Recovery",
+            color = Color.White,
+            fontSize = 38.sp,
+            lineHeight = 42.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "Cloud Backup setup was interrupted and its local recovery records do not match.",
+            color = OnboardingTextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun RecoveryExplanation(canRemove: Boolean) {
+    val explanation =
+        if (canRemove) {
+            "Cove verified that the incomplete local setup can be removed " +
+                "without changing your active backup or cloud data."
+        } else {
+            "Contact support and include the code below. Don’t change Cloud Backup " +
+                "settings until the recovery state has been reviewed."
+        }
+
+    RecoveryCard {
+        Text(
+            text = explanation,
+            color = Color.White.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun SupportCodeCard(
+    supportCode: String,
+    onCopySupportCode: () -> Unit,
+    onContactSupport: () -> Unit,
+) {
+    RecoveryCard {
+        Text(
+            text = "Support code",
+            color = OnboardingTextSecondary,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = supportCode,
+            color = Color.White,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.testTag("cloudBackup.recovery.supportCode"),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TextButton(onClick = onCopySupportCode, modifier = Modifier.weight(1f)) {
+                Text("Copy Code")
             }
-
-            OnboardingStatusHero(icon = Icons.Default.CloudOff)
-
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Cloud Backup Needs Recovery",
-                    color = Color.White,
-                    fontSize = 38.sp,
-                    lineHeight = 42.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "Cloud Backup setup was interrupted and its local recovery records do not match.",
-                    color = OnboardingTextSecondary,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            RecoveryCard {
-                Text(
-                    text =
-                        if (canRemove) {
-                            "Cove verified that the incomplete local setup can be removed without changing your active backup or cloud data."
-                        } else {
-                            "Contact support and include the code below. Don’t change Cloud Backup settings until the recovery state has been reviewed."
-                        },
-                    color = Color.White.copy(alpha = 0.85f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            RecoveryCard {
-                Text(
-                    text = "Support code",
-                    color = OnboardingTextSecondary,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Text(
-                    text = recovery.supportCode,
-                    color = Color.White,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.testTag("cloudBackup.recovery.supportCode"),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    TextButton(
-                        onClick = { copySupportCode(context, recovery.supportCode) },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Copy Code")
-                    }
-                    TextButton(
-                        onClick = { contactSupport(context, recovery.supportCode) },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Contact Support")
-                    }
-                }
-            }
-
-            when {
-                isCleaning -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.size(12.dp))
-                        Text("Removing incomplete setup...", color = Color.White)
-                    }
-                }
-
-                canRemove -> {
-                    TextButton(
-                        onClick = { showConfirmation = true },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .testTag("cloudBackup.recovery.removeIncompleteSetup"),
-                    ) {
-                        Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
-                    }
-                }
+            TextButton(onClick = onContactSupport, modifier = Modifier.weight(1f)) {
+                Text("Contact Support")
             }
         }
     }
+}
 
-    if (showConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showConfirmation = false },
-            title = { Text("Remove incomplete Cloud Backup setup?") },
-            text = {
-                Text(
-                    "This removes only local data from the interrupted setup. Your active Cloud Backup key, cloud data, and wallets on this device will be preserved.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showConfirmation = false
-                        onConfirmCleanup()
-                    },
-                    modifier = Modifier.testTag("cloudBackup.recovery.confirmRemoveIncompleteSetup"),
-                ) {
-                    Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirmation = false }) { Text("Cancel") }
-            },
-        )
+@Composable
+private fun RecoveryAction(
+    isCleaning: Boolean,
+    canRemove: Boolean,
+    onRequestCleanup: () -> Unit,
+) {
+    when {
+        isCleaning ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.size(12.dp))
+                Text("Removing incomplete setup...", color = Color.White)
+            }
+
+        canRemove ->
+            TextButton(
+                onClick = onRequestCleanup,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("cloudBackup.recovery.removeIncompleteSetup"),
+            ) {
+                Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
+            }
     }
+}
+
+@Composable
+private fun CleanupConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove incomplete Cloud Backup setup?") },
+        text = {
+            Text(
+                "This removes only local data from the interrupted setup. " +
+                    "Your active Cloud Backup key, cloud data, and wallets on this device will be preserved.",
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                modifier = Modifier.testTag("cloudBackup.recovery.confirmRemoveIncompleteSetup"),
+            ) {
+                Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

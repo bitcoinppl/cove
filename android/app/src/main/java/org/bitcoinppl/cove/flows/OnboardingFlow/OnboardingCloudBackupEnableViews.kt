@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,7 +35,6 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableBusyOverlay
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
-import org.bitcoinppl.cove.cloudbackup.CloudBackupPendingEnableRecoveryContent
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
@@ -71,6 +69,13 @@ internal enum class OnboardingCloudBackupRecoveryIntent {
     SKIP,
 }
 
+internal data class OnboardingCloudBackupStepActions(
+    val onEnable: () -> Unit,
+    val onEnabled: () -> Unit,
+    val onSkip: () -> Unit,
+    val dispatch: (CloudBackupManagerAction) -> Unit,
+)
+
 internal fun onboardingCloudBackupStepPresentation(
     lifecycle: CloudBackupLifecycle,
 ): OnboardingCloudBackupStepPresentation =
@@ -104,9 +109,13 @@ internal fun OnboardingCloudBackupStepView(
     OnboardingCloudBackupStepContent(
         backupManager = backupManager,
         branch = branch,
-        onEnable = onEnable,
-        onEnabled = onEnabled,
-        onSkip = onSkip,
+        actions =
+            OnboardingCloudBackupStepActions(
+                onEnable = onEnable,
+                onEnabled = onEnabled,
+                onSkip = onSkip,
+                dispatch = backupManager::dispatch,
+            ),
     )
 }
 
@@ -114,79 +123,45 @@ internal fun OnboardingCloudBackupStepView(
 internal fun OnboardingCloudBackupStepContent(
     backupManager: CloudBackupManager,
     branch: OnboardingBranch?,
-    onEnable: () -> Unit,
-    onEnabled: () -> Unit,
-    onSkip: () -> Unit,
-    dispatch: (CloudBackupManagerAction) -> Unit = backupManager::dispatch,
+    actions: OnboardingCloudBackupStepActions,
 ) {
-    var didReportEnabled by remember { mutableStateOf(false) }
+    ReportOnboardingCloudBackupEnabled(
+        backupManager = backupManager,
+        onEnabled = actions.onEnabled,
+    )
 
-    LaunchedEffect(backupManager.enableCompletion?.id, backupManager.lifecycle) {
-        if (didReportEnabled) return@LaunchedEffect
+    OnboardingCloudBackupPresentationContent(
+        presentation = onboardingCloudBackupStepPresentation(backupManager.lifecycle),
+        branch = branch,
+        actions = actions,
+    )
+}
 
-        val completion = backupManager.enableCompletion
-        if (completion != null && isOnboardingCloudBackupEnableCompletion(completion.item)) {
-            backupManager.consumeEnableCompletion(completion)
-            didReportEnabled = true
-            onEnabled()
-            return@LaunchedEffect
-        }
-
-        val readiness = backupManager.onboardingEnableCompletionReadiness()
-        if (
-            didReportEnabled ||
-            !shouldCompleteOnboardingCloudBackupFromPersistedState(readiness)
-        ) {
-            return@LaunchedEffect
-        }
-
-        didReportEnabled = true
-        onEnabled()
-    }
-
-    when (val presentation = onboardingCloudBackupStepPresentation(backupManager.lifecycle)) {
-        is OnboardingCloudBackupStepPresentation.PendingEnableRecovery -> {
-            CloudBackupPendingEnableRecoveryContent(
-                recovery = presentation.recovery,
-                onConfirmCleanup = {
-                    routeOnboardingCloudBackupRecoveryIntent(
-                        OnboardingCloudBackupRecoveryIntent.REMOVE_INCOMPLETE_SETUP,
-                        dispatch = dispatch,
-                        onSkip = onSkip,
-                    )
-                },
-                onCancel = {
-                    routeOnboardingCloudBackupRecoveryIntent(
-                        OnboardingCloudBackupRecoveryIntent.SKIP,
-                        dispatch = dispatch,
-                        onSkip = onSkip,
-                    )
-                },
+@Composable
+internal fun OnboardingCloudBackupEnableContent(
+    branch: OnboardingBranch?,
+    onEnable: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    when (branch) {
+        OnboardingBranch.SOFTWARE_IMPORT -> {
+            OnboardingSoftwareImportCloudBackupStepView(
+                onEnable = onEnable,
+                onSkip = onSkip,
             )
         }
-
-        OnboardingCloudBackupStepPresentation.Enable -> {
-            when (branch) {
-                OnboardingBranch.SOFTWARE_IMPORT -> {
-                    OnboardingSoftwareImportCloudBackupStepView(
-                        onEnable = onEnable,
-                        onSkip = onSkip,
-                    )
-                }
-                OnboardingBranch.HARDWARE -> {
-                    OnboardingHardwareImportCloudBackupStepView(
-                        onEnable = onEnable,
-                        onSkip = onSkip,
-                    )
-                }
-                else -> {
-                    OnboardingCloudBackupDetailsStepView(
-                        onEnable = onEnable,
-                        onSkip = onSkip,
-                        context = CloudBackupEnableOnboardingContext.STANDARD,
-                    )
-                }
-            }
+        OnboardingBranch.HARDWARE -> {
+            OnboardingHardwareImportCloudBackupStepView(
+                onEnable = onEnable,
+                onSkip = onSkip,
+            )
+        }
+        else -> {
+            OnboardingCloudBackupDetailsStepView(
+                onEnable = onEnable,
+                onSkip = onSkip,
+                context = CloudBackupEnableOnboardingContext.STANDARD,
+            )
         }
     }
 }
