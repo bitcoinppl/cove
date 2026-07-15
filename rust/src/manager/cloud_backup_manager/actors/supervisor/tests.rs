@@ -5,6 +5,7 @@ use super::enable::{
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use crate::database::cloud_backup::PersistedDisablingCloudBackup;
+use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     async_test_lock, configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state, test_globals,
@@ -658,6 +659,75 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
 
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.detail_workflow.open();
+    let DetailRefreshPlan::Start(superseded_refresh) =
+        supervisor.detail_workflow.request_refresh()
+    else {
+        panic!("expected detail refresh to start");
+    };
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
+
+    let operation_claim = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
+        .unwrap();
+    let repair_detail_claim = supervisor.detail_workflow.start_operation_result();
+    supervisor
+        .complete_repair_passkey_refresh_detail(
+            operation_claim,
+            repair_detail_claim,
+            Some(CloudBackupDetailResult::AccessError(CloudBackupError::Offline(
+                "offline".into(),
+            ))),
+        )
+        .await
+        .unwrap();
+
+    let CloudBackupLifecycle::Configured(configured) = manager.state.read().public_state().lifecycle
+    else {
+        panic!("expected configured cloud backup");
+    };
+    assert!(matches!(
+        configured.detail,
+        CloudBackupDetailState::Failed {
+            reason: CloudBackupInventoryIncompleteReason::Offline,
+            ..
+        }
+    ));
+
+    supervisor
+        .complete_refresh_detail(
+            Some(CloudBackupDetailResult::Success(CloudBackupDetail {
+                last_sync: None,
+                up_to_date: Vec::new(),
+                needs_sync: Vec::new(),
+                cloud_only_count: 0,
+                other_backups: CloudBackupOtherBackupsState::Loaded {
+                    summary: Default::default(),
+                },
+            })),
+            DetailRefreshAttempt::Initial,
+            superseded_refresh,
+        )
+        .await
+        .unwrap();
+
+    let CloudBackupLifecycle::Configured(configured) = manager.state.read().public_state().lifecycle
+    else {
+        panic!("expected configured cloud backup");
+    };
+    assert!(matches!(configured.detail, CloudBackupDetailState::Failed { .. }));
 }
 
 #[tokio::test(flavor = "current_thread")]

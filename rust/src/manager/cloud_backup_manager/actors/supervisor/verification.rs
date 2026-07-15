@@ -836,14 +836,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match self.detail_workflow.is_latest_result(detail_claim).then_some(result).flatten() {
-            Some(CloudBackupDetailResult::Success(detail)) => {
-                manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
-            }
-            Some(CloudBackupDetailResult::AccessError(error)) => {
-                warn!("Failed to refresh detail after passkey repair: {error}");
-            }
-            None => {}
+        if self.detail_workflow.is_latest_result(detail_claim)
+            && let Some(result) = result
+        {
+            apply_refresh_detail_result(&manager, &result);
         }
 
         manager.refresh_sync_health();
