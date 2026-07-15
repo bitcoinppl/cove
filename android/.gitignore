@@ -8,6 +8,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore.properties
 
 # rust code
 app/src/main/java/com/example/cove/uniffi

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("com.android.compose.screenshot")
@@ -5,6 +7,22 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jlleitschuh.gradle.ktlint")
 }
+
+// prefer env values with an optional local properties fallback
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties =
+    Properties().apply {
+        if (keystorePropertiesFile.exists()) {
+            keystorePropertiesFile.inputStream().use(::load)
+        }
+    }
+
+fun releaseSigningValue(envName: String, propertyName: String, default: String = ""): String =
+    System
+        .getenv(envName)
+        ?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+        ?: default
 
 android {
     namespace = "org.bitcoinppl.cove"
@@ -34,10 +52,18 @@ android {
             // uses default debug keystore
         }
         create("release") {
-            storeFile = file(System.getenv("COVE_KEYSTORE_PATH") ?: "${System.getProperty("user.home")}/cove-release.keystore")
-            storePassword = System.getenv("COVE_KEYSTORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("COVE_KEY_ALIAS") ?: "cove"
-            keyPassword = System.getenv("COVE_KEY_PASSWORD") ?: ""
+            // play upload key defaults match .envrc.example
+            storeFile =
+                file(
+                    releaseSigningValue(
+                        "COVE_KEYSTORE_PATH",
+                        "storeFile",
+                        "${System.getProperty("user.home")}/.secrets/cove-upload.keystore",
+                    ),
+                )
+            storePassword = releaseSigningValue("COVE_KEYSTORE_PASSWORD", "storePassword")
+            keyAlias = releaseSigningValue("COVE_KEY_ALIAS", "keyAlias", "upload")
+            keyPassword = releaseSigningValue("COVE_KEY_PASSWORD", "keyPassword")
         }
     }
 
