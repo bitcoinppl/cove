@@ -7299,7 +7299,32 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
      */
     func backupWalletCount()  -> UInt32?
 
+    /**
+     * Claim the exclusive operation and return after all prior cloud writes drain
+     */
+    func beginDriveAccountSwitch() async throws  -> UInt64
+
+    /**
+     * Move an unstarted account transition to its rollback phase
+     */
+    func cancelDriveAccountSwitch(transitionId: UInt64) async throws
+
     func cloudStorageDidChange()
+
+    /**
+     * Release the transition after Android commits its staged account
+     */
+    func confirmDriveAccountSwitchCommitted(transitionId: UInt64) async throws
+
+    /**
+     * Release the transition after Android discards its staged account
+     */
+    func confirmDriveAccountSwitchRolledBack(transitionId: UInt64) async throws
+
+    /**
+     * Continue the claimed transition after Android durably stages the selected account
+     */
+    func continueDriveAccountSwitch(transitionId: UInt64) async throws
 
     /**
      * Reset local cloud backup state (keychain + DB) without touching iCloud
@@ -7326,6 +7351,11 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
     func isCloudBackupUnverified()  -> Bool
 
     func listenForUpdates(reconciler: CloudBackupManagerReconciler)
+
+    /**
+     * Reconcile persisted Rust and Android transition state after process startup
+     */
+    func reconcileDriveAccountSwitch(pendingTransitionId: UInt64?) async throws
 
     func resumePendingCloudUploadVerification()
 
@@ -7434,12 +7464,112 @@ open func backupWalletCount() -> UInt32?  {
 })
 }
 
+    /**
+     * Claim the exclusive operation and return after all prior cloud writes drain
+     */
+open func beginDriveAccountSwitch()async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_begin_drive_account_switch(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
+        )
+}
+
+    /**
+     * Move an unstarted account transition to its rollback phase
+     */
+open func cancelDriveAccountSwitch(transitionId: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_cancel_drive_account_switch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterUInt64.lower(transitionId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
+        )
+}
+
 open func cloudStorageDidChange()  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
+}
+
+    /**
+     * Release the transition after Android commits its staged account
+     */
+open func confirmDriveAccountSwitchCommitted(transitionId: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(
+                    self.uniffiCloneHandle(),
+                    FfiConverterUInt64.lower(transitionId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
+        )
+}
+
+    /**
+     * Release the transition after Android discards its staged account
+     */
+open func confirmDriveAccountSwitchRolledBack(transitionId: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(
+                    self.uniffiCloneHandle(),
+                    FfiConverterUInt64.lower(transitionId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
+        )
+}
+
+    /**
+     * Continue the claimed transition after Android durably stages the selected account
+     */
+open func continueDriveAccountSwitch(transitionId: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_continue_drive_account_switch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterUInt64.lower(transitionId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
+        )
 }
 
     /**
@@ -7507,6 +7637,26 @@ open func listenForUpdates(reconciler: CloudBackupManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCloudBackupManagerReconciler_lower(reconciler),uniffiCallStatus
     )
 }
+}
+
+    /**
+     * Reconcile persisted Rust and Android transition state after process startup
+     */
+open func reconcileDriveAccountSwitch(pendingTransitionId: UInt64?)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(
+                    self.uniffiCloneHandle(),
+                    FfiConverterOptionUInt64.lower(pendingTransitionId)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
+        )
 }
 
 open func resumePendingCloudUploadVerification()  {try! rustCall() {
@@ -19907,6 +20057,125 @@ public func FfiConverterTypeCloudBackupDetailState_lower(_ value: CloudBackupDet
 
 
 /**
+ * Failure to coordinate an Android Google Drive account transition
+ */
+public
+enum CloudBackupDriveAccountSwitchError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    /**
+     * Another exclusive Cloud Backup operation owns the supervisor
+     */
+    case Busy
+    /**
+     * Cloud Backup has no configured state to move to another account
+     */
+    case NotConfigured
+    /**
+     * The supplied transition does not own the current operation
+     */
+    case InvalidTransition
+    /**
+     * Persistence or actor coordination failed
+     */
+    case Internal(String
+    )
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_cloudbackupdriveaccountswitcherror_uniffi_trait_display(
+            FfiConverterTypeCloudBackupDriveAccountSwitchError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension CloudBackupDriveAccountSwitchError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupDriveAccountSwitchError: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupDriveAccountSwitchError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDriveAccountSwitchError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .Busy
+        case 2: return .NotConfigured
+        case 3: return .InvalidTransition
+        case 4: return .Internal(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupDriveAccountSwitchError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case .Busy:
+            writeInt(&buf, Int32(1))
+
+
+        case .NotConfigured:
+            writeInt(&buf, Int32(2))
+
+
+        case .InvalidTransition:
+            writeInt(&buf, Int32(3))
+
+
+        case let .Internal(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDriveAccountSwitchError_lift(_ buf: RustBuffer) throws -> CloudBackupDriveAccountSwitchError {
+    return try FfiConverterTypeCloudBackupDriveAccountSwitchError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDriveAccountSwitchError_lower(_ value: CloudBackupDriveAccountSwitchError) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDriveAccountSwitchError.lower(value)
+}
+
+
+/**
  * Public enable flow state for onboarding and settings
  */
 
@@ -20812,6 +21081,16 @@ public enum CloudBackupReconcileMessage: Equatable, Hashable {
     )
     case enableCompleted(CloudBackupEnableContext
     )
+    /**
+     * Android must atomically commit its staged Google Drive identity
+     */
+    case driveAccountSwitchCommitRequired(UInt64
+    )
+    /**
+     * Android must atomically discard its staged Google Drive identity
+     */
+    case driveAccountSwitchRollbackRequired(UInt64
+    )
 
 
 
@@ -20839,6 +21118,12 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case 2: return .enableCompleted(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
+        case 3: return .driveAccountSwitchCommitRequired(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 4: return .driveAccountSwitchRollbackRequired(try FfiConverterUInt64.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -20856,6 +21141,16 @@ public struct FfiConverterTypeCloudBackupReconcileMessage: FfiConverterRustBuffe
         case let .enableCompleted(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
+
+
+        case let .driveAccountSwitchCommitRequired(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .driveAccountSwitchRollbackRequired(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt64.write(v1, into: &buf)
 
         }
     }
@@ -40249,7 +40544,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_begin_drive_account_switch() != 51588) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_cancel_drive_account_switch() != 28502) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change() != 44707) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_committed() != 41226) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back() != 46453) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_continue_drive_account_switch() != 614) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_debug_reset_cloud_backup_state() != 45375) {
@@ -40268,6 +40578,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_listen_for_updates() != 38172) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 26216) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590) {

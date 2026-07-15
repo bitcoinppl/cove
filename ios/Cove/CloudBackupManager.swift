@@ -280,8 +280,13 @@ final class CloudBackupManager: AnyReconciler, CloudBackupManagerReconciler, @un
         case let .lifecycle(lifecycle, settingsRowStatus):
             state.lifecycle = lifecycle
             state.settingsRowStatus = settingsRowStatus
+
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
+
+        // account transitions are handled only by Android
+        case .driveAccountSwitchCommitRequired, .driveAccountSwitchRollbackRequired:
+            break
         }
     }
 
