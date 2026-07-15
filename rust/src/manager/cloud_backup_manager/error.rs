@@ -344,7 +344,9 @@ pub(crate) enum CloudBackupError {
     #[error("compatibility error: {0}")]
     Compatibility(String),
 
-    #[error("Passkey didn't match any backups, please try a new one")]
+    #[error(
+        "This passkey did not unlock backups currently available in iCloud. Wait for iCloud to finish syncing, then try again."
+    )]
     PasskeyMismatch,
 
     #[error("no cloud backups found")]

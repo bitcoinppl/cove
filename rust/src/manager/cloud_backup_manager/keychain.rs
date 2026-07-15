@@ -164,11 +164,6 @@ impl CloudBackupKeychain {
         })
     }
 
-    pub(crate) fn clear_passkey(&self) {
-        self.0.delete(CSPP_CREDENTIAL_ID_KEY.into());
-        self.0.delete(CSPP_PRF_SALT_KEY.into());
-    }
-
     pub(crate) fn delete_master_key(&self) -> Result<(), CloudBackupKeychainError> {
         let cspp = cove_cspp::Cspp::new(self.0.clone());
         if !cspp.delete_master_key() {
