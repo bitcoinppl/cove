@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.test
 
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.junit.Assume.assumeTrue
 import org.junit.rules.TestRule
 import org.junit.runner.Description
@@ -14,7 +15,9 @@ class FullLaunchTestRule : TestRule {
         object : Statement() {
             override fun evaluate() {
                 assumeTrue("manual full-launch tests require the ManualFullLaunchTest annotation argument", isManualRun(description))
-                base.evaluate()
+
+                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                device.withStayAwake { base.evaluate() }
             }
         }
 

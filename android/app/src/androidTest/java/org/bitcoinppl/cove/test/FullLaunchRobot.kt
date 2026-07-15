@@ -28,7 +28,7 @@ class FullLaunchStartupRobot(
             acceptTermsAndContinue()
         }
 
-        device.waitUntilVisible(tag("onboarding.getStarted"))
+        device.advanceUntilVisible(tag("onboarding.getStarted"))
 
         return this
     }
@@ -68,21 +68,25 @@ class FullLaunchOnboardingRobot(
         )
 
     fun tapGetStarted(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.getStarted")).click()
-        device.waitUntilVisible(text("Do you already have Bitcoin?"))
+        device.advanceUntilVisible(text("Do you already have Bitcoin?")) {
+            clickCenterIfVisible(tag("onboarding.getStarted"))
+        }
 
         return this
     }
 
     fun chooseExistingUser(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing")).click()
-        device.waitUntilVisible(text("How do you store your Bitcoin?"))
+        device.advanceUntilVisible(text("How do you store your Bitcoin?")) {
+            clickCenterIfVisible(tag("onboarding.bitcoinChoice.existing"))
+        }
+
         return this
     }
 
     fun chooseNewUser(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.bitcoinChoice.new")).click()
-        device.waitUntilVisible(text("Creating your wallet"))
+        device.advanceUntilVisible(text("Creating your wallet")) {
+            clickCenterIfVisible(tag("onboarding.bitcoinChoice.new"))
+        }
         device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
 
         return this
@@ -90,7 +94,7 @@ class FullLaunchOnboardingRobot(
 
     fun goBackToBitcoinChoice(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("Back")).click()
-        device.waitUntilVisible(text("Do you already have Bitcoin?"))
+        device.advanceUntilVisible(text("Do you already have Bitcoin?"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.new"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing"))
 
@@ -99,7 +103,7 @@ class FullLaunchOnboardingRobot(
 
     fun systemBackToBitcoinChoice(): FullLaunchOnboardingRobot {
         device.pressBack()
-        device.waitUntilVisible(text("Do you already have Bitcoin?"))
+        device.advanceUntilVisible(text("Do you already have Bitcoin?"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.new"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing"))
 
@@ -107,13 +111,13 @@ class FullLaunchOnboardingRobot(
     }
 
     fun useAnotherWallet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("How do you store your Bitcoin?"))
+        device.advanceUntilVisible(text("How do you store your Bitcoin?"))
 
         return this
     }
 
     fun assertStorageChoices(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("How do you store your Bitcoin?"))
+        device.advanceUntilVisible(text("How do you store your Bitcoin?"))
         device.waitUntilVisible(tag("onboarding.storage.exchange"))
         device.waitUntilVisible(tag("onboarding.storage.hardware"))
         device.waitUntilVisible(tag("onboarding.storage.software"))
@@ -122,30 +126,34 @@ class FullLaunchOnboardingRobot(
     }
 
     fun chooseExchange(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.storage.exchange")).click()
-        device.waitUntilVisible(text("Creating your wallet"))
+        device.advanceUntilVisible(text("Creating your wallet")) {
+            clickCenterIfVisible(tag("onboarding.storage.exchange"))
+        }
         device.waitUntilVisible(text("Back up your wallet before funding it"), timeoutMillis = 10_000)
 
         return this
     }
 
     fun chooseHardwareWallet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.storage.hardware")).click()
-        device.waitUntilVisible(text("Import your hardware wallet"))
+        device.advanceUntilVisible(text("Import your hardware wallet")) {
+            clickCenterIfVisible(tag("onboarding.storage.hardware"))
+        }
 
         return this
     }
 
     fun chooseSoftwareWallet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.storage.software")).click()
-        device.waitUntilVisible(text("Import your software wallet"))
+        device.advanceUntilVisible(text("Import your software wallet")) {
+            clickCenterIfVisible(tag("onboarding.storage.software"))
+        }
 
         return this
     }
 
     fun chooseSoftwareCreate(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.software.create")).click()
-        device.waitUntilVisible(text("Creating your wallet"))
+        device.advanceUntilVisible(text("Creating your wallet")) {
+            clickCenterIfVisible(tag("onboarding.software.create"))
+        }
         device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
 
         return this
@@ -160,7 +168,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun viewRecoveryWords(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.secretWords")).click()
+        device.waitUntilVisible(text("Show Words")).click()
         device.waitUntilVisible(text("Your Recovery Words"))
         device.waitUntilVisible(tag("onboarding.secretWords.saved"))
 
@@ -202,7 +210,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun assertHardwareImportChoices(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Import your hardware wallet"))
+        device.advanceUntilVisible(text("Import your hardware wallet"))
         device.waitUntilVisible(text("Scan export QR"))
         device.waitUntilVisible(text("Import export file"))
         device.waitUntilVisible(text("Scan with NFC"))
@@ -211,7 +219,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openHardwareQrScanner(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Scan export QR")).click()
+        device.clickCenter(device.advanceUntilVisible(text("Scan export QR")))
         device.waitUntilVisible(text("Scan Hardware QR"))
         assertQrScannerVisible()
 
@@ -219,7 +227,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openHardwareNfcScanner(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Scan with NFC")).click()
+        device.clickCenter(device.advanceUntilVisible(text("Scan with NFC")))
         device.waitUntilVisible(text("Scan your hardware wallet with NFC"))
         device.waitUntilVisible(text("Start NFC Scan"))
 
@@ -227,7 +235,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun assertSoftwareImportChoices(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Import your software wallet"))
+        device.advanceUntilVisible(text("Import your software wallet"))
         device.waitUntilVisible(text("Enter recovery words"))
         device.waitUntilVisible(text("Scan QR code"))
 
@@ -235,34 +243,43 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openSoftwareQrScanner(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Scan QR code")).click()
+        device.clickCenter(device.advanceUntilVisible(text("Scan QR code")))
         assertQrScannerVisible()
 
         return this
     }
 
     fun importKnownEmptyMainnetWalletWords(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Enter recovery words")).click()
-        device.waitUntilVisible(text("How many words do you have?"))
-        device.waitUntilVisible(text("12 words")).click()
-        device.waitUntilVisible(text("Import Wallet"))
-
-        knownEmptyMainnetMnemonic.forEachIndexed { index, word ->
-            device.waitUntilVisible(tag("hotWalletImport.word.${index + 1}")).text = word
+        device.advanceUntilVisible(text("How many words do you have?")) {
+            clickCenterIfVisible(text("Enter recovery words"))
+        }
+        device.advanceUntilVisible(text("Import Wallet")) {
+            clickCenterIfVisible(text("12 words"))
         }
 
-        device.pressEnter()
-        device.scrollUntilVisible(tag("hotWalletImport.import")).click()
-        device.waitUntilVisible(text("Protect this wallet with Cloud Backup?"), timeoutMillis = 20_000)
+        knownEmptyMainnetMnemonic.forEachIndexed { index, word ->
+            val wordSelector = tag("hotWalletImport.word.${index + 1}")
+            device.waitUntilVisible(wordSelector).text = word
+            device.waitUntilTextEquals(wordSelector, word)
+        }
+
+        device.dismissKeyboardIfShown()
+        device.clickUntilVisible(
+            clickSelector = tag("hotWalletImport.import"),
+            targetSelector = text("Protect this wallet with Cloud Backup?"),
+            timeoutMillis = 60_000,
+        )
 
         return this
     }
 
     fun assertImportScreenBlocksScreenshots(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Enter recovery words")).click()
-        device.waitUntilVisible(text("How many words do you have?"))
-        device.waitUntilVisible(text("12 words")).click()
-        device.waitUntilVisible(text("Import Wallet"))
+        device.advanceUntilVisible(text("How many words do you have?")) {
+            clickCenterIfVisible(text("Enter recovery words"))
+        }
+        device.advanceUntilVisible(text("Import Wallet")) {
+            clickCenterIfVisible(text("12 words"))
+        }
         assertScreenshotsBlocked()
 
         return this
@@ -292,10 +309,14 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
-    fun assertImportedMainnetWalletHasHistoryAndNoBitcoin(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Send"), timeoutMillis = 30_000).click()
-        device.waitUntilVisible(text("No funds available to send"), timeoutMillis = 10_000)
+    fun assertImportedMainnetWalletShowsHistory(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Send"), timeoutMillis = 30_000)
         device.waitUntilVisible(text("Transactions"), timeoutMillis = 30_000)
+        device.waitUntilAnyVisible(
+            text("Sent"),
+            text("Received"),
+            timeoutMillis = 90_000,
+        )
 
         return this
     }
@@ -325,7 +346,7 @@ class FullLaunchOnboardingRobot(
         device.waitUntilVisible(text("How It Works"))
         device.waitUntilVisible(text("Back"))
         device.waitUntilVisible(tag("onboarding.cloudBackup.cancel"))
-        device.waitUntilVisible(tag("onboarding.cloudBackup.enable"))
+        device.waitUntilGone(textContains("Finishing the Google Drive check"), timeoutMillis = 30_000)
 
         return this
     }
@@ -336,10 +357,10 @@ class FullLaunchOnboardingRobot(
             "access to my Google account",
             "manually back up my 12 or 24 words",
         ).forEach { label ->
-            device.scrollUntilVisible(textContains(label)).click()
+            device.clickCheckboxBesideLabel(label)
         }
 
-        device.scrollUntilVisible(tag("onboarding.cloudBackup.enable")).click()
+        device.clickObjectUntilGoneOrSystemSheet(tag("onboarding.cloudBackup.enable"))
 
         return this
     }
@@ -409,19 +430,54 @@ class FullLaunchOnboardingRobot(
 
 fun fullLaunchDevice(): UiDevice =
     UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).apply {
-        wakeUp()
-        executeShellCommand("wm dismiss-keyguard")
+        ensureManualFullLaunchDeviceReady()
     }
 
 fun launchFullApp() {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val packageName = instrumentation.targetContext.packageName
+    val device = UiDevice.getInstance(instrumentation)
+
+    device.ensureManualFullLaunchDeviceReady()
+
     val output =
         instrumentation.uiAutomation.executeShellCommand(
             "am start -W -n $packageName/org.bitcoinppl.cove.MainActivity --ez org.bitcoinppl.cove.uitest.RESET_DATA true",
         )
 
     output.drainAndClose()
+    device.ensureManualFullLaunchDeviceReady()
+}
+
+private fun UiDevice.ensureManualFullLaunchDeviceReady(timeoutMillis: Long = 5_000) {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+
+    while (System.currentTimeMillis() < deadline) {
+        wakeUp()
+        executeShellCommand("wm dismiss-keyguard")
+
+        if (!isDeviceLocked()) {
+            return
+        }
+
+        Thread.sleep(250)
+    }
+
+    fail(
+        "Manual full-launch tests require the connected Android device to be unlocked. " +
+            "Unlock the device and rerun just ui-manual.\n${dumpWindowHierarchy()}",
+    )
+}
+
+private fun UiDevice.isDeviceLocked(): Boolean {
+    val trustDump = executeShellCommand("dumpsys trust")
+    val currentUserLine = trustDump.lineSequence().firstOrNull { "(current)" in it }
+
+    if (currentUserLine != null) {
+        return "deviceLocked=1" in currentUserLine
+    }
+
+    return "showingAndNotOccluded=true" in executeShellCommand("dumpsys window policy")
 }
 
 private fun assertFlagSecureSet(
@@ -469,6 +525,15 @@ private fun UiDevice.waitUntilVisible(
     wait(Until.findObject(selector.value), timeoutMillis)
         ?: error("Timed out waiting for ${selector.description}\n${dumpWindowHierarchy()}")
 
+private fun UiDevice.waitUntilGone(
+    selector: DescribedSelector,
+    timeoutMillis: Long = 20_000,
+) {
+    if (!wait(Until.gone(selector.value), timeoutMillis)) {
+        error("Timed out waiting for ${selector.description} to disappear\n${dumpWindowHierarchy()}")
+    }
+}
+
 private fun UiDevice.waitUntilAnyVisible(
     first: DescribedSelector,
     second: DescribedSelector,
@@ -485,13 +550,137 @@ private fun UiDevice.waitUntilAnyVisible(
     error("Timed out waiting for ${first.description} or ${second.description}\n${dumpWindowHierarchy()}")
 }
 
+private fun UiDevice.advanceUntilVisible(
+    targetSelector: DescribedSelector,
+    timeoutMillis: Long = 20_000,
+    advance: UiDevice.() -> Boolean = { false },
+): UiObject2 {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+    var lastAdvanceAt = 0L
+
+    while (System.currentTimeMillis() < deadline) {
+        findObject(targetSelector.value)?.let { return it }
+
+        if (continuePastCloudRestorePromptIfShown()) {
+            waitForIdle()
+            Thread.sleep(250)
+            continue
+        }
+
+        val now = System.currentTimeMillis()
+        if (now - lastAdvanceAt >= 750) {
+            advance()
+            lastAdvanceAt = now
+        }
+        waitForIdle()
+        Thread.sleep(250)
+    }
+
+    error("Timed out waiting for ${targetSelector.description}\n${dumpWindowHierarchy()}")
+}
+
+private fun UiDevice.continuePastCloudRestorePromptIfShown(): Boolean {
+    listOf(
+        text("Continue setup"),
+        text("Continue Setup"),
+        text("Set Up as New"),
+        text("Continue Without Backup"),
+        text("Continue Without Cloud Restore"),
+    ).firstNotNullOfOrNull { selector -> findObject(selector.value) }?.let { button ->
+        clickCenter(button)
+
+        return true
+    }
+
+    if (isCloudRestorePromptVisible()) {
+        pressBack()
+        return true
+    }
+
+    return false
+}
+
 private fun UiDevice.scrollUntilVisible(selector: DescribedSelector): UiObject2 {
+    tryScrollUntilVisible(selector)?.let { return it }
+
+    return waitUntilVisible(selector)
+}
+
+private fun UiDevice.tryScrollUntilVisible(selector: DescribedSelector): UiObject2? {
     repeat(8) {
         findObject(selector.value)?.let { return it }
         swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
     }
 
-    return waitUntilVisible(selector)
+    return findObject(selector.value)
+}
+
+private fun UiDevice.isCloudRestorePromptVisible(): Boolean =
+    findObject(text("Google Drive Backup Found").value) != null ||
+        findObject(text("Restore from Google Drive").value) != null ||
+        findObject(text("No Google Drive Backup Found").value) != null ||
+        findObject(text("No Backup Found").value) != null ||
+        findObject(text("You're Offline").value) != null ||
+        findObject(text("Cove backup found").value) != null
+
+private fun UiDevice.clickUntilVisible(
+    clickSelector: DescribedSelector,
+    targetSelector: DescribedSelector,
+    timeoutMillis: Long,
+) {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+
+    while (System.currentTimeMillis() < deadline) {
+        findObject(targetSelector.value)?.let { return }
+
+        val clickNode = tryScrollUntilSafelyClickable(clickSelector)
+        if (clickNode?.isEnabled == true) {
+            clickNode.click()
+        }
+
+        Thread.sleep(500)
+    }
+
+    error("Timed out waiting for ${targetSelector.description}\n${dumpWindowHierarchy()}")
+}
+
+private fun UiDevice.clickObjectUntilGoneOrSystemSheet(selector: DescribedSelector) {
+    val deadline = System.currentTimeMillis() + 60_000
+    var clicked = false
+
+    while (System.currentTimeMillis() < deadline) {
+        if (findObject(textContains("Create a passkey").value) != null ||
+            findObject(textContains("Create passkey").value) != null ||
+            findObject(textContains("Save a passkey").value) != null ||
+            findObject(textContains("Save passkey").value) != null ||
+            findObject(text("Choose an account").value) != null ||
+            findObject(textContains("previous backup").value) != null ||
+            findObject(textContains("Creating your passkey").value) != null
+        ) {
+            return
+        }
+
+        val visibleButton = findObject(selector.value)
+        if (visibleButton != null && !visibleButton.isEnabled) {
+            Thread.sleep(500)
+            continue
+        }
+
+        val button = tryScrollUntilSafelyClickable(selector)
+        if (button == null) {
+            if (clicked) return
+
+            Thread.sleep(500)
+            continue
+        }
+
+        waitForIdle()
+        button.click()
+        clicked = true
+        Thread.sleep(500)
+    }
+
+    error("Timed out waiting for ${selector.description} to start an operation\n${dumpWindowHierarchy()}")
 }
 
 private fun UiDevice.acceptTerms() {
@@ -502,10 +691,115 @@ private fun UiDevice.acceptTerms() {
         "onboarding.terms.check.recovery",
         "onboarding.terms.check.agreement",
     ).forEach { tag ->
-        scrollUntilVisible(tag(tag)).click()
+        clickLeadingEdge(scrollUntilVisible(tag(tag)))
     }
 
-    scrollUntilVisible(tag("onboarding.terms.agree")).click()
+    clickSafely(tag("onboarding.terms.agree"))
+}
+
+private fun UiDevice.dismissKeyboardIfShown() {
+    clickKeyboardDoneIfShown()
+    Thread.sleep(250)
+
+    if (!isKeyboardDoneVisible()) {
+        return
+    }
+
+    pressBack()
+    Thread.sleep(250)
+}
+
+private fun UiDevice.clickKeyboardDoneIfShown(): Boolean {
+    val doneKey =
+        findObject(desc("Enter").value)
+            ?: findObject(text("Done").value)
+            ?: return false
+
+    clickCenter(doneKey)
+
+    return true
+}
+
+private fun UiDevice.isKeyboardDoneVisible(): Boolean =
+    findObject(desc("Enter").value) != null || findObject(text("Done").value) != null
+
+private fun UiDevice.clickLeadingEdge(node: UiObject2) {
+    val bounds = node.visibleBounds
+    val x = (bounds.left + 60).coerceAtMost(bounds.right - 1)
+
+    click(x, bounds.centerY())
+}
+
+private fun UiDevice.clickCheckboxBesideLabel(label: String) {
+    val labelNode = scrollUntilVisible(textContains(label))
+    clickCenter(labelNode)
+}
+
+private fun UiDevice.clickSafely(selector: DescribedSelector) {
+    clickCenter(scrollUntilSafelyClickable(selector))
+}
+
+private fun UiDevice.scrollUntilSafelyClickable(selector: DescribedSelector): UiObject2 {
+    tryScrollUntilSafelyClickable(selector)?.let { return it }
+
+    return waitUntilVisible(selector)
+}
+
+private fun UiDevice.tryScrollUntilSafelyClickable(selector: DescribedSelector): UiObject2? {
+    repeat(12) {
+        findObject(selector.value)?.let { node ->
+            if (isSafelyClickable(node)) return node
+        }
+        swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
+    }
+
+    return findObject(selector.value)?.takeIf { isSafelyClickable(it) }
+}
+
+private fun UiDevice.isSafelyClickable(node: UiObject2): Boolean {
+    val bounds = node.visibleBounds
+    val safeBottom = displayHeight - 200
+
+    return node.isEnabled &&
+        bounds.width() > 0 &&
+        bounds.height() > 0 &&
+        bounds.centerX() in 1 until displayWidth &&
+        bounds.centerY() in 1 until safeBottom
+}
+
+private fun UiDevice.clickCenter(node: UiObject2) {
+    val bounds = node.visibleBounds
+
+    click(bounds.centerX(), bounds.centerY())
+}
+
+private fun UiDevice.clickCenterIfVisible(selector: DescribedSelector): Boolean {
+    findObject(selector.value)?.let { node ->
+        clickCenter(node)
+
+        return true
+    }
+
+    return false
+}
+
+private fun UiDevice.waitUntilTextEquals(
+    selector: DescribedSelector,
+    expected: String,
+    timeoutMillis: Long = 5_000,
+) {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+
+    while (System.currentTimeMillis() < deadline) {
+        val node = findObject(selector.value)
+        if (node?.text == expected) {
+            return
+        }
+
+        Thread.sleep(100)
+    }
+
+    error("Timed out waiting for ${selector.description} to equal \"$expected\"\n${dumpWindowHierarchy()}")
 }
 
 private class DescribedSelector(

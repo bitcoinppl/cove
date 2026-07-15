@@ -54,6 +54,18 @@ enum Commands {
     #[command(name = "bundle-android")]
     BundleAndroid,
 
+    /// Run an Android command from android/ while keeping the device awake
+    #[command(name = "android-stay-awake")]
+    AndroidStayAwake {
+        /// Command and arguments to run after --
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+
+    /// Run manual Android full-launch onboarding UI tests
+    #[command(name = "android-ui-manual")]
+    AndroidUiManual,
+
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
     BuildIos {
@@ -229,6 +241,10 @@ fn main() -> Result<()> {
         }
 
         Commands::BundleAndroid => android::bundle_android(cli.verbose),
+
+        Commands::AndroidStayAwake { command } => android::run_with_stay_awake(&command),
+
+        Commands::AndroidUiManual => android::run_manual_ui_tests(),
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);

@@ -1,12 +1,13 @@
 use crate::common::{
-    command_exists, print_error, print_info, print_success, trim_generated_trailing_whitespace,
+    command_exists, print_error, print_info, print_success, print_warning,
+    trim_generated_trailing_whitespace,
 };
 use color_eyre::{
-    eyre::{Context, ContextCompat},
+    eyre::{bail, Context, ContextCompat},
     Result,
 };
 use colored::Colorize;
-use std::collections::HashMap;
+use std::{collections::HashMap, process::Command};
 use xshell::{cmd, Shell};
 
 // Android build constants
@@ -25,6 +26,13 @@ const ANDROID_PACKAGE_NAME: &str = "org.bitcoinppl.cove.dev";
 const ANDROID_ACTIVITY_NAME: &str = "org.bitcoinppl.cove.MainActivity";
 const APK_PATH_DEBUG: &str = "app/build/outputs/apk/dev/debug/app-dev-debug.apk";
 const APK_PATH_RELEASE: &str = "app/build/outputs/apk/dev/release/app-dev-release.apk";
+const ANDROID_PROJECT_DIR: &str = "../android";
+const STAY_AWAKE_SETTING: &str = "stay_on_while_plugged_in";
+const STAY_AWAKE_WHILE_PLUGGED_IN: &str = "7";
+const SCREEN_OFF_TIMEOUT_SETTING: &str = "screen_off_timeout";
+const STAY_AWAKE_SCREEN_OFF_TIMEOUT_MS: &str = "1800000";
+const UI_TEST_PACKAGE_NAME: &str = "org.bitcoinppl.cove.uitest";
+const UI_TEST_RUNNER_PACKAGE_NAME: &str = "org.bitcoinppl.cove.uitest.test";
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
@@ -325,6 +333,220 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
+    if command.is_empty() {
+        bail!("Android stay-awake command cannot be empty");
+    }
+    if !command_exists("adb") {
+        bail!("adb command not found");
+    }
+
+    let previous_stay_awake_setting = read_stay_awake_setting()?;
+    let previous_screen_off_timeout = read_screen_off_timeout_setting()?;
+    let mut guard =
+        AndroidStayAwakeGuard::new(previous_stay_awake_setting, previous_screen_off_timeout);
+
+    adb_status(
+        &["shell", "settings", "put", "global", STAY_AWAKE_SETTING, STAY_AWAKE_WHILE_PLUGGED_IN],
+        "Failed to enable Android stay-awake setting",
+    )?;
+    adb_status(
+        &[
+            "shell",
+            "settings",
+            "put",
+            "system",
+            SCREEN_OFF_TIMEOUT_SETTING,
+            STAY_AWAKE_SCREEN_OFF_TIMEOUT_MS,
+        ],
+        "Failed to extend Android screen-off timeout",
+    )?;
+    adb_status(
+        &["shell", "svc", "power", "stayon", "true"],
+        "Failed to enable Android stay-awake service",
+    )?;
+    for args in [
+        ["shell", "input", "keyevent", "KEYCODE_WAKEUP"].as_slice(),
+        ["shell", "wm", "dismiss-keyguard"].as_slice(),
+    ] {
+        if let Err(error) = adb_status(args, "Failed to wake or unlock Android device") {
+            print_warning(&format!("{error}"));
+        }
+    }
+
+    print_info(&format!("Running Android command: {}", command.join(" ")));
+    let status = Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(ANDROID_PROJECT_DIR)
+        .status()
+        .wrap_err_with(|| format!("Failed to run Android command {}", command[0]))?;
+
+    if !status.success() {
+        bail!("Android command failed with status {status}");
+    }
+
+    guard.restore()?;
+
+    Ok(())
+}
+
+pub fn run_manual_ui_tests() -> Result<()> {
+    let _guard = AndroidUiPackageCleanupGuard;
+    let command = [
+        "./gradlew",
+        ":app:connectedUiTestDebugAndroidTest",
+        "-Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest",
+    ]
+    .map(String::from);
+
+    run_with_stay_awake(&command)
+}
+
+struct AndroidStayAwakeGuard {
+    previous_stay_awake_setting: String,
+    previous_screen_off_timeout: String,
+    restore_attempted: bool,
+}
+
+impl AndroidStayAwakeGuard {
+    fn new(previous_stay_awake_setting: String, previous_screen_off_timeout: String) -> Self {
+        Self { previous_stay_awake_setting, previous_screen_off_timeout, restore_attempted: false }
+    }
+
+    fn restore(&mut self) -> Result<()> {
+        self.restore_attempted = true;
+        let mut errors = Vec::new();
+
+        if let Err(error) = restore_stayon_service_state(&self.previous_stay_awake_setting) {
+            errors.push(error.to_string());
+        }
+        if let Err(error) = restore_stay_awake_setting(&self.previous_stay_awake_setting) {
+            errors.push(error.to_string());
+        }
+        if let Err(error) = restore_screen_off_timeout_setting(&self.previous_screen_off_timeout) {
+            errors.push(error.to_string());
+        }
+
+        if !errors.is_empty() {
+            bail!("Failed to restore Android stay-awake state: {}", errors.join("; "));
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for AndroidStayAwakeGuard {
+    fn drop(&mut self) {
+        if self.restore_attempted {
+            return;
+        }
+
+        if let Err(error) = self.restore() {
+            print_warning(&format!("{error}"));
+        }
+    }
+}
+
+struct AndroidUiPackageCleanupGuard;
+
+impl Drop for AndroidUiPackageCleanupGuard {
+    fn drop(&mut self) {
+        uninstall_android_package(UI_TEST_RUNNER_PACKAGE_NAME);
+        uninstall_android_package(UI_TEST_PACKAGE_NAME);
+    }
+}
+
+fn read_stay_awake_setting() -> Result<String> {
+    read_android_setting("global", STAY_AWAKE_SETTING, "Android stay-awake setting")
+}
+
+fn read_screen_off_timeout_setting() -> Result<String> {
+    read_android_setting("system", SCREEN_OFF_TIMEOUT_SETTING, "Android screen-off timeout")
+}
+
+fn read_android_setting(namespace: &str, setting: &str, label: &str) -> Result<String> {
+    let output = Command::new("adb")
+        .args(["shell", "settings", "get", namespace, setting])
+        .output()
+        .wrap_err_with(|| format!("Failed to read {label}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("Failed to read {label}: {}", stderr.trim());
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        bail!("Failed to read {label}: empty setting value");
+    }
+
+    Ok(value)
+}
+
+fn restore_stay_awake_setting(previous_setting: &str) -> Result<()> {
+    if previous_setting == "null" {
+        return adb_status(
+            &["shell", "settings", "delete", "global", STAY_AWAKE_SETTING],
+            "Failed to restore Android stay-awake setting",
+        );
+    }
+
+    adb_status(
+        &["shell", "settings", "put", "global", STAY_AWAKE_SETTING, previous_setting],
+        "Failed to restore Android stay-awake setting",
+    )
+}
+
+fn restore_screen_off_timeout_setting(previous_setting: &str) -> Result<()> {
+    if previous_setting == "null" {
+        return adb_status(
+            &["shell", "settings", "delete", "system", SCREEN_OFF_TIMEOUT_SETTING],
+            "Failed to restore Android screen-off timeout setting",
+        );
+    }
+
+    adb_status(
+        &["shell", "settings", "put", "system", SCREEN_OFF_TIMEOUT_SETTING, previous_setting],
+        "Failed to restore Android screen-off timeout setting",
+    )
+}
+
+fn restore_stayon_service_state(previous_setting: &str) -> Result<()> {
+    let stayon_arg = stayon_service_arg(previous_setting);
+
+    adb_status(
+        &["shell", "svc", "power", "stayon", stayon_arg],
+        "Failed to restore Android stay-awake service",
+    )
+}
+
+fn stayon_service_arg(previous_setting: &str) -> &'static str {
+    match previous_setting.parse::<u32>().unwrap_or(0) {
+        0 => "false",
+        1 => "ac",
+        2 => "usb",
+        4 => "wireless",
+        8 => "dock",
+        _ => "true",
+    }
+}
+
+fn adb_status(args: &[&str], context: &str) -> Result<()> {
+    let status = Command::new("adb").args(args).status().wrap_err_with(|| context.to_string())?;
+
+    if !status.success() {
+        bail!("{context}: adb exited with status {status}");
+    }
+
+    Ok(())
+}
+
+fn uninstall_android_package(package_name: &str) {
+    if let Err(error) = Command::new("adb").args(["uninstall", package_name]).status() {
+        print_warning(&format!("Failed to run adb uninstall for {package_name}: {error}"));
+    }
 }
 
 fn extract_version_name(content: &str) -> Option<String> {
