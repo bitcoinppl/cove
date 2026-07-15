@@ -13,7 +13,8 @@ use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupProgress, LocalWalletMode};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion, PersistedRestoreAllMarker,
+    PersistedCloudBackupState, PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion,
+    PersistedRestoreAllMarker,
 };
 use crate::wallet::metadata::WalletMetadata;
 
