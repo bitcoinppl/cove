@@ -194,11 +194,11 @@ fn select_with_fzf(devices: &[AndroidDevice]) -> Result<AndroidDevice> {
         .context("Selected Android device was not recognized")
 }
 
-fn adb_stdout(output: &Output) -> String {
+pub(crate) fn adb_stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).replace('\r', "")
 }
 
-fn command_error(output: &Output) -> String {
+pub(crate) fn command_error(output: &Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr).replace('\r', "");
     let stderr = stderr.trim();
     if !stderr.is_empty() {

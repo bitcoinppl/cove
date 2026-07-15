@@ -1391,6 +1391,7 @@ mod tests {
 
     fn persisted_preview_wallet(metadata: WalletMetadata) -> Wallet {
         crate::test_support::ensure_tokio_runtime();
+        test_keychain();
 
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         crate::database::Database::global()
