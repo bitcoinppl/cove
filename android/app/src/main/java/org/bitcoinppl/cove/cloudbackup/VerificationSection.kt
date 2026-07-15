@@ -345,58 +345,60 @@ private fun VerificationFailureContent(
     onRecreate: () -> Unit,
     onReinitialize: () -> Unit,
 ) {
-    when (failure) {
-        is DeepVerificationFailure.Retry -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Try Again",
-                onClick = {
-                    manager.dispatch(
-                        verificationRetryAction(failure),
-                    )
-                },
-                leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            )
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Create New Passkey",
-                onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
-                leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-            )
+    Column {
+        when (failure) {
+            is DeepVerificationFailure.Retry -> {
+                ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+                MaterialDivider()
+                MaterialSettingsItem(
+                    title = "Try Again",
+                    onClick = {
+                        manager.dispatch(
+                            verificationRetryAction(failure),
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                )
+                MaterialDivider()
+                MaterialSettingsItem(
+                    title = "Create New Passkey",
+                    onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
+                    leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                )
+            }
+
+            is DeepVerificationFailure.RecreateManifest -> {
+                ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+                MaterialDivider()
+                MaterialSettingsItem(
+                    title = "Recreate Backup Index",
+                    subtitle = failure.warning,
+                    onClick = onRecreate,
+                    leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                )
+            }
+
+            is DeepVerificationFailure.ReinitializeBackup -> {
+                ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+                MaterialDivider()
+                MaterialSettingsItem(
+                    title = "Reinitialize Cloud Backup",
+                    subtitle = failure.warning,
+                    onClick = onReinitialize,
+                    leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
+                )
+            }
+
+            is DeepVerificationFailure.UnsupportedVersion -> {
+                ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+            }
         }
 
-        is DeepVerificationFailure.RecreateManifest -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
+        val repairState = manager.passkeyRepairState
+        if (repairState is CloudBackupPasskeyRepairState.Failed) {
             MaterialDivider()
-            MaterialSettingsItem(
-                title = "Recreate Backup Index",
-                subtitle = failure.warning,
-                onClick = onRecreate,
-                leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            )
+            ErrorInlineMessage(repairState.v1, modifier = Modifier.padding(16.dp))
         }
-
-        is DeepVerificationFailure.ReinitializeBackup -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-            MaterialDivider()
-            MaterialSettingsItem(
-                title = "Reinitialize Cloud Backup",
-                subtitle = failure.warning,
-                onClick = onReinitialize,
-                leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
-            )
-        }
-
-        is DeepVerificationFailure.UnsupportedVersion -> {
-            ErrorInlineMessage(failure.message, modifier = Modifier.padding(16.dp))
-        }
-    }
-
-    val repairState = manager.passkeyRepairState
-    if (repairState is CloudBackupPasskeyRepairState.Failed) {
-        MaterialDivider()
-        ErrorInlineMessage(repairState.v1, modifier = Modifier.padding(16.dp))
     }
 }
 
