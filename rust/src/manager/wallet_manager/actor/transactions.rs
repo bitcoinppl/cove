@@ -466,17 +466,16 @@ impl WalletActor {
     pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,
-        payjoin_endpoint: Option<String>,
+        _payjoin_endpoint: Option<String>,
     ) -> ActorResult<Result<(), Error>> {
         if let Err(error) = self.ensure_ledger_ready_for_spend() {
             return Produces::ok(Err(error));
         }
 
-        if self.payjoin_actor.is_some() {
-            return Produces::ok(Err(Error::SignAndBroadcastError(
-                "a payjoin session is already in progress".to_string(),
-            )));
-        }
+        let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
+            Ok(result) => result,
+            Err(error) => return Produces::ok(Err(error)),
+        };
 
         match self.db.get_payjoin_sender_session() {
             Ok(None) => {}
@@ -550,6 +549,7 @@ impl WalletActor {
         }
     }
 
+    #[allow(dead_code)]
     async fn initiate_payjoin_payment(
         &mut self,
         psbt: Psbt,
