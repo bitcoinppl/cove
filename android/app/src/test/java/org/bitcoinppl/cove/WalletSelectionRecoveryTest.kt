@@ -9,6 +9,74 @@ import org.junit.Test
 
 class WalletSelectionRecoveryTest {
     @Test
+    fun recoveryTriesRequestedThenCachedThenWalletDisplayOrder() {
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = "wallet-b",
+                cachedId = "wallet-a",
+                displayedIds = listOf("wallet-c", "wallet-a", "wallet-b", "wallet-d"),
+            )
+
+        assertEquals("wallet-b", recovery.nextCandidate())
+        assertEquals("wallet-a", recovery.nextCandidate())
+        assertEquals("wallet-c", recovery.nextCandidate())
+        assertEquals("wallet-d", recovery.nextCandidate())
+        assertEquals(null, recovery.nextCandidate())
+    }
+
+    @Test
+    fun recoveryExhaustionDoesNotRetryAttemptedWallets() {
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = "wallet-a",
+                cachedId = "wallet-a",
+                displayedIds = listOf("wallet-a", "wallet-a"),
+            )
+
+        assertEquals("wallet-a", recovery.nextCandidate())
+        assertEquals(null, recovery.nextCandidate())
+    }
+
+    @Test
+    fun completedBootstrapUsesMatchingCacheEvenWhenGenerationChanged() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 2,
+                cachedWalletId = "wallet-b",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.UseCached, decision)
+    }
+
+    @Test
+    fun completedBootstrapCancelsWhenAnotherWalletChangedTheCache() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 2,
+                cachedWalletId = "wallet-c",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Cancel, decision)
+    }
+
+    @Test
+    fun completedBootstrapInstallsWhenCacheIsUnchanged() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 1,
+                cachedWalletId = "wallet-a",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Install, decision)
+    }
+
+    @Test
     fun recoversWalletSelectionWithoutPoppingRoute() {
         var didPopRoute = false
 

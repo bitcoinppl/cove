@@ -1,10 +1,35 @@
 import Observation
 
+enum WalletManagerCacheLoadDecision: Equatable {
+    case installLoaded
+    case useCached
+    case cancelLoaded
+
+    static func resolve(
+        targetId: WalletId,
+        capturedGeneration: UInt64,
+        currentGeneration: UInt64,
+        cachedWalletId: WalletId?
+    ) -> Self {
+        if cachedWalletId == targetId {
+            return .useCached
+        }
+
+        guard capturedGeneration == currentGeneration else {
+            return .cancelLoaded
+        }
+
+        return .installLoaded
+    }
+}
+
 @Observable final class ManagerCache {
     private let logger = Log(id: "ManagerCache")
 
     @ObservationIgnored
     private let backgroundScanTaskHandler: BackgroundScanTaskHandler
+    @ObservationIgnored
+    private var walletManagerCacheGeneration: UInt64 = 0
 
     private(set) var walletManager: WalletManager?
     private(set) var sendFlowManager: SendFlowManager?
@@ -58,7 +83,7 @@ import Observation
             return walletManager
         }
 
-        let previousManager = walletManager
+        let cacheGeneration = walletManagerCacheGeneration
         logger.debug(
             "did not find vm for \(id), loading new vm: \(walletManager?.id ?? "none")"
         )
@@ -76,17 +101,25 @@ import Observation
             throw CancellationError()
         }
 
-        // ensureWalletManagerLoaded checks before installWalletManager whether another wallet
-        // replaced the cache
-        // walletManager !== previousManager and walletManager.id != id means a different wallet
-        // owns it now
-        // close and cancel the newly loaded WalletManager so the replacement remains authoritative
-        if let walletManager, walletManager !== previousManager, walletManager.id != id {
+        switch WalletManagerCacheLoadDecision.resolve(
+            targetId: id,
+            capturedGeneration: cacheGeneration,
+            currentGeneration: walletManagerCacheGeneration,
+            cachedWalletId: walletManager?.id
+        ) {
+        case .installLoaded:
+            return installWalletManager(loadedWalletManager)
+        case .useCached:
+            loadedWalletManager.close()
+            guard let walletManager = cachedWalletManager(id: id) else {
+                throw CancellationError()
+            }
+
+            return walletManager
+        case .cancelLoaded:
             loadedWalletManager.close()
             throw CancellationError()
         }
-
-        return installWalletManager(loadedWalletManager)
     }
 
     private func installWalletManager(_ walletManager: WalletManager) -> WalletManager {
@@ -100,23 +133,33 @@ import Observation
             }
         }
 
-        clearWalletManager()
+        let previousManager = self.walletManager
+        backgroundScanTaskHandler.endInitialScanBackgroundTask()
+        previousManager?.setInitialScanLifecycleChanged(nil)
+        clearSendFlowManager()
 
         backgroundScanTaskHandler.observeInitialScanLifecycle(for: walletManager) { [weak self] in
             self?.walletManager
         }
         self.walletManager = walletManager
+        walletManagerCacheGeneration &+= 1
+        previousManager?.close()
 
         return walletManager
     }
 
     func clearWalletManager(id: WalletId? = nil) {
         if id == nil {
+            let hadWalletManager = walletManager != nil
             backgroundScanTaskHandler.endInitialScanBackgroundTask()
             walletManager?.setInitialScanLifecycleChanged(nil)
             walletManager?.close()
             walletManager = nil
             clearSendFlowManager()
+
+            if hadWalletManager {
+                walletManagerCacheGeneration &+= 1
+            }
             return
         }
 
@@ -125,6 +168,7 @@ import Observation
             walletManager?.setInitialScanLifecycleChanged(nil)
             walletManager?.close()
             walletManager = nil
+            walletManagerCacheGeneration &+= 1
         }
 
         clearSendFlowManager(id: id)

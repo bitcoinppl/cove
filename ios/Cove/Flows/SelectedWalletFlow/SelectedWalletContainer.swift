@@ -21,6 +21,7 @@ struct SelectedWalletContainer: View {
     var body: some View {
         WalletManagerHost(
             walletId: id,
+            preparesWalletRoute: true,
             loading: {
                 if let metadata = app.walletMetadata(id: id) {
                     SelectedWalletLoadingScreen(metadata: metadata)

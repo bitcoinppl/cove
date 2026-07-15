@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
-import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.components.FullPageLoadingView
@@ -190,7 +189,6 @@ private fun LoadAndResetContent(
     route: Route.LoadAndReset,
 ) {
     val nextRoutes = route.resetTo.map { it.route() }
-    val loadingTimeMs = route.afterMillis.toLong()
     val loadingMessage =
         if (nextRoutes.firstOrNull() is Route.SelectedWallet) {
             stringResource(R.string.label_loading_wallet)
@@ -201,9 +199,6 @@ private fun LoadAndResetContent(
     FullPageLoadingView(message = loadingMessage)
 
     LaunchedEffect(route) {
-        val generation = app.captureLoadAndResetGeneration()
-        app.startLoadAndResetTargetPrewarm(generation, nextRoutes)
-        delay(loadingTimeMs)
-        app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+        app.completeLoadAndReset(route)
     }
 }

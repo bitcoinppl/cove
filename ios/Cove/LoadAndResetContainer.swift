@@ -22,17 +22,27 @@ struct LoadAndResetContainer: View {
             .task(id: route) {
                 do {
                     let generation = app.captureLoadAndResetGeneration()
-                    app.startLoadAndResetTargetPrewarm(
+                    async let minimumDelay: Void = Task.sleep(
+                        for: .milliseconds(loadingTimeMs)
+                    )
+                    async let preparation = app.prepareLoadAndResetTarget(
                         generation: generation,
                         routes: nextRoute
                     )
-                    try await Task.sleep(for: .milliseconds(loadingTimeMs))
+
+                    let (_, outcome) = try await (minimumDelay, preparation)
+                    guard case .ready = outcome else { return }
+
                     app.resetAfterLoadingIfCurrent(
                         generation: generation,
                         route: route,
                         nextRoute: nextRoute
                     )
-                } catch {}
+                } catch is CancellationError {
+                    return
+                } catch {
+                    Log.error("Unable to prepare load-and-reset target: \(error)")
+                }
             }
             .tint(.primary)
     }

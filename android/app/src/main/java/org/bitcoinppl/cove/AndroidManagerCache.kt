@@ -20,6 +20,7 @@ internal class AndroidManagerCache(
     private val mainScope: CoroutineScope,
 ) {
     private val tag = "AppManager"
+    private var walletManagerCacheGeneration = 0L
 
     internal var walletManager: WalletManager? by mutableStateOf(null)
         private set
@@ -72,7 +73,7 @@ internal class AndroidManagerCache(
         id: WalletId,
         isCurrent: () -> Boolean = { true },
     ): WalletManager {
-        val previousManager =
+        val (cachedManager, cacheGeneration) =
             withContext(Dispatchers.Main.immediate) {
                 ensureWalletLoadIsCurrent(id, isCurrent)
 
@@ -80,21 +81,21 @@ internal class AndroidManagerCache(
                 if (current != null) {
                     if (current.id == id) {
                         Log.d(tag, "found and using wallet manager for $id")
-                        return@withContext current
+                        return@withContext current to walletManagerCacheGeneration
                     }
 
                     Log.d(tag, "will replace old wallet manager for ${current.id}")
                 }
 
-                current
+                current to walletManagerCacheGeneration
             }
-        if (previousManager?.id == id) {
+        if (cachedManager?.id == id) {
             ensureWalletLoadIsCurrent(id, isCurrent)
 
-            return previousManager
+            return cachedManager
         }
 
-        Log.d(tag, "did not find wallet manager for $id, creating new: ${previousManager?.id}")
+        Log.d(tag, "did not find wallet manager for $id, creating new: ${cachedManager?.id}")
 
         val manager =
             try {
@@ -109,12 +110,21 @@ internal class AndroidManagerCache(
                 closeLoadedManagerAndCancel(manager, id)
             }
 
-            val currentManager = walletManager
-            if (currentManager != null && currentManager !== previousManager && currentManager.id != id) {
-                closeLoadedManagerAndCancel(manager, id)
+            when (
+                WalletManagerBootstrapDecision.resolve(
+                    targetId = id,
+                    capturedGeneration = cacheGeneration,
+                    currentGeneration = walletManagerCacheGeneration,
+                    cachedWalletId = walletManager?.id,
+                )
+            ) {
+                WalletManagerBootstrapDecision.UseCached -> {
+                    manager.close()
+                    checkNotNull(walletManager)
+                }
+                WalletManagerBootstrapDecision.Cancel -> closeLoadedManagerAndCancel(manager, id)
+                WalletManagerBootstrapDecision.Install -> installWalletManager(manager)
             }
-
-            installWalletManager(manager)
         }
     }
 
@@ -148,8 +158,10 @@ internal class AndroidManagerCache(
                     currentManager
                 }
                 else -> {
-                    clearWalletManager()
+                    clearWalletScopedChildManagers()
                     walletManager = manager
+                    walletManagerCacheGeneration += 1
+                    currentManager?.close()
                     manager
                 }
             }
@@ -222,6 +234,7 @@ internal class AndroidManagerCache(
     }
 
     internal fun clearWalletManager() {
+        val hadWalletManager = walletManager != null
         clearWalletScopedChildManagers()
 
         try {
@@ -230,6 +243,7 @@ internal class AndroidManagerCache(
             Log.w(tag, "Error closing WalletManager: ${e.message}")
         }
         walletManager = null
+        if (hadWalletManager) walletManagerCacheGeneration += 1
     }
 
     internal fun clearWalletManager(id: WalletId) {

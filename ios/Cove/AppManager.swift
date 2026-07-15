@@ -4,6 +4,34 @@ import SwiftUI
 
 private let walletModeChangeDelayMs = 250
 
+enum LoadAndResetPreparationOutcome {
+    case ready
+    case redirected
+}
+
+enum WalletTargetPreparationOutcome {
+    case ready(WalletManager)
+    case redirected
+}
+
+struct WalletTransitionRecoveryPlan {
+    private(set) var attemptedIds: [WalletId] = []
+
+    mutating func recordAttempt(_ id: WalletId) {
+        guard !attemptedIds.contains(id) else { return }
+        attemptedIds.append(id)
+    }
+
+    func candidates(cachedWalletId: WalletId?, displayedIds: [WalletId]) -> [WalletId] {
+        let orderedIds = [cachedWalletId].compactMap(\.self) + displayedIds
+
+        return orderedIds.reduce(into: []) { candidates, id in
+            guard !attemptedIds.contains(id), !candidates.contains(id) else { return }
+            candidates.append(id)
+        }
+    }
+}
+
 @Observable final class AppManager: FfiReconcile {
     static let shared = makeShared()
 
@@ -246,6 +274,15 @@ private let walletModeChangeDelayMs = 250
         )
     }
 
+    private func selectWalletWithoutNavigationGeneration(_ id: WalletId) throws {
+        try navigationCoordinator.selectWallet(
+            id,
+            router: router,
+            isSidebarVisible: &isSidebarVisible,
+            advancesGeneration: false
+        )
+    }
+
     func trySelectLatestOrNewWallet() {
         do {
             try selectLatestOrNewWallet()
@@ -430,27 +467,101 @@ private let walletModeChangeDelayMs = 250
     }
 
     @MainActor
-    func startLoadAndResetTargetPrewarm(generation: GenerationToken, routes: [Route]) {
-        navigationCoordinator.startLoadAndResetTargetPrewarm(
-            generation: generation,
-            routes: routes
-        ) { [weak self] id in
-            guard let self else { return }
-            let isCurrent: @MainActor () -> Bool = { [weak self] in
-                self?.navigationCoordinator.isNavigationGenerationCurrent(generation) == true
-            }
+    func prepareLoadAndResetTarget(
+        generation: GenerationToken,
+        routes: [Route]
+    ) async throws -> LoadAndResetPreparationOutcome {
+        guard case let .selectedWallet(id) = routes.first else { return .ready }
+
+        switch try await prepareWalletTarget(id: id, generation: generation) {
+        case .ready:
+            return .ready
+        case .redirected:
+            return .redirected
+        }
+    }
+
+    @MainActor
+    func prepareSelectedWallet(
+        id: WalletId,
+        generation: GenerationToken
+    ) async throws -> WalletTargetPreparationOutcome {
+        try await prepareWalletTarget(id: id, generation: generation)
+    }
+
+    @MainActor
+    private func prepareWalletTarget(
+        id: WalletId,
+        generation: GenerationToken
+    ) async throws -> WalletTargetPreparationOutcome {
+        var recoveryPlan = WalletTransitionRecoveryPlan()
+        var candidateId = id
+
+        while true {
+            recoveryPlan.recordAttempt(candidateId)
 
             do {
-                let manager = try await self.ensureWalletManagerLoaded(id: id, isCurrent: isCurrent)
-                guard isCurrent() else { return }
+                let manager = try await ensureWalletManagerLoaded(id: candidateId) {
+                    self.navigationCoordinator.isNavigationGenerationCurrent(generation)
+                }
 
-                try await manager.startWalletScanIfNeeded()
+                guard navigationCoordinator.isNavigationGenerationCurrent(generation) else {
+                    throw CancellationError()
+                }
+
+                if candidateId == id {
+                    return .ready(manager)
+                }
+
+                do {
+                    try selectWalletWithoutNavigationGeneration(candidateId)
+                    return .redirected
+                } catch {
+                    logger.error("Unable to select recovery wallet \(candidateId): \(error)")
+                }
             } catch is CancellationError {
-                return
+                throw CancellationError()
             } catch {
-                self.logger.error("Unable to prewarm selected wallet \(id): \(error)")
+                handleWalletPreparationError(error, walletId: candidateId)
             }
+
+            guard let nextId = recoveryPlan.candidates(
+                cachedWalletId: walletManager?.id,
+                displayedIds: wallets.map(\.id)
+            ).first else {
+                recoverFromExhaustedWalletTransition(generation: generation)
+                return .redirected
+            }
+
+            candidateId = nextId
         }
+    }
+
+    @MainActor
+    private func handleWalletPreparationError(_ error: Error, walletId: WalletId) {
+        if case let WalletManagerError.DatabaseCorruption(corruptedId, errorMessage) = error {
+            logger.error("Wallet database corrupted for \(corruptedId): \(errorMessage)")
+            alertState = TaggedItem(
+                .walletDatabaseCorrupted(walletId: corruptedId, error: errorMessage)
+            )
+            return
+        }
+
+        logger.error("Unable to prepare wallet \(walletId): \(error)")
+    }
+
+    @MainActor
+    private func recoverFromExhaustedWalletTransition(generation: GenerationToken) {
+        guard navigationCoordinator.isNavigationGenerationCurrent(generation) else { return }
+
+        do {
+            try database.globalConfig().clearSelectedWallet()
+        } catch {
+            logger.error("Unable to clear selected wallet after recovery exhausted: \(error)")
+        }
+
+        clearWalletManager()
+        resetRoute(to: .newWallet(.select))
     }
 
     @MainActor

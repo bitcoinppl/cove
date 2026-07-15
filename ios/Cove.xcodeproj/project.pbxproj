@@ -25,6 +25,7 @@
 		C0B0001C2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */; };
 		C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */; };
 		C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */; };
+		C0D000012F10000000000001 /* WalletTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D000022F10000000000001 /* WalletTransitionTests.swift */; };
 		C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */; };
 		C0D000012F20000000000001 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		C0D000022F20000000000001 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
@@ -89,6 +90,7 @@
 		C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateScreenLayoutTests.swift; sourceTree = "<group>"; };
 		C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLogStoreTests.swift; sourceTree = "<group>"; };
 		C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupIOSSafetyHelpersTests.swift; sourceTree = "<group>"; };
+		C0D000022F10000000000001 /* WalletTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransitionTests.swift; sourceTree = "<group>"; };
 		C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyProviderImplTests.swift; sourceTree = "<group>"; };
 		C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoveCloudBackupUITestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveCloudBackupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -181,6 +183,7 @@
 			children = (
 				C0B000182F10000000000001 /* AmountFormatterTests.swift */,
 				C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */,
+				C0D000022F10000000000001 /* WalletTransitionTests.swift */,
 				C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */,
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
 				C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */,
@@ -445,6 +448,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */,
+				C0D000012F10000000000001 /* WalletTransitionTests.swift in Sources */,
 				C0B000192F10000000000001 /* AmountFormatterTests.swift in Sources */,
 				C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */,
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,

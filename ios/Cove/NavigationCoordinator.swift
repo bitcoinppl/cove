@@ -212,21 +212,6 @@ extension FfiApp: NavigationRouteClient {}
     }
 
     @MainActor
-    func startLoadAndResetTargetPrewarm(
-        generation: GenerationToken,
-        routes: [Route],
-        prewarmSelectedWallet: @escaping @MainActor (WalletId) async -> Void
-    ) {
-        Task { [weak self] in
-            await self?.prewarmLoadAndResetTargetIfCurrent(
-                generation: generation,
-                routes: routes,
-                prewarmSelectedWallet: prewarmSelectedWallet
-            )
-        }
-    }
-
-    @MainActor
     func resetAfterLoadingIfCurrent(
         generation: GenerationToken,
         route: Route,
@@ -296,18 +281,6 @@ extension FfiApp: NavigationRouteClient {}
 
     func isNavigationGenerationCurrent(_ generation: GenerationToken) -> Bool {
         navigationGenerations.isCurrent(capturedToken: generation)
-    }
-
-    @MainActor
-    private func prewarmLoadAndResetTargetIfCurrent(
-        generation: GenerationToken,
-        routes: [Route],
-        prewarmSelectedWallet: @escaping @MainActor (WalletId) async -> Void
-    ) async {
-        guard isNavigationGenerationCurrent(generation) else { return }
-        guard case let .selectedWallet(id) = routes.first else { return }
-
-        await prewarmSelectedWallet(id)
     }
 
     private func scheduleNavigationSettled(for generation: GenerationToken) {

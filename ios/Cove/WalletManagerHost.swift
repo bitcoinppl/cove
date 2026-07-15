@@ -9,17 +9,20 @@ struct WalletManagerHost<Loading: View, Content: View>: View {
     @Environment(AppManager.self) private var app
 
     let walletId: WalletId
+    let preparesWalletRoute: Bool
     let loading: () -> Loading
     let onError: (Error) -> Void
     let content: (WalletManager) -> Content
 
     init(
         walletId: WalletId,
+        preparesWalletRoute: Bool = false,
         @ViewBuilder loading: @escaping () -> Loading,
         onError: @escaping (Error) -> Void = { _ in },
         @ViewBuilder content: @escaping (WalletManager) -> Content
     ) {
         self.walletId = walletId
+        self.preparesWalletRoute = preparesWalletRoute
         self.loading = loading
         self.onError = onError
         self.content = content
@@ -52,7 +55,12 @@ struct WalletManagerHost<Loading: View, Content: View>: View {
         guard manager == nil else { return }
 
         do {
-            _ = try await app.ensureWalletManagerLoaded(id: walletId)
+            if preparesWalletRoute {
+                let generation = app.captureLoadAndResetGeneration()
+                _ = try await app.prepareSelectedWallet(id: walletId, generation: generation)
+            } else {
+                _ = try await app.ensureWalletManagerLoaded(id: walletId)
+            }
         } catch is CancellationError {
             return
         } catch {
