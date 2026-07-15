@@ -1,0 +1,9 @@
+Cove 1.3.0 improves backup, restore, and wallet scanning.
+
+• Back up to Google Drive and restore with a passkey on a new or reinstalled phone
+• New setup screens for creating, importing, and restoring wallets
+• See scan progress as balances and transactions appear sooner
+• Better scanning and imports across account numbers and address types
+• Receive screens detect activity and warn before address reuse
+• Safer pasted send amounts
+• Clearer backup, wallet, and security messages
