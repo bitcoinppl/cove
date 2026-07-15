@@ -498,23 +498,13 @@ impl CloudBackupWriteSupervisor {
                 manager.remove_blob_sync_states(std::iter::once(record_id.clone()))?;
 
                 let wallet_count = wallet_record_ids.len() as u32;
-                match Database::global().cloud_backup_state.get() {
-                    Ok(mut current) => {
-                        current.set_wallet_count(Some(wallet_count));
-                        if let Err(error) = manager.persist_cloud_backup_state(
-                            &current,
-                            "persist cloud backup state after deleting cloud wallet",
-                        ) {
-                            warn!(
-                                "Failed to persist cloud backup state after deleting cloud wallet: {error}"
-                            );
-                        }
-                    }
-                    Err(error) => {
-                        warn!(
-                            "Failed to load cloud backup state after deleting cloud wallet, skipping wallet count update: {error}"
-                        );
-                    }
+                if let Err(error) = manager.mutate_persisted_cloud_backup_state(
+                    "persist cloud backup state after deleting cloud wallet",
+                    |state| state.set_wallet_count(Some(wallet_count)),
+                ) {
+                    warn!(
+                        "Failed to persist cloud backup state after deleting cloud wallet: {error}"
+                    );
                 }
 
                 Ok(())

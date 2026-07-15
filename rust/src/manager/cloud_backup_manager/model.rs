@@ -135,7 +135,15 @@ struct CloudBackupConfiguredReducerState {
     destructive_operation: CloudBackupDestructiveOperationState,
     pending_upload_verification: PendingUploadVerificationState,
     detail: CloudBackupDetailState,
+    detail_refresh: DetailRefreshActivity,
     prompt: CloudBackupConfiguredPrompt,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum DetailRefreshActivity {
+    #[default]
+    Idle,
+    InFlight,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,6 +178,7 @@ impl Default for CloudBackupConfiguredReducerState {
             destructive_operation: CloudBackupDestructiveOperationState::Idle,
             pending_upload_verification: PendingUploadVerificationState::Idle,
             detail: CloudBackupDetailState::NotLoaded,
+            detail_refresh: DetailRefreshActivity::Idle,
             prompt: CloudBackupConfiguredPrompt::None,
         }
     }
@@ -620,6 +629,15 @@ impl CloudBackupReducerState {
         }
     }
 
+    fn loaded_detail_mut(&mut self) -> Option<&mut LoadedCloudBackupDetail> {
+        match &mut self.configured.detail {
+            CloudBackupDetailState::Complete { state } => Some(state),
+            CloudBackupDetailState::Checking { retained }
+            | CloudBackupDetailState::Failed { retained, .. } => retained.as_mut(),
+            CloudBackupDetailState::NotLoaded => None,
+        }
+    }
+
     fn detail_inventory_is_complete(&self) -> bool {
         matches!(self.configured.detail, CloudBackupDetailState::Complete { .. })
     }
@@ -1036,6 +1054,7 @@ impl CloudBackupReducerState {
 
     fn apply_detail_refresh(&mut self, detail: Option<CloudBackupDetail>, reset_cloud_only: bool) {
         let previous_loaded = self.loaded_detail().cloned();
+        self.configured.detail_refresh = DetailRefreshActivity::Idle;
         self.configured.detail = match detail {
             Some(detail) => {
                 let cloud_only = if reset_cloud_only {
@@ -1068,10 +1087,13 @@ impl CloudBackupReducerState {
 
     fn apply_detail_refresh_started(&mut self) {
         let retained = self.loaded_detail().cloned();
+        self.configured.detail_refresh = DetailRefreshActivity::InFlight;
         self.configured.detail = CloudBackupDetailState::Checking { retained };
     }
 
     fn apply_detail_refresh_provisional(&mut self, detail: CloudBackupDetail) {
+        self.configured.detail_refresh = DetailRefreshActivity::InFlight;
+
         if let Some(previous_loaded) = self.loaded_detail().cloned() {
             self.configured.detail =
                 CloudBackupDetailState::Checking { retained: Some(previous_loaded) };
@@ -1094,60 +1116,97 @@ impl CloudBackupReducerState {
         error: String,
     ) {
         let retained = self.loaded_detail().cloned();
+        self.configured.detail_refresh = DetailRefreshActivity::Idle;
         self.configured.detail = CloudBackupDetailState::Failed { reason, error, retained };
     }
 
     fn resolve_cloud_only_state(&mut self, cloud_only: CloudOnlyState) {
+        let detail_refresh_in_flight =
+            self.configured.detail_refresh == DetailRefreshActivity::InFlight;
+
         match (&mut self.configured.detail, cloud_only) {
             (CloudBackupDetailState::Complete { state }, cloud_only) => {
                 state.cloud_only = cloud_only;
             }
             (CloudBackupDetailState::Checking { retained }, CloudOnlyState::Loaded { wallets }) => {
-                let Some(mut state) = retained.take() else {
+                let Some(state) = retained.as_mut() else {
                     return;
                 };
 
                 state.cloud_only = CloudOnlyState::Loaded { wallets };
-                self.configured.detail = CloudBackupDetailState::Complete { state };
+                if !detail_refresh_in_flight && let Some(state) = retained.take() {
+                    self.configured.detail = CloudBackupDetailState::Complete { state };
+                }
             }
             (detail, CloudOnlyState::Loading) => {
-                let retained = match detail {
+                let mut retained = match detail {
                     CloudBackupDetailState::Complete { state } => Some(state.clone()),
                     CloudBackupDetailState::Checking { retained }
                     | CloudBackupDetailState::Failed { retained, .. } => retained.clone(),
                     CloudBackupDetailState::NotLoaded => None,
                 };
+                if let Some(state) = &mut retained {
+                    state.cloud_only = CloudOnlyState::Loading;
+                }
                 *detail = CloudBackupDetailState::Checking { retained };
             }
+            (
+                CloudBackupDetailState::Failed { retained, .. },
+                failed @ CloudOnlyState::Failed { .. },
+            ) => {
+                if let Some(state) = retained {
+                    state.cloud_only = failed;
+                }
+            }
             (detail, CloudOnlyState::Failed { error }) => {
-                let retained = match detail {
+                let mut retained = match detail {
                     CloudBackupDetailState::Complete { state } => Some(state.clone()),
                     CloudBackupDetailState::Checking { retained }
                     | CloudBackupDetailState::Failed { retained, .. } => retained.clone(),
                     CloudBackupDetailState::NotLoaded => None,
                 };
-                *detail = CloudBackupDetailState::Failed {
-                    reason: CloudBackupInventoryIncompleteReason::Unknown,
-                    error,
-                    retained,
-                };
+                if let Some(state) = &mut retained {
+                    state.cloud_only = CloudOnlyState::Failed { error: error.clone() };
+                }
+
+                if detail_refresh_in_flight {
+                    *detail = CloudBackupDetailState::Checking { retained };
+                } else {
+                    *detail = CloudBackupDetailState::Failed {
+                        reason: CloudBackupInventoryIncompleteReason::Unknown,
+                        error,
+                        retained,
+                    };
+                }
             }
             (detail, CloudOnlyState::NotFetched) => {
-                *detail = CloudBackupDetailState::NotLoaded;
+                if detail_refresh_in_flight {
+                    if let CloudBackupDetailState::Checking { retained: Some(state) } = detail {
+                        state.cloud_only = CloudOnlyState::NotFetched;
+                    }
+                } else {
+                    *detail = CloudBackupDetailState::NotLoaded;
+                }
+            }
+            (CloudBackupDetailState::Failed { retained: Some(state), .. }, loaded) => {
+                state.cloud_only = loaded;
             }
             (CloudBackupDetailState::NotLoaded, CloudOnlyState::Loaded { .. })
-            | (CloudBackupDetailState::Failed { .. }, CloudOnlyState::Loaded { .. }) => {}
+            | (
+                CloudBackupDetailState::Failed { retained: None, .. },
+                CloudOnlyState::Loaded { .. },
+            ) => {}
         }
     }
 
     fn resolve_cloud_only_operation(&mut self, cloud_only_operation: CloudOnlyOperation) {
-        if let CloudBackupDetailState::Complete { state } = &mut self.configured.detail {
+        if let Some(state) = self.loaded_detail_mut() {
             state.cloud_only_operation = cloud_only_operation;
         }
     }
 
     fn resolve_other_backups_operation(&mut self, other_backups_operation: OtherBackupsOperation) {
-        if let CloudBackupDetailState::Complete { state } = &mut self.configured.detail {
+        if let Some(state) = self.loaded_detail_mut() {
             state.other_backups_operation = other_backups_operation;
         }
     }
@@ -1775,6 +1834,113 @@ mod tests {
             configured.restore_all,
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
+    }
+
+    #[test]
+    fn cloud_only_completion_does_not_finish_authoritative_detail_refresh() {
+        let mut model = configured_model_with_cloud_only(vec![cloud_only_wallet(
+            "stale-wallet",
+            CloudBackupWalletStatus::DeletedFromDevice,
+        )]);
+        let loaded_wallets = vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+        ];
+
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Loading,
+            ))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
+        else {
+            panic!("expected authoritative detail refresh to remain checking");
+        };
+        assert_eq!(retained.cloud_only, CloudOnlyState::Loaded { wallets: loaded_wallets });
+        assert_eq!(
+            configured.restore_all,
+            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn retained_detail_receives_terminal_operation_states() {
+        let mut model = configured_model_with_cloud_only(vec![cloud_only_wallet(
+            "wallet-1",
+            CloudBackupWalletStatus::DeletedFromDevice,
+        )]);
+        let cloud_only_failure = CloudOnlyOperation::Failed { error: "restore failed".into() };
+        let other_backups_failure =
+            OtherBackupsOperation::Failed { error: "recovery failed".into() };
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+                CloudOnlyOperation::Operating { record_id: "wallet-1".into() },
+            ))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+                OtherBackupsOperation::Recovering,
+            ))
+            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+                cloud_only_failure.clone(),
+            ))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+                other_backups_failure.clone(),
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
+        else {
+            panic!("expected checking detail with retained operation states");
+        };
+        assert_eq!(retained.cloud_only_operation, cloud_only_failure);
+        assert_eq!(retained.other_backups_operation, other_backups_failure);
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+                reason: CloudBackupInventoryIncompleteReason::Offline,
+                error: "provider offline".into(),
+            })
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+                CloudOnlyOperation::Idle,
+            ))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+                OtherBackupsOperation::Deleted,
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Failed { retained: Some(retained), .. } = configured.detail
+        else {
+            panic!("expected failed detail with retained operation states");
+        };
+        assert_eq!(retained.cloud_only_operation, CloudOnlyOperation::Idle);
+        assert_eq!(retained.other_backups_operation, OtherBackupsOperation::Deleted);
     }
 
     #[test]

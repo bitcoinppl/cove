@@ -208,6 +208,37 @@ private func onboardingWordGridRowCount(_ wordCount: Int) -> Int {
     max((wordCount + 1) / 2, 1)
 }
 
+enum OnboardingCloudBackupStepPresentation: Equatable {
+    case enable
+    case pendingEnableRecovery(CloudBackupPendingEnableRecovery)
+}
+
+enum OnboardingCloudBackupRecoveryIntent {
+    case removeIncompleteSetup
+    case skip
+}
+
+func onboardingCloudBackupStepPresentation(
+    lifecycle: CloudBackupLifecycle
+) -> OnboardingCloudBackupStepPresentation {
+    guard case let .pendingEnableRecovery(recovery) = lifecycle else { return .enable }
+
+    return .pendingEnableRecovery(recovery)
+}
+
+func routeOnboardingCloudBackupRecoveryIntent(
+    _ intent: OnboardingCloudBackupRecoveryIntent,
+    dispatch: (CloudBackupManagerAction) -> Void,
+    onSkip: () -> Void
+) {
+    switch intent {
+    case .removeIncompleteSetup:
+        dispatch(.confirmPendingEnableCleanup)
+    case .skip:
+        onSkip()
+    }
+}
+
 struct OnboardingCloudBackupStepView: View {
     @State private var backupManager = CloudBackupManager.shared
     @State private var didReportEnabled = false
@@ -219,25 +250,20 @@ struct OnboardingCloudBackupStepView: View {
 
     var body: some View {
         Group {
-            switch branch {
-            case .softwareImport:
-                OnboardingSoftwareImportCloudBackupStepView(
-                    onEnable: onEnable,
-                    onSkip: onSkip
+            switch onboardingCloudBackupStepPresentation(lifecycle: backupManager.lifecycle) {
+            case let .pendingEnableRecovery(recovery):
+                CloudBackupPendingEnableRecoveryView(
+                    recovery: recovery,
+                    onRemoveIncompleteSetup: {
+                        routeRecoveryIntent(.removeIncompleteSetup)
+                    },
+                    onCancel: {
+                        routeRecoveryIntent(.skip)
+                    }
                 )
 
-            case .hardware:
-                OnboardingHardwareImportCloudBackupStepView(
-                    onEnable: onEnable,
-                    onSkip: onSkip
-                )
-
-            case .newUser, .exchange, .softwareCreate, nil:
-                OnboardingCloudBackupDetailsStepView(
-                    onEnable: onEnable,
-                    onSkip: onSkip,
-                    context: .standard
-                )
+            case .enable:
+                enableContent
             }
         }
         .task(id: backupManager.enableCompletion?.id) {
@@ -246,6 +272,38 @@ struct OnboardingCloudBackupStepView: View {
         .task(id: backupManager.lifecycle) {
             await completeIfReady()
         }
+    }
+
+    @ViewBuilder
+    private var enableContent: some View {
+        switch branch {
+        case .softwareImport:
+            OnboardingSoftwareImportCloudBackupStepView(
+                onEnable: onEnable,
+                onSkip: onSkip
+            )
+
+        case .hardware:
+            OnboardingHardwareImportCloudBackupStepView(
+                onEnable: onEnable,
+                onSkip: onSkip
+            )
+
+        case .newUser, .exchange, .softwareCreate, nil:
+            OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
+                onSkip: onSkip,
+                context: .standard
+            )
+        }
+    }
+
+    private func routeRecoveryIntent(_ intent: OnboardingCloudBackupRecoveryIntent) {
+        routeOnboardingCloudBackupRecoveryIntent(
+            intent,
+            dispatch: { backupManager.dispatch(action: $0) },
+            onSkip: onSkip
+        )
     }
 
     private func completeIfReady() async {

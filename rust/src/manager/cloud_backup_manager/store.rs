@@ -74,33 +74,32 @@ impl CloudBackupStore {
         &self,
         namespace_id: String,
     ) -> Result<(), CloudBackupError> {
-        let mut state = self.0.cloud_backup_state.get().map_err(|source| {
-            CloudBackupError::internal_context("read cloud backup state", source)
-        })?;
-        if !state.replace_pending_restore_all(PersistedRestoreAllMarker { namespace_id }) {
+        let mutation = self
+            .0
+            .cloud_backup_state
+            .mutate(|state| {
+                state.replace_pending_restore_all(PersistedRestoreAllMarker { namespace_id })
+            })
+            .map_err(|source| {
+                CloudBackupError::internal_context("persist Restore All marker", source)
+            })?;
+        if !mutation.outcome {
             return Err(CloudBackupError::Internal(
                 "cannot start Restore All while Cloud Backup is not configured".into(),
             ));
         }
 
-        self.0.cloud_backup_state.set(&state).map_err(|source| {
-            CloudBackupError::internal_context("persist Restore All marker", source)
-        })
+        Ok(())
     }
 
     pub(crate) fn clear_restore_all_marker(&self) -> Result<bool, CloudBackupError> {
-        let mut state = self.0.cloud_backup_state.get().map_err(|source| {
-            CloudBackupError::internal_context("read cloud backup state", source)
-        })?;
-        if !state.clear_pending_restore_all() {
-            return Ok(false);
-        }
-
-        self.0.cloud_backup_state.set(&state).map_err(|source| {
-            CloudBackupError::internal_context("clear Restore All marker", source)
-        })?;
-
-        Ok(true)
+        self.0
+            .cloud_backup_state
+            .mutate(PersistedCloudBackupState::clear_pending_restore_all)
+            .map(|mutation| mutation.outcome)
+            .map_err(|source| {
+                CloudBackupError::internal_context("clear Restore All marker", source)
+            })
     }
 
     pub(crate) async fn upload_all_wallets(
@@ -207,12 +206,12 @@ impl CloudBackupStore {
         wallet_count: u32,
     ) -> Result<(), CloudBackupError> {
         let now = crate::manager::cloud_backup_manager::current_timestamp();
-        let current = self.0.cloud_backup_state.get().map_err(|source| {
-            CloudBackupError::internal_context("read cloud backup state", source)
-        })?;
         self.0
             .cloud_backup_state
-            .set(&current.mark_enabled_preserving_verification(now, wallet_count))
+            .mutate(|state| {
+                *state = state.mark_enabled_preserving_verification(now, wallet_count);
+            })
+            .map(|_| ())
             .map_err(|source| {
                 CloudBackupError::internal_context("persist cloud backup state", source)
             })
@@ -237,6 +236,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupStatus,
         PersistedConfiguredCloudBackup, PersistedPasskeyState,
@@ -280,6 +281,39 @@ mod tests {
             "namespace".into(),
             vec![PendingVerificationUpload::master_key_wrapper()],
         )
+    }
+
+    fn race_with_held_state_mutation<M, C>(db: Arc<Database>, mutation: M, concurrent: C)
+    where
+        M: FnOnce(&mut PersistedCloudBackupState) + Send,
+        C: FnOnce() + Send,
+    {
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(0);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+        let (concurrent_started_tx, concurrent_started_rx) = std::sync::mpsc::sync_channel(0);
+
+        std::thread::scope(|scope| {
+            let writer = scope.spawn(move || {
+                db.cloud_backup_state
+                    .mutate(|state| {
+                        mutation(state);
+                        entered_tx.send(()).unwrap();
+                        release_rx.recv().unwrap();
+                    })
+                    .unwrap();
+            });
+            entered_rx.recv().unwrap();
+
+            let concurrent_writer = scope.spawn(move || {
+                concurrent_started_tx.send(()).unwrap();
+                concurrent();
+            });
+            concurrent_started_rx.recv().unwrap();
+            release_tx.send(()).unwrap();
+
+            writer.join().unwrap();
+            concurrent_writer.join().unwrap();
+        });
     }
 
     #[test]
@@ -337,6 +371,174 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(12));
         assert_eq!(state.last_verification_dismissed_at(), Some(13));
+        let _ = db.cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn atomic_state_mutations_preserve_restore_marker_count_and_verification() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+        db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
+        let store = CloudBackupStore::new(&db);
+        let first_marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
+        let first_marker_for_write = first_marker.clone();
+        let marker_store = store.clone();
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            |state| *state = state.mark_enabled_preserving_verification(20, 5),
+            move || {
+                marker_store
+                    .persist_restore_all_marker(first_marker_for_write.namespace_id)
+                    .unwrap();
+            },
+        );
+
+        let state = db.cloud_backup_state.get().unwrap();
+        assert_eq!(state.pending_restore_all(), Some(&first_marker));
+        assert_eq!(state.wallet_count(), Some(5));
+        assert_eq!(state.last_verified_at(), Some(11));
+        assert_eq!(state.last_verification_requested_at(), Some(12));
+        assert_eq!(state.last_verification_dismissed_at(), Some(13));
+
+        let second_marker = PersistedRestoreAllMarker { namespace_id: "namespace-2".into() };
+        let marker = second_marker.clone();
+        let upload_store = store.clone();
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            move |state| {
+                assert!(state.replace_pending_restore_all(marker));
+            },
+            move || upload_store.persist_enabled(7).unwrap(),
+        );
+
+        let state = db.cloud_backup_state.get().unwrap();
+        assert_eq!(state.pending_restore_all(), Some(&second_marker));
+        assert_eq!(state.wallet_count(), Some(7));
+        assert_eq!(state.last_verified_at(), Some(11));
+        assert_eq!(state.last_verification_requested_at(), Some(12));
+        assert_eq!(state.last_verification_dismissed_at(), Some(13));
+
+        let clear_store = store.clone();
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            |state| *state = state.mark_enabled_preserving_verification(30, 9),
+            move || assert!(clear_store.clear_restore_all_marker().unwrap()),
+        );
+
+        let state = db.cloud_backup_state.get().unwrap();
+        assert!(state.pending_restore_all().is_none());
+        assert_eq!(state.wallet_count(), Some(9));
+        assert_eq!(state.last_verified_at(), Some(11));
+        assert_eq!(state.last_verification_requested_at(), Some(12));
+        assert_eq!(state.last_verification_dismissed_at(), Some(13));
+        let _ = db.cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn concurrent_verification_and_completion_writes_preserve_new_restore_marker() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+        db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
+        let store = CloudBackupStore::new(&db);
+        let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
+        let marker_for_write = marker.clone();
+        let marker_store = store.clone();
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            |state| state.mark_verified_at(21),
+            move || {
+                marker_store.persist_restore_all_marker(marker_for_write.namespace_id).unwrap();
+            },
+        );
+
+        assert!(store.clear_restore_all_marker().unwrap());
+        let completion_marker = PersistedRestoreAllMarker { namespace_id: "namespace-2".into() };
+        let completion_marker_for_write = completion_marker.clone();
+        let completion = pending_completion();
+        let completion_for_write = completion.clone();
+        let completion_db = Arc::clone(&db);
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            move |state| {
+                assert!(state.replace_pending_restore_all(completion_marker_for_write));
+            },
+            move || {
+                completion_db
+                    .cloud_backup_state
+                    .mutate(|state| {
+                        assert!(
+                            state.replace_pending_verification_completion(completion_for_write,)
+                        );
+                    })
+                    .unwrap();
+            },
+        );
+
+        let state = Database::global().cloud_backup_state.get().unwrap();
+        assert_eq!(state.pending_restore_all(), Some(&completion_marker));
+        assert_eq!(state.pending_verification_completion(), Some(&completion));
+        assert_eq!(state.last_verified_at(), Some(21));
+        let _ = Database::global().cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn concurrent_verification_and_completion_writes_do_not_resurrect_cleared_restore_marker() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+        let mut initial = passkey_missing_state();
+        assert!(initial.replace_pending_restore_all(PersistedRestoreAllMarker {
+            namespace_id: "namespace-1".into(),
+        }));
+        assert!(initial.replace_pending_verification_completion(pending_completion()));
+        db.cloud_backup_state.set(&initial).unwrap();
+        let store = CloudBackupStore::new(&db);
+        let clear_store = store.clone();
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            |state| {
+                state.clear_pending_verification_completion();
+            },
+            move || assert!(clear_store.clear_restore_all_marker().unwrap()),
+        );
+
+        let marker_store = store.clone();
+        marker_store.persist_restore_all_marker("namespace-2".into()).unwrap();
+        race_with_held_state_mutation(
+            Arc::clone(&db),
+            |state| {
+                state.clear_pending_restore_all();
+            },
+            move || {
+                db.cloud_backup_state
+                    .mutate(|state| state.mark_verification_required(Some(30)))
+                    .unwrap();
+            },
+        );
+
+        let state = Database::global().cloud_backup_state.get().unwrap();
+        assert!(state.pending_restore_all().is_none());
+        assert!(state.pending_verification_completion().is_none());
+        assert_eq!(state.last_verification_requested_at(), Some(30));
+        let _ = Database::global().cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn restore_all_marker_requires_configured_state() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+
+        let error = CloudBackupStore::new(&db)
+            .persist_restore_all_marker("namespace-1".into())
+            .unwrap_err();
+
+        assert!(
+            matches!(error, CloudBackupError::Internal(message) if message.contains("not configured"))
+        );
+        assert_eq!(db.cloud_backup_state.get().unwrap(), PersistedCloudBackupState::Disabled);
         let _ = db.cloud_backup_state.delete();
     }
 

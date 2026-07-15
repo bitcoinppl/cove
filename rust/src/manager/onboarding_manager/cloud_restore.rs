@@ -39,6 +39,12 @@ pub(crate) enum CloudRestoreInspectionError {
     BackupMetadataPending,
 }
 
+impl CloudRestoreInspectionError {
+    fn is_retryable(&self) -> bool {
+        matches!(self, Self::BackupMetadataPending)
+    }
+}
+
 pub(crate) async fn inspect_cloud_restore_backup(
     cloud: CloudStorageClient,
 ) -> Result<CloudRestoreBackupSnapshot, CloudRestoreInspectionError> {
@@ -190,6 +196,7 @@ where
             .with_max_times(max_retries),
     )
     .sleep(sleep)
+    .when(CloudRestoreInspectionError::is_retryable)
     .notify(|error: &CloudRestoreInspectionError, _| {
         warn!("Onboarding: cloud backup check failed: {error}");
     })

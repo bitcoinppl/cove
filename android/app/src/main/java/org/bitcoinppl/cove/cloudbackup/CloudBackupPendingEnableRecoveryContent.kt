@@ -192,6 +192,7 @@ internal fun CloudBackupPendingEnableRecoveryContent(
                         showConfirmation = false
                         onConfirmCleanup()
                     },
+                    modifier = Modifier.testTag("cloudBackup.recovery.confirmRemoveIncompleteSetup"),
                 ) {
                     Text("Remove Incomplete Setup", color = MaterialTheme.colorScheme.error)
                 }

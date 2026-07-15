@@ -605,30 +605,30 @@ impl RustCloudBackupManager {
         self.reconcile_runtime_status(CloudBackupStatus::Disabled);
     }
 
-    pub(crate) fn persist_cloud_backup_state(
+    pub(crate) fn mutate_persisted_cloud_backup_state<T>(
         &self,
-        state: &PersistedCloudBackupState,
         context: &str,
-    ) -> Result<(), CloudBackupError> {
-        Database::global()
+        mutation: impl FnOnce(&mut PersistedCloudBackupState) -> T,
+    ) -> Result<T, CloudBackupError> {
+        let committed = Database::global()
             .cloud_backup_state
-            .set(state)
+            .mutate(mutation)
             .map_err(|source| CloudBackupError::internal_context(context, source))?;
 
-        self.reconcile_runtime_status(Self::runtime_status_for(state));
+        self.reconcile_runtime_status(Self::runtime_status_for(&committed.state));
         self.refresh_persisted_flags();
 
-        Ok(())
+        Ok(committed.outcome)
     }
 
     pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
-        let mut state = Self::load_persisted_state();
         let dismissed_at = crate::manager::cloud_backup_manager::current_timestamp();
-        if !state.dismiss_verification_request(dismissed_at) {
-            return Ok(());
-        }
+        self.mutate_persisted_cloud_backup_state(
+            "persist cloud backup prompt dismissal",
+            |state| state.dismiss_verification_request(dismissed_at),
+        )?;
 
-        self.persist_cloud_backup_state(&state, "persist cloud backup prompt dismissal")
+        Ok(())
     }
 
     fn current_namespace_id(&self) -> Result<String, CloudBackupError> {
@@ -657,18 +657,15 @@ impl RustCloudBackupManager {
         completion: PendingVerificationCompletion,
         source: CloudBackupVerificationSource,
     ) -> Result<(), CloudBackupError> {
-        let persisted_completion = completion.clone();
-
-        let mut state = Database::global().cloud_backup_state.get().map_err(|error| {
-            CloudBackupError::internal_context("read pending verification completion", error)
-        })?;
-        if !state.replace_pending_verification_completion(persisted_completion) {
+        let replaced = self.mutate_persisted_cloud_backup_state(
+            "persist pending verification completion",
+            |state| state.replace_pending_verification_completion(completion.clone()),
+        )?;
+        if !replaced {
             return Err(CloudBackupError::Internal(
                 "pending verification completion requires configured cloud backup state".into(),
             ));
         }
-
-        self.persist_cloud_backup_state(&state, "persist pending verification completion")?;
 
         self.activate_persisted_pending_verification_completion_for_source(completion, source)
     }
@@ -701,16 +698,19 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn clear_pending_verification_completion(&self) {
-        let mut state = Self::load_persisted_state();
-        if !state.clear_pending_verification_completion() {
+        let cleared = self.mutate_persisted_cloud_backup_state(
+            "clear pending verification completion",
+            PersistedCloudBackupState::clear_pending_verification_completion,
+        );
+        let cleared = match cleared {
+            Ok(cleared) => cleared,
+            Err(error) => {
+                error!("Failed to clear pending verification completion: {error}");
+                return;
+            }
+        };
+        if !cleared {
             send!(self.supervisor.clear_pending_verification_completion());
-            return;
-        }
-
-        if let Err(error) =
-            self.persist_cloud_backup_state(&state, "clear pending verification completion")
-        {
-            error!("Failed to clear pending verification completion: {error}");
             return;
         }
 
@@ -736,6 +736,22 @@ mod manager_test_support {
     use super::*;
 
     impl RustCloudBackupManager {
+        pub(crate) fn persist_cloud_backup_state(
+            &self,
+            state: &PersistedCloudBackupState,
+            context: &str,
+        ) -> Result<(), CloudBackupError> {
+            Database::global()
+                .cloud_backup_state
+                .set(state)
+                .map_err(|source| CloudBackupError::internal_context(context, source))?;
+
+            self.reconcile_runtime_status(Self::runtime_status_for(state));
+            self.refresh_persisted_flags();
+
+            Ok(())
+        }
+
         pub(crate) fn model_snapshot(&self) -> test_support::CloudBackupModelSnapshot {
             self.state.read().snapshot()
         }
@@ -791,8 +807,19 @@ impl RustCloudBackupManager {
             Some(count) => Some(count),
             None if current.is_configured() => match CloudBackupStore::new(&db).wallet_count() {
                 Ok(count) => {
-                    let _ = db.cloud_backup_state.set(&current.with_wallet_count(Some(count)));
-                    Some(count)
+                    let persisted = db
+                        .cloud_backup_state
+                        .mutate(|state| {
+                            if !state.is_configured() {
+                                return false;
+                            }
+
+                            state.set_wallet_count(Some(count));
+                            true
+                        })
+                        .map(|mutation| mutation.outcome)
+                        .unwrap_or(false);
+                    persisted.then_some(count)
                 }
                 Err(error) => {
                     warn!("Failed to derive cloud backup wallet count: {error}");

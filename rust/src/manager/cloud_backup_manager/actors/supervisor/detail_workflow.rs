@@ -372,16 +372,18 @@ mod tests {
     }
 
     #[test]
-    fn newer_operation_supersedes_screen_refresh_result() {
+    fn newer_operation_supersedes_screen_result_without_dropping_trailing_refresh() {
         let mut workflow = DetailWorkflow::default();
         workflow.open();
         let DetailRefreshPlan::Start(refresh) = workflow.request_refresh() else {
             panic!("expected refresh to start");
         };
+        assert_eq!(workflow.request_refresh(), DetailRefreshPlan::Queued);
 
         workflow.start_operation_result();
         let completion = workflow.complete_refresh(refresh);
 
         assert!(!completion.apply);
+        assert!(matches!(completion.next, DetailRefreshPlan::Wait { .. }));
     }
 }

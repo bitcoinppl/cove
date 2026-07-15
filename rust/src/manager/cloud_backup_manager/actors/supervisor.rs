@@ -823,11 +823,9 @@ impl CloudBackupSupervisor {
         }
 
         let completion = self.detail_workflow.complete_refresh(claim);
-        if !completion.apply {
-            return Produces::ok(());
-        }
-
-        if let Some(result) = result {
+        if completion.apply
+            && let Some(result) = result
+        {
             apply_refresh_detail_result(&manager, &result);
         }
 

@@ -30,6 +30,11 @@ pub struct CloudBackupStateTable {
     db: Arc<RedbDatabase>,
 }
 
+pub(crate) struct CommittedCloudBackupStateMutation<T> {
+    pub(crate) outcome: T,
+    pub(crate) state: PersistedCloudBackupState,
+}
+
 impl CloudBackupStateTable {
     pub fn new(db: Arc<RedbDatabase>, write_txn: &WriteTransaction) -> Self {
         write_txn
@@ -63,6 +68,30 @@ impl CloudBackupStateTable {
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Ok(())
+    }
+
+    pub(crate) fn mutate<T>(
+        &self,
+        mutation: impl FnOnce(&mut PersistedCloudBackupState) -> T,
+    ) -> Result<CommittedCloudBackupStateMutation<T>, Error> {
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        let (outcome, state) = {
+            let mut table =
+                write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
+            let mut state = table
+                .get(CURRENT_KEY)
+                .map_err_str(Error::TableAccess)?
+                .map(|value| value.value())
+                .unwrap_or_default();
+            let outcome = mutation(&mut state);
+            table.insert(CURRENT_KEY, &state).map_err_str(Error::TableAccess)?;
+            (outcome, state)
+        };
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+
+        Ok(CommittedCloudBackupStateMutation { outcome, state })
     }
 
     #[cfg(test)]

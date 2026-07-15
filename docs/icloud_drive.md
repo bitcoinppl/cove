@@ -147,7 +147,9 @@ These numbers are project heuristics, not Apple guidance:
 - cancellation stops queued silent work; an expired deadline is unavailable or incomplete, never confirmed empty
 
 The outer deadline applies to silent discovery, not to interactive passkey or
-provider sheets.
+provider sheets. Rust does not restart silent discovery after that deadline or
+another storage failure; its bounded retries apply only after namespace
+metadata is visible while recovery files are still pending.
 
 ## Common mistakes
 

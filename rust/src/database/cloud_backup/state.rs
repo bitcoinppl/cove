@@ -151,12 +151,6 @@ impl PersistedCloudBackupState {
         true
     }
 
-    pub fn with_wallet_count(&self, wallet_count: Option<u32>) -> Self {
-        let mut state = self.clone();
-        state.set_wallet_count(wallet_count);
-        state
-    }
-
     pub fn set_wallet_count(&mut self, wallet_count: Option<u32>) {
         let Self::Configured(configured) = self else {
             return;

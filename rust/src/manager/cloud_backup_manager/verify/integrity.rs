@@ -268,14 +268,16 @@ impl RustCloudBackupManager {
 
         info!("Cloud backup integrity: applying downgrade={downgrade:?}");
 
-        let current = RustCloudBackupManager::load_persisted_state();
-        let Some(new_state) = downgrade.apply_to(&current) else {
-            return;
-        };
+        let persisted =
+            self.mutate_persisted_cloud_backup_state("persist backup integrity state", |state| {
+                let Some(new_state) = downgrade.apply_to(state) else {
+                    return false;
+                };
 
-        if let Err(error) =
-            self.persist_cloud_backup_state(&new_state, "persist backup integrity state")
-        {
+                *state = new_state;
+                true
+            });
+        if let Err(error) = persisted {
             error!("Failed to persist backup integrity state: {error}");
         };
     }

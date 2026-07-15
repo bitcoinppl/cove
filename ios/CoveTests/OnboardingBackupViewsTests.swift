@@ -197,6 +197,50 @@ final class OnboardingBackupViewsTests: XCTestCase {
         )
     }
 
+    func testPendingEnableRecoveryReplacesOnboardingEnablePresentation() {
+        let recovery = CloudBackupPendingEnableRecovery(
+            supportCode: "CB-PE-001",
+            cleanup: .available
+        )
+
+        XCTAssertEqual(
+            onboardingCloudBackupStepPresentation(
+                lifecycle: .pendingEnableRecovery(recovery)
+            ),
+            .pendingEnableRecovery(recovery)
+        )
+        XCTAssertEqual(
+            onboardingCloudBackupStepPresentation(lifecycle: .disabled),
+            .enable
+        )
+    }
+
+    func testPendingEnableRecoveryRoutesCleanupToManagerAndCancelToSkip() {
+        var dispatched: CloudBackupManagerAction?
+        var didSkip = false
+
+        routeOnboardingCloudBackupRecoveryIntent(
+            .removeIncompleteSetup,
+            dispatch: { dispatched = $0 },
+            onSkip: { didSkip = true }
+        )
+
+        guard case .confirmPendingEnableCleanup = dispatched else {
+            return XCTFail("expected pending-enable cleanup action")
+        }
+        XCTAssertFalse(didSkip)
+
+        dispatched = nil
+        routeOnboardingCloudBackupRecoveryIntent(
+            .skip,
+            dispatch: { dispatched = $0 },
+            onSkip: { didSkip = true }
+        )
+
+        XCTAssertNil(dispatched)
+        XCTAssertTrue(didSkip)
+    }
+
     private func enableBusyCopy(
         _ flow: CloudBackupEnableFlow?,
         verificationPresentation: CloudBackupVerificationPresentation

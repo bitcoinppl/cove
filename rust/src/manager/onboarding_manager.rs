@@ -2396,18 +2396,26 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn cloud_check_retries_errors_and_returns_inconclusive() {
+    async fn cloud_check_does_not_retry_non_retryable_storage_errors() {
+        let attempts = Arc::new(Mutex::new(0));
+        let attempt_log = Arc::clone(&attempts);
         let outcome = determine_cloud_check_outcome(
-            || async {
-                Err(CloudRestoreInspectionError::Storage(CloudStorageError::NotAvailable(
-                    "network timed out".into(),
-                )))
+            move || {
+                let attempt_log = Arc::clone(&attempt_log);
+
+                async move {
+                    *attempt_log.lock().unwrap() += 1;
+                    Err(CloudRestoreInspectionError::Storage(CloudStorageError::NotAvailable(
+                        "platform deadline expired".into(),
+                    )))
+                }
             },
             |_| async {},
         )
         .await;
 
         assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
+        assert_eq!(*attempts.lock().unwrap(), 1);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2438,8 +2446,17 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn exhausted_pending_metadata_remains_inconclusive() {
+        let attempts = Arc::new(Mutex::new(0));
+        let attempt_log = Arc::clone(&attempts);
         let outcome = determine_cloud_check_outcome(
-            || async { Err(CloudRestoreInspectionError::BackupMetadataPending) },
+            move || {
+                let attempt_log = Arc::clone(&attempt_log);
+
+                async move {
+                    *attempt_log.lock().unwrap() += 1;
+                    Err(CloudRestoreInspectionError::BackupMetadataPending)
+                }
+            },
             |_| async {},
         )
         .await;
@@ -2448,6 +2465,7 @@ mod tests {
             outcome,
             CloudCheckOutcome::Inconclusive(CloudCheckIssue::BackupMetadataPending)
         );
+        assert_eq!(*attempts.lock().unwrap(), 7);
     }
 
     #[test]

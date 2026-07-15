@@ -19,8 +19,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
+import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
+import org.bitcoinppl.cove_core.CloudBackupState
 import org.bitcoinppl.cove_core.CloudRestoreProviderHint
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingStorageSelection
@@ -240,6 +246,45 @@ class OnboardingBranchScreensTest {
         compose.onNodeWithText("Protect this hardware wallet with Cloud Backup?").assertIsDisplayed()
         compose.button("Not Now").performClick()
         assertEquals("skip-hardware", selected)
+    }
+
+    @Test
+    fun pendingEnableRecoveryReplacesOnboardingEnableAndRoutesCleanupAndSkip() {
+        var selected = ""
+        val manager =
+            CloudBackupManager(
+                CloudBackupState(
+                    CloudBackupLifecycle.PendingEnableRecovery(
+                        CloudBackupPendingEnableRecovery(
+                            supportCode = "CB-PE-001",
+                            cleanup = CloudBackupPendingEnableCleanupState.AVAILABLE,
+                        ),
+                    ),
+                    CloudBackupSettingsRowStatus.RecoveryRequired,
+                ),
+            )
+
+        compose.setOnboardingContent {
+            OnboardingCloudBackupStepContent(
+                backupManager = manager,
+                branch = OnboardingBranch.NEW_USER,
+                onEnable = { selected = "enable" },
+                onEnabled = { selected = "enabled" },
+                onSkip = { selected = "skip" },
+                dispatch = { selected = "cleanup" },
+            )
+        }
+
+        compose.onNodeWithText("Cloud Backup Needs Recovery").assertIsDisplayed()
+        compose.onNodeWithText("CB-PE-001").assertIsDisplayed()
+        compose.onAllNodesWithTag("onboarding.cloudBackup.enable").assertCountEquals(0)
+        compose.onNodeWithTag("cloudBackup.recovery.removeIncompleteSetup").performClick()
+        compose.onNodeWithTag("cloudBackup.recovery.confirmRemoveIncompleteSetup").performClick()
+        assertEquals("cleanup", selected)
+
+        selected = ""
+        compose.button("Cancel").performClick()
+        assertEquals("skip", selected)
     }
 
     @Test

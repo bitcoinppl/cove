@@ -241,7 +241,7 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 }
 
-private struct CloudBackupPendingEnableRecoveryView: View {
+struct CloudBackupPendingEnableRecoveryView: View {
     @Environment(\.openURL) private var openURL
 
     let recovery: CloudBackupPendingEnableRecovery

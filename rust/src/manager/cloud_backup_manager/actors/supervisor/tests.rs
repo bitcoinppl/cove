@@ -2142,6 +2142,56 @@ async fn pending_enable_restart_finishes_promoted_state_with_matching_completion
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn pending_enable_restart_finishes_after_commit_cleared_staging_slot() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let (finalization, master_key) = test_enable_upload_finalization();
+    prepare_test_enable_local_promotion(&manager, &finalization, &master_key);
+    let mut persisted_state = persisted_enabled_cloud_backup_state(Some(0));
+    assert!(persisted_state.replace_pending_verification_completion(
+        finalization.pending_completion.clone()
+    ));
+    Database::global().cloud_backup_state.set(&persisted_state).unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+
+    globals.keychain.fail_delete_at(3);
+    assert!(cspp.commit_master_key_promotion().is_err());
+    assert!(globals
+        .keychain
+        .get_entry("cspp::v1::staged_master_key_encryption_key_and_nonce")
+        .is_none());
+    assert!(globals.keychain.get_entry("cspp::v1::staged_master_key").is_none());
+    assert_eq!(
+        cspp.master_key_promotion_status().unwrap(),
+        MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Staged)
+    );
+
+    cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
+    assert_eq!(
+        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+        master_key.as_bytes()
+    );
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().as_deref(),
+        Some(finalization.namespace_id.as_str())
+    );
+    assert!(CloudBackupKeychain::global()
+        .load_pending_enable_journal()
+        .unwrap()
+        .is_none());
+    assert!(!matches!(manager.state().lifecycle, CloudBackupLifecycle::PendingEnableRecovery(_)));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completion_is_missing() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();

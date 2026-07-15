@@ -201,9 +201,15 @@ impl<S: CsppStore> Cspp<S> {
         Ok(())
     }
 
-    /// Loads the isolated staged master key without consulting or changing active cache
+    /// Loads the staged master key without consulting or changing active cache
+    ///
+    /// While a promotion is pending, the durable promotion journal is authoritative
+    /// and the isolated staging slot is only a repairable copy
     pub fn load_staged_master_key(&self) -> Result<Option<MasterKey>, CsppError> {
-        let entries = self.read_staged_entries();
+        let entries = match self.load_promotion_journal()? {
+            Some(journal) => journal.staged,
+            None => self.read_staged_entries(),
+        };
         if entries.is_absent() {
             return Ok(None);
         }
@@ -1216,6 +1222,53 @@ mod tests {
             MasterKeyPromotionStatus::None
         );
         assert!(recreated.read_staged_entries().is_absent());
+        assert_eq!(recreated.get_or_create_master_key().unwrap().as_bytes(), staged.as_bytes());
+    }
+
+    #[test]
+    fn promotion_journal_owns_staged_key_after_interrupted_staging_clear() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        let prior = deterministic_key(25);
+        let staged = deterministic_key(26);
+        let staged_namespace = staged.namespace_id();
+        let prior_namespace = prior.namespace_id();
+        cspp.save_master_key(&prior).unwrap();
+        cspp.save_staged_master_key(&staged).unwrap();
+        cspp.promote_staged_master_key().unwrap();
+
+        store.fail_nth_mutation(3);
+        assert!(cspp.commit_master_key_promotion().is_err());
+        assert!(cspp.read_staged_entries().is_absent());
+        assert_eq!(
+            cspp.master_key_promotion_status().unwrap(),
+            MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Staged)
+        );
+
+        Cspp::<FailNthStore>::clear_cached_master_key();
+        let recreated = Cspp::new(store);
+        let evidence = recreated
+            .master_key_promotion_evidence(&staged_namespace, Some(&prior_namespace))
+            .unwrap();
+
+        assert!(evidence.staged_matches_expected);
+        assert!(evidence.prior_matches_expected);
+        assert_eq!(
+            recreated.load_staged_master_key().unwrap().unwrap().as_bytes(),
+            staged.as_bytes()
+        );
+
+        recreated.promote_staged_master_key().unwrap();
+        assert!(!recreated.read_staged_entries().is_absent());
+        recreated.commit_master_key_promotion().unwrap();
+
+        assert_eq!(
+            recreated.master_key_promotion_status().unwrap(),
+            MasterKeyPromotionStatus::None
+        );
         assert_eq!(recreated.get_or_create_master_key().unwrap().as_bytes(), staged.as_bytes());
     }
 

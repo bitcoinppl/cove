@@ -178,63 +178,54 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
-        let current = RustCloudBackupManager::load_persisted_state();
-        if matches!(
-            current.status(),
-            PersistedCloudBackupStatus::Disabled | PersistedCloudBackupStatus::Corrupted
-        ) {
-            return;
-        }
+        let verified_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let persisted =
+            self.mutate_persisted_cloud_backup_state("persist verification state", |state| {
+                if matches!(
+                    state.status(),
+                    PersistedCloudBackupStatus::Disabled
+                        | PersistedCloudBackupStatus::Corrupted
+                        | PersistedCloudBackupStatus::Disabling
+                ) {
+                    return false;
+                }
 
-        let mut new_state = current.clone();
-        match result {
-            DeepVerificationResult::Verified(_) => {
-                new_state
-                    .mark_verified_at(crate::manager::cloud_backup_manager::current_timestamp());
-            }
-            DeepVerificationResult::AwaitingUploadConfirmation(_) => return,
-            DeepVerificationResult::PasskeyConfirmed(_) => return,
-            DeepVerificationResult::PasskeyMissing(_) => {
-                new_state.mark_passkey_missing();
-            }
-            DeepVerificationResult::UserCancelled(_) | DeepVerificationResult::Failed(_) => {
-                new_state.mark_verification_required(new_state.last_verification_requested_at());
-            }
-            DeepVerificationResult::NotEnabled => return,
-        };
+                let previous = state.clone();
+                match result {
+                    DeepVerificationResult::Verified(_) => state.mark_verified_at(verified_at),
+                    DeepVerificationResult::PasskeyMissing(_) => state.mark_passkey_missing(),
+                    DeepVerificationResult::UserCancelled(_)
+                    | DeepVerificationResult::Failed(_) => {
+                        state.mark_verification_required(state.last_verification_requested_at());
+                    }
+                    DeepVerificationResult::AwaitingUploadConfirmation(_)
+                    | DeepVerificationResult::PasskeyConfirmed(_)
+                    | DeepVerificationResult::NotEnabled => return false,
+                }
 
-        if current != new_state
-            && let Err(error) =
-                self.persist_cloud_backup_state(&new_state, "persist verification state")
-        {
+                *state != previous
+            });
+        if let Err(error) = persisted {
             error!("Failed to persist verification state: {error}");
         }
     }
 
     pub(crate) fn mark_verification_required_after_wallet_change(&self) {
-        let current = RustCloudBackupManager::load_persisted_state();
-
-        match current.status() {
-            PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
-                let Some(mut new_state) = IntegrityDowngrade::Unverified.apply_to(&current) else {
-                    return;
+        let requested_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let persisted = self.mutate_persisted_cloud_backup_state(
+            "mark cloud backup unverified after wallet change",
+            |state| {
+                let Some(mut new_state) = IntegrityDowngrade::Unverified.apply_to(state) else {
+                    return false;
                 };
 
-                new_state.mark_verification_required(Some(
-                    crate::manager::cloud_backup_manager::current_timestamp(),
-                ));
-
-                if let Err(error) = self.persist_cloud_backup_state(
-                    &new_state,
-                    "mark cloud backup unverified after wallet change",
-                ) {
-                    error!("Failed to mark cloud backup unverified after wallet change: {error}");
-                }
-            }
-            PersistedCloudBackupStatus::PasskeyMissing
-            | PersistedCloudBackupStatus::Disabling
-            | PersistedCloudBackupStatus::Disabled
-            | PersistedCloudBackupStatus::Corrupted => {}
+                new_state.mark_verification_required(Some(requested_at));
+                *state = new_state;
+                true
+            },
+        );
+        if let Err(error) = persisted {
+            error!("Failed to mark cloud backup unverified after wallet change: {error}");
         }
     }
 
