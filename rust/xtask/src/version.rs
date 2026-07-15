@@ -69,47 +69,46 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
 
     println!("{} {current_version}", "Current version:".blue().bold());
 
-    // calculate new version
-    let parts: Vec<&str> = current_version.split('.').collect();
-    if parts.len() != 3 {
-        color_eyre::eyre::bail!("Version must be x.y.z");
-    }
-
-    let (mut major, mut minor, mut patch) =
-        (parts[0].parse::<u32>()?, parts[1].parse::<u32>()?, parts[2].parse::<u32>()?);
-
-    match bump_type.as_str() {
-        "major" => {
-            major += 1;
-            minor = 0;
-            patch = 0;
-        }
-        "minor" => {
-            minor += 1;
-            patch = 0;
-        }
-        "patch" => {
-            patch += 1;
-        }
-        _ => color_eyre::eyre::bail!("Bump type must be 'major', 'minor', 'patch', or 'build'"),
-    }
-    let new_version = format!("{major}.{minor}.{patch}");
+    let new_version = calculate_bumped_version(current_version, &bump_type)?;
     println!("{} {new_version}", "Bumping to:".green().bold());
     println!("{} {:?}", "Targets:".blue(), targets);
 
-    // update Cargo.toml (Rust)
-    if targets.contains(&"rust") {
-        update_rust(&sh, &cargo_toml, current_version, &new_version)?;
+    let rust_update =
+        targets.contains(&"rust").then(|| prepare_rust(&cargo_toml, current_version, &new_version));
+    let ios_update = targets
+        .contains(&"ios")
+        .then(|| prepare_ios(&sh, current_version, &new_version))
+        .transpose()?
+        .flatten();
+    let android_update = targets
+        .contains(&"android")
+        .then(|| prepare_android(&sh, current_version, &new_version))
+        .transpose()?
+        .flatten();
+
+    if let Some(content) = rust_update {
+        sh.write_file(CARGO_TOML_PATH, content)?;
+        println!("{} Updated rust/Cargo.toml", "✓".green());
     }
 
-    // update iOS project.pbxproj
-    if targets.contains(&"ios") {
-        update_ios(&sh, &bump_type)?;
+    if let Some(content) = ios_update {
+        sh.write_file(IOS_PROJECT_PATH, content)?;
+        println!(
+            "{} Updated iOS MARKETING_VERSION: {} -> {}",
+            "✓".green(),
+            current_version,
+            new_version
+        );
     }
 
-    // update Android build.gradle.kts
-    if targets.contains(&"android") {
-        update_android(&sh, &bump_type)?;
+    if let Some(content) = android_update {
+        sh.write_file(ANDROID_GRADLE_PATH, content)?;
+        println!(
+            "{} Updated Android versionName: {} -> {}",
+            "✓".green(),
+            current_version,
+            new_version
+        );
     }
 
     // update Cargo.lock (only if rust was updated)
@@ -150,88 +149,51 @@ fn calculate_bumped_version(current_version: &str, bump_type: &str) -> Result<St
     Ok(format!("{major}.{minor}.{patch}"))
 }
 
-fn update_rust(
-    sh: &Shell,
-    cargo_toml: &str,
-    current_version: &str,
-    new_version: &str,
-) -> Result<()> {
-    let new_cargo_toml = cargo_toml.replace(
+fn prepare_rust(cargo_toml: &str, current_version: &str, new_version: &str) -> String {
+    cargo_toml.replace(
         &format!("version = \"{current_version}\""),
         &format!("version = \"{new_version}\""),
-    );
-    sh.write_file("Cargo.toml", new_cargo_toml)?;
-    println!("{} Updated rust/Cargo.toml", "✓".green());
-    Ok(())
+    )
 }
 
-fn update_ios(sh: &Shell, bump_type: &str) -> Result<()> {
+fn prepare_ios(sh: &Shell, current_version: &str, new_version: &str) -> Result<Option<String>> {
     if !sh.path_exists(IOS_PROJECT_PATH) {
         println!("{} iOS project file not found at {}", "!".yellow(), IOS_PROJECT_PATH);
-        return Ok(());
+        return Ok(None);
     }
 
     let pbx = sh.read_file(IOS_PROJECT_PATH)?;
+    let current_setting = format!("MARKETING_VERSION = {current_version};");
+    if !pbx.contains(&current_setting) {
+        color_eyre::eyre::bail!(
+            "Could not find iOS MARKETING_VERSION matching Rust version {current_version}"
+        );
+    }
 
-    // extract current iOS version
-    let current_ios_version = extract_version(&pbx, "MARKETING_VERSION = ", ';')
-        .context("Could not extract iOS MARKETING_VERSION")?;
+    let new_pbx = pbx.replace(&current_setting, &format!("MARKETING_VERSION = {new_version};"));
+    let new_pbx = increment_and_replace_ios(new_pbx);
 
-    // calculate new version
-    let new_version = calculate_bumped_version(&current_ios_version, bump_type)?;
-
-    let new_pbx = pbx.replace(
-        &format!("MARKETING_VERSION = {current_ios_version};"),
-        &format!("MARKETING_VERSION = {new_version};"),
-    );
-
-    sh.write_file(IOS_PROJECT_PATH, new_pbx)?;
-    println!(
-        "{} Updated iOS MARKETING_VERSION: {} -> {}",
-        "✓".green(),
-        current_ios_version,
-        new_version
-    );
-
-    // increment build number
-    bump_ios_build_number(sh)?;
-
-    Ok(())
+    Ok(Some(new_pbx))
 }
 
-fn update_android(sh: &Shell, bump_type: &str) -> Result<()> {
+fn prepare_android(sh: &Shell, current_version: &str, new_version: &str) -> Result<Option<String>> {
     if !sh.path_exists(ANDROID_GRADLE_PATH) {
         println!("{} Android build.gradle.kts not found at {}", "!".yellow(), ANDROID_GRADLE_PATH);
-        return Ok(());
+        return Ok(None);
     }
 
     let gradle = sh.read_file(ANDROID_GRADLE_PATH)?;
+    let current_setting = format!("versionName = \"{current_version}\"");
+    if !gradle.contains(&current_setting) {
+        color_eyre::eyre::bail!(
+            "Could not find Android versionName matching Rust version {current_version}"
+        );
+    }
 
-    // extract current Android version
-    let current_android_version = extract_version(&gradle, "versionName = \"", '"')
-        .context("Could not extract Android versionName")?;
+    let new_gradle = gradle.replace(&current_setting, &format!("versionName = \"{new_version}\""));
+    let new_gradle = increment_and_replace_android(new_gradle);
 
-    // calculate new version
-    let new_version = calculate_bumped_version(&current_android_version, bump_type)?;
-
-    // update versionName
-    let new_gradle = gradle.replace(
-        &format!("versionName = \"{current_android_version}\""),
-        &format!("versionName = \"{new_version}\""),
-    );
-
-    sh.write_file(ANDROID_GRADLE_PATH, new_gradle)?;
-    println!(
-        "{} Updated Android versionName: {} -> {}",
-        "✓".green(),
-        current_android_version,
-        new_version
-    );
-
-    // increment build number
-    bump_android_build_number(sh)?;
-
-    Ok(())
+    Ok(Some(new_gradle))
 }
 
 pub(crate) fn snapshot_ios_project(sh: &Shell) -> Result<Option<String>> {
@@ -326,14 +288,6 @@ fn increment_and_replace_android(content: String) -> String {
     )
 }
 
-fn extract_version(content: &str, key: &str, terminator: char) -> Option<String> {
-    let start = content.find(key)?;
-    let after_key = &content[start + key.len()..];
-    let end = after_key.find(terminator)?;
-    let version = after_key[..end].trim().trim_matches('"').to_string();
-    Some(version)
-}
-
 fn extract_u32_values(content: &str, key: &str, terminator: char) -> Vec<u32> {
     content
         .match_indices(key)
@@ -382,10 +336,53 @@ fn replace_u32_values(
 #[cfg(test)]
 mod tests {
     use super::{
-        bump_ios_build_number, increment_and_replace_ios, restore_ios_project,
-        snapshot_ios_project, IOS_PROJECT_PATH,
+        bump_ios_build_number, increment_and_replace_ios, prepare_android, prepare_ios,
+        restore_ios_project, snapshot_ios_project, IOS_PROJECT_PATH,
     };
     use xshell::Shell;
+
+    #[test]
+    fn prepares_platform_versions_from_rust_source_of_truth() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let rust_dir = temp_dir.path().join("rust");
+        let ios_project_dir = temp_dir.path().join("ios/Cove.xcodeproj");
+        let android_app_dir = temp_dir.path().join("android/app");
+        std::fs::create_dir_all(&rust_dir).unwrap();
+        std::fs::create_dir_all(&ios_project_dir).unwrap();
+        std::fs::create_dir_all(&android_app_dir).unwrap();
+
+        std::fs::write(
+            ios_project_dir.join("project.pbxproj"),
+            "\
+MARKETING_VERSION = 1.0;
+CURRENT_PROJECT_VERSION = 105;
+MARKETING_VERSION = 1.3.0;
+CURRENT_PROJECT_VERSION = 105;
+MARKETING_VERSION = 1.3.0;
+",
+        )
+        .unwrap();
+        std::fs::write(
+            android_app_dir.join("build.gradle.kts"),
+            "\
+versionCode = 27
+versionName = \"1.3.0\"
+",
+        )
+        .unwrap();
+
+        let sh = Shell::new().unwrap();
+        sh.change_dir(&rust_dir);
+
+        let ios = prepare_ios(&sh, "1.3.0", "1.4.0").unwrap().unwrap();
+        let android = prepare_android(&sh, "1.3.0", "1.4.0").unwrap().unwrap();
+
+        assert!(ios.contains("MARKETING_VERSION = 1.0;"));
+        assert_eq!(ios.matches("MARKETING_VERSION = 1.4.0;").count(), 2);
+        assert_eq!(ios.matches("CURRENT_PROJECT_VERSION = 106;").count(), 2);
+        assert!(android.contains("versionName = \"1.4.0\""));
+        assert!(android.contains("versionCode = 28"));
+    }
 
     #[test]
     fn bumps_all_ios_build_numbers_from_highest_value() {
