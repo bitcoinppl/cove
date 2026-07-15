@@ -140,7 +140,8 @@ impl CloudBackupSupervisor {
         if !Self::clear_drive_account_switch(transition_id) {
             return Produces::ok(Err(CloudBackupDriveAccountSwitchError::InvalidTransition));
         }
-        send!(self.write.unblock(CloudBackupWriteBlocker::DriveAccountSwitch { transition_id }));
+
+        self.resume_cloud_backup_work_after_drive_account_switch(&manager, transition_id).await;
 
         match transition.phase {
             PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded => {
@@ -187,7 +188,9 @@ impl CloudBackupSupervisor {
         if !Self::clear_drive_account_switch(transition_id) {
             return Produces::ok(Err(CloudBackupDriveAccountSwitchError::InvalidTransition));
         }
-        send!(self.write.unblock(CloudBackupWriteBlocker::DriveAccountSwitch { transition_id }));
+
+        self.resume_cloud_backup_work_after_drive_account_switch(&manager, transition_id).await;
+
         self.active_operation = None;
         manager.apply_recovery_outcome(CloudBackupRecoveryOutcome::Idle);
         manager.project_exclusive_operation_finished(claim);
@@ -196,6 +199,43 @@ impl CloudBackupSupervisor {
         ));
 
         Produces::ok(Ok(()))
+    }
+
+    async fn resume_cloud_backup_work_after_drive_account_switch(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        transition_id: u64,
+    ) {
+        if let Err(error) = self
+            .unblock_cloud_backup_writes(CloudBackupWriteBlocker::DriveAccountSwitch {
+                transition_id,
+            })
+            .await
+        {
+            let message =
+                format!("failed to lift Google Drive account switch write fence: {error}");
+            error!("{message}");
+            manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(message));
+            return;
+        }
+
+        if let Err(error) = call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await {
+            let message = format!(
+                "failed to resume cloud backup uploads after Google Drive account switch: {error}"
+            );
+            error!("{message}");
+            manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(message));
+        }
+
+        if let Err(error) = call!(self.uploads.ensure_pending_upload_verification_loop()).await {
+            let message = format!(
+                "failed to resume pending cloud backup verification after Google Drive account switch: {error}"
+            );
+            error!("{message}");
+            manager.apply_sync_outcome(CloudBackupSyncOutcome::Failed(message));
+        }
+
+        manager.refresh_sync_health();
     }
 
     pub async fn reconcile_drive_account_switch(
