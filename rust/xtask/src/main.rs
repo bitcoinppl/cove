@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use color_eyre::Result;
 
 mod android;
+mod android_device;
 mod common;
 mod github;
 mod ios;
