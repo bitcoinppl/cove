@@ -850,6 +850,8 @@ internal fun OnboardingRestoreUnavailableScreen(
             onClick = onCheckAgain,
         )
 
+        Spacer(modifier = Modifier.size(14.dp))
+
         OnboardingSecondaryButton(
             text = "Continue Setup",
             onClick = onContinue,
