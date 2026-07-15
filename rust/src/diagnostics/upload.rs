@@ -1,7 +1,11 @@
-use std::{io::Write as _, time::Duration};
+use std::{io::Write as _, str::FromStr as _, time::Duration};
 
+use age::x25519;
 use flate2::{Compression, write::GzEncoder};
-use reqwest::{StatusCode, header::CONTENT_TYPE};
+use reqwest::{
+    StatusCode,
+    header::{CONTENT_TYPE, HeaderName},
+};
 use serde::Deserialize;
 
 use super::DiagnosticsUploadReport;
@@ -9,7 +13,12 @@ use super::DiagnosticsUploadReport;
 const PRODUCTION_UPLOAD_URL: &str = "https://diagnostics.covebitcoinwallet.com/reports";
 // this identifies public mobile clients and must not be trusted as an authorization credential
 const PUBLIC_APP_TOKEN: &str = "v1.cove-mobile-2026-07";
-const GZIP_CONTENT_TYPE: &str = "application/gzip";
+const PRODUCTION_RECIPIENT: &str = "age10mdkqr5jsuy0y98ezkxe9pyd3n42f7eusjx3fe5gmf38ssh8xyws4pe5lq";
+const ENCRYPTION_KEY_ID: &str = "cove-diagnostics-2026-07";
+const AGE_CONTENT_TYPE: &str = "application/age";
+const ENCRYPTION_KEY_ID_HEADER: HeaderName = HeaderName::from_static("x-cove-diagnostics-key-id");
+const MAX_REPORT_JSON_BYTES: usize = 32 * 1024 * 1024;
+const MAX_GZIPPED_REPORT_BYTES: usize = 10 * 1024 * 1024;
 const MAX_SUCCESS_RESPONSE_BYTES: usize = 16 * 1024;
 const MAX_STATUS_BODY_BYTES: usize = 2 * 1024;
 const MAX_UPLOAD_ATTEMPTS: usize = 2;
@@ -26,6 +35,18 @@ pub(crate) enum UploadError {
 
     #[error("failed to gzip report JSON: {0}")]
     Gzip(std::io::Error),
+
+    #[error("report JSON exceeded {limit} bytes")]
+    JsonTooLarge { limit: usize },
+
+    #[error("gzipped report exceeded {limit} bytes")]
+    GzipTooLarge { limit: usize },
+
+    #[error("configured diagnostics recipient is invalid: {0}")]
+    InvalidRecipient(String),
+
+    #[error("failed to encrypt diagnostics report: {0}")]
+    Encrypt(age::EncryptError),
 
     #[error("collector request failed: {0}")]
     Request(reqwest::Error),
@@ -46,8 +67,16 @@ pub(crate) enum UploadError {
 impl UploadError {
     pub(crate) fn user_message(&self) -> String {
         match self {
-            Self::Client(_) | Self::EncodeJson(_) | Self::Gzip(_) => {
+            Self::Client(_)
+            | Self::EncodeJson(_)
+            | Self::Gzip(_)
+            | Self::InvalidRecipient(_)
+            | Self::Encrypt(_) => {
                 "Unable to prepare the diagnostics report. Please try again.".to_string()
+            }
+            Self::JsonTooLarge { .. } | Self::GzipTooLarge { .. } => {
+                "The diagnostics report is too large to submit. You can still share it manually."
+                    .to_string()
             }
             Self::Request(error) if error.is_connect() => {
                 "Unable to reach the diagnostics collector. Check your connection and try again."
@@ -92,6 +121,12 @@ impl UploadError {
             Self::Client(error) => format!("failed to create HTTP client: {error}"),
             Self::EncodeJson(error) => format!("failed to encode report JSON: {error}"),
             Self::Gzip(error) => format!("failed to gzip report JSON: {error}"),
+            Self::JsonTooLarge { limit } => format!("report JSON exceeded {limit} bytes"),
+            Self::GzipTooLarge { limit } => format!("gzipped report exceeded {limit} bytes"),
+            Self::InvalidRecipient(error) => {
+                format!("configured diagnostics recipient is invalid: {error}")
+            }
+            Self::Encrypt(error) => format!("failed to encrypt diagnostics report: {error}"),
             Self::Request(error) => format!("collector request failed: {error}"),
             Self::DecodeResponse(error) => {
                 format!("failed to decode collector success response: {error}")
@@ -106,11 +141,17 @@ struct UploadResponse {
 }
 
 pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<String, UploadError> {
+    let report = report.clone();
+    let body = cove_tokio::unblock::run_blocking(move || {
+        let recipient = production_recipient()?;
+
+        encrypted_gzipped_json(&report, &recipient)
+    })
+    .await?;
     let client = cove_http::new_client_without_redirects().map_err(UploadError::Client)?;
-    let body = gzipped_json(report)?;
 
     for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
-        match submit_report_once(&client, &body).await {
+        match submit_report_once(&client, &body, ENCRYPTION_KEY_ID).await {
             Ok(report_id) => return Ok(report_id),
             Err(error) if attempt < MAX_UPLOAD_ATTEMPTS && upload_error_is_retryable(&error) => {
                 tracing::warn!(
@@ -126,12 +167,17 @@ pub(crate) async fn submit_report(report: &DiagnosticsUploadReport) -> Result<St
     unreachable!("upload attempts loop must return")
 }
 
-async fn submit_report_once(client: &reqwest::Client, body: &[u8]) -> Result<String, UploadError> {
+async fn submit_report_once(
+    client: &reqwest::Client,
+    body: &[u8],
+    key_id: &str,
+) -> Result<String, UploadError> {
     let mut response = client
         .post(upload_url())
         .timeout(UPLOAD_ATTEMPT_TIMEOUT)
         .bearer_auth(PUBLIC_APP_TOKEN)
-        .header(CONTENT_TYPE, GZIP_CONTENT_TYPE)
+        .header(CONTENT_TYPE, AGE_CONTENT_TYPE)
+        .header(ENCRYPTION_KEY_ID_HEADER, key_id)
         .body(body.to_vec())
         .send()
         .await
@@ -157,9 +203,32 @@ async fn submit_report_once(client: &reqwest::Client, body: &[u8]) -> Result<Str
 
 pub(crate) fn gzipped_json(report: &DiagnosticsUploadReport) -> Result<Vec<u8>, UploadError> {
     let json = serde_json::to_vec(report).map_err(UploadError::EncodeJson)?;
+    if json.len() > MAX_REPORT_JSON_BYTES {
+        return Err(UploadError::JsonTooLarge { limit: MAX_REPORT_JSON_BYTES });
+    }
+
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(&json).map_err(UploadError::Gzip)?;
-    encoder.finish().map_err(UploadError::Gzip)
+    let gzipped = encoder.finish().map_err(UploadError::Gzip)?;
+    if gzipped.len() > MAX_GZIPPED_REPORT_BYTES {
+        return Err(UploadError::GzipTooLarge { limit: MAX_GZIPPED_REPORT_BYTES });
+    }
+
+    Ok(gzipped)
+}
+
+fn encrypted_gzipped_json(
+    report: &DiagnosticsUploadReport,
+    recipient: &x25519::Recipient,
+) -> Result<Vec<u8>, UploadError> {
+    let gzipped = gzipped_json(report)?;
+
+    age::encrypt(recipient, &gzipped).map_err(UploadError::Encrypt)
+}
+
+fn production_recipient() -> Result<x25519::Recipient, UploadError> {
+    x25519::Recipient::from_str(PRODUCTION_RECIPIENT)
+        .map_err(|error| UploadError::InvalidRecipient(error.to_string()))
 }
 
 fn upload_url() -> String {
@@ -180,6 +249,10 @@ fn upload_error_is_retryable(error: &UploadError) -> bool {
         UploadError::Client(_)
         | UploadError::EncodeJson(_)
         | UploadError::Gzip(_)
+        | UploadError::JsonTooLarge { .. }
+        | UploadError::GzipTooLarge { .. }
+        | UploadError::InvalidRecipient(_)
+        | UploadError::Encrypt(_)
         | UploadError::Status { .. }
         | UploadError::DecodeResponse(_)
         | UploadError::InvalidResponse(_)
@@ -294,6 +367,7 @@ mod tests {
     }
 
     async fn upload_server(responses: Vec<TestResponse>) -> (String, Arc<AtomicUsize>) {
+        crate::test_support::ensure_tokio_runtime();
         let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
@@ -345,6 +419,7 @@ mod tests {
     async fn redirect_server(
         location: &str,
     ) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+        crate::test_support::ensure_tokio_runtime();
         let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
         let addr = listener.local_addr().expect("test server has local addr");
@@ -382,6 +457,36 @@ mod tests {
 
         let gzipped = gzipped_json(&report).unwrap();
         let mut decoder = GzDecoder::new(gzipped.as_slice());
+        let mut json = String::new();
+        decoder.read_to_string(&mut json).unwrap();
+
+        assert!(json.contains("\"user_description\":\"description\""));
+        assert!(json.contains("amount=5000 sats"));
+    }
+
+    #[test]
+    fn production_recipient_is_valid() {
+        assert_eq!(production_recipient().unwrap().to_string(), PRODUCTION_RECIPIENT);
+    }
+
+    #[test]
+    fn report_is_gzipped_before_age_encryption() {
+        let report = report();
+        let identity = age::x25519::Identity::generate();
+        let recipient = identity.to_public();
+
+        let encrypted = encrypted_gzipped_json(&report, &recipient).unwrap();
+        let second_encrypted = encrypted_gzipped_json(&report, &recipient).unwrap();
+
+        assert!(encrypted.starts_with(b"age-encryption.org/v1\n"));
+        assert_ne!(encrypted, second_encrypted);
+        assert!(!encrypted.windows(16).any(|window| window == b"amount=5000 sats"));
+        assert!(!encrypted.starts_with(&[0x1f, 0x8b]));
+
+        let compressed = age::decrypt(&identity, &encrypted).unwrap();
+        assert!(compressed.starts_with(&[0x1f, 0x8b]));
+
+        let mut decoder = GzDecoder::new(compressed.as_slice());
         let mut json = String::new();
         decoder.read_to_string(&mut json).unwrap();
 
