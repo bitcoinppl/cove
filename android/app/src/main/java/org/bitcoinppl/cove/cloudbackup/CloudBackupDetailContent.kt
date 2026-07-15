@@ -41,6 +41,7 @@ internal enum class CloudBackupDetailBodyState {
     UNSUPPORTED_PASSKEY_PROVIDER,
     MISSING_PASSKEY,
     VERIFYING,
+    CANCELLED,
     DETAIL,
     AUTHORIZATION_BLOCKED,
     INVENTORY_FAILED,
@@ -55,6 +56,7 @@ internal fun cloudBackupDetailBodyState(
         manager.isUnsupportedPasskeyProvider -> CloudBackupDetailBodyState.UNSUPPORTED_PASSKEY_PROVIDER
         manager.isPasskeyMissing -> CloudBackupDetailBodyState.MISSING_PASSKEY
         manager.verificationState is CloudBackupVerificationState.Running -> CloudBackupDetailBodyState.VERIFYING
+        manager.verificationState is CloudBackupVerificationState.Cancelled -> CloudBackupDetailBodyState.CANCELLED
         hasDetail -> CloudBackupDetailBodyState.DETAIL
         manager.hasPendingUploadVerification && manager.syncState is CloudBackupSyncState.Blocked ->
             CloudBackupDetailBodyState.AUTHORIZATION_BLOCKED
@@ -134,6 +136,9 @@ internal fun CloudBackupDetailContent(
                     title = "Verifying cloud backup",
                     message = "Confirming that your backups can be decrypted and restored",
                 )
+            }
+            CloudBackupDetailBodyState.CANCELLED -> {
+                CancelledVerificationRecoveryContent(manager = manager)
             }
             CloudBackupDetailBodyState.DETAIL -> {
                 DetailFormContent(
