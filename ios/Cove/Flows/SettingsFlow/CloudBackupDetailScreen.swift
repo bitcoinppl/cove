@@ -15,13 +15,16 @@ struct CloudBackupDetailScreen: View {
 
     private var hasVerificationResult: Bool {
         switch manager.verificationState {
-        case .verified, .awaitingUploadConfirmation, .failed: true
+        case .verified, .awaitingUploadConfirmation, .cancelled, .failed: true
         default: false
         }
     }
 
     private var isCancelled: Bool {
-        false
+        if case .cancelled = manager.verificationState {
+            return true
+        }
+        return false
     }
 
     private var isPasskeyMissing: Bool {

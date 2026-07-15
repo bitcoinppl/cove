@@ -1471,7 +1471,17 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count(
     ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_begin_drive_account_switch(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cancel_drive_account_switch(
+    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_continue_drive_account_switch(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(
     ): Short
@@ -1482,6 +1492,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_is_cloud_backup_unverified(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(
     ): Short
@@ -2574,8 +2586,18 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_backup_wallet_count(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_begin_drive_account_switch(`ptr`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_cancel_drive_account_switch(`ptr`: Long,`transitionId`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_cloud_storage_did_change(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(`ptr`: Long,`transitionId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(`ptr`: Long,`transitionId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_continue_drive_account_switch(`ptr`: Long,`transitionId`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_has_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_is_cloud_backup_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2586,6 +2608,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(`ptr`: Long,`pendingTransitionId`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3387,6 +3411,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_deepverificationfailure_message(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_catastrophicrecoveryerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_cloudbackupdriveaccountswitcherror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4383,7 +4409,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_backup_wallet_count() != 17456.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_begin_drive_account_switch() != 55166.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_cancel_drive_account_switch() != 12726.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_cloud_storage_did_change() != 44707.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_committed() != 33416.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back() != 34858.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_continue_drive_account_switch() != 3329.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_has_pending_cloud_upload_verification() != 4437.toShort()) {
@@ -4399,6 +4440,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 61990.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590.toShort()) {
@@ -19083,7 +19127,32 @@ public interface RustCloudBackupManagerInterface {
      */
     fun `backupWalletCount`(): kotlin.UInt?
 
+    /**
+     * Claim the exclusive operation and return after all prior cloud writes drain
+     */
+    suspend fun `beginDriveAccountSwitch`(): kotlin.ULong
+
+    /**
+     * Move an unstarted account transition to its rollback phase
+     */
+    suspend fun `cancelDriveAccountSwitch`(`transitionId`: kotlin.ULong)
+
     fun `cloudStorageDidChange`()
+
+    /**
+     * Release the transition after Android commits its staged account
+     */
+    suspend fun `confirmDriveAccountSwitchCommitted`(`transitionId`: kotlin.ULong)
+
+    /**
+     * Release the transition after Android discards its staged account
+     */
+    suspend fun `confirmDriveAccountSwitchRolledBack`(`transitionId`: kotlin.ULong)
+
+    /**
+     * Continue the claimed transition after Android durably stages the selected account
+     */
+    suspend fun `continueDriveAccountSwitch`(`transitionId`: kotlin.ULong)
 
     fun `hasPendingCloudUploadVerification`(): kotlin.Boolean
 
@@ -19106,6 +19175,11 @@ public interface RustCloudBackupManagerInterface {
      * Reports whether onboarding may recover a lost enable-completion event from durable state
      */
     fun `onboardingEnableCompletionReadiness`(): CloudBackupOnboardingCompletionReadiness
+
+    /**
+     * Reconcile persisted Rust and Android transition state after process startup
+     */
+    suspend fun `reconcileDriveAccountSwitch`(`pendingTransitionId`: kotlin.ULong?)
 
     fun `resumePendingCloudUploadVerification`()
 
@@ -19274,6 +19348,56 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     }
 
 
+
+    /**
+     * Claim the exclusive operation and return after all prior cloud writes drain
+     */
+    @Throws(CloudBackupDriveAccountSwitchException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `beginDriveAccountSwitch`() : kotlin.ULong {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_begin_drive_account_switch(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterULong.lift(it) },
+        // Error FFI converter
+        CloudBackupDriveAccountSwitchException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * Move an unstarted account transition to its rollback phase
+     */
+    @Throws(CloudBackupDriveAccountSwitchException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `cancelDriveAccountSwitch`(`transitionId`: kotlin.ULong) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_cancel_drive_account_switch(
+                uniffiHandle,
+
+        FfiConverterULong.lower(`transitionId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        CloudBackupDriveAccountSwitchException.ErrorHandler,
+    )
+    }
+
     override fun `cloudStorageDidChange`()
         =
     callWithHandle {
@@ -19285,6 +19409,84 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     }
 
 
+
+
+    /**
+     * Release the transition after Android commits its staged account
+     */
+    @Throws(CloudBackupDriveAccountSwitchException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `confirmDriveAccountSwitchCommitted`(`transitionId`: kotlin.ULong) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_committed(
+                uniffiHandle,
+
+        FfiConverterULong.lower(`transitionId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        CloudBackupDriveAccountSwitchException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * Release the transition after Android discards its staged account
+     */
+    @Throws(CloudBackupDriveAccountSwitchException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `confirmDriveAccountSwitchRolledBack`(`transitionId`: kotlin.ULong) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_confirm_drive_account_switch_rolled_back(
+                uniffiHandle,
+
+        FfiConverterULong.lower(`transitionId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        CloudBackupDriveAccountSwitchException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * Continue the claimed transition after Android durably stages the selected account
+     */
+    @Throws(CloudBackupDriveAccountSwitchException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `continueDriveAccountSwitch`(`transitionId`: kotlin.ULong) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_continue_drive_account_switch(
+                uniffiHandle,
+
+        FfiConverterULong.lower(`transitionId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        CloudBackupDriveAccountSwitchException.ErrorHandler,
+    )
+    }
 
     override fun `hasPendingCloudUploadVerification`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -19362,6 +19564,32 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     )
     }
 
+
+
+    /**
+     * Reconcile persisted Rust and Android transition state after process startup
+     */
+    @Throws(CloudBackupDriveAccountSwitchException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `reconcileDriveAccountSwitch`(`pendingTransitionId`: kotlin.ULong?) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(
+                uniffiHandle,
+
+        FfiConverterOptionalULong.lower(`pendingTransitionId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        CloudBackupDriveAccountSwitchException.ErrorHandler,
+    )
+    }
 
     override fun `resumePendingCloudUploadVerification`()
         =
@@ -36877,6 +37105,137 @@ public object FfiConverterTypeCloudBackupDetailState : FfiConverterRustBuffer<Cl
 
 
 
+
+
+/**
+ * Failure to coordinate an Android Google Drive account transition
+ */
+sealed class CloudBackupDriveAccountSwitchException: kotlin.Exception() {
+
+    /**
+     * Another exclusive Cloud Backup operation owns the supervisor
+     */
+    class Busy(
+        ) : CloudBackupDriveAccountSwitchException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * Cloud Backup has no configured state to move to another account
+     */
+    class NotConfigured(
+        ) : CloudBackupDriveAccountSwitchException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The supplied transition does not own the current operation
+     */
+    class InvalidTransition(
+        ) : CloudBackupDriveAccountSwitchException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * Persistence or actor coordination failed
+     */
+    class Internal(
+
+        val v1: kotlin.String
+        ) : CloudBackupDriveAccountSwitchException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_cloudbackupdriveaccountswitcherror_uniffi_trait_display(FfiConverterTypeCloudBackupDriveAccountSwitchError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<CloudBackupDriveAccountSwitchException> {
+        override fun lift(error_buf: RustBuffer.ByValue): CloudBackupDriveAccountSwitchException = FfiConverterTypeCloudBackupDriveAccountSwitchError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupDriveAccountSwitchError : FfiConverterRustBuffer<CloudBackupDriveAccountSwitchException> {
+    override fun read(buf: ByteBuffer): CloudBackupDriveAccountSwitchException {
+
+
+        return when(buf.getInt()) {
+            1 -> CloudBackupDriveAccountSwitchException.Busy()
+            2 -> CloudBackupDriveAccountSwitchException.NotConfigured()
+            3 -> CloudBackupDriveAccountSwitchException.InvalidTransition()
+            4 -> CloudBackupDriveAccountSwitchException.Internal(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupDriveAccountSwitchException): ULong {
+        return when(value) {
+            is CloudBackupDriveAccountSwitchException.Busy -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is CloudBackupDriveAccountSwitchException.NotConfigured -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is CloudBackupDriveAccountSwitchException.InvalidTransition -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is CloudBackupDriveAccountSwitchException.Internal -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupDriveAccountSwitchException, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupDriveAccountSwitchException.Busy -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupDriveAccountSwitchException.NotConfigured -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupDriveAccountSwitchException.InvalidTransition -> {
+                buf.putInt(3)
+                Unit
+            }
+            is CloudBackupDriveAccountSwitchException.Internal -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
 /**
  * Public enable flow state for onboarding and settings
  */
@@ -38421,6 +38780,30 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
 
+    /**
+     * Android must atomically commit its staged Google Drive identity
+     */
+    data class DriveAccountSwitchCommitRequired(
+        val v1: kotlin.ULong) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Android must atomically discard its staged Google Drive identity
+     */
+    data class DriveAccountSwitchRollbackRequired(
+        val v1: kotlin.ULong) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -38444,6 +38827,12 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             2 -> CloudBackupReconcileMessage.EnableCompleted(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
+            3 -> CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired(
+                FfiConverterULong.read(buf),
+                )
+            4 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
+                FfiConverterULong.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -38464,6 +38853,20 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterTypeCloudBackupEnableContext.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: CloudBackupReconcileMessage, buf: ByteBuffer) {
@@ -38477,6 +38880,16 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             is CloudBackupReconcileMessage.EnableCompleted -> {
                 buf.putInt(2)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
+                buf.putInt(4)
+                FfiConverterULong.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -39781,6 +40194,9 @@ sealed class CloudBackupVerificationState {
     object AwaitingUploadConfirmation : CloudBackupVerificationState()
 
 
+    object Cancelled : CloudBackupVerificationState()
+
+
     data class Failed(
         val v1: org.bitcoinppl.cove_core.DeepVerificationFailure) : CloudBackupVerificationState()
 
@@ -39814,7 +40230,8 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
             3 -> CloudBackupVerificationState.Required
             4 -> CloudBackupVerificationState.Running
             5 -> CloudBackupVerificationState.AwaitingUploadConfirmation
-            6 -> CloudBackupVerificationState.Failed(
+            6 -> CloudBackupVerificationState.Cancelled
+            7 -> CloudBackupVerificationState.Failed(
                 FfiConverterTypeDeepVerificationFailure.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -39854,6 +40271,12 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 4UL
             )
         }
+        is CloudBackupVerificationState.Cancelled -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupVerificationState.Failed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -39887,8 +40310,12 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 buf.putInt(5)
                 Unit
             }
-            is CloudBackupVerificationState.Failed -> {
+            is CloudBackupVerificationState.Cancelled -> {
                 buf.putInt(6)
+                Unit
+            }
+            is CloudBackupVerificationState.Failed -> {
+                buf.putInt(7)
                 FfiConverterTypeDeepVerificationFailure.write(value.v1, buf)
                 Unit
             }

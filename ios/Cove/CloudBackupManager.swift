@@ -210,8 +210,10 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
 
     var shouldPromptVerification: Bool {
         if isBackgroundVerifying { return false }
-        if case .required = verificationState { return true }
-        return false
+        switch verificationState {
+        case .required, .cancelled: return true
+        default: return false
+        }
     }
 
     var isUnverified: Bool {
@@ -317,6 +319,8 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
             state.settingsRowStatus = settingsRowStatus
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
+        case .driveAccountSwitchCommitRequired, .driveAccountSwitchRollbackRequired:
+            break
         }
     }
 }

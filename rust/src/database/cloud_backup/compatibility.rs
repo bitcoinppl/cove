@@ -96,6 +96,7 @@ impl From<PersistedLegacyCloudBackupState> for PersistedCloudBackupState {
             },
             pending_verification_completion: state.pending_verification_completion,
             pending_restore_all: None,
+            drive_account_switch: None,
         })
     }
 }
@@ -424,8 +425,9 @@ mod tests {
         CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudStorageIssue,
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
         PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-        PersistedConfiguredCloudBackup, PersistedPasskeyState, PersistedPendingVerificationUpload,
-        PersistedRestoreAllMarker,
+        PersistedConfiguredCloudBackup, PersistedDriveAccountSwitch,
+        PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
+        PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
     };
 
     fn configured_state(
@@ -440,6 +442,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync, wallet_count },
             pending_verification_completion: None,
             pending_restore_all: None,
+            drive_account_switch: None,
         })
     }
 
@@ -512,6 +515,29 @@ mod tests {
 
         let decoded: PersistedCloudBackupState = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.pending_restore_all(), Some(&marker));
+    }
+
+    #[test]
+    fn cloud_backup_state_round_trips_drive_account_switch_without_changing_record_version() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            Some(10),
+            Some(2),
+        );
+        assert!(state.set_drive_account_switch(PersistedDriveAccountSwitch {
+            transition_id: 7,
+            phase: PersistedDriveAccountSwitchPhase::Reinitializing,
+        }));
+
+        let encoded = serde_json::to_value(&state).unwrap();
+        let decoded: PersistedCloudBackupState = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["version"], 2);
+        assert_eq!(decoded, state);
     }
 
     #[test]

@@ -42,6 +42,24 @@ const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "If this keeps happening, update Cove or contact support."
 );
 
+/// Failure to coordinate an Android Google Drive account transition
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum CloudBackupDriveAccountSwitchError {
+    /// Another exclusive Cloud Backup operation owns the supervisor
+    #[error("another cloud backup operation is already in progress")]
+    Busy,
+    /// Cloud Backup has no configured state to move to another account
+    #[error("cloud backup is not configured")]
+    NotConfigured,
+    /// The supplied transition does not own the current operation
+    #[error("invalid Google Drive account switch transition")]
+    InvalidTransition,
+    /// Persistence or actor coordination failed
+    #[error("internal Google Drive account switch error: {0}")]
+    Internal(String),
+}
+
 #[derive(Debug)]
 struct CloudBackupErrorSource {
     message: String,

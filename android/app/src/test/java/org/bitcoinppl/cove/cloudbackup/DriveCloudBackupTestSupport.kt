@@ -141,14 +141,74 @@ internal class BlockingClearDriveAuthorization : DriveAuthorization {
 internal class TestDriveAccountBindingStore(
     private var identity: DriveAccountIdentity? = null,
 ) : DriveAccountBindingStore {
-    override fun selectedIdentity(): DriveAccountIdentity? = identity
+    private var pendingTransitionId: ULong? = null
+    private var pendingIdentity: DriveAccountIdentity? = null
+    private var committedTransitionId: ULong? = null
+    var stageSucceeds = true
+    var retainFailedStage = false
+
+    override fun selectedIdentity(): DriveAccountIdentity? = pendingIdentity ?: identity
+
+    fun committedIdentity(): DriveAccountIdentity? = identity
 
     override fun bindIdentity(identity: DriveAccountIdentity) {
-        this.identity = identity
+        if (pendingTransitionId != null) {
+            pendingIdentity = identity
+        } else {
+            this.identity = identity
+            committedTransitionId = null
+        }
     }
 
     override fun clearIdentity() {
         identity = null
+        pendingTransitionId = null
+        pendingIdentity = null
+        committedTransitionId = null
+    }
+
+    override fun pendingTransitionId(): ULong? = pendingTransitionId
+
+    override fun isIdentityStaged(transitionId: ULong): Boolean =
+        pendingTransitionId == transitionId && pendingIdentity != null
+
+    override fun stageIdentity(
+        transitionId: ULong,
+        identity: DriveAccountIdentity,
+    ): Boolean {
+        if (!stageSucceeds) {
+            if (retainFailedStage) {
+                pendingTransitionId = transitionId
+                pendingIdentity = identity
+            }
+            return false
+        }
+        if (pendingTransitionId != null && pendingTransitionId != transitionId) return false
+
+        pendingTransitionId = transitionId
+        pendingIdentity = identity
+        return true
+    }
+
+    override fun commitStagedIdentity(transitionId: ULong): Boolean {
+        if (pendingTransitionId == null) return committedTransitionId == transitionId
+        if (pendingTransitionId != transitionId) return false
+        val stagedIdentity = pendingIdentity ?: return false
+
+        identity = stagedIdentity
+        pendingTransitionId = null
+        pendingIdentity = null
+        committedTransitionId = transitionId
+        return true
+    }
+
+    override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
+        if (pendingTransitionId == null) return true
+        if (pendingTransitionId != transitionId) return false
+
+        pendingTransitionId = null
+        pendingIdentity = null
+        return true
     }
 }
 

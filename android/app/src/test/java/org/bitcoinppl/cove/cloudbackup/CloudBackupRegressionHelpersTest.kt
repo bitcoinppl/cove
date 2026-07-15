@@ -164,6 +164,17 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
+    fun cancelledVerificationShowsRecoveryInsteadOfLoadedDetail() {
+        assertEquals(
+            CloudBackupDetailBodyState.CANCELLED,
+            cloudBackupDetailBodyState(
+                manager = cloudBackupManager(verification = CloudBackupVerificationState.Cancelled),
+                hasDetail = true,
+            ),
+        )
+    }
+
+    @Test
     fun failedVerificationWithoutDetailShowsFallbackVerificationSection() {
         val bodyState =
             cloudBackupDetailBodyState(

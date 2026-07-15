@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.DriveAccountSelectionOutcome
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.device.CloudStorage
@@ -34,6 +35,7 @@ open class CoveApplication : Application() {
     private var connectivity: Connectivity? = null
     private var passkeyAccess: PasskeyAccess? = null
     private var cloudStorage: CloudStorage? = null
+    private var cloudStorageAccess: AndroidCloudStorageAccess? = null
     private var connectivityAccess: LifecycleConnectivityAccess? = null
     private var bootstrapCompleted = false
 
@@ -60,9 +62,18 @@ open class CoveApplication : Application() {
             connectivityAccess = createdConnectivityAccess
             connectivity = Connectivity(createdConnectivityAccess)
             passkeyAccess = PasskeyAccess(createPasskeyProvider())
-            cloudStorage = CloudStorage(createCloudStorageAccess())
+            val createdCloudStorageAccess = createCloudStorageAccess()
+            cloudStorageAccess = createdCloudStorageAccess as? AndroidCloudStorageAccess
+            cloudStorage = CloudStorage(createdCloudStorageAccess)
             CloudBackupManager.setOnCloudBackupDisabled {
                 clearCloudBackupDriveAccountBinding(this)
+            }
+            cloudStorageAccess?.let { access ->
+                CloudBackupManager.setDriveAccountSwitchCallbacks(
+                    pendingTransitionId = access::pendingAccountSwitchTransitionId,
+                    commit = access::commitAccountSwitch,
+                    rollback = access::rollbackAccountSwitch,
+                )
             }
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
@@ -81,6 +92,12 @@ open class CoveApplication : Application() {
 
     protected open fun createConnectivityAccess(): LifecycleConnectivityAccess =
         ConnectivityMonitor(this)
+
+    internal suspend fun selectCloudBackupDriveAccount(
+        transitionId: ULong,
+    ): DriveAccountSelectionOutcome =
+        checkNotNull(cloudStorageAccess) { "cloud storage access is not initialized" }
+            .selectAccountForCloudBackup(transitionId)
 
     // Called from MainActivity after bootstrap completes on the main thread
     fun onBootstrapComplete() {
@@ -136,6 +153,7 @@ open class CoveApplication : Application() {
         try {
             cloudStorage?.close()
             cloudStorage = null
+            cloudStorageAccess = null
             Log.d(TAG, "CloudStorage FFI object closed")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing CloudStorage FFI object", e)

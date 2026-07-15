@@ -68,6 +68,10 @@ impl CloudBackupExclusiveOperationClaim {
     pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
         self.operation
     }
+
+    pub(crate) fn generation(self) -> u64 {
+        self.generation
+    }
 }
 
 /// Event accepted by the private reducer

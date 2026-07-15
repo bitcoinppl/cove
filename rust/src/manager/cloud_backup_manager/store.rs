@@ -13,8 +13,7 @@ use super::wallets::{PreparedWalletBackup, prepare_wallet_backup};
 use super::{CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupProgress, LocalWalletMode};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    PersistedCloudBackupState, PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion,
-    PersistedRestoreAllMarker,
+    PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion, PersistedRestoreAllMarker,
 };
 use crate::wallet::metadata::WalletMetadata;
 
@@ -39,7 +38,10 @@ impl CloudBackupStore {
         wallet_count: u32,
         completion: PersistedPendingVerificationCompletion,
     ) -> Result<(), CloudBackupError> {
-        let mut state = PersistedCloudBackupState::mark_enabled_reset_verification(
+        let current = self.0.cloud_backup_state.get().map_err(|source| {
+            CloudBackupError::internal_context("read cloud backup state", source)
+        })?;
+        let mut state = current.mark_enabled_reset_verification_preserving_transition(
             crate::manager::cloud_backup_manager::current_timestamp(),
             wallet_count,
         );
@@ -239,8 +241,8 @@ mod tests {
     use std::sync::Arc;
 
     use crate::database::cloud_backup::{
-        PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupStatus,
-        PersistedConfiguredCloudBackup, PersistedPasskeyState,
+        PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
+        PersistedCloudBackupStatus, PersistedConfiguredCloudBackup, PersistedPasskeyState,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
     use crate::manager::cloud_backup_manager::{
@@ -264,6 +266,7 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync: Some(10), wallet_count: Some(2) },
             pending_verification_completion: None,
             pending_restore_all: None,
+            drive_account_switch: None,
         })
     }
 

@@ -13,6 +13,86 @@ import org.junit.Test
 
 class AndroidCloudStorageAccessTest {
     @Test
+    fun explicitDriveAccountSelectionStagesReplacementUntilCommit() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply { account = replacement }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val outcome = storage.selectAccountForCloudBackup(1UL)
+
+            assertEquals(DriveAccountSelectionOutcome.Changed, outcome)
+            assertEquals(replacement, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(1UL, store.pendingTransitionId())
+            assertTrue(storage.commitAccountSwitch(1UL))
+            assertEquals(replacement, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+            assertEquals(listOf(true), authorization.accessRequests)
+        }
+
+    @Test
+    fun selectingBoundDriveAccountDoesNotStageReinitialization() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val refreshed =
+                DriveAccountIdentity(
+                    googleAccountId = "account-1",
+                    drivePermissionId = "permission-1",
+                    email = "person@example.com",
+                )
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply { account = refreshed }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val outcome = storage.selectAccountForCloudBackup(1UL)
+
+            assertEquals(DriveAccountSelectionOutcome.Unchanged, outcome)
+            assertEquals(refreshed, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+        }
+
+    @Test
+    fun rolledBackDriveAccountSelectionRestoresCommittedBinding() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply { account = replacement }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            storage.selectAccountForCloudBackup(7UL)
+
+            assertTrue(storage.rollbackAccountSwitch(7UL))
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+        }
+
+    @Test
+    fun failedDriveAccountStagingPreservesBindingAndClearsSelectedToken() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original).apply {
+                stageSucceeds = false
+                retainFailedStage = true
+            }
+            val authorization = RecordingDriveAuthorization().apply { account = replacement }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val error = captureError { storage.selectAccountForCloudBackup(7UL) }
+
+            assertTrue(error is IllegalStateException)
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(null, store.pendingTransitionId())
+            assertEquals(listOf("token-1"), authorization.clearedTokens)
+        }
+
+    @Test
     fun scP05SilentAuthoritativeEmptySnapshotCompletesWithoutRetryOrConsent() =
         runBlocking {
             MockDriveServer().use { server ->

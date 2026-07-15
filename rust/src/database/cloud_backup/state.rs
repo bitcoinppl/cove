@@ -128,6 +128,13 @@ impl PersistedCloudBackupState {
         }
     }
 
+    pub(crate) fn drive_account_switch(&self) -> Option<&PersistedDriveAccountSwitch> {
+        match self {
+            Self::Configured(configured) => configured.drive_account_switch.as_ref(),
+            Self::Disabled | Self::Disabling(_) | Self::Corrupted { .. } => None,
+        }
+    }
+
     pub fn should_prompt_verification(&self) -> bool {
         if !self.is_unverified() {
             return false;
@@ -180,6 +187,7 @@ impl PersistedCloudBackupState {
             },
             pending_verification_completion: self.pending_verification_completion().cloned(),
             pending_restore_all: self.pending_restore_all().cloned(),
+            drive_account_switch: self.drive_account_switch().copied(),
         })
     }
 
@@ -197,7 +205,21 @@ impl PersistedCloudBackupState {
             },
             pending_verification_completion: None,
             pending_restore_all: None,
+            drive_account_switch: None,
         })
+    }
+
+    pub(crate) fn mark_enabled_reset_verification_preserving_transition(
+        &self,
+        last_sync: u64,
+        wallet_count: u32,
+    ) -> Self {
+        let mut state = Self::mark_enabled_reset_verification(last_sync, wallet_count);
+        if let Some(account_switch) = self.drive_account_switch().copied() {
+            state.set_drive_account_switch(account_switch);
+        }
+
+        state
     }
 
     pub fn mark_verified_at(&mut self, verified_at: u64) {
@@ -281,6 +303,33 @@ impl PersistedCloudBackupState {
 
         configured.pending_restore_all.take().is_some()
     }
+
+    pub(crate) fn set_drive_account_switch(
+        &mut self,
+        account_switch: PersistedDriveAccountSwitch,
+    ) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+
+        configured.drive_account_switch = Some(account_switch);
+        true
+    }
+
+    pub(crate) fn clear_drive_account_switch(&mut self, transition_id: u64) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+        if configured
+            .drive_account_switch
+            .is_none_or(|account_switch| account_switch.transition_id != transition_id)
+        {
+            return false;
+        }
+
+        configured.drive_account_switch = None;
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -306,6 +355,23 @@ pub struct PersistedConfiguredCloudBackup {
     pub pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_restore_all: Option<PersistedRestoreAllMarker>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drive_account_switch: Option<PersistedDriveAccountSwitch>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedDriveAccountSwitch {
+    pub transition_id: u64,
+    pub phase: PersistedDriveAccountSwitchPhase,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PersistedDriveAccountSwitchPhase {
+    AwaitingAccountSelection,
+    Reinitializing,
+    AwaitingAccountCommitSucceeded,
+    AwaitingAccountCommitFailed,
+    AwaitingAccountRollback,
 }
 
 impl PersistedConfiguredCloudBackup {

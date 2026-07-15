@@ -149,6 +149,16 @@ internal interface DriveAccountBindingStore {
     fun bindIdentity(identity: DriveAccountIdentity)
 
     fun clearIdentity()
+
+    fun pendingTransitionId(): ULong?
+
+    fun isIdentityStaged(transitionId: ULong): Boolean
+
+    fun stageIdentity(transitionId: ULong, identity: DriveAccountIdentity): Boolean
+
+    fun commitStagedIdentity(transitionId: ULong): Boolean
+
+    fun rollbackStagedIdentity(transitionId: ULong): Boolean
 }
 
 internal class SharedPreferencesDriveAccountBindingStore(
@@ -159,9 +169,24 @@ internal class SharedPreferencesDriveAccountBindingStore(
         appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     override fun selectedIdentity(): DriveAccountIdentity? {
-        val googleAccountId = preferences.getString(KEY_ID, null)?.takeIf(String::isNotBlank)
-        val drivePermissionId = preferences.getString(KEY_PERMISSION_ID, null)?.takeIf(String::isNotBlank)
-        val email = preferences.getString(KEY_EMAIL, null)?.takeIf(String::isNotBlank)
+        if (storedPendingTransitionId() != null) {
+            pendingIdentity()?.let { return it }
+        }
+
+        return identity(KEY_ID, KEY_PERMISSION_ID, KEY_EMAIL)
+    }
+
+    private fun pendingIdentity(): DriveAccountIdentity? =
+        identity(KEY_PENDING_ID, KEY_PENDING_PERMISSION_ID, KEY_PENDING_EMAIL)
+
+    private fun identity(
+        idKey: String,
+        permissionIdKey: String,
+        emailKey: String,
+    ): DriveAccountIdentity? {
+        val googleAccountId = preferences.getString(idKey, null)?.takeIf(String::isNotBlank)
+        val drivePermissionId = preferences.getString(permissionIdKey, null)?.takeIf(String::isNotBlank)
+        val email = preferences.getString(emailKey, null)?.takeIf(String::isNotBlank)
 
         return if (googleAccountId == null && drivePermissionId == null && email == null) {
             null
@@ -175,12 +200,88 @@ internal class SharedPreferencesDriveAccountBindingStore(
     }
 
     override fun bindIdentity(identity: DriveAccountIdentity) {
+        if (storedPendingTransitionId() != null) {
+            preferences
+                .edit()
+                .putString(KEY_PENDING_ID, identity.googleAccountId)
+                .putString(KEY_PENDING_PERMISSION_ID, identity.drivePermissionId)
+                .putString(KEY_PENDING_EMAIL, identity.email)
+                .apply()
+            return
+        }
+
         preferences
             .edit()
             .putString(KEY_ID, identity.googleAccountId)
             .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
             .putString(KEY_EMAIL, identity.email)
+            .remove(KEY_COMMITTED_TRANSITION_ID)
             .apply()
+    }
+
+    override fun pendingTransitionId(): ULong? = storedPendingTransitionId()
+
+    override fun isIdentityStaged(transitionId: ULong): Boolean =
+        storedPendingTransitionId() == transitionId && pendingIdentity() != null
+
+    private fun storedPendingTransitionId(): ULong? =
+        if (preferences.contains(KEY_PENDING_TRANSITION_ID)) {
+            preferences.getLong(KEY_PENDING_TRANSITION_ID, 0).toULong()
+        } else {
+            null
+        }
+
+    override fun stageIdentity(
+        transitionId: ULong,
+        identity: DriveAccountIdentity,
+    ): Boolean {
+        val pendingTransitionId = storedPendingTransitionId()
+        if (pendingTransitionId != null && pendingTransitionId != transitionId) {
+            return false
+        }
+
+        return preferences
+            .edit()
+            .putLong(KEY_PENDING_TRANSITION_ID, transitionId.toLong())
+            .putString(KEY_PENDING_ID, identity.googleAccountId)
+            .putString(KEY_PENDING_PERMISSION_ID, identity.drivePermissionId)
+            .putString(KEY_PENDING_EMAIL, identity.email)
+            .commit()
+    }
+
+    override fun commitStagedIdentity(transitionId: ULong): Boolean {
+        val pendingTransitionId = storedPendingTransitionId()
+        if (pendingTransitionId == null) {
+            return preferences.contains(KEY_COMMITTED_TRANSITION_ID) &&
+                preferences.getLong(KEY_COMMITTED_TRANSITION_ID, 0).toULong() == transitionId
+        }
+        if (pendingTransitionId != transitionId) return false
+        val identity = pendingIdentity() ?: return false
+
+        return preferences
+            .edit()
+            .putString(KEY_ID, identity.googleAccountId)
+            .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
+            .putString(KEY_EMAIL, identity.email)
+            .putLong(KEY_COMMITTED_TRANSITION_ID, transitionId.toLong())
+            .remove(KEY_PENDING_TRANSITION_ID)
+            .remove(KEY_PENDING_ID)
+            .remove(KEY_PENDING_PERMISSION_ID)
+            .remove(KEY_PENDING_EMAIL)
+            .commit()
+    }
+
+    override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
+        val pendingTransitionId = storedPendingTransitionId() ?: return true
+        if (pendingTransitionId != transitionId) return false
+
+        return preferences
+            .edit()
+            .remove(KEY_PENDING_TRANSITION_ID)
+            .remove(KEY_PENDING_ID)
+            .remove(KEY_PENDING_PERMISSION_ID)
+            .remove(KEY_PENDING_EMAIL)
+            .commit()
     }
 
     override fun clearIdentity() {
@@ -189,6 +290,11 @@ internal class SharedPreferencesDriveAccountBindingStore(
             .remove(KEY_ID)
             .remove(KEY_PERMISSION_ID)
             .remove(KEY_EMAIL)
+            .remove(KEY_PENDING_TRANSITION_ID)
+            .remove(KEY_PENDING_ID)
+            .remove(KEY_PENDING_PERMISSION_ID)
+            .remove(KEY_PENDING_EMAIL)
+            .remove(KEY_COMMITTED_TRANSITION_ID)
             .apply()
     }
 
@@ -197,6 +303,11 @@ internal class SharedPreferencesDriveAccountBindingStore(
         private const val KEY_ID = "google_account_id"
         private const val KEY_PERMISSION_ID = "google_drive_permission_id"
         private const val KEY_EMAIL = "google_account_email"
+        private const val KEY_PENDING_TRANSITION_ID = "pending_transition_id"
+        private const val KEY_PENDING_ID = "pending_google_account_id"
+        private const val KEY_PENDING_PERMISSION_ID = "pending_google_drive_permission_id"
+        private const val KEY_PENDING_EMAIL = "pending_google_account_email"
+        private const val KEY_COMMITTED_TRANSITION_ID = "committed_transition_id"
     }
 }
 
@@ -230,6 +341,8 @@ internal fun clearCloudBackupDriveAccountBinding(context: Context) {
 
 internal interface DriveAuthorization {
     suspend fun accessToken(interactive: Boolean): DriveAccessToken
+
+    suspend fun selectAccount(): DriveAccessToken = accessToken(interactive = true)
 
     suspend fun updateCachedToken(accessToken: DriveAccessToken) = Unit
 
@@ -289,6 +402,12 @@ internal class CachingDriveAuthorization(
         }
     }
 
+    override suspend fun selectAccount(): DriveAccessToken =
+        tokenMutex.withLock {
+            cachedAccessToken = null
+            delegate.selectAccount()
+        }
+
     override suspend fun updateCachedToken(accessToken: DriveAccessToken) {
         tokenMutex.withLock {
             val cached = cachedAccessToken ?: return@withLock
@@ -326,14 +445,35 @@ internal class DriveAuthorizationHelper(
     private val client by lazy { Identity.getAuthorizationClient(appContext) }
     private val requestedScopes = listOf(Scope(DRIVE_APP_DATA_SCOPE))
 
-    override suspend fun accessToken(interactive: Boolean): DriveAccessToken {
+    override suspend fun accessToken(interactive: Boolean): DriveAccessToken =
+        authorize(
+            account = selectedAccount()?.androidAccount(),
+            prompt = AuthorizationRequest.Prompt.NOT_SET,
+            interactive = interactive,
+        )
+
+    // explicit switching must omit the saved account so a stale credential cannot suppress the chooser
+    override suspend fun selectAccount(): DriveAccessToken =
+        authorize(
+            account = null,
+            prompt = AuthorizationRequest.Prompt.SELECT_ACCOUNT,
+            interactive = true,
+        )
+
+    private suspend fun authorize(
+        account: Account?,
+        prompt: Int,
+        interactive: Boolean,
+    ): DriveAccessToken {
         val requestBuilder =
             AuthorizationRequest
                 .builder()
                 .setRequestedScopes(requestedScopes)
 
-        val selectedIdentity = selectedAccount()
-        selectedIdentity?.androidAccount()?.let(requestBuilder::setAccount)
+        account?.let(requestBuilder::setAccount)
+        if (prompt != AuthorizationRequest.Prompt.NOT_SET) {
+            requestBuilder.setPrompt(prompt)
+        }
 
         val authorizationResult = client
             .authorize(requestBuilder.build())

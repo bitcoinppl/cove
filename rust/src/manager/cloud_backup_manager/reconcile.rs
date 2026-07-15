@@ -18,6 +18,10 @@ use super::{
 pub enum CloudBackupReconcileMessage {
     Lifecycle(Box<CloudBackupLifecycle>, CloudBackupSettingsRowStatus),
     EnableCompleted(CloudBackupEnableContext),
+    /// Android must atomically commit its staged Google Drive identity
+    DriveAccountSwitchCommitRequired(u64),
+    /// Android must atomically discard its staged Google Drive identity
+    DriveAccountSwitchRollbackRequired(u64),
 }
 
 #[uniffi::export(callback_interface)]
@@ -33,7 +37,7 @@ impl RustCloudBackupManager {
         ((&db_state).into(), db_state.should_prompt_verification())
     }
 
-    fn send(&self, message: Message) {
+    pub(crate) fn send(&self, message: Message) {
         self.reconciler.send_sync(message);
     }
 

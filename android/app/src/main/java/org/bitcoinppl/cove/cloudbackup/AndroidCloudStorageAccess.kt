@@ -20,7 +20,7 @@ private const val GOOGLE_DRIVE_SYNC_FAILED_MESSAGE =
 
 class AndroidCloudStorageAccess internal constructor(
     driveAuthorization: DriveAuthorization,
-    accountBindingStore: DriveAccountBindingStore,
+    private val accountBindingStore: DriveAccountBindingStore,
     driveApiEndpoints: DriveApiEndpoints = DriveApiEndpoints(),
     drivePathNamesProvider: () -> DrivePathNames = { DrivePaths.defaultNames },
 ) : CloudStorageAccess {
@@ -41,6 +41,56 @@ class AndroidCloudStorageAccess internal constructor(
     private val httpClient = DriveHttpClient(driveApiEndpoints)
     private val folderResolver = DriveFolderResolver(httpClient, drivePathNamesProvider)
     private val tokenProvider = DriveTokenProvider(driveAuthorization, accountBindingStore, httpClient)
+
+    internal suspend fun selectAccountForCloudBackup(transitionId: ULong): DriveAccountSelectionOutcome {
+        val previouslySelectedIdentity = accountBindingStore.selectedIdentity()
+        val access = tokenProvider.selectAccount()
+        val identity = checkNotNull(access.account)
+
+        if (previouslySelectedIdentity?.matches(identity) == true) {
+            val enriched = previouslySelectedIdentity.verifiedMerge(identity)
+            if (enriched != previouslySelectedIdentity) {
+                accountBindingStore.bindIdentity(enriched)
+            }
+
+            logDriveDebug("selected google drive account is already bound to Cloud Backup")
+            return DriveAccountSelectionOutcome.Unchanged
+        }
+
+        if (!accountBindingStore.stageIdentity(transitionId, identity)) {
+            if (!accountBindingStore.rollbackStagedIdentity(transitionId)) {
+                logDriveWarning("failed to clear unstaged drive account")
+            }
+            runCatching {
+                tokenProvider.clearToken(access.token)
+            }.onFailure { error ->
+                logDriveWarning("failed to clear unstaged drive token", error)
+            }
+
+            throw IllegalStateException("google drive account selection could not be saved")
+        }
+
+        logDriveDebug("staged google drive account for Cloud Backup")
+        return DriveAccountSelectionOutcome.Changed
+    }
+
+    internal fun pendingAccountSwitchTransitionId(): ULong? {
+        val transitionId = accountBindingStore.pendingTransitionId() ?: return null
+        if (accountBindingStore.isIdentityStaged(transitionId)) {
+            return transitionId
+        }
+
+        check(accountBindingStore.rollbackStagedIdentity(transitionId)) {
+            "incomplete google drive account selection could not be cleared"
+        }
+        return null
+    }
+
+    internal fun commitAccountSwitch(transitionId: ULong): Boolean =
+        accountBindingStore.commitStagedIdentity(transitionId)
+
+    internal fun rollbackAccountSwitch(transitionId: ULong): Boolean =
+        accountBindingStore.rollbackStagedIdentity(transitionId)
 
     private fun CloudAccessPolicy.allowsConsent(): Boolean =
         this == CloudAccessPolicy.CONSENT_ALLOWED
