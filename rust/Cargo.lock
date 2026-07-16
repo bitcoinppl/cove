@@ -5733,6 +5733,7 @@ dependencies = [
  "hex",
  "image",
  "qrcode",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",

@@ -7,6 +7,7 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
+use semver::Version;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -371,7 +372,7 @@ pub fn signed_android_release_apk(verbose: bool) -> Result<()> {
 
     sh.change_dir("../android");
 
-    validate_android_release_signing_env(&sh)?;
+    validate_android_release_signing_env()?;
     let _ = sh.remove_path(APK_STORE_RELEASE_DIR);
 
     print_info("Building signed store release arm64-v8a APK...");
@@ -407,7 +408,7 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     // change to android directory
     sh.change_dir("../android");
 
-    validate_android_release_signing_env(&sh)?;
+    validate_android_release_signing_env()?;
 
     // build the AAB and APK for store release
     print_info("Building store release AAB and APK...");
@@ -465,17 +466,16 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     Ok(())
 }
 
-fn validate_android_release_signing_env(sh: &Shell) -> Result<()> {
+fn validate_android_release_signing_env() -> Result<()> {
     let values = SIGNING_ENV_VARS
         .iter()
         .map(|env_name| (*env_name, std::env::var(env_name).ok()))
         .collect::<HashMap<_, _>>();
 
-    validate_android_release_signing_values(&sh.current_dir(), &values)
+    validate_android_release_signing_values(&values)
 }
 
 fn validate_android_release_signing_values(
-    android_root: &Path,
     values: &HashMap<&'static str, Option<String>>,
 ) -> Result<()> {
     for env_name in SIGNING_ENV_VARS {
@@ -492,9 +492,13 @@ fn validate_android_release_signing_values(
         .get("COVE_KEYSTORE_PATH")
         .and_then(Option::as_deref)
         .context("COVE_KEYSTORE_PATH must be set for Android release signing")?;
-    let keystore_path = resolve_gradle_app_path(android_root, keystore_path);
+    let keystore_path = Path::new(keystore_path);
 
-    fs::File::open(&keystore_path).wrap_err_with(|| {
+    if !keystore_path.is_absolute() {
+        color_eyre::eyre::bail!("COVE_KEYSTORE_PATH must be an absolute path");
+    }
+
+    fs::File::open(keystore_path).wrap_err_with(|| {
         format!(
             "COVE_KEYSTORE_PATH must point to a readable keystore file: {}",
             keystore_path.display()
@@ -502,15 +506,6 @@ fn validate_android_release_signing_values(
     })?;
 
     Ok(())
-}
-
-fn resolve_gradle_app_path(android_root: &Path, path: &str) -> PathBuf {
-    let path = PathBuf::from(path);
-    if path.is_absolute() {
-        return path;
-    }
-
-    android_root.join("app").join(path)
 }
 
 fn read_android_release_version(sh: &Shell) -> Result<AndroidReleaseVersion> {
@@ -594,8 +589,7 @@ fn validate_apk_signature(apk_path: &Path) -> Result<()> {
 
     let stdout =
         String::from_utf8(output.stdout).wrap_err("apksigner output was not valid UTF-8")?;
-    let actual_digest = parse_apksigner_sha256_digest(&stdout)
-        .context("apksigner output did not include signer certificate SHA-256 digest")?;
+    let actual_digest = single_apksigner_sha256_digest(&stdout)?;
 
     validate_signing_cert_sha256(&actual_digest, expected_signing_cert_sha256()?.as_deref())?;
 
@@ -1014,19 +1008,25 @@ fn find_android_tool(name: &str) -> Option<PathBuf> {
             continue;
         };
 
-        let mut candidates = entries
-            .filter_map(std::result::Result::ok)
-            .map(|entry| entry.path().join(name))
-            .filter(|path| path.exists())
-            .collect::<Vec<_>>();
-        candidates.sort();
-
-        if let Some(candidate) = candidates.pop() {
+        if let Some(candidate) = newest_android_build_tool(entries, name) {
             return Some(candidate);
         }
     }
 
     None
+}
+
+fn newest_android_build_tool(entries: fs::ReadDir, name: &str) -> Option<PathBuf> {
+    entries
+        .filter_map(std::result::Result::ok)
+        .filter_map(|entry| {
+            let version = entry.file_name().to_str().and_then(|name| Version::parse(name).ok())?;
+            let path = entry.path().join(name);
+
+            path.is_file().then_some((version, path))
+        })
+        .max_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, path)| path)
 }
 
 fn remote_shell_quote(value: &str) -> String {
@@ -1069,17 +1069,35 @@ fn parse_aapt_badging(output: &str) -> Option<ApkBadging> {
     Some(ApkBadging { package_name, version_name, version_code })
 }
 
-fn parse_apksigner_sha256_digest(output: &str) -> Option<String> {
-    output.lines().find_map(|line| {
-        let (_, digest) = line.split_once("certificate SHA-256 digest:")?;
-        let normalized = normalize_sha256_digest(digest);
+fn single_apksigner_sha256_digest(output: &str) -> Result<String> {
+    let digests = output
+        .lines()
+        .filter_map(|line| {
+            if !line.trim_start().starts_with("Signer #") {
+                return None;
+            }
 
-        if normalized.is_empty() {
-            None
-        } else {
-            Some(normalized)
-        }
-    })
+            let (_, digest) = line.split_once("certificate SHA-256 digest:")?;
+            let normalized = normalize_sha256_digest(digest);
+
+            if normalized.is_empty() {
+                None
+            } else {
+                Some(normalized)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    match digests.as_slice() {
+        [digest] => Ok(digest.clone()),
+        [] => color_eyre::eyre::bail!(
+            "apksigner output did not include signer certificate SHA-256 digest"
+        ),
+        _ => color_eyre::eyre::bail!(
+            "Expected exactly one APK signer certificate, found {}",
+            digests.len()
+        ),
+    }
 }
 
 fn parse_single_quoted_value(line: &str, key: &str) -> Option<String> {
@@ -1110,8 +1128,8 @@ fn validate_sha256_digest(value: &str, label: &str) -> Result<()> {
 mod tests {
     use super::{
         arm64_apk_output_file_from_metadata, extract_version_code, extract_version_name,
-        normalize_sha256_digest, parse_aapt_badging, parse_apksigner_sha256_digest,
-        remote_shell_quote, target_for_abi, target_path_for_android_file,
+        newest_android_build_tool, normalize_sha256_digest, parse_aapt_badging, remote_shell_quote,
+        single_apksigner_sha256_digest, target_for_abi, target_path_for_android_file,
         validate_android_release_signing_values, validate_signing_cert_sha256,
     };
     use std::{collections::HashMap, fs};
@@ -1174,39 +1192,42 @@ mod tests {
 
     #[test]
     fn validates_required_signing_env_values_and_keystore() {
-        let android_root = tempfile::tempdir().unwrap();
-        let app_dir = android_root.path().join("app");
-        fs::create_dir(&app_dir).unwrap();
-        fs::write(app_dir.join("release.keystore"), "placeholder").unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let keystore_path = temp_dir.path().join("release.keystore");
+        fs::write(&keystore_path, "placeholder").unwrap();
 
-        let values = signing_env_values(Some("release.keystore"));
+        let values = signing_env_values(keystore_path.to_str());
 
-        validate_android_release_signing_values(android_root.path(), &values).unwrap();
+        validate_android_release_signing_values(&values).unwrap();
     }
 
     #[test]
     fn rejects_missing_signing_env_values() {
-        let android_root = tempfile::tempdir().unwrap();
         let values = signing_env_values(None);
 
-        let error = validate_android_release_signing_values(android_root.path(), &values)
-            .unwrap_err()
-            .to_string();
+        let error = validate_android_release_signing_values(&values).unwrap_err().to_string();
 
         assert!(error.contains("COVE_KEYSTORE_PATH must be set"));
     }
 
     #[test]
     fn rejects_unreadable_signing_keystore_path() {
-        let android_root = tempfile::tempdir().unwrap();
-        fs::create_dir(android_root.path().join("app")).unwrap();
-        let values = signing_env_values(Some("missing.keystore"));
+        let temp_dir = tempfile::tempdir().unwrap();
+        let missing_keystore = temp_dir.path().join("missing.keystore");
+        let values = signing_env_values(missing_keystore.to_str());
 
-        let error = validate_android_release_signing_values(android_root.path(), &values)
-            .unwrap_err()
-            .to_string();
+        let error = validate_android_release_signing_values(&values).unwrap_err().to_string();
 
         assert!(error.contains("COVE_KEYSTORE_PATH must point to a readable keystore file"));
+    }
+
+    #[test]
+    fn rejects_relative_signing_keystore_path() {
+        let values = signing_env_values(Some("secrets/release.keystore"));
+
+        let error = validate_android_release_signing_values(&values).unwrap_err().to_string();
+
+        assert!(error.contains("COVE_KEYSTORE_PATH must be an absolute path"));
     }
 
     #[test]
@@ -1266,9 +1287,37 @@ Signer #1 certificate SHA-256 digest: AA:bb cc-dd_00112233445566778899aabbccddee
 ";
 
         assert_eq!(
-            parse_apksigner_sha256_digest(output).as_deref(),
-            Some("aabbccdd00112233445566778899aabbccddeeff00112233445566778899aabb")
+            single_apksigner_sha256_digest(output).unwrap(),
+            "aabbccdd00112233445566778899aabbccddeeff00112233445566778899aabb"
         );
+    }
+
+    #[test]
+    fn rejects_multiple_apksigner_certificates() {
+        let output = "\
+Signer #1 certificate SHA-256 digest: aabbccdd00112233445566778899aabbccddeeff00112233445566778899aabb
+Signer #2 certificate SHA-256 digest: bbbbccdd00112233445566778899aabbccddeeff00112233445566778899aabb
+";
+
+        let error = single_apksigner_sha256_digest(output).unwrap_err().to_string();
+
+        assert!(error.contains("Expected exactly one APK signer certificate, found 2"));
+    }
+
+    #[test]
+    fn selects_newest_android_build_tool_by_semantic_version() {
+        let build_tools = tempfile::tempdir().unwrap();
+
+        for version in ["9.0.0", "10.0.0-rc1", "10.0.0"] {
+            let version_dir = build_tools.path().join(version);
+            fs::create_dir(&version_dir).unwrap();
+            fs::write(version_dir.join("apksigner"), []).unwrap();
+        }
+
+        let entries = fs::read_dir(build_tools.path()).unwrap();
+        let selected = newest_android_build_tool(entries, "apksigner").unwrap();
+
+        assert_eq!(selected, build_tools.path().join("10.0.0/apksigner"));
     }
 
     #[test]

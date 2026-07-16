@@ -11,6 +11,7 @@ xshell = "0.2.7"
 colored = "3.1.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+semver = "1.0.28"
 
 # for util sign-psbt
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39"] }

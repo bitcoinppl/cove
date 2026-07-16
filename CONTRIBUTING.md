@@ -56,7 +56,7 @@ just bundle-android                # alias: just bua
 
 `just bundle-android` builds release Rust FFI and Kotlin bindings, builds the signed store release AAB and universal APK, validates the APK signing and package metadata, and copies the release artifacts to `~/Downloads`. The universal APK is copied as `cove-<versionName>-<versionCode>-universal.apk`.
 
-Signed Android release workflows require `COVE_KEYSTORE_PATH`, `COVE_KEYSTORE_PASSWORD`, `COVE_KEY_ALIAS`, and `COVE_KEY_PASSWORD`. Set `COVE_SIGNING_CERT_SHA256` to the expected upload certificate SHA-256 digest when you want the script to verify the signing certificate fingerprint.
+Signed Android release workflows require `COVE_KEYSTORE_PATH`, `COVE_KEYSTORE_PASSWORD`, `COVE_KEY_ALIAS`, and `COVE_KEY_PASSWORD`. `COVE_KEYSTORE_PATH` must be an absolute path. Set `COVE_SIGNING_CERT_SHA256` to the expected upload certificate SHA-256 digest when you want the script to verify the signing certificate fingerprint.
 
 ## Development Workflow
 
