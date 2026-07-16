@@ -106,6 +106,10 @@ impl BuildProfile {
     }
 }
 
+fn allows_android_version_downgrade(profile: BuildProfile) -> bool {
+    !matches!(profile, BuildProfile::Release)
+}
+
 fn get_abi_mapping() -> HashMap<&'static str, &'static str> {
     let mut map = HashMap::new();
     map.insert("aarch64-linux-android", "arm64-v8a");
@@ -369,19 +373,30 @@ pub fn run_android(profile: BuildProfile, options: AndroidRunOptions, verbose: b
     print_success("Build successful");
 
     for device in devices {
-        install_and_launch_android(&sh, &device, apk_path)?;
+        install_and_launch_android(&sh, &device, apk_path, profile)?;
     }
 
     Ok(())
 }
 
-fn install_and_launch_android(sh: &Shell, device: &AndroidDevice, apk_path: &str) -> Result<()> {
+fn install_and_launch_android(
+    sh: &Shell,
+    device: &AndroidDevice,
+    apk_path: &str,
+    profile: BuildProfile,
+) -> Result<()> {
     let serial = device.serial();
 
     print_info(&format!("Installing APK on {}...", device.description()));
-    cmd!(sh, "adb -s {serial} install -r {apk_path}")
-        .run()
-        .wrap_err_with(|| format!("Failed to install APK on {}", device.description()))?;
+    if allows_android_version_downgrade(profile) {
+        cmd!(sh, "adb -s {serial} install -r -d {apk_path}")
+            .run()
+            .wrap_err_with(|| format!("Failed to install APK on {}", device.description()))?;
+    } else {
+        cmd!(sh, "adb -s {serial} install -r {apk_path}")
+            .run()
+            .wrap_err_with(|| format!("Failed to install APK on {}", device.description()))?;
+    }
     print_success(&format!("App installed on {}", device.description()));
 
     print_info(&format!("Launching app on {}...", device.description()));
@@ -1121,8 +1136,8 @@ fn extract_version_code(content: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_export_env_file, parse_keystore_properties, target_for_abi,
-        target_path_for_android_file,
+        allows_android_version_downgrade, parse_export_env_file, parse_keystore_properties,
+        target_for_abi, target_path_for_android_file, BuildProfile,
     };
     use std::fs;
 
@@ -1185,6 +1200,16 @@ mod tests {
     #[test]
     fn rejects_unsupported_android_abis() {
         assert_eq!(target_for_abi("x86"), None);
+    }
+
+    #[test]
+    fn debug_install_allows_version_downgrade() {
+        assert!(allows_android_version_downgrade(BuildProfile::Debug));
+    }
+
+    #[test]
+    fn release_install_rejects_version_downgrade() {
+        assert!(!allows_android_version_downgrade(BuildProfile::Release));
     }
 
     #[test]
