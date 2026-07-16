@@ -1182,7 +1182,7 @@ fn exclude_locked_outpoints<Cs>(
 
 #[cfg(test)]
 mod tests {
-    use act_zero::{Addr, call, runtimes::tokio::spawn_actor};
+    use act_zero::{runtimes::tokio::spawn_actor, *};
     use bdk_wallet::{
         KeychainKind, LocalOutput,
         chain::{BlockId, ChainPosition, ConfirmationBlockTime},
@@ -1279,7 +1279,7 @@ mod tests {
         server: JoinHandle<()>,
     }
 
-    async fn actor_value<T>(result: act_zero::ActorResult<T>) -> T {
+    async fn actor_value<T>(result: ActorResult<T>) -> T {
         result
             .expect("actor method should not fail")
             .await
@@ -1287,8 +1287,8 @@ mod tests {
     }
 
     impl super::WalletActor {
-        async fn in_memory_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
-            act_zero::Produces::ok(self.wallet.metadata.clone())
+        async fn in_memory_wallet_metadata(&mut self) -> ActorResult<WalletMetadata> {
+            Produces::ok(self.wallet.metadata.clone())
         }
 
         async fn set_test_wallet_data_db(&mut self, db: WalletDataDb) -> act_zero::ActorResult<()> {
@@ -1301,15 +1301,22 @@ mod tests {
             &mut self,
             age: Duration,
             block_height: usize,
-        ) -> act_zero::ActorResult<()> {
+        ) -> ActorResult<()> {
             let now = UNIX_EPOCH.elapsed().unwrap_or_default();
             self.last_height_fetched = Some((now.saturating_sub(age), block_height));
 
-            act_zero::Produces::ok(())
+            Produces::ok(())
         }
 
-        async fn cached_height_for_test(&mut self) -> act_zero::ActorResult<Option<usize>> {
-            act_zero::Produces::ok(self.last_height_fetched().map(|(_, block_height)| block_height))
+        async fn cached_height_for_test(&mut self) -> ActorResult<Option<usize>> {
+            Produces::ok(self.last_height_fetched().map(|(_, block_height)| block_height))
+        }
+
+        async fn transaction_watcher_for_test(
+            &mut self,
+            tx_id: Txid,
+        ) -> ActorResult<Option<Addr<crate::transaction_watcher::TransactionWatcher>>> {
+            Produces::ok(self.transaction_watchers.get(&tx_id).cloned())
         }
     }
 
@@ -1513,6 +1520,19 @@ mod tests {
             .global_config
             .set_selected_node(&node)
             .expect("unreachable node config is saved");
+    }
+
+    fn set_invalid_bitcoin_electrum_node() {
+        let node = Node::new_electrum(
+            "invalid test node".to_string(),
+            "invalid://".to_string(),
+            CoveNetwork::Bitcoin,
+        );
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("invalid node config is saved");
     }
 
     async fn set_test_bitcoin_esplora_node() -> JoinHandle<()> {
@@ -2311,6 +2331,48 @@ mod tests {
 
         assert_eq!(height, 321);
         assert!(server.requests.load(Ordering::SeqCst) > 0);
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn transaction_watcher_retries_after_initial_node_client_failure() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
+        crate::database::test_support::init_test_database();
+        set_invalid_bitcoin_electrum_node();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        let pending =
+            receive_output(&mut wallet.bdk, Amount::from_sat(20_000), ReceiveTo::Mempool(1));
+        let tx_id = pending.txid;
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        call!(addr.start_transaction_watcher(tx_id)).await.expect("transaction watcher starts");
+        let watcher = call!(addr.transaction_watcher_for_test(tx_id))
+            .await
+            .expect("wallet actor responds")
+            .expect("transaction watcher is registered");
+
+        call!(watcher.probe()).await.expect("transaction watcher starts");
+        call!(watcher.probe()).await.expect("initial watcher poll starts");
+
+        let server = set_height_esplora_node(1, Duration::ZERO).await;
+        for _ in 0..10 {
+            tokio::time::advance(Duration::from_secs(31)).await;
+            for _ in 0..100 {
+                if server.requests.load(Ordering::SeqCst) > 0 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        }
+
+        call!(watcher.stop_watching()).await.expect("transaction watcher stops");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+
+        assert!(server.requests.load(Ordering::SeqCst) > 0, "transaction watcher must retry");
     }
 
     #[tokio::test(flavor = "current_thread")]

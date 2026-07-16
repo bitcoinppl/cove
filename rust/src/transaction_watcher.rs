@@ -134,3 +134,14 @@ impl TransactionWatcher {
         }
     }
 }
+
+#[cfg(test)]
+mod test_support {
+    use super::*;
+
+    impl TransactionWatcher {
+        pub(crate) async fn probe(&mut self) -> ActorResult<()> {
+            Produces::ok(())
+        }
+    }
+}
