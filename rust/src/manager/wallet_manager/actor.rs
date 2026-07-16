@@ -7,7 +7,7 @@ use crate::{
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
-    transaction::{ConfirmedTransaction, Transaction, TransactionDetails, TxId},
+    transaction::{ConfirmedTransaction, Transaction, TransactionDetailsPresentation, TxId},
     transaction_watcher::TransactionWatcher,
     wallet::{Wallet, WalletAddressType, balance::Balance, metadata::WalletMetadata},
 };
@@ -461,8 +461,11 @@ impl WalletActor {
         Ok(txns_with_prices)
     }
 
-    pub async fn transaction_details(&mut self, tx_id: TxId) -> ActorResult<TransactionDetails> {
-        Produces::ok(self.transaction_details_for_tx_id(tx_id)?)
+    pub async fn transaction_details(
+        &mut self,
+        tx_id: TxId,
+    ) -> ActorResult<TransactionDetailsPresentation> {
+        Produces::ok(self.transaction_details_presentation_for_tx_id(tx_id)?)
     }
 
     pub async fn current_wallet_unspent_outpoints_for_txn(

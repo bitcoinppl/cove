@@ -28,13 +28,17 @@ struct TransactionDetailsView: View {
     // public
     let id: WalletId
     let txId: TxId
-    private let initialDetails: TransactionDetails
+    private let initialPresentation: TransactionDetailsPresentation
     let refreshOnAppear: Bool
     var manager: WalletManager
 
-    /// read from cache (observable), fallback to initial details
+    /// read from cache (observable), fallback to the initial presentation
+    var transactionDetailsPresentation: TransactionDetailsPresentation {
+        manager.transactionDetailsPresentations[txId] ?? initialPresentation
+    }
+
     var transactionDetails: TransactionDetails {
-        manager.transactionDetails[txId] ?? initialDetails
+        transactionDetailsPresentation.details()
     }
 
     var lockState: TransactionLockState? {
@@ -42,19 +46,19 @@ struct TransactionDetailsView: View {
     }
 
     var numberOfConfirmations: Int? {
-        manager.transactionConfirmations[txId].map(Int.init)
+        transactionDetailsPresentation.confirmations().map(Int.init)
     }
 
     init(
         id: WalletId,
         txId: TxId,
-        transactionDetails: TransactionDetails,
+        transactionDetailsPresentation: TransactionDetailsPresentation,
         refreshOnAppear: Bool = true,
         manager: WalletManager
     ) {
         self.id = id
         self.txId = txId
-        self.initialDetails = transactionDetails
+        self.initialPresentation = transactionDetailsPresentation
         self.refreshOnAppear = refreshOnAppear
         self.manager = manager
     }
@@ -100,7 +104,7 @@ struct TransactionDetailsView: View {
         lockStateUpdatingIndicatorShownAt = nil
         Task {
             await updateTransactionLockState {
-                try await manager.toggleTransactionLockState(for: initialDetails.txId())
+                try await manager.toggleTransactionLockState(for: txId)
             }
         }
     }
@@ -113,7 +117,7 @@ struct TransactionDetailsView: View {
         lockStateUpdatingIndicatorShownAt = nil
         Task {
             await updateTransactionLockState {
-                try await manager.unlockTransactionOutputs(for: initialDetails.txId())
+                try await manager.unlockTransactionOutputs(for: txId)
             }
         }
     }
@@ -201,15 +205,6 @@ struct TransactionDetailsView: View {
             }
 
             await refreshTransactionLockState()
-
-            // start watcher after a delay to avoid race condition with onDisappear
-            do {
-                try await Task.sleep(for: .seconds(2))
-            } catch {
-                return
-            }
-
-            manager.dispatch(action: .startTransactionWatcher(transactionDetails.txId()))
         }
         .background(
             GeometryReader { geometry in
@@ -254,7 +249,7 @@ struct TransactionDetailsView: View {
 
     func refreshTransactionLockState() async {
         do {
-            _ = try await manager.transactionLockState(for: initialDetails.txId())
+            _ = try await manager.transactionLockState(for: txId)
             await MainActor.run {
                 lockStateLoadError = nil
             }
@@ -320,12 +315,13 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed received") {
     AsyncPreview {
-        let details = TransactionDetails.previewConfirmedReceived()
+        let presentation = TransactionDetailsPresentation.previewConfirmedReceived()
+        let details = presentation.details()
 
         TransactionDetailsView(
             id: WalletId(),
             txId: details.txId(),
-            transactionDetails: details,
+            transactionDetailsPresentation: presentation,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -334,12 +330,13 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed sent") {
     AsyncPreview {
-        let details = TransactionDetails.previewConfirmedSent()
+        let presentation = TransactionDetailsPresentation.previewConfirmedSent()
+        let details = presentation.details()
 
         TransactionDetailsView(
             id: WalletId(),
             txId: details.txId(),
-            transactionDetails: details,
+            transactionDetailsPresentation: presentation,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -348,12 +345,13 @@ struct TransactionDetailsView: View {
 
 #Preview("pending received") {
     AsyncPreview {
-        let details = TransactionDetails.previewPendingReceived()
+        let presentation = TransactionDetailsPresentation.previewPendingReceived()
+        let details = presentation.details()
 
         TransactionDetailsView(
             id: WalletId(),
             txId: details.txId(),
-            transactionDetails: details,
+            transactionDetailsPresentation: presentation,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)
@@ -362,12 +360,13 @@ struct TransactionDetailsView: View {
 
 #Preview("pending sent") {
     AsyncPreview {
-        let details = TransactionDetails.previewPendingSent()
+        let presentation = TransactionDetailsPresentation.previewPendingSent()
+        let details = presentation.details()
 
         TransactionDetailsView(
             id: WalletId(),
             txId: details.txId(),
-            transactionDetails: details,
+            transactionDetailsPresentation: presentation,
             manager: WalletManager(preview: "preview_only")
         )
         .environment(AppManager.shared)

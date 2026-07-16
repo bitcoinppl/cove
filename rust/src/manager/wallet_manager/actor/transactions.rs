@@ -32,7 +32,7 @@ use crate::{
     },
     mnemonic::{Mnemonic, MnemonicExt as _},
     node::client::NodeClient,
-    transaction::{FeeRate, Transaction, TransactionDetails, TxId},
+    transaction::{FeeRate, Transaction, TransactionDetails, TransactionDetailsPresentation, TxId},
     wallet::Address,
 };
 
@@ -1088,17 +1088,20 @@ impl WalletActor {
             .map_err_str(Error::TransactionDetailsError)
     }
 
-    pub(crate) fn confirmation_count_for_details(
+    pub(crate) fn transaction_details_presentation_for_tx_id(
         &mut self,
-        details: &TransactionDetails,
-    ) -> Option<u32> {
-        let block_height = details.block_number()?;
-        let current_height = self
-            .last_height_fetched()
-            .map(|(_, block_height)| block_height as u32)
-            .unwrap_or_else(|| self.wallet.bdk.local_chain().tip().height());
+        tx_id: TxId,
+    ) -> Result<TransactionDetailsPresentation, Error> {
+        let details = self.transaction_details_for_tx_id(tx_id)?;
+        let current_height = self.current_confirmation_height();
 
-        Some(if block_height > current_height { 0 } else { current_height - block_height + 1 })
+        Ok(TransactionDetailsPresentation::new(details, current_height))
+    }
+
+    fn current_confirmation_height(&mut self) -> u32 {
+        self.last_height_fetched()
+            .map(|(_, block_height)| block_height as u32)
+            .unwrap_or_else(|| self.wallet.bdk.local_chain().tip().height())
     }
 }
 

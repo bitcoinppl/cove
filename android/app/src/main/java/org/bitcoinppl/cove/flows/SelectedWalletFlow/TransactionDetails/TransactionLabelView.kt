@@ -92,8 +92,8 @@ fun TransactionLabelView(
 
     suspend fun updateDetails() {
         runCatchingCancellable(TAG, "Error getting updated label") {
-            val details = manager.refreshTransactionDetails(txId)
-            currentLabel = details.transactionLabel()
+            val presentation = manager.refreshTransactionDetails(txId)
+            currentLabel = presentation.details().transactionLabel()
         }.onFailure { e ->
             val message = context.getString(R.string.label_update_error, e.message ?: "Unknown error")
             snackbarHostState.showSnackbar(

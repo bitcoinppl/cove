@@ -36,11 +36,10 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.ui.theme.ResetStatusBarToTheme
-import org.bitcoinppl.cove_core.TransactionDetails
+import org.bitcoinppl.cove_core.TransactionDetailsPresentation
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.TxId
 
-private const val INITIAL_DELAY_MS = 2000L
 private const val LOCK_STATE_UPDATE_REVEAL_DELAY_MS = 200L
 private const val LOCK_STATE_UPDATE_MIN_VISIBLE_MS = 350L
 
@@ -53,7 +52,7 @@ private const val LOCK_STATE_UPDATE_MIN_VISIBLE_MS = 350L
 fun TransactionDetailsScreen(
     app: AppManager,
     manager: WalletManager,
-    details: TransactionDetails,
+    presentation: TransactionDetailsPresentation,
     txId: TxId,
     refreshOnAppear: Boolean = true,
 ) {
@@ -65,10 +64,11 @@ fun TransactionDetailsScreen(
     val metadata = manager.walletMetadata ?: return
     val scope = rememberCoroutineScope()
 
-    // read transaction details from cache (observable), fallback to passed-in details
-    val transactionDetails = manager.transactionDetailsCache[txId] ?: details
-
-    val numberOfConfirmations = manager.transactionConfirmations[txId]?.toInt()
+    // read transaction details from cache (observable), fallback to the passed-in presentation
+    val transactionDetailsPresentation =
+        manager.transactionDetailsPresentations[txId] ?: presentation
+    val transactionDetails = transactionDetailsPresentation.details()
+    val numberOfConfirmations = transactionDetailsPresentation.confirmations()?.toInt()
     val lockState = manager.transactionLockStates[txId]
     var isRefreshing by remember { mutableStateOf(false) }
     var isUpdatingLockState by remember { mutableStateOf(false) }
@@ -184,8 +184,6 @@ fun TransactionDetailsScreen(
 
         refreshTransactionLockState(showSnackbar = false)
 
-        delay(INITIAL_DELAY_MS)
-        manager.dispatch(WalletManagerAction.StartTransactionWatcher(txId))
     }
 
     // load fiat amounts (update cached values with fresh async values)

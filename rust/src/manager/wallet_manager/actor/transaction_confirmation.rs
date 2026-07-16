@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use bdk_wallet::chain::spk_client::{SyncRequest, SyncResponse};
@@ -6,15 +6,11 @@ use bitcoin::Txid;
 use tracing::{debug, info, warn};
 
 use crate::{
-    database::Database,
     manager::wallet_manager::{
-        TransactionConfirmationUpdate, WalletManagerReconcileMessage,
+        WalletManagerReconcileMessage,
         actor::{ActorState, WalletActor, WalletScanGeneration},
     },
-    node::{
-        client::{Error as NodeError, NodeClientOptions},
-        client_builder::NodeClientBuilder,
-    },
+    node::client::{Error as NodeError, NodeClientOptions},
     transaction_watcher::{
         TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS, TransactionWatcher, TransactionWatcherEvent,
     },
@@ -33,11 +29,9 @@ impl WalletActor {
         }
 
         let network = self.wallet.network;
-        let node = Database::global().global_config.selected_node();
         let options = NodeClientOptions { batch_size: 1 };
-        let client_builder = NodeClientBuilder { node, options };
 
-        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder, network);
+        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, options, network);
         let addr = spawn_actor(watcher);
 
         self.transaction_watchers.insert(tx_id, addr);
@@ -46,15 +40,15 @@ impl WalletActor {
     }
 
     fn transaction_watcher_needed(&mut self, tx_id: Txid) -> bool {
-        let details = match self.transaction_details_for_tx_id(tx_id.into()) {
-            Ok(details) => details,
+        let presentation = match self.transaction_details_presentation_for_tx_id(tx_id.into()) {
+            Ok(presentation) => presentation,
             Err(error) => {
                 warn!("not starting transaction watcher for tx_id={tx_id}: {error}");
                 return false;
             }
         };
 
-        let Some(confirmations) = self.confirmation_count_for_details(&details) else {
+        let Some(confirmations) = presentation.confirmations() else {
             return true;
         };
 
@@ -170,21 +164,17 @@ impl WalletActor {
             return Produces::ok(());
         };
 
-        let details = self.transaction_details_for_tx_id(tx_id.into())?;
-        let confirmations = self.confirmation_count_for_details(&details);
+        let presentation = self.transaction_details_presentation_for_tx_id(tx_id.into())?;
+        let confirmations = presentation.confirmations();
         let balance = self.wallet.balance();
 
         self.send(WalletManagerReconcileMessage::TransactionUpdated(transaction));
-        self.send(WalletManagerReconcileMessage::TransactionDetailsUpdated(details.into()));
+        self.send(WalletManagerReconcileMessage::TransactionDetailsUpdated(presentation.into()));
 
-        if let Some(confirmations) = confirmations {
-            self.send(WalletManagerReconcileMessage::TransactionConfirmationsUpdated(
-                TransactionConfirmationUpdate { tx_id: Arc::new(tx_id.into()), confirmations },
-            ));
-
-            if confirmations >= TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS {
-                self.remove_watcher_for_txn(tx_id).await;
-            }
+        if let Some(confirmations) = confirmations
+            && confirmations >= TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS
+        {
+            self.remove_watcher_for_txn(tx_id).await;
         }
 
         self.send(WalletManagerReconcileMessage::WalletBalanceChanged(balance.into()));

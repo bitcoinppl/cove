@@ -24,6 +24,8 @@ pub type TransactionDirection = cove_types::transaction::TransactionDirection;
 pub type TxId = cove_types::TxId;
 
 pub type TransactionDetails = transaction_details::TransactionDetails;
+/// Transaction details paired with a consistent confirmation presentation
+pub type TransactionDetailsPresentation = transaction_details::TransactionDetailsPresentation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionState {
