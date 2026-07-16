@@ -347,7 +347,27 @@ struct DevicectlDevice {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DevicectlConnectionProperties {
-    tunnel_state: Option<String>,
+    pairing_state: Option<DevicectlPairingState>,
+    tunnel_state: Option<DevicectlTunnelState>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum DevicectlPairingState {
+    Paired,
+    Unpaired,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum DevicectlTunnelState {
+    Connected,
+    Disconnected,
+    Unavailable,
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1533,7 +1553,7 @@ fn available_ios_devices(sh: &Shell) -> Result<Vec<ResolvedDevice>> {
 }
 
 fn refresh_matching_ios_device_connection(sh: &Shell, selector: &DeviceSelector) -> Result<()> {
-    let Some(device) = paired_ios_devices(sh)?
+    let Some(device) = refreshable_ios_devices(sh)?
         .into_iter()
         .find(|device| devicectl_device_matches_selector(device, selector))
     else {
@@ -1552,7 +1572,7 @@ fn refresh_matching_ios_device_connection(sh: &Shell, selector: &DeviceSelector)
     Ok(())
 }
 
-fn paired_ios_devices(sh: &Shell) -> Result<Vec<DevicectlDevice>> {
+fn refreshable_ios_devices(sh: &Shell) -> Result<Vec<DevicectlDevice>> {
     let output_path = devicectl_json_output_path()?;
 
     let result = (|| -> Result<Vec<DevicectlDevice>> {
@@ -1571,7 +1591,7 @@ fn paired_ios_devices(sh: &Shell) -> Result<Vec<DevicectlDevice>> {
             .result
             .devices
             .into_iter()
-            .filter(|device| device.hardware_properties.platform.as_deref() == Some("iOS"))
+            .filter(devicectl_device_connection_can_refresh)
             .collect())
     })();
 
@@ -1593,7 +1613,17 @@ fn resolved_available_ios_device(device: DevicectlDevice) -> Option<ResolvedDevi
 
 fn devicectl_device_is_available_ios(device: &DevicectlDevice) -> bool {
     device.hardware_properties.platform.as_deref() == Some("iOS")
-        && device.connection_properties.tunnel_state.as_deref() == Some("connected")
+        && device.connection_properties.pairing_state == Some(DevicectlPairingState::Paired)
+        && device.connection_properties.tunnel_state == Some(DevicectlTunnelState::Connected)
+}
+
+fn devicectl_device_connection_can_refresh(device: &DevicectlDevice) -> bool {
+    device.hardware_properties.platform.as_deref() == Some("iOS")
+        && device.connection_properties.pairing_state == Some(DevicectlPairingState::Paired)
+        && matches!(
+            device.connection_properties.tunnel_state,
+            Some(DevicectlTunnelState::Connected | DevicectlTunnelState::Disconnected)
+        )
 }
 
 fn ios_devices_include_selector(devices: &[ResolvedDevice], selector: &DeviceSelector) -> bool {
@@ -1653,12 +1683,13 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 mod tests {
     use super::{
         default_build_slot_from_cwd, derived_data_dir_name_for_slot,
-        device_selector_from_target_value, devicectl_device_is_available_ios,
-        ensure_aasa_webcredentials_app, looks_like_ios_udid, normalize_pem_text,
-        resolve_device_name_or_alias, sanitize_build_slot, simulator_line_matches_device,
-        simulator_state_from_line, DeviceSelector, DevicectlConnectionProperties, DevicectlDevice,
-        DevicectlDeviceProperties, DevicectlHardwareProperties, IOS_DEVICE_DERIVED_DATA_SUFFIX,
-        IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
+        device_selector_from_target_value, devicectl_device_connection_can_refresh,
+        devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, looks_like_ios_udid,
+        normalize_pem_text, resolve_device_name_or_alias, sanitize_build_slot,
+        simulator_line_matches_device, simulator_state_from_line, DeviceSelector,
+        DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
+        DevicectlHardwareProperties, DevicectlPairingState, DevicectlTunnelState,
+        IOS_DEVICE_DERIVED_DATA_SUFFIX, IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
     use std::path::Path;
 
@@ -1777,23 +1808,65 @@ ABC123
 
     #[test]
     fn devicectl_device_is_available_ios_accepts_connected_ios_device() {
-        let device = devicectl_device("iOS", "connected");
+        let device =
+            devicectl_device("iOS", DevicectlPairingState::Paired, DevicectlTunnelState::Connected);
 
         assert!(devicectl_device_is_available_ios(&device));
     }
 
     #[test]
     fn devicectl_device_is_available_ios_rejects_unavailable_ios_device() {
-        let device = devicectl_device("iOS", "unavailable");
+        let device = devicectl_device(
+            "iOS",
+            DevicectlPairingState::Paired,
+            DevicectlTunnelState::Unavailable,
+        );
 
         assert!(!devicectl_device_is_available_ios(&device));
     }
 
     #[test]
     fn devicectl_device_is_available_ios_rejects_non_ios_device() {
-        let device = devicectl_device("macOS", "connected");
+        let device = devicectl_device(
+            "macOS",
+            DevicectlPairingState::Paired,
+            DevicectlTunnelState::Connected,
+        );
 
         assert!(!devicectl_device_is_available_ios(&device));
+    }
+
+    #[test]
+    fn devicectl_device_connection_can_refresh_accepts_paired_disconnected_ios_device() {
+        let device = devicectl_device(
+            "iOS",
+            DevicectlPairingState::Paired,
+            DevicectlTunnelState::Disconnected,
+        );
+
+        assert!(devicectl_device_connection_can_refresh(&device));
+    }
+
+    #[test]
+    fn devicectl_device_connection_can_refresh_rejects_unpaired_device() {
+        let device = devicectl_device(
+            "iOS",
+            DevicectlPairingState::Unpaired,
+            DevicectlTunnelState::Disconnected,
+        );
+
+        assert!(!devicectl_device_connection_can_refresh(&device));
+    }
+
+    #[test]
+    fn devicectl_device_connection_can_refresh_rejects_unavailable_device() {
+        let device = devicectl_device(
+            "iOS",
+            DevicectlPairingState::Paired,
+            DevicectlTunnelState::Unavailable,
+        );
+
+        assert!(!devicectl_device_connection_can_refresh(&device));
     }
 
     #[test]
@@ -1930,11 +2003,16 @@ ABC123
         );
     }
 
-    fn devicectl_device(platform: &str, tunnel_state: &str) -> DevicectlDevice {
+    fn devicectl_device(
+        platform: &str,
+        pairing_state: DevicectlPairingState,
+        tunnel_state: DevicectlTunnelState,
+    ) -> DevicectlDevice {
         DevicectlDevice {
             identifier: "device-id".to_string(),
             connection_properties: DevicectlConnectionProperties {
-                tunnel_state: Some(tunnel_state.to_string()),
+                pairing_state: Some(pairing_state),
+                tunnel_state: Some(tunnel_state),
             },
             device_properties: DevicectlDeviceProperties {
                 name: Some("Praveens iPhone 15".to_string()),
