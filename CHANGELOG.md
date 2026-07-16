@@ -2,158 +2,128 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-16
+
+- Added encrypted cloud backup, onboarding restore, and backup management on iOS and Android
+- Improved wallet recovery with progressive scanning, custom gap limits, and richer backup metadata
+- Added Payjoin URI support, clearer incoming balance reporting, and broader wallet import compatibility
+- Improved security for seed screens, imported PSBTs, local app data, and TAPSIGNER backups
+- Improved startup, connectivity, cloud sync, hardware-wallet exports, and cross-platform reliability
+
+## [1.2.5] - 2026-05-29
+
+- Clarified Android version information in Settings
+
+## [1.2.4] - 2026-05-29
+
+- Fixed an Android send-flow crash when PIN or biometric authentication was enabled
+
+## [1.2.3] - 2026-05-19
+
+- Fixed imports for legacy and wrapped SegWit hot wallets
+
+## [1.2.2] - 2026-03-20
+
+- Added recovery flows for wallets missing seed words after a device restore
+- Added seed-word import to compatible existing wallets
+- Improved fee estimates, wallet scanning, address formatting, and Sparrow descriptor exports
+- Fixed an iOS navigation freeze affecting some accessibility text settings
+
+## [1.2.1] - 2026-02-07
+
+- Fixed a crash in the send flow
+
+## [1.2.0] - 2026-02-06
+
+- Added historical fiat values to transaction details and send confirmation
+- Added public descriptor and SeedQR exports
+- Added support for signed, unfinalized PSBTs from more hardware wallets
+- Improved wallet deletion safeguards, PIN privacy, biometric unlocking, and seed-word imports
+- Preserved wallet scroll position when returning from transaction details
+
+## [1.1.0] - 2025-12-23
+
+- Added animated UR QR support and improved animated QR performance
+- Added QR and share options for label exports
+- Improved wallet switching, transaction loading, and send-flow startup
+- Refined wallet import and cross-platform UI behavior
+
+## [1.0.3] - 2025-12-02
+
+- Fixed deadlocks when verifying seed words and renaming wallets
+
+## [1.0.2] - 2025-11-24
+
+- Expanded Android support across wallet management, sending, settings, labels, authentication, and TAPSIGNER flows
+- Added receive-address and wallet-operation QR scanning improvements
+- Improved iOS 26 compatibility and cross-platform UI consistency
+- Improved NFC reliability and prevented repeated TAPSIGNER import prompts
+
 ## [1.0.1] - 2025-06-16
 
-## Bug Fixes
-
-- Fixed unsealed TAPSIGNER being detected as already initialized
-- Show full address derivation path including the keychain index
-- Fixed crashing on APDU NFC error
-- Fixed verifying words flow not working if seed has a consecutive duplicate word
-- Prevent words in "Backup Your Words" screen being reset when app goes in background
-
-## Changes
-
-- Only use the regular SwiftUI `ProgressView` for all loading indicators, instead of using the `ActivityIndicatorView` library and keep loading indicators color consistent
+- Improved TAPSIGNER setup and NFC error handling
+- Fixed seed verification and backup progress being lost when the app entered the background
+- Added the full address derivation path and standardized loading indicators
 
 ## [1.0.0] - 2025-06-11
 
-- Fix import words view being cut off on smaller screens and iPads
-- Fix receive view (receive address) being cut off on smaller screens and iPads
-- Fix not showing duplicate wallet error in HotWalletImport
-- Fix import seed view showing the wrong number for the seed words
-- Fix loading spinner glitch on the selected wallet screen
-- Always showing `spendable` balance on the selected wallet screen instead of `total`
-- Fix sometimes pending transactions would not show up as confirmed
+- Improved seed import and receive layouts across screen sizes
+- Fixed duplicate-wallet and seed-length validation feedback
+- Standardized wallet balances on spendable funds
+- Improved pending transaction refresh behavior
 
 ## [0.5.1] - 2025-06-03
 
-### Added
-
-- Terms and Conditions popup, which is required to use the app
-
-### Bug Fixes
-
-- Show updated label on UTXO list screen
-- Show updated label on transaction details screen
-- Hot wallet import flow where erasing to a correct word would not show the word as valid
+- Added the required Terms and Conditions prompt
+- Fixed stale labels in UTXO and transaction details
+- Improved seed-word validation during wallet import
 
 ## [0.5.0] - 2025-05-28
 
-### Features
-
-**Coin Control**
-
-- New UTXO list screen to search, filter, sort and select individual UTXOs
-- Select individual UTXOs to send from
-- Set a custom amount to send from a UTXO list (the rest will be sent to change)
-- Show UTXO labels on the confirm screen
-- Search UTXOs by amount
-
-- Add warning if fee is more than 20% of the amount you are sending
-- Disallow sending if the fee is more than 100% of the amount you are sending
+- Added coin control with UTXO search, filtering, sorting, selection, and custom send amounts
+- Added UTXO labels to send confirmation
+- Added warnings and safeguards for disproportionately high fees
 
 ## [0.4.1] - 2025-05-12
 
-### Changes
-
-- Redesigned address QR receive sheet
-- Redesigned "Advanced More Details" sheet in the send flow
-
-### Fixes
-
-- Fixed a bug where entering a comically large fiat amount would crash the app
-- Fixed a bug where in Testnet4 addresses were coming up as invalid when they weren't
-- Fixed a bug where keyboard wasn't dismissing when address was valid
-- Fixed signet transaction viewer link
+- Redesigned receive-address and advanced send-detail sheets
+- Improved large fiat amount handling, address validation, keyboard behavior, and Signet links
 
 ## [0.4.0] - 2025-05-08
 
-### Features
-
-- Support for importing hardware wallets with [Key Expressions](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki#key-expressions)
-  - This adds support for using Cove with [Krux](https://github.com/selfcustody/krux)
-- Create a CSV file of your transactions with fiat values for each transaction at the time of the transaction
-  - This is useful for tax reporting
-- Send flow improvements and bug fixes
-  - Show proper formatting as you type
-  - Default to entering the amount in before the address
-  - Small UI bug fixes
-- Testnet4 support
-
-### Fixes
-
-- Fix bug where the total fees the user sees changes between screens
-
-### Internal (non-user facing)
-
-- Extracted out multiple modules into their own crates
-- Updated build script to work with multiple crates and to create a SPM package for iOS
-- Complete refactor of send flow, moved logic over to rust
+- Added hardware-wallet imports using key expressions, including Krux support
+- Added transaction CSV exports with historical fiat values
+- Added Testnet4 support
+- Improved send entry, fee consistency, and overall send-flow reliability
 
 ## [0.3.0] - 2025-04-07
 
-### TAPSIGNER Support
-
-- Setup TAPSIGNER
-- Change TAPSIGNER PIN
-- Backup TAPSIGNER
-- Import TAPSIGNER public key
-- Sign PSBT using TAPSIGNER
-
-### Features / Improvements
-
-- Pending transactions are automatically updated without user having to refresh
+- Added TAPSIGNER setup, import, PIN changes, backups, and PSBT signing
+- Added automatic updates for pending transactions
 
 ## [0.2.2] - 2025-03-11
 
-### Fixes
-
-- Fixed bug where it was possible to get stuck in "Decoy PIN" mode
-- Added more plausible deniability to decoy PIN mode
-- Fix bug where unsigned transactions were not showing up in the transaction list
-- Fixed bug where NFC signed txn import was showing an error even tho it was successful
-- Fixed bug where NFC scanning would lock the app
-- Fix where imported name was reset to the default name
-
-### Changes
-
-- Don't show cover when using NFC
+- Improved decoy PIN reliability and plausible deniability
+- Fixed NFC transaction import and scanning lockups
+- Fixed unsigned transaction visibility and imported wallet names
 
 ## [0.2.1] - 2025-03-07
 
-### Fixes
-
-- Add more plausible deniability to decooy PIN mode
-  - Pretend to change PIN and trick PINs in the settings scree
-- Make it easier to click the "Change PIN" button in the settings screen
+- Improved decoy PIN plausible deniability and PIN settings usability
 
 ## [0.2.0] - 2025-03-05
 
-### Features
-
-- Add ability to import an XPUB (not a descriptor) as a hardware wallet
-
-### Fixes
-
-- Fixed visual bug in dark mode transaction list (main wallet screen)
+- Added watch-only hardware-wallet imports from extended public keys
+- Fixed transaction list appearance in dark mode
 
 ## [0.1.0] - 2025-03-04
 
-- Add version number, git short hash and feedback email to wallet settings screen
-- Fixed bug where custom node url starting with `http` or `https` would crash the app
+- Added app version, build, and feedback details to wallet settings
+- Fixed crashes caused by custom node URLs using HTTP or HTTPS
 
-## [0.0.1] [Build 39] - 2025-02-28
+## [0.0.1] - 2025-02-28
 
-- Import hardware wallet (xpub / public descriptor) using NFC, File & QR
-- Create hot wallet, and verify hot wallet backup
-- Send Bitcoin using a hot wallet
-- Send Bitcoin using a hardware wallet, using NFC, File or QR for transferring PSBTs
-- View transaction details
-- Create and use multiple wallets
-- Create and use BIP329 labels
-- Import and Export BIP329 labels
-- Select your preferred fiat currency
-- Connect your own node
-- Create Trick Pins (Wipe Data & Decoy PIN)
-- Use FaceID or PIN to lock your wallets
+- Added hot and hardware wallet creation and import
+- Added Bitcoin sending, hardware-wallet signing, and transaction details
+- Added multiple wallets, BIP329 labels, fiat currency selection, and custom nodes
+- Added Face ID, PIN locking, decoy PINs, and wipe PINs
