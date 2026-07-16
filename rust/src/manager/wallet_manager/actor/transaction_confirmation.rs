@@ -48,11 +48,7 @@ impl WalletActor {
             }
         };
 
-        let Some(confirmations) = presentation.confirmations() else {
-            return true;
-        };
-
-        confirmations < TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS
+        confirmation_count_requires_watcher(presentation.confirmations())
     }
 
     pub async fn handle_transaction_watcher_event(
@@ -180,5 +176,25 @@ impl WalletActor {
         self.send(WalletManagerReconcileMessage::WalletBalanceChanged(balance.into()));
 
         Produces::ok(())
+    }
+}
+
+fn confirmation_count_requires_watcher(confirmations: Option<u32>) -> bool {
+    match confirmations {
+        Some(confirmations) => confirmations < TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS,
+        None => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watcher_is_required_until_terminal_confirmation_count() {
+        assert!(confirmation_count_requires_watcher(None));
+        assert!(confirmation_count_requires_watcher(Some(1)));
+        assert!(confirmation_count_requires_watcher(Some(2)));
+        assert!(!confirmation_count_requires_watcher(Some(3)));
     }
 }
