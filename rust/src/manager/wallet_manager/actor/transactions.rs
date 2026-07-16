@@ -492,7 +492,14 @@ impl WalletActor {
                             .to_string(),
                     )));
                 }
-                // record cleared — fall through to allow this send
+
+                // The completed tx may have been the payjoin proposal, so reusing the
+                // supplied PSBT (which is still the fallback) could cause a conflict.
+                // Ask the user to confirm again now that the record is cleared.
+                return Produces::ok(Err(Error::SignAndBroadcastError(
+                    "previous payjoin session cleared; please confirm your payment again"
+                        .to_string(),
+                )));
             }
 
             Err(error) => {

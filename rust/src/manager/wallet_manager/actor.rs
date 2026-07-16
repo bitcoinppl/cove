@@ -2610,6 +2610,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn send_gate_clears_stale_session_when_terminal_tx_already_in_wallet() {
         crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
         test_keychain();
         let mut wallet = Wallet::preview_new_wallet();
         mark_wallet_ledger_ready(&mut wallet);
@@ -2644,10 +2645,11 @@ mod tests {
         })
         .unwrap();
         let result = actor.initiate_payment(dummy_psbt, None).await;
-        let _ = actor_value(result).await;
+        let outcome = actor_value(result).await;
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
         assert!(session.is_none(), "gate should have cleared the stale session record");
+        assert!(matches!(outcome, Err(super::Error::SignAndBroadcastError(_))));
     }
 
     #[tokio::test(flavor = "current_thread")]
