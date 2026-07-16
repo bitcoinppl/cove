@@ -3,8 +3,8 @@
 
 use base64::Engine as _;
 use base64::prelude::BASE64_STANDARD;
-use chacha20poly1305::aead::OsRng;
-use chacha20poly1305::{AeadCore as _, ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
+use chacha20poly1305::aead::Generate as _;
+use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 use chacha20poly1305::{Key, Nonce};
 
 use cove_macros::impl_default_for;
@@ -64,8 +64,8 @@ pub enum Error {
 impl_default_for!(Cryptor);
 impl Cryptor {
     pub fn new() -> Self {
-        let key = ChaCha20Poly1305::generate_key(&mut OsRng);
-        let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+        let key = Key::generate();
+        let nonce = Nonce::generate();
 
         Self { key, nonce, used: false }
     }

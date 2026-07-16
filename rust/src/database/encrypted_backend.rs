@@ -1,6 +1,6 @@
-use chacha20poly1305::aead::{Aead as _, AeadCore as _, OsRng, Payload};
+use chacha20poly1305::aead::{Aead as _, Generate as _, Payload};
 use chacha20poly1305::{KeyInit as _, XChaCha20Poly1305, XNonce};
-use hmac::{Hmac, KeyInit as _, Mac};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use std::fmt::{self, Debug};
@@ -146,7 +146,9 @@ fn decrypt_disk_block(
         ));
     }
 
-    let nonce = XNonce::from_slice(&disk_data[..NONCE_LEN]);
+    let nonce = <&XNonce>::try_from(&disk_data[..NONCE_LEN]).map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidData, "invalid encrypted block nonce length")
+    })?;
     let ciphertext_with_tag = &disk_data[NONCE_LEN..];
     let aad = block_index.to_le_bytes();
 
@@ -410,7 +412,7 @@ impl EncryptedBackend {
     fn encrypt_block(&self, block_index: u64, plaintext: &[u8]) -> io::Result<Vec<u8>> {
         assert!(plaintext.len() <= BLOCK_SIZE);
 
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+        let nonce = XNonce::generate();
         let aad = block_index.to_le_bytes();
 
         let ciphertext = self
