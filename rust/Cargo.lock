@@ -62,6 +62,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aead"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1973cfbc1a2daf9cf550e74e1f088c28e7f7d8c1e1418fb6c9dc5184b7e84c99"
+dependencies = [
+ "crypto-common 0.2.2",
+ "inout 0.2.2",
+]
+
+[[package]]
 name = "aes"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -590,8 +600,9 @@ dependencies = [
 
 [[package]]
 name = "bbqr"
-version = "0.4.1"
-source = "git+file:///Users/praveen/code/bull/bbqr-rust?rev=da62607abe6a8d9f58ea5422140c86a5af60919f#da62607abe6a8d9f58ea5422140c86a5af60919f"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1898cccddb1a93783bfe6d303a6bcc7e3ba6a7d55db77412cc5e4d3564d28c03"
 dependencies = [
  "data-encoding",
  "flate2",
@@ -1054,6 +1065,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
 dependencies = [
  "cfg-if",
+ "cipher 0.5.2",
  "cpufeatures 0.3.0",
  "rand_core 0.10.1",
 ]
@@ -1082,6 +1094,18 @@ dependencies = [
  "cipher 0.4.4",
  "poly1305 0.8.0",
  "zeroize",
+]
+
+[[package]]
+name = "chacha20poly1305"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b89e1c441e926b9c82a8d023f6e1b7ae0adcfaa7d621814e4d60789bac751cb"
+dependencies = [
+ "aead 0.6.1",
+ "chacha20 0.10.0",
+ "cipher 0.5.2",
+ "poly1305 0.9.1",
 ]
 
 [[package]]
@@ -1326,7 +1350,7 @@ dependencies = [
  "bitvec",
  "bytes",
  "cfg-if",
- "chacha20poly1305 0.10.1",
+ "chacha20poly1305 0.11.0",
  "cove-bdk",
  "cove-bdk-progressive-scan",
  "cove-bip39",
@@ -1359,8 +1383,8 @@ dependencies = [
  "memchr",
  "minicbor 2.2.1",
  "minicbor-serde",
- "nid",
- "num-bigint",
+ "nid 3.0.0",
+ "num-bigint 0.5.1",
  "numfmt",
  "once_cell",
  "parking_lot",
@@ -1428,7 +1452,7 @@ name = "cove-bip39"
 version = "0.1.0"
 dependencies = [
  "bip39",
- "num-bigint",
+ "num-bigint 0.5.1",
  "rand 0.10.1",
  "sha2 0.11.0",
  "thiserror 2.0.18",
@@ -1460,7 +1484,7 @@ version = "0.1.0"
 dependencies = [
  "arc-swap",
  "base64 0.22.1",
- "chacha20poly1305 0.10.1",
+ "chacha20poly1305 0.11.0",
  "cove-util",
  "hex",
  "hkdf 0.13.0",
@@ -1585,7 +1609,7 @@ dependencies = [
  "foundation-ur",
  "hex",
  "jiff",
- "nid",
+ "nid 5.0.0",
  "numfmt",
  "payjoin",
  "rand 0.10.1",
@@ -1623,7 +1647,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "bitcoin",
- "chacha20poly1305 0.10.1",
+ "chacha20poly1305 0.11.0",
  "cove-macros",
  "hex",
  "memchr",
@@ -1752,7 +1776,9 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
 dependencies = [
+ "getrandom 0.4.2",
  "hybrid-array 0.4.12",
+ "rand_core 0.10.1",
 ]
 
 [[package]]
@@ -3439,9 +3465,9 @@ dependencies = [
 
 [[package]]
 name = "minicbor-serde"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80047f75e28e3b38f6ab2ec3c2c7669f6b411fa6f8424e1a90a3fd784b19a3f4"
+checksum = "293c7245401f035e2dcc4b12ebdb5c9d8847247fc79fe1b5b0a0d58d7275324c"
 dependencies = [
  "minicbor 2.2.1",
  "serde",
@@ -3535,6 +3561,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nid"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "051e0405f3a6dda39a78cd893812ab9495e37ba1a915c3bec6af598e31b7b621"
+dependencies = [
+ "rand 0.10.1",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "no_std_io2"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3588,6 +3624,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-derive"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3613,7 +3659,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.6",
  "num-integer",
  "num-traits",
 ]
@@ -3935,6 +3981,16 @@ dependencies = [
  "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash 0.5.1",
+]
+
+[[package]]
+name = "poly1305"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e2d0073b297041425c7c3df6eb4792d598a15323fe63346852b092eca02904c"
+dependencies = [
+ "cpufeatures 0.3.0",
+ "universal-hash 0.6.1",
 ]
 
 [[package]]
@@ -5843,6 +5899,16 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common 0.1.7",
  "subtle",
+]
+
+[[package]]
+name = "universal-hash"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4987bdc12753382e0bec4a65c50738ffaabc998b9cdd1f952fb5f39b0048a96"
+dependencies = [
+ "crypto-common 0.2.2",
+ "ctutils",
 ]
 
 [[package]]

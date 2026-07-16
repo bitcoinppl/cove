@@ -1,6 +1,6 @@
 use argon2::{Algorithm, Argon2, Params, Version};
-use chacha20poly1305::aead::{OsRng, rand_core::RngCore as _};
-use chacha20poly1305::{AeadCore as _, KeyInit as _, XChaCha20Poly1305, XNonce, aead::Aead as _};
+use chacha20poly1305::aead::Generate as _;
+use chacha20poly1305::{KeyInit as _, XChaCha20Poly1305, XNonce, aead::Aead as _};
 use zeroize::Zeroizing;
 
 use cove_util::result_ext::ResultExt as _;
@@ -78,7 +78,8 @@ fn parse_header(data: &[u8]) -> Result<ParsedHeader<'_>, BackupError> {
         .map_err(|_| BackupError::Truncated)?;
 
     let nonce_start = MAGIC_SIZE + VERSION_SIZE + SALT_SIZE;
-    let nonce = XNonce::from_slice(&data[nonce_start..nonce_start + NONCE_SIZE]);
+    let nonce = <&XNonce>::try_from(&data[nonce_start..nonce_start + NONCE_SIZE])
+        .map_err(|_| BackupError::Truncated)?;
 
     let payload_len_start = nonce_start + NONCE_SIZE;
     let payload_len_bytes: [u8; 4] = data[payload_len_start..payload_len_start + PAYLOAD_LEN_SIZE]
@@ -103,12 +104,11 @@ fn parse_header(data: &[u8]) -> Result<ParsedHeader<'_>, BackupError> {
 
 /// Encrypt data and assemble the .covb file bytes
 pub fn encrypt(plaintext: &[u8], password: &str) -> Result<Vec<u8>, BackupError> {
-    let mut salt = [0u8; SALT_SIZE];
-    OsRng.fill_bytes(&mut salt);
+    let salt = <[u8; SALT_SIZE]>::generate();
 
     let key = derive_key(password, &salt)?;
     let cipher = XChaCha20Poly1305::new((&*key).into());
-    let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+    let nonce = XNonce::generate();
 
     let ciphertext =
         cipher.encrypt(&nonce, plaintext).map_err(|e| BackupError::Encryption(e.to_string()))?;
