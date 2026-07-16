@@ -472,10 +472,11 @@ impl WalletActor {
             return Produces::ok(Err(error));
         }
 
-        let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
-            Ok(result) => result,
-            Err(error) => return Produces::ok(Err(error)),
-        };
+        if self.payjoin_actor.is_some() {
+            return Produces::ok(Err(Error::SignAndBroadcastError(
+                "a payjoin session is already in progress".to_string(),
+            )));
+        }
 
         match self.db.get_payjoin_sender_session() {
             Ok(None) => {}
@@ -533,20 +534,12 @@ impl WalletActor {
             }
         }
 
-        match payjoin_endpoint {
-            None => {
-                let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
-                    Ok(result) => result,
-                    Err(error) => return Produces::ok(Err(error)),
-                };
+        let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
+            Ok(result) => result,
+            Err(error) => return Produces::ok(Err(error)),
+        };
 
-                self.start_broadcast_transaction(transaction)
-            }
-            Some(endpoint) => {
-                let result = self.initiate_payjoin_payment(psbt, endpoint).await;
-                Produces::ok(result)
-            }
-        }
+        self.start_broadcast_transaction(transaction)
     }
 
     #[allow(dead_code)]
