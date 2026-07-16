@@ -1,6 +1,7 @@
-use std::{io::Write as _, str::FromStr as _, time::Duration};
+use std::{io, str::FromStr as _, time::Duration};
 
-use age::x25519;
+use age::{Encryptor, x25519};
+use bytes::Bytes;
 use flate2::{Compression, write::GzEncoder};
 use reqwest::{
     StatusCode,
@@ -31,6 +32,79 @@ const UPLOAD_RETRY_DELAY: Duration = Duration::from_millis(500);
 struct DiagnosticsEncryptionKey {
     id: &'static str,
     recipient: &'static str,
+}
+
+#[derive(Clone, Copy)]
+enum ReportSizeLimit {
+    Json,
+    Gzipped,
+}
+
+impl ReportSizeLimit {
+    fn max_bytes(self) -> usize {
+        match self {
+            Self::Json => MAX_REPORT_JSON_BYTES,
+            Self::Gzipped => MAX_GZIPPED_REPORT_BYTES,
+        }
+    }
+
+    fn upload_error(self) -> UploadError {
+        match self {
+            Self::Json => UploadError::JsonTooLarge { limit: self.max_bytes() },
+            Self::Gzipped => UploadError::GzipTooLarge { limit: self.max_bytes() },
+        }
+    }
+
+    fn io_error_message(self) -> &'static str {
+        match self {
+            Self::Json => "diagnostics report JSON exceeded its byte limit",
+            Self::Gzipped => "gzipped diagnostics report exceeded its byte limit",
+        }
+    }
+}
+
+struct SizeLimitedWriter<W> {
+    inner: W,
+    limit: ReportSizeLimit,
+    written: usize,
+    exceeded: bool,
+}
+
+impl<W> SizeLimitedWriter<W> {
+    fn new(inner: W, limit: ReportSizeLimit) -> Self {
+        Self { inner, limit, written: 0, exceeded: false }
+    }
+
+    fn inner(&self) -> &W {
+        &self.inner
+    }
+
+    fn into_inner(self) -> W {
+        self.inner
+    }
+
+    fn limit_error(&self) -> Option<UploadError> {
+        self.exceeded.then(|| self.limit.upload_error())
+    }
+}
+
+impl<W: io::Write> io::Write for SizeLimitedWriter<W> {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        if buffer.len() > self.limit.max_bytes() - self.written {
+            self.exceeded = true;
+
+            return Err(io::Error::other(self.limit.io_error_message()));
+        }
+
+        let written = self.inner.write(buffer)?;
+        self.written += written;
+
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +144,12 @@ pub(crate) enum UploadError {
 
     #[error("collector returned status {status}: {body}")]
     Status { status: reqwest::StatusCode, body: String },
+}
+
+impl From<age::EncryptError> for UploadError {
+    fn from(error: age::EncryptError) -> Self {
+        Self::Encrypt(error)
+    }
 }
 
 impl UploadError {
@@ -158,7 +238,7 @@ pub(crate) async fn submit_report(report: DiagnosticsUploadReport) -> Result<Str
     let client = cove_http::new_client_without_redirects().map_err(UploadError::Client)?;
 
     for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
-        match submit_report_once(&client, &body, PRODUCTION_ENCRYPTION_KEY).await {
+        match submit_report_once(&client, body.clone(), PRODUCTION_ENCRYPTION_KEY).await {
             Ok(report_id) => return Ok(report_id),
             Err(error) if attempt < MAX_UPLOAD_ATTEMPTS && upload_error_is_retryable(&error) => {
                 tracing::warn!(
@@ -176,7 +256,7 @@ pub(crate) async fn submit_report(report: DiagnosticsUploadReport) -> Result<Str
 
 async fn submit_report_once(
     client: &reqwest::Client,
-    body: &[u8],
+    body: Bytes,
     encryption_key: DiagnosticsEncryptionKey,
 ) -> Result<String, UploadError> {
     let mut response = client
@@ -185,7 +265,7 @@ async fn submit_report_once(
         .bearer_auth(PUBLIC_APP_TOKEN)
         .header(CONTENT_TYPE, AGE_CONTENT_TYPE)
         .header(ENCRYPTION_KEY_ID_HEADER, encryption_key.id)
-        .body(body.to_vec())
+        .body(body)
         .send()
         .await
         .map_err(UploadError::Request)?;
@@ -208,29 +288,48 @@ async fn submit_report_once(
     Ok(report_id)
 }
 
-pub(crate) fn gzipped_json(report: &DiagnosticsUploadReport) -> Result<Vec<u8>, UploadError> {
-    let json = serde_json::to_vec(report).map_err(UploadError::EncodeJson)?;
-    if json.len() > MAX_REPORT_JSON_BYTES {
-        return Err(UploadError::JsonTooLarge { limit: MAX_REPORT_JSON_BYTES });
+fn write_gzipped_json<W: io::Write>(
+    report: &DiagnosticsUploadReport,
+    output: W,
+) -> Result<W, UploadError> {
+    // place limits before each downstream transform so oversized input stops without another full buffer
+    let gzip_output = SizeLimitedWriter::new(output, ReportSizeLimit::Gzipped);
+    let gzip_encoder = GzEncoder::new(gzip_output, Compression::default());
+    let mut json_output = SizeLimitedWriter::new(gzip_encoder, ReportSizeLimit::Json);
+
+    let serialization_result = serde_json::to_writer(&mut json_output, report);
+    if let Some(error) = json_output.limit_error() {
+        return Err(error);
     }
 
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-    encoder.write_all(&json).map_err(UploadError::Gzip)?;
-    let gzipped = encoder.finish().map_err(UploadError::Gzip)?;
-    if gzipped.len() > MAX_GZIPPED_REPORT_BYTES {
-        return Err(UploadError::GzipTooLarge { limit: MAX_GZIPPED_REPORT_BYTES });
+    if let Some(error) = json_output.inner().get_ref().limit_error() {
+        return Err(error);
     }
 
-    Ok(gzipped)
+    serialization_result.map_err(UploadError::EncodeJson)?;
+
+    let mut gzip_encoder = json_output.into_inner();
+    let finish_result = gzip_encoder.try_finish();
+    if let Some(error) = gzip_encoder.get_ref().limit_error() {
+        return Err(error);
+    }
+
+    finish_result.map_err(UploadError::Gzip)?;
+    let gzip_output = gzip_encoder.finish().map_err(UploadError::Gzip)?;
+
+    Ok(gzip_output.into_inner())
 }
 
 fn encrypted_gzipped_json(
     report: &DiagnosticsUploadReport,
     recipient: &x25519::Recipient,
-) -> Result<Vec<u8>, UploadError> {
-    let gzipped = gzipped_json(report)?;
+) -> Result<Bytes, UploadError> {
+    let encryptor = Encryptor::with_recipients(std::iter::once(recipient as &dyn age::Recipient))?;
+    let encryption_writer = encryptor.wrap_output(Vec::new()).map_err(age::EncryptError::from)?;
+    let encryption_writer = write_gzipped_json(report, encryption_writer)?;
+    let encrypted = encryption_writer.finish().map_err(age::EncryptError::from)?;
 
-    age::encrypt(recipient, &gzipped).map_err(UploadError::Encrypt)
+    Ok(Bytes::from(encrypted))
 }
 
 fn production_recipient(
@@ -314,7 +413,7 @@ async fn read_status_body_snippet(response: &mut reqwest::Response) -> Result<St
 #[cfg(test)]
 mod tests {
     use std::{
-        io::Read as _,
+        io::{self, Read as _},
         sync::{
             Arc,
             atomic::{AtomicUsize, Ordering},
@@ -353,6 +452,27 @@ mod tests {
         body: String,
     }
 
+    #[derive(Clone, Debug, Default)]
+    struct CountingWriter(Arc<AtomicUsize>);
+
+    impl CountingWriter {
+        fn bytes_written(&self) -> usize {
+            self.0.load(Ordering::Relaxed)
+        }
+    }
+
+    impl io::Write for CountingWriter {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            self.0.fetch_add(buffer.len(), Ordering::Relaxed);
+
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
     fn report() -> DiagnosticsUploadReport {
         DiagnosticsUploadReport {
             schema_version: 1,
@@ -375,6 +495,35 @@ mod tests {
         }
     }
 
+    fn report_with_body(body: String) -> DiagnosticsUploadReport {
+        let mut report = report();
+        report.sections.push(DiagnosticsSection { title: "large payload".to_string(), body });
+
+        report
+    }
+
+    // deterministic printable pseudo-random content resists gzip compression; '"' and '\' are
+    // skipped so serde_json does not escape it and alter the serialized size
+    fn deterministic_printable_body(len: usize) -> String {
+        let mut state: u64 = 0x0123_4567_89ab_cdef;
+        let mut body = String::with_capacity(len);
+
+        while body.len() < len {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+
+            let byte = 0x20 + (state % 95) as u8;
+            if byte == b'"' || byte == b'\\' {
+                continue;
+            }
+
+            body.push(byte as char);
+        }
+
+        body
+    }
+
     async fn upload_server(responses: Vec<TestResponse>) -> (String, Arc<AtomicUsize>) {
         crate::test_support::ensure_tokio_runtime();
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -386,9 +535,10 @@ mod tests {
         tokio::spawn(async move {
             for response in responses {
                 let (mut socket, _) = listener.accept().await.expect("test server accepts request");
-                let mut buffer = [0; 4096];
-                let _ = socket.read(&mut buffer).await.expect("test server reads request");
+                let request = read_request_head(&mut socket).await;
                 server_request_count.fetch_add(1, Ordering::Relaxed);
+
+                assert_request_has_wire_headers(&request);
 
                 let status = response.status;
                 let reason = status.canonical_reason().unwrap_or("status");
@@ -425,6 +575,23 @@ mod tests {
         }
     }
 
+    // matches each expected header as a complete, case-insensitive header line so that a header
+    // value can never satisfy a different header's assertion by substring overlap
+    fn assert_request_has_wire_headers(request: &[u8]) {
+        let head = String::from_utf8_lossy(request).to_ascii_lowercase();
+
+        assert!(
+            head.split("\r\n").any(|line| line == "content-type: application/age"),
+            "request is missing the content-type: application/age header line"
+        );
+
+        assert!(
+            head.split("\r\n")
+                .any(|line| line == "x-cove-diagnostics-key-id: cove-diagnostics-2026-07"),
+            "request is missing the x-cove-diagnostics-key-id header line"
+        );
+    }
+
     async fn redirect_server(
         location: &str,
     ) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
@@ -443,6 +610,7 @@ mod tests {
                 server_request_count.fetch_add(1, Ordering::Relaxed);
 
                 assert!(request.starts_with(b"POST /reports HTTP/1.1\r\n"));
+                assert_request_has_wire_headers(&request);
 
                 let body = r#"{"error":"redirect"}"#;
                 let http_response = format!(
@@ -461,16 +629,54 @@ mod tests {
     }
 
     #[test]
-    fn gzipped_json_contains_report_and_description() {
+    fn streamed_gzipped_json_contains_report_and_description() {
         let report = report();
 
-        let gzipped = gzipped_json(&report).unwrap();
+        let gzipped = write_gzipped_json(&report, Vec::new()).unwrap();
         let mut decoder = GzDecoder::new(gzipped.as_slice());
         let mut json = String::new();
         decoder.read_to_string(&mut json).unwrap();
 
         assert!(json.contains("\"user_description\":\"description\""));
         assert!(json.contains("amount=5000 sats"));
+    }
+
+    #[test]
+    fn streamed_gzipped_json_rejects_report_larger_than_json_limit() {
+        let body = "A".repeat(MAX_REPORT_JSON_BYTES + 1);
+        let report = report_with_body(body);
+
+        let error = write_gzipped_json(&report, Vec::new()).unwrap_err();
+
+        assert!(matches!(error, UploadError::JsonTooLarge { limit: MAX_REPORT_JSON_BYTES }));
+        assert_eq!(
+            error.user_message(),
+            "The diagnostics report is too large to submit. You can still share it manually."
+        );
+    }
+
+    #[test]
+    fn streamed_gzipped_json_stops_at_gzip_limit() {
+        // this body crosses the gzip limit while staying under the JSON limit
+        let body = deterministic_printable_body(MAX_GZIPPED_REPORT_BYTES + 6 * 1024 * 1024);
+        let report = report_with_body(body);
+        let json_output = CountingWriter::default();
+
+        serde_json::to_writer(json_output.clone(), &report).expect("report serializes to JSON");
+        assert!(
+            json_output.bytes_written() <= MAX_REPORT_JSON_BYTES,
+            "test report must stay under the JSON limit to exercise the gzip guard"
+        );
+
+        let gzip_output = CountingWriter::default();
+        let error = write_gzipped_json(&report, gzip_output.clone()).unwrap_err();
+
+        assert!(matches!(error, UploadError::GzipTooLarge { limit: MAX_GZIPPED_REPORT_BYTES }));
+        assert!(gzip_output.bytes_written() <= MAX_GZIPPED_REPORT_BYTES);
+        assert_eq!(
+            error.user_message(),
+            "The diagnostics report is too large to submit. You can still share it manually."
+        );
     }
 
     #[test]

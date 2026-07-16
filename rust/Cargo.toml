@@ -24,6 +24,7 @@ tokio = { version = "1.52.3" }
 async-trait = "0.1.89"
 
 # encoding / decoding 
+bytes = "1.11.1"
 hex = "0.4.3"
 base64 = "0.22.1"
 data-encoding = "2.11.0"
@@ -263,6 +264,7 @@ memchr = { workspace = true }
 unicode-normalization = { workspace = true }
 
 # encoding / decoding 
+bytes = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
 data-encoding = { workspace = true }
