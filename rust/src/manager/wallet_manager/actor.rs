@@ -53,7 +53,7 @@ pub struct WalletActor {
     pub addr: WeakAddr<Self>,
     pub reconciler: Sender<SingleOrMany>,
     pub wallet: Wallet,
-    pub node_client: Option<NodeClient>,
+    node_client: Option<NodeClient>,
 
     pub db: WalletDataDb,
     pub state: ActorState,
@@ -72,7 +72,7 @@ pub struct WalletActor {
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
     last_height_fetched: Option<(Duration, usize)>,
-    height_refresh_in_flight: Option<node::HeightRefreshInFlight>,
+    height_refreshes_in_flight: HashMap<node::NodeRefreshKey, node::HeightRefreshInFlight>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -91,7 +91,7 @@ pub enum ActorState {
     FailedSyncScan,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub(crate) struct WalletScanGeneration(u64);
 
 impl WalletScanGeneration {
@@ -166,7 +166,7 @@ impl WalletActor {
             node_client: None,
             last_scan_finished: None,
             last_height_fetched: None,
-            height_refresh_in_flight: None,
+            height_refreshes_in_flight: HashMap::default(),
             state: ActorState::Initial,
             receive_address: ReceiveAddressSession::default(),
             scan_status,
@@ -1241,6 +1241,7 @@ mod tests {
             TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot,
         },
         node::Node,
+        transaction_watcher::TransactionWatcherEvent,
         wallet::{Address, Wallet, WalletAddressType, metadata::WalletId},
     };
 
@@ -1274,6 +1275,7 @@ mod tests {
     struct TestEsploraNode {
         requests: Arc<AtomicUsize>,
         height_requests: Arc<AtomicUsize>,
+        transaction_requests: Arc<AtomicUsize>,
         server: JoinHandle<()>,
     }
 
@@ -1313,6 +1315,10 @@ mod tests {
 
         async fn cached_height_for_test(&mut self) -> ActorResult<Option<usize>> {
             Produces::ok(self.last_height_fetched().map(|(_, block_height)| block_height))
+        }
+
+        async fn actor_state_for_test(&mut self) -> ActorResult<ActorState> {
+            Produces::ok(self.state)
         }
 
         async fn transaction_watcher_for_test(
@@ -1597,25 +1603,35 @@ mod tests {
         let request_counter = requests.clone();
         let height_requests = Arc::new(AtomicUsize::new(0));
         let height_request_counter = height_requests.clone();
+        let transaction_requests = Arc::new(AtomicUsize::new(0));
+        let transaction_request_counter = transaction_requests.clone();
         let block_heights = Arc::new(block_heights);
         let server = tokio::spawn(async move {
             loop {
                 let Ok((mut stream, _)) = listener.accept().await else { return };
                 let request_counter = request_counter.clone();
                 let height_request_counter = height_request_counter.clone();
+                let transaction_request_counter = transaction_request_counter.clone();
                 let block_heights = block_heights.clone();
                 tokio::spawn(async move {
                     let mut request = [0; 1024];
                     let bytes_read = stream.read(&mut request).await.unwrap_or_default();
                     request_counter.fetch_add(1, Ordering::SeqCst);
 
+                    let request = String::from_utf8_lossy(&request[..bytes_read]).into_owned();
+                    let height_index = request
+                        .starts_with("GET /blocks/tip/height ")
+                        .then(|| height_request_counter.fetch_add(1, Ordering::SeqCst));
+                    if request.starts_with("GET /tx/") {
+                        transaction_request_counter.fetch_add(1, Ordering::SeqCst);
+                    }
+
                     if !delay.is_zero() {
                         tokio::time::sleep(delay).await;
                     }
 
-                    let request = String::from_utf8_lossy(&request[..bytes_read]);
                     let body = if request.starts_with("GET /blocks/tip/height ") {
-                        let index = height_request_counter.fetch_add(1, Ordering::SeqCst);
+                        let index = height_index.expect("height requests have an index");
                         block_heights
                             .get(index)
                             .or_else(|| block_heights.last())
@@ -1638,7 +1654,21 @@ mod tests {
             }
         });
 
-        TestEsploraNode { requests, height_requests, server }
+        TestEsploraNode { requests, height_requests, transaction_requests, server }
+    }
+
+    async fn wait_for_height_request_count(server: &TestEsploraNode, count: usize) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if server.height_requests.load(Ordering::SeqCst) >= count {
+                    return;
+                }
+
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("height request count is reached");
     }
 
     async fn wait_for_persisted_height(metadata: &WalletMetadata, block_height: u64) {
@@ -2334,6 +2364,164 @@ mod tests {
 
         assert_eq!(height, 321);
         assert!(server.requests.load(Ordering::SeqCst) > 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn selected_node_change_rebuilds_cached_wallet_client() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let first_server = set_height_esplora_node(111, Duration::ZERO).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let first_height = call!(addr.get_height(true))
+            .await
+            .expect("first height actor responds")
+            .expect("first node height loads");
+
+        let second_server = set_height_esplora_node(222, Duration::ZERO).await;
+        let second_height = call!(addr.get_height(true))
+            .await
+            .expect("second height actor responds")
+            .expect("selected node height loads");
+
+        restore_default_bitcoin_node();
+        first_server.server.abort();
+        second_server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(first_height, 111);
+        assert_eq!(second_height, 222);
+        assert!(second_server.height_requests.load(Ordering::SeqCst) > 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn stale_node_refresh_cannot_overwrite_new_node_height() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let first_server = set_height_esplora_node(333, Duration::from_millis(300)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let first_height = call!(addr.get_height(true));
+        wait_for_height_request_count(&first_server, 2).await;
+
+        let second_server = set_height_esplora_node(222, Duration::ZERO).await;
+        let second_height = call!(addr.get_height(true))
+            .await
+            .expect("second height actor responds")
+            .expect("selected node height loads");
+        let first_error = first_height
+            .await
+            .expect("first height actor responds")
+            .expect_err("stale node height is rejected");
+
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let cached_height = call!(addr.cached_height_for_test())
+            .await
+            .expect("cached height actor responds")
+            .expect("selected node height is cached");
+        let persisted_height = persisted_wallet_metadata(&metadata)
+            .internal
+            .last_height_fetched
+            .expect("selected node height is persisted")
+            .block_height;
+
+        restore_default_bitcoin_node();
+        first_server.server.abort();
+        second_server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(first_error, super::Error::GetHeightError);
+        assert_eq!(second_height, 222);
+        assert_eq!(cached_height, 222);
+        assert_eq!(persisted_height, 222);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_during_confirmation_block_refresh_stops_targeted_scan() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(10, Duration::from_millis(300)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+        let tx_id = Txid::all_zeros();
+
+        call!(addr.handle_transaction_watcher_event(TransactionWatcherEvent::ConfirmedObserved {
+            tx_id
+        }))
+        .await
+        .expect("confirmation event actor responds");
+        wait_for_height_request_count(&server, 2).await;
+        let height_requests_at_shutdown = server.height_requests.load(Ordering::SeqCst);
+
+        call!(addr.shutdown()).await.expect("wallet actor shuts down");
+        tokio::time::sleep(Duration::from_millis(700)).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(server.height_requests.load(Ordering::SeqCst), height_requests_at_shutdown);
+        assert_eq!(server.transaction_requests.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn shutdown_during_confirmation_height_refresh_stops_targeted_sync() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(10, Duration::from_millis(300)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        call!(addr.perform_scan_for_single_tx_id(Txid::all_zeros()))
+            .await
+            .expect("targeted scan actor responds");
+        wait_for_height_request_count(&server, 2).await;
+
+        call!(addr.shutdown()).await.expect("wallet actor shuts down");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(server.transaction_requests.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn targeted_sync_completion_after_shutdown_does_not_change_actor_state() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(10, Duration::ZERO).await;
+
+        let wallet = Wallet::preview_new_wallet();
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        call!(addr.complete_targeted_sync_after_shutdown_for_test(Txid::all_zeros()))
+            .await
+            .expect("stale targeted sync completion is handled");
+        let state = call!(addr.actor_state_for_test())
+            .await
+            .expect("actor state is available after stale completion");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+
+        assert_eq!(state, ActorState::Initial);
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]

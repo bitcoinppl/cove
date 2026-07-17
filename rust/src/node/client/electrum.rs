@@ -46,10 +46,6 @@ impl ElectrumClient {
         Self { client, options }
     }
 
-    pub fn new(client: Arc<ElectrumClientInner>) -> Self {
-        Self::new_with_options(client, Self::default_options())
-    }
-
     pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
         Self::new_from_node_and_options(node, Self::default_options()).await
     }

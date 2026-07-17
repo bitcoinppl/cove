@@ -9,7 +9,6 @@ use crate::{
     database::Database,
     manager::wallet_manager::actor::WalletActor,
     node::{
-        Node,
         client::{Error as NodeError, NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
@@ -25,7 +24,7 @@ pub struct TransactionWatcher {
     tx_id: Txid,
     options: NodeClientOptions,
     network: Network,
-    connection: Option<TransactionWatcherConnection>,
+    client: Option<NodeClient>,
     keep_watching: bool,
 }
 
@@ -34,16 +33,10 @@ pub enum TransactionWatcherEvent {
     ConfirmedObserved { tx_id: Txid },
 }
 
-#[derive(Debug, Clone)]
-struct TransactionWatcherConnection {
-    node: Node,
-    client: NodeClient,
-}
-
 #[derive(Debug)]
 enum TransactionWatcherPollResult {
-    Pending(TransactionWatcherConnection),
-    Confirmed(TransactionWatcherConnection),
+    Pending(NodeClient),
+    Confirmed(NodeClient),
     Failed(NodeError),
 }
 
@@ -90,7 +83,7 @@ impl TransactionWatcher {
             tx_id,
             options,
             network,
-            connection: None,
+            client: None,
             keep_watching: true,
         }
     }
@@ -101,14 +94,13 @@ impl TransactionWatcher {
         }
 
         let selected_node = Database::global().global_config.selected_node();
-        let connection =
-            self.connection.take().filter(|connection| connection.node == selected_node);
+        let client = self.client.take().filter(|client| client.node() == &selected_node);
         let builder = NodeClientBuilder { node: selected_node, options: self.options };
         let tx_id = self.tx_id;
 
         trace!("checking txn: {tx_id}");
         self.addr.send_fut_with(|addr| async move {
-            let result = poll_transaction(connection, builder, tx_id).await;
+            let result = poll_transaction(client, builder, tx_id).await;
             send!(addr.handle_poll_result(result));
         });
 
@@ -124,25 +116,25 @@ impl TransactionWatcher {
         }
 
         let kind = match result {
-            TransactionWatcherPollResult::Pending(connection) => {
-                self.connection = Some(connection);
+            TransactionWatcherPollResult::Pending(client) => {
+                self.client = Some(client);
                 TransactionWatcherPollKind::Pending
             }
 
-            TransactionWatcherPollResult::Confirmed(connection) => {
-                self.connection = Some(connection);
+            TransactionWatcherPollResult::Confirmed(client) => {
+                self.client = Some(client);
                 TransactionWatcherPollKind::Confirmed
             }
 
             TransactionWatcherPollResult::Failed(error) => {
                 error!("failed to check txn {}: {error:?}", self.tx_id);
-                self.connection = None;
+                self.client = None;
                 TransactionWatcherPollKind::Failed
             }
         };
 
         let plan = poll_plan(kind, self.normal_wait_time());
-        debug_assert_eq!(self.connection.is_some(), plan.keep_connection);
+        debug_assert_eq!(self.client.is_some(), plan.keep_connection);
 
         if plan.notify_confirmed {
             info!("found txn: {}", self.tx_id);
@@ -159,7 +151,7 @@ impl TransactionWatcher {
     pub async fn stop_watching(&mut self) -> ActorResult<()> {
         debug!("stop_watching for txn {}", self.tx_id);
         self.keep_watching = false;
-        self.connection = None;
+        self.client = None;
         Produces::ok(())
     }
 
@@ -213,21 +205,21 @@ fn poll_plan(
 }
 
 async fn poll_transaction(
-    connection: Option<TransactionWatcherConnection>,
+    client: Option<NodeClient>,
     builder: NodeClientBuilder,
     tx_id: Txid,
 ) -> TransactionWatcherPollResult {
-    let connection = match connection {
-        Some(connection) => connection,
+    let client = match client {
+        Some(client) => client,
         None => match builder.build().await {
-            Ok(client) => TransactionWatcherConnection { node: builder.node, client },
+            Ok(client) => client,
             Err(error) => return TransactionWatcherPollResult::Failed(error),
         },
     };
 
-    match connection.client.get_confirmed_transaction(Arc::new(tx_id)).await {
-        Ok(Some(_)) => TransactionWatcherPollResult::Confirmed(connection),
-        Ok(None) => TransactionWatcherPollResult::Pending(connection),
+    match client.get_confirmed_transaction(Arc::new(tx_id)).await {
+        Ok(Some(_)) => TransactionWatcherPollResult::Confirmed(client),
+        Ok(None) => TransactionWatcherPollResult::Pending(client),
         Err(error) => TransactionWatcherPollResult::Failed(error),
     }
 }
