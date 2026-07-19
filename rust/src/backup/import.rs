@@ -609,13 +609,14 @@ fn restore_ohttp_relay_url(
     }
 
     if let Err(error) = config.set_ohttp_relay_url(url.clone()) {
-        warn!("skipping invalid ohttp relay url: {error}");
         if !matches!(
             error,
             DatabaseError::GlobalConfig(GlobalConfigTableError::InvalidOhttpRelayUrl(_))
         ) {
             return vec![format!("ohttp relay url: {error}")];
         }
+
+        warn!("skipping invalid ohttp relay url: {error}");
     }
 
     Vec::new()

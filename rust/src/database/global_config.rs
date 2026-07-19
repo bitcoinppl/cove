@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cove_util::ResultExt as _;
 use redb::TableDefinition;
 use tap::TapFallible as _;
 use tracing::{error, warn};
@@ -402,8 +403,8 @@ impl GlobalConfigTable {
             return Ok(None);
         }
 
-        let parsed = url::Url::parse(&url)
-            .map_err(|error| GlobalConfigTableError::InvalidOhttpRelayUrl(error.to_string()))?;
+        let parsed =
+            url::Url::parse(&url).map_err_str(GlobalConfigTableError::InvalidOhttpRelayUrl)?;
 
         if parsed.scheme() != "https" {
             return Err(GlobalConfigTableError::InvalidOhttpRelayUrl(

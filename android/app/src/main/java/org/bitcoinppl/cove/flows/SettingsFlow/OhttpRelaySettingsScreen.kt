@@ -47,6 +47,8 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.DatabaseException
+import org.bitcoinppl.cove_core.GlobalConfigTableException
 
 private val DEFAULT_RELAYS =
     listOf(
@@ -103,7 +105,13 @@ fun OhttpRelaySettingsScreen(
                     snackbarHostState.showSnackbar(savedMessage)
                 }
             } catch (e: Exception) {
-                showAlert(invalidUrlTitle, invalidUrlMessage)
+                if (e is DatabaseException.GlobalConfig &&
+                    e.v1 is GlobalConfigTableException.InvalidOhttpRelayUrl
+                ) {
+                    showAlert(invalidUrlTitle, invalidUrlMessage)
+                } else {
+                    showAlert(updateFailedTitle, updateFailedMessage)
+                }
                 isSaving = false
             }
         }
