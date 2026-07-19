@@ -128,6 +128,9 @@ pub struct AppSettings {
     /// Per-network normalized custom transaction explorer templates
     #[serde(default)]
     pub custom_block_explorers: BTreeMap<String, String>,
+    /// Normalized custom OHTTP relay URL used for payjoin sends
+    #[serde(default)]
+    pub ohttp_relay_url: Option<String>,
 }
 
 /// Result of a successful backup export
@@ -257,6 +260,7 @@ mod tests {
                     "Bitcoin".to_string(),
                     "https://example.com/tx/{txid}".to_string(),
                 )]),
+                ohttp_relay_url: Some("https://relay.example.com/".to_string()),
             },
         }
     }
@@ -276,6 +280,7 @@ mod tests {
             decoded.settings.custom_block_explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+        assert_eq!(decoded.settings.ohttp_relay_url.as_deref(), Some("https://relay.example.com/"));
     }
 
     #[test]
@@ -349,6 +354,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: vec![],
                 custom_block_explorers: BTreeMap::new(),
+                ohttp_relay_url: None,
             },
         };
 

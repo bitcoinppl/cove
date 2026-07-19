@@ -555,6 +555,7 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
     }
 
     errors.extend(restore_custom_block_explorers(config, &settings.custom_block_explorers));
+    errors.extend(restore_ohttp_relay_url(config, &settings.ohttp_relay_url));
 
     if errors.is_empty() {
         Ok(())
@@ -592,6 +593,32 @@ fn restore_custom_block_explorers(
     }
 
     errors
+}
+
+fn restore_ohttp_relay_url(
+    config: &GlobalConfigTable,
+    ohttp_relay_url: &Option<String>,
+) -> Vec<String> {
+    let Some(url) = ohttp_relay_url else {
+        return Vec::new();
+    };
+
+    if url.trim().is_empty() {
+        warn!("skipping empty ohttp relay url");
+        return Vec::new();
+    }
+
+    if let Err(error) = config.set_ohttp_relay_url(url.clone()) {
+        warn!("skipping invalid ohttp relay url: {error}");
+        if !matches!(
+            error,
+            DatabaseError::GlobalConfig(GlobalConfigTableError::InvalidOhttpRelayUrl(_))
+        ) {
+            return vec![format!("ohttp relay url: {error}")];
+        }
+    }
+
+    Vec::new()
 }
 
 fn wallet_name_from_backup(backup: &WalletBackup) -> String {
@@ -688,6 +715,33 @@ mod tests {
             Some("https://existing.example/tx/{txid}")
         );
         assert_eq!(config.custom_block_explorer(Network::Signet), None);
+    }
+
+    #[test]
+    fn backup_import_restores_valid_ohttp_relay_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+
+        let errors =
+            restore_ohttp_relay_url(&config, &Some("https://relay.example.com".to_string()));
+
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_url().as_deref(), Some("https://relay.example.com/"));
+    }
+
+    #[test]
+    fn backup_import_skips_invalid_ohttp_relay_url_without_clearing_existing() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        config.set_ohttp_relay_url("https://existing.example".to_string()).unwrap();
+
+        let errors = restore_ohttp_relay_url(&config, &Some("http://insecure.example".to_string()));
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_url().as_deref(), Some("https://existing.example/"));
+
+        let errors = restore_ohttp_relay_url(&config, &Some("   ".to_string()));
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_url().as_deref(), Some("https://existing.example/"));
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {

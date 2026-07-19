@@ -42,6 +42,7 @@ pub enum GlobalConfigKey {
     LockedAt,
     OnboardingProgress,
     CustomBlockExplorer(Network),
+    OhttpRelayUrl,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -74,6 +75,7 @@ impl From<GlobalConfigKey> for &'static str {
                 "custom_block_explorer_testnet4"
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
+            GlobalConfigKey::OhttpRelayUrl => "ohttp_relay_url",
         }
     }
 }
@@ -106,6 +108,9 @@ pub enum GlobalConfigTableError {
 
     #[error("invalid custom block explorer: {0}")]
     InvalidCustomBlockExplorer(String),
+
+    #[error("invalid OHTTP relay URL: {0}")]
+    InvalidOhttpRelayUrl(String),
 }
 
 impl From<CustomBlockExplorerError> for GlobalConfigTableError {
@@ -376,6 +381,45 @@ impl GlobalConfigTable {
 
     pub fn clear_custom_block_explorer(&self, network: Network) -> Result<()> {
         self.delete(GlobalConfigKey::CustomBlockExplorer(network))
+    }
+
+    pub fn ohttp_relay_url(&self) -> Option<String> {
+        self.get(GlobalConfigKey::OhttpRelayUrl).unwrap_or(None).and_then(|url| {
+            let parsed = url::Url::parse(&url).ok()?;
+            if parsed.scheme() != "https" {
+                return None;
+            }
+
+            Some(parsed.to_string())
+        })
+    }
+
+    pub fn set_ohttp_relay_url(&self, url: String) -> Result<Option<String>> {
+        let url = url.trim().to_string();
+
+        if url.is_empty() {
+            self.clear_ohttp_relay_url()?;
+            return Ok(None);
+        }
+
+        let parsed = url::Url::parse(&url)
+            .map_err(|error| GlobalConfigTableError::InvalidOhttpRelayUrl(error.to_string()))?;
+
+        if parsed.scheme() != "https" {
+            return Err(GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relay URL must use HTTPS".to_string(),
+            )
+            .into());
+        }
+
+        let canonical = parsed.to_string();
+        self.set(GlobalConfigKey::OhttpRelayUrl, canonical.clone())?;
+
+        Ok(Some(canonical))
+    }
+
+    pub fn clear_ohttp_relay_url(&self) -> Result<()> {
+        self.delete(GlobalConfigKey::OhttpRelayUrl)
     }
 
     #[uniffi::method(name = "selectedFiatCurrency")]
@@ -686,6 +730,98 @@ mod tests {
             table.selected_block_explorer_option(Network::Bitcoin),
             BlockExplorerOption::MempoolSpace
         );
+    }
+
+    #[test]
+    fn ohttp_relay_url_is_none_when_unset() {
+        let (_tmp, table) = test_table();
+
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_stores_and_retrieves_https_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table.set_ohttp_relay_url(" https://relay.example.com ".to_string()).unwrap();
+
+        assert_eq!(saved.as_deref(), Some("https://relay.example.com/"));
+        assert_eq!(table.ohttp_relay_url().as_deref(), Some("https://relay.example.com/"));
+    }
+
+    #[test]
+    fn ohttp_relay_url_rejects_http_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.set_ohttp_relay_url("http://relay.example.com".to_string()).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relay URL must use HTTPS".to_string(),
+            ))
+        );
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_rejects_invalid_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.set_ohttp_relay_url("not a url".to_string()).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relative URL without a base".to_string(),
+            ))
+        );
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_normalizes_stored_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table.set_ohttp_relay_url("HTTPS://Relay.Example.com".to_string()).unwrap();
+
+        assert_eq!(saved.as_deref(), Some("https://relay.example.com/"));
+        assert_eq!(table.ohttp_relay_url().as_deref(), Some("https://relay.example.com/"));
+    }
+
+    #[test]
+    fn ohttp_relay_url_clears_on_empty_input() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table.set_ohttp_relay_url("https://relay.example.com".to_string()).unwrap();
+        let cleared = table.set_ohttp_relay_url("   ".to_string()).unwrap();
+
+        assert_eq!(cleared, None);
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_clear_removes_stored_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table.set_ohttp_relay_url("https://relay.example.com".to_string()).unwrap();
+        table.clear_ohttp_relay_url().unwrap();
+
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn corrupt_stored_ohttp_relay_url_returns_none() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        use super::GlobalConfigKey;
+
+        table.set(GlobalConfigKey::OhttpRelayUrl, "javascript:alert(1)".to_string()).unwrap();
+
+        assert_eq!(table.ohttp_relay_url(), None);
     }
 
     fn test_table() -> (tempfile::TempDir, super::GlobalConfigTable) {

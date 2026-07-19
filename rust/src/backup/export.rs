@@ -158,6 +158,7 @@ impl BackupExporter {
         }
 
         let custom_block_explorers = gather_custom_block_explorers(&self.db.global_config);
+        let ohttp_relay_url = self.db.global_config.ohttp_relay_url();
 
         Ok(AppSettings {
             selected_network,
@@ -165,6 +166,7 @@ impl BackupExporter {
             color_scheme,
             selected_nodes,
             custom_block_explorers,
+            ohttp_relay_url,
         })
     }
 

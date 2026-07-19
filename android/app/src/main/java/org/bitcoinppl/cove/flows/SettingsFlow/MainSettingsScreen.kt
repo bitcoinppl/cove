@@ -236,6 +236,17 @@ fun MainSettingsScreen(
                                 )
                             },
                         )
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_ohttp_relay),
+                            icon = Icons.Default.Hub,
+                            onClick = {
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.OhttpRelay),
+                                )
+                            },
+                        )
                     }
                 }
 
