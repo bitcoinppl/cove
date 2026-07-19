@@ -23,6 +23,11 @@ struct MainSettingsGeneralSection: View {
                 symbol: "safari"
             )
             SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
+            SettingsRow(
+                title: "PayJoin Relay",
+                route: .ohttpRelay,
+                symbol: "arrow.triangle.2.circlepath"
+            )
         }
     }
 }

@@ -4487,6 +4487,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func clearCustomBlockExplorer(network: Network) throws
 
+    func clearOhttpRelayUrl() throws
+
     func clearSelectedWallet() throws
 
     func colorScheme()  -> ColorSchemeSelection
@@ -4506,6 +4508,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func isInDecoyMode()  -> Bool
 
     func isInMainMode()  -> Bool
+
+    func ohttpRelayUrl()  -> String?
 
     func previewCustomBlockExplorer(network: Network, input: String) throws  -> String
 
@@ -4530,6 +4534,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func setCustomBlockExplorer(network: Network, input: String) throws  -> String?
 
     func setHashedPinCode(hashedPinCode: String) throws
+
+    func setOhttpRelayUrl(url: String) throws  -> String?
 
     func setSelectedNetwork(network: Network) throws
 
@@ -4605,6 +4611,14 @@ open func clearCustomBlockExplorer(network: Network)throws   {try rustCallWithEr
     uniffi_cove_fn_method_globalconfigtable_clear_custom_block_explorer(
             self.uniffiCloneHandle(),
         FfiConverterTypeNetwork_lower(network),uniffiCallStatus
+    )
+}
+}
+
+open func clearOhttpRelayUrl()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_clear_ohttp_relay_url(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
 }
@@ -4695,6 +4709,15 @@ open func isInMainMode() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func ohttpRelayUrl() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_ohttp_relay_url(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -4814,6 +4837,16 @@ open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError
         FfiConverterString.lower(hashedPinCode),uniffiCallStatus
     )
 }
+}
+
+open func setOhttpRelayUrl(url: String)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_url(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
 }
 
 open func setSelectedNetwork(network: Network)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
@@ -27583,6 +27616,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case onboardingProgress
     case customBlockExplorer(Network
     )
+    case ohttpRelayUrl
 
 
 
@@ -27635,6 +27669,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 15: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
         )
+
+        case 16: return .ohttpRelayUrl
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27705,6 +27741,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
             writeInt(&buf, Int32(15))
             FfiConverterTypeNetwork.write(v1, into: &buf)
 
+
+        case .ohttpRelayUrl:
+            writeInt(&buf, Int32(16))
+
         }
     }
 }
@@ -27737,6 +27777,8 @@ enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.Locali
     )
     case PinCodeMustBeHashed
     case InvalidCustomBlockExplorer(String
+    )
+    case InvalidOhttpRelayUrl(String
     )
 
 
@@ -27788,6 +27830,9 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
         case 4: return .InvalidCustomBlockExplorer(
             try FfiConverterString.read(from: &buf)
             )
+        case 5: return .InvalidOhttpRelayUrl(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27816,6 +27861,11 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
 
         case let .InvalidCustomBlockExplorer(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .InvalidOhttpRelayUrl(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -35395,6 +35445,7 @@ public enum SettingsRoute: Equatable, Hashable {
     case allWallets
     case about
     case cloudBackup
+    case ohttpRelay
 
 
 
@@ -35436,6 +35487,8 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
         case 9: return .about
 
         case 10: return .cloudBackup
+
+        case 11: return .ohttpRelay
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -35485,6 +35538,10 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
 
         case .cloudBackup:
             writeInt(&buf, Int32(10))
+
+
+        case .ohttpRelay:
+            writeInt(&buf, Int32(11))
 
         }
     }
@@ -44817,6 +44874,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer() != 40308) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_clear_ohttp_relay_url() != 26983) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 50864) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -44845,6 +44905,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_url() != 61876) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136) {
@@ -44881,6 +44944,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_url() != 7011) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578) {
