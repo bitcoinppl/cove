@@ -6160,18 +6160,34 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UInt64 {
 public protocol NodeSelectorProtocol: AnyObject, Sendable {
 
     /**
+     * Decide what a rejected certificate means for this url.
+     *
+     * Deciding here rather than in each app keeps one rule: a url that already
+     * trusts a certificate is never offered a different one.
+     */
+    func certificateDecision(url: String) async throws  -> CertificateDecision
+
+    /**
      * Check the node url and set it as selected node if it is valid
      */
     func checkAndSaveNode(node: Node) async throws
 
     func checkSelectedNode(node: Node) async throws
 
+    /**
+     * Read the certificate a server presents, so it can be shown to the user.
+     *
+     * The certificate is not verified. It is only trusted once the user has
+     * compared the fingerprint against their server and accepted it.
+     */
+    func fetchNodeCertificate(url: String) async throws  -> NodeCertificate
+
     func nodeList()  -> [NodeSelection]
 
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    func parseCustomNode(url: String, name: String, enteredName: String) throws  -> Node
+    func parseCustomNode(url: String, name: String, enteredName: String, tls: TlsTrust?) throws  -> Node
 
     func selectPresetNode(name: String) throws  -> Node
 
@@ -6240,6 +6256,29 @@ public convenience init() {
 
 
     /**
+     * Decide what a rejected certificate means for this url.
+     *
+     * Deciding here rather than in each app keeps one rule: a url that already
+     * trusts a certificate is never offered a different one.
+     */
+open func certificateDecision(url: String)async throws  -> CertificateDecision  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_nodeselector_certificate_decision(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCertificateDecision_lift,
+            errorHandler: FfiConverterTypeNodeSelectorError_lift
+        )
+}
+
+    /**
      * Check the node url and set it as selected node if it is valid
      */
 open func checkAndSaveNode(node: Node)async throws   {
@@ -6276,6 +6315,29 @@ open func checkSelectedNode(node: Node)async throws   {
         )
 }
 
+    /**
+     * Read the certificate a server presents, so it can be shown to the user.
+     *
+     * The certificate is not verified. It is only trusted once the user has
+     * compared the fingerprint against their server and accepted it.
+     */
+open func fetchNodeCertificate(url: String)async throws  -> NodeCertificate  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_nodeselector_fetch_node_certificate(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNodeCertificate_lift,
+            errorHandler: FfiConverterTypeNodeSelectorError_lift
+        )
+}
+
 open func nodeList() -> [NodeSelection]  {
     return try!  FfiConverterSequenceTypeNodeSelection.lift(try! rustCall() {
         uniffiCallStatus in
@@ -6288,14 +6350,15 @@ open func nodeList() -> [NodeSelection]  {
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-open func parseCustomNode(url: String, name: String, enteredName: String)throws  -> Node  {
+open func parseCustomNode(url: String, name: String, enteredName: String, tls: TlsTrust? = nil)throws  -> Node  {
     return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_nodeselector_parse_custom_node(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(url),
         FfiConverterString.lower(name),
-        FfiConverterString.lower(enteredName),uniffiCallStatus
+        FfiConverterString.lower(enteredName),
+        FfiConverterOptionTypeTlsTrust.lower(tls),uniffiCallStatus
     )
 })
 }
@@ -16023,14 +16086,24 @@ public struct Node: Equatable, Hashable {
     public var network: Network
     public var apiType: ApiType
     public var url: String
+    /**
+     * How the node's TLS certificate is verified. `None` uses the bundled
+     * webpki roots, which is the behavior every node had before this field.
+     */
+    public var tls: TlsTrust?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(name: String, network: Network, apiType: ApiType, url: String) {
+    public init(name: String, network: Network, apiType: ApiType, url: String,
+        /**
+         * How the node's TLS certificate is verified. `None` uses the bundled
+         * webpki roots, which is the behavior every node had before this field.
+         */tls: TlsTrust? = nil) {
         self.name = name
         self.network = network
         self.apiType = apiType
         self.url = url
+        self.tls = tls
     }
 
 
@@ -16052,7 +16125,8 @@ public struct FfiConverterTypeNode: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf),
                 network: FfiConverterTypeNetwork.read(from: &buf),
                 apiType: FfiConverterTypeApiType.read(from: &buf),
-                url: FfiConverterString.read(from: &buf)
+                url: FfiConverterString.read(from: &buf),
+                tls: FfiConverterOptionTypeTlsTrust.read(from: &buf)
         )
     }
 
@@ -16061,6 +16135,7 @@ public struct FfiConverterTypeNode: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterTypeApiType.write(value.apiType, into: &buf)
         FfiConverterString.write(value.url, into: &buf)
+        FfiConverterOptionTypeTlsTrust.write(value.tls, into: &buf)
     }
 }
 
@@ -16077,6 +16152,77 @@ public func FfiConverterTypeNode_lift(_ buf: RustBuffer) throws -> Node {
 #endif
 public func FfiConverterTypeNode_lower(_ value: Node) -> RustBuffer {
     return FfiConverterTypeNode.lower(value)
+}
+
+
+/**
+ * A certificate a server presented, offered to the user for confirmation.
+ */
+public struct NodeCertificate: Equatable, Hashable {
+    /**
+     * SHA-256 of the certificate, ready to store as [`TlsTrust`].
+     */
+    public var sha256: Data
+    /**
+     * The same value as colon separated hex, so it can be compared against
+     * what the server operator sees.
+     */
+    public var display: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * SHA-256 of the certificate, ready to store as [`TlsTrust`].
+         */sha256: Data,
+        /**
+         * The same value as colon separated hex, so it can be compared against
+         * what the server operator sees.
+         */display: String) {
+        self.sha256 = sha256
+        self.display = display
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeCertificate: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeCertificate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeCertificate {
+        return
+            try NodeCertificate(
+                sha256: FfiConverterData.read(from: &buf),
+                display: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodeCertificate, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.sha256, into: &buf)
+        FfiConverterString.write(value.display, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeCertificate_lift(_ buf: RustBuffer) throws -> NodeCertificate {
+    return try FfiConverterTypeNodeCertificate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeCertificate_lower(_ value: NodeCertificate) -> RustBuffer {
+    return FfiConverterTypeNodeCertificate.lower(value)
 }
 
 
@@ -20383,6 +20529,87 @@ public func FfiConverterTypeCatastrophicRecoveryError_lift(_ buf: RustBuffer) th
 public func FfiConverterTypeCatastrophicRecoveryError_lower(_ value: CatastrophicRecoveryError) -> RustBuffer {
     return FfiConverterTypeCatastrophicRecoveryError.lower(value)
 }
+
+
+/**
+ * What to do about a node whose certificate was rejected.
+ */
+
+public enum CertificateDecision: Equatable, Hashable {
+
+    /**
+     * Nothing is trusted for this url yet, so the certificate can be offered
+     * for the user to accept.
+     */
+    case unrecognized(certificate: NodeCertificate
+    )
+    /**
+     * This url already trusts a different certificate. Offering to accept the
+     * new one would undo the decision the user already made, so it is reported
+     * rather than asked about.
+     */
+    case changed
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CertificateDecision: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCertificateDecision: FfiConverterRustBuffer {
+    typealias SwiftType = CertificateDecision
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CertificateDecision {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .unrecognized(certificate: try FfiConverterTypeNodeCertificate.read(from: &buf)
+        )
+
+        case 2: return .changed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CertificateDecision, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .unrecognized(certificate):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeNodeCertificate.write(certificate, into: &buf)
+
+
+        case .changed:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCertificateDecision_lift(_ buf: RustBuffer) throws -> CertificateDecision {
+    return try FfiConverterTypeCertificateDecision.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCertificateDecision_lower(_ value: CertificateDecision) -> RustBuffer {
+    return FfiConverterTypeCertificateDecision.lower(value)
+}
+
 
 
 public
@@ -27704,6 +27931,10 @@ enum NodeSelectorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case ParseNodeUrlError(String
     )
+    case ReadCertificateError(String
+    )
+    case CertificateNotTrusted
+    case CertificateWouldBeForgotten
 
 
 
@@ -27745,6 +27976,11 @@ public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
         case 4: return .ParseNodeUrlError(
             try FfiConverterString.read(from: &buf)
             )
+        case 5: return .ReadCertificateError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .CertificateNotTrusted
+        case 7: return .CertificateWouldBeForgotten
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27775,6 +28011,19 @@ public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
         case let .ParseNodeUrlError(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
+
+
+        case let .ReadCertificateError(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .CertificateNotTrusted:
+            writeInt(&buf, Int32(6))
+
+
+        case .CertificateWouldBeForgotten:
+            writeInt(&buf, Int32(7))
 
         }
     }
@@ -33188,6 +33437,98 @@ public func FfiConverterTypeTapSignerRoute_lift(_ buf: RustBuffer) throws -> Tap
 #endif
 public func FfiConverterTypeTapSignerRoute_lower(_ value: TapSignerRoute) -> RustBuffer {
     return FfiConverterTypeTapSignerRoute.lower(value)
+}
+
+
+
+/**
+ * How a node's TLS certificate is verified.
+ *
+ * A node with no [`TlsTrust`] is verified against the bundled webpki roots,
+ * which is what every node did before this type existed.
+ */
+
+public enum TlsTrust: Equatable, Hashable {
+
+    /**
+     * Verify the chain against a user supplied CA, still checking the hostname.
+     * The leaf may rotate without invalidating the setting, so this suits a
+     * self hosted certificate authority.
+     */
+    case customCa(cert: Data
+    )
+    /**
+     * Accept exactly one leaf certificate, identified by the SHA-256 of its DER
+     * encoding. The hostname is not checked, so this also covers certificates
+     * issued without a matching SAN, which is common for servers reached by IP.
+     *
+     * Expiry is not checked either: the certificate is trusted because the user
+     * chose it, not because an authority vouched for it, so it stays valid until
+     * they replace it.
+     */
+    case pinnedFingerprint(sha256: Data
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TlsTrust: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTlsTrust: FfiConverterRustBuffer {
+    typealias SwiftType = TlsTrust
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TlsTrust {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .customCa(cert: try FfiConverterData.read(from: &buf)
+        )
+
+        case 2: return .pinnedFingerprint(sha256: try FfiConverterData.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TlsTrust, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .customCa(cert):
+            writeInt(&buf, Int32(1))
+            FfiConverterData.write(cert, into: &buf)
+
+
+        case let .pinnedFingerprint(sha256):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(sha256, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTlsTrust_lift(_ buf: RustBuffer) throws -> TlsTrust {
+    return try FfiConverterTypeTlsTrust.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTlsTrust_lower(_ value: TlsTrust) -> RustBuffer {
+    return FfiConverterTypeTlsTrust.lower(value)
 }
 
 
@@ -39103,6 +39444,30 @@ fileprivate struct FfiConverterOptionTypeTapSignerResponse: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTlsTrust: FfiConverterRustBuffer {
+    typealias SwiftType = TlsTrust?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTlsTrust.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTlsTrust.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletBirthday: FfiConverterRustBuffer {
     typealias SwiftType = WalletBirthday?
 
@@ -41779,16 +42144,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_mnemonic_words() != 8009) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nodeselector_certificate_decision() != 17478) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 42980) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nodeselector_fetch_node_certificate() != 27543) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_nodeselector_node_list() != 26686) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 26788) {
+    if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 15006) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812) {

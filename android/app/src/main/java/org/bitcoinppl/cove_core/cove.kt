@@ -1739,9 +1739,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_mnemonic_words(
     ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_certificate_decision(
+    ): Short
     external fun uniffi_cove_checksum_method_nodeselector_check_and_save_node(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
+    ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_fetch_node_certificate(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_node_list(
     ): Short
@@ -2912,13 +2916,17 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_nodeselector_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_nodeselector_certificate_decision(`ptr`: Long,`url`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_nodeselector_check_and_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_cove_fn_method_nodeselector_fetch_node_certificate(`ptr`: Long,`url`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,`tls`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4761,16 +4769,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_nodeselector_certificate_decision() != 17478.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 42980.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_nodeselector_fetch_node_certificate() != 27543.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_nodeselector_node_list() != 26686.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 26788.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 15006.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812.toShort()) {
@@ -16315,18 +16329,34 @@ public object FfiConverterTypeMnemonic: FfiConverter<Mnemonic, Long> {
 public interface NodeSelectorInterface {
 
     /**
+     * Decide what a rejected certificate means for this url.
+     *
+     * Deciding here rather than in each app keeps one rule: a url that already
+     * trusts a certificate is never offered a different one.
+     */
+    suspend fun `certificateDecision`(`url`: kotlin.String): CertificateDecision
+
+    /**
      * Check the node url and set it as selected node if it is valid
      */
     suspend fun `checkAndSaveNode`(`node`: Node)
 
     suspend fun `checkSelectedNode`(`node`: Node)
 
+    /**
+     * Read the certificate a server presents, so it can be shown to the user.
+     *
+     * The certificate is not verified. It is only trusted once the user has
+     * compared the fingerprint against their server and accepted it.
+     */
+    suspend fun `fetchNodeCertificate`(`url`: kotlin.String): NodeCertificate
+
     fun `nodeList`(): List<NodeSelection>
 
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String): Node
+    fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `tls`: TlsTrust? = null): Node
 
     fun `selectPresetNode`(`name`: kotlin.String): Node
 
@@ -16446,6 +16476,34 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
 
     /**
+     * Decide what a rejected certificate means for this url.
+     *
+     * Deciding here rather than in each app keeps one rule: a url that already
+     * trusts a certificate is never offered a different one.
+     */
+    @Throws(NodeSelectorException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `certificateDecision`(`url`: kotlin.String) : CertificateDecision {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_nodeselector_certificate_decision(
+                uniffiHandle,
+
+        FfiConverterString.lower(`url`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeCertificateDecision.lift(it) },
+        // Error FFI converter
+        NodeSelectorException.ErrorHandler,
+    )
+    }
+
+
+    /**
      * Check the node url and set it as selected node if it is valid
      */
     @Throws(NodeSelectorException::class)
@@ -16493,6 +16551,34 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     )
     }
 
+
+    /**
+     * Read the certificate a server presents, so it can be shown to the user.
+     *
+     * The certificate is not verified. It is only trusted once the user has
+     * compared the fingerprint against their server and accepted it.
+     */
+    @Throws(NodeSelectorException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `fetchNodeCertificate`(`url`: kotlin.String) : NodeCertificate {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_nodeselector_fetch_node_certificate(
+                uniffiHandle,
+
+        FfiConverterString.lower(`url`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNodeCertificate.lift(it) },
+        // Error FFI converter
+        NodeSelectorException.ErrorHandler,
+    )
+    }
+
     override fun `nodeList`(): List<NodeSelection> {
             return FfiConverterSequenceTypeNodeSelection.lift(
     callWithHandle {
@@ -16510,7 +16596,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    @Throws(NodeSelectorException::class)override fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String): Node {
+    @Throws(NodeSelectorException::class)override fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `tls`: TlsTrust?): Node {
             return FfiConverterTypeNode.lift(
     callWithHandle {
     uniffiRustCallWithError(NodeSelectorException) { _status ->
@@ -16519,7 +16605,8 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
         FfiConverterString.lower(`url`),
         FfiConverterString.lower(`name`),
-        FfiConverterString.lower(`enteredName`),_status)
+        FfiConverterString.lower(`enteredName`),
+        FfiConverterOptionalTypeTlsTrust.lower(`tls`),_status)
 }
     }
     )
@@ -30878,6 +30965,12 @@ data class Node (
     var `apiType`: ApiType
     ,
     var `url`: kotlin.String
+    ,
+    /**
+     * How the node's TLS certificate is verified. `None` uses the bundled
+     * webpki roots, which is the behavior every node had before this field.
+     */
+    var `tls`: TlsTrust? = null
 
 ){
 
@@ -30898,6 +30991,7 @@ public object FfiConverterTypeNode: FfiConverterRustBuffer<Node> {
             FfiConverterTypeNetwork.read(buf),
             FfiConverterTypeApiType.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalTypeTlsTrust.read(buf),
         )
     }
 
@@ -30905,7 +30999,8 @@ public object FfiConverterTypeNode: FfiConverterRustBuffer<Node> {
             FfiConverterString.allocationSize(value.`name`) +
             FfiConverterTypeNetwork.allocationSize(value.`network`) +
             FfiConverterTypeApiType.allocationSize(value.`apiType`) +
-            FfiConverterString.allocationSize(value.`url`)
+            FfiConverterString.allocationSize(value.`url`) +
+            FfiConverterOptionalTypeTlsTrust.allocationSize(value.`tls`)
     )
 
     override fun write(value: Node, buf: ByteBuffer) {
@@ -30913,6 +31008,55 @@ public object FfiConverterTypeNode: FfiConverterRustBuffer<Node> {
             FfiConverterTypeNetwork.write(value.`network`, buf)
             FfiConverterTypeApiType.write(value.`apiType`, buf)
             FfiConverterString.write(value.`url`, buf)
+            FfiConverterOptionalTypeTlsTrust.write(value.`tls`, buf)
+    }
+}
+
+
+
+/**
+ * A certificate a server presented, offered to the user for confirmation.
+ */
+data class NodeCertificate (
+    /**
+     * SHA-256 of the certificate, ready to store as [`TlsTrust`].
+     */
+    var `sha256`: kotlin.ByteArray
+    ,
+    /**
+     * The same value as colon separated hex, so it can be compared against
+     * what the server operator sees.
+     */
+    var `display`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeCertificate: FfiConverterRustBuffer<NodeCertificate> {
+    override fun read(buf: ByteBuffer): NodeCertificate {
+        return NodeCertificate(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NodeCertificate) = (
+            FfiConverterByteArray.allocationSize(value.`sha256`) +
+            FfiConverterString.allocationSize(value.`display`)
+    )
+
+    override fun write(value: NodeCertificate, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`sha256`, buf)
+            FfiConverterString.write(value.`display`, buf)
     }
 }
 
@@ -36023,6 +36167,91 @@ public object FfiConverterTypeCatastrophicRecoveryError : FfiConverterRustBuffer
     }
 
 }
+
+
+
+/**
+ * What to do about a node whose certificate was rejected.
+ */
+sealed class CertificateDecision {
+
+    /**
+     * Nothing is trusted for this url yet, so the certificate can be offered
+     * for the user to accept.
+     */
+    data class Unrecognized(
+        val `certificate`: org.bitcoinppl.cove_core.NodeCertificate) : CertificateDecision()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * This url already trusts a different certificate. Offering to accept the
+     * new one would undo the decision the user already made, so it is reported
+     * rather than asked about.
+     */
+    object Changed : CertificateDecision()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCertificateDecision : FfiConverterRustBuffer<CertificateDecision>{
+    override fun read(buf: ByteBuffer): CertificateDecision {
+        return when(buf.getInt()) {
+            1 -> CertificateDecision.Unrecognized(
+                FfiConverterTypeNodeCertificate.read(buf),
+                )
+            2 -> CertificateDecision.Changed
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CertificateDecision): ULong = when(value) {
+        is CertificateDecision.Unrecognized -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNodeCertificate.allocationSize(value.`certificate`)
+            )
+        }
+        is CertificateDecision.Changed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CertificateDecision, buf: ByteBuffer) {
+        when(value) {
+            is CertificateDecision.Unrecognized -> {
+                buf.putInt(1)
+                FfiConverterTypeNodeCertificate.write(value.`certificate`, buf)
+                Unit
+            }
+            is CertificateDecision.Changed -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -45121,6 +45350,26 @@ sealed class NodeSelectorException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class ReadCertificateException(
+
+        val v1: kotlin.String
+        ) : NodeSelectorException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class CertificateNotTrusted(
+        ) : NodeSelectorException() {
+        override val message
+            get() = ""
+    }
+
+    class CertificateWouldBeForgotten(
+        ) : NodeSelectorException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -45152,6 +45401,11 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
             4 -> NodeSelectorException.ParseNodeUrlException(
                 FfiConverterString.read(buf),
                 )
+            5 -> NodeSelectorException.ReadCertificateException(
+                FfiConverterString.read(buf),
+                )
+            6 -> NodeSelectorException.CertificateNotTrusted()
+            7 -> NodeSelectorException.CertificateWouldBeForgotten()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -45178,6 +45432,19 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is NodeSelectorException.ReadCertificateException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is NodeSelectorException.CertificateNotTrusted -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeSelectorException.CertificateWouldBeForgotten -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -45201,6 +45468,19 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
             is NodeSelectorException.ParseNodeUrlException -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is NodeSelectorException.ReadCertificateException -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is NodeSelectorException.CertificateNotTrusted -> {
+                buf.putInt(6)
+                Unit
+            }
+            is NodeSelectorException.CertificateWouldBeForgotten -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -52372,6 +52652,109 @@ public object FfiConverterTypeTapSignerRoute : FfiConverterRustBuffer<TapSignerR
 
 
 
+/**
+ * How a node's TLS certificate is verified.
+ *
+ * A node with no [`TlsTrust`] is verified against the bundled webpki roots,
+ * which is what every node did before this type existed.
+ */
+sealed class TlsTrust {
+
+    /**
+     * Verify the chain against a user supplied CA, still checking the hostname.
+     * The leaf may rotate without invalidating the setting, so this suits a
+     * self hosted certificate authority.
+     */
+    data class CustomCa(
+        val `cert`: kotlin.ByteArray) : TlsTrust()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Accept exactly one leaf certificate, identified by the SHA-256 of its DER
+     * encoding. The hostname is not checked, so this also covers certificates
+     * issued without a matching SAN, which is common for servers reached by IP.
+     *
+     * Expiry is not checked either: the certificate is trusted because the user
+     * chose it, not because an authority vouched for it, so it stays valid until
+     * they replace it.
+     */
+    data class PinnedFingerprint(
+        val `sha256`: kotlin.ByteArray) : TlsTrust()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTlsTrust : FfiConverterRustBuffer<TlsTrust>{
+    override fun read(buf: ByteBuffer): TlsTrust {
+        return when(buf.getInt()) {
+            1 -> TlsTrust.CustomCa(
+                FfiConverterByteArray.read(buf),
+                )
+            2 -> TlsTrust.PinnedFingerprint(
+                FfiConverterByteArray.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TlsTrust): ULong = when(value) {
+        is TlsTrust.CustomCa -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterByteArray.allocationSize(value.`cert`)
+            )
+        }
+        is TlsTrust.PinnedFingerprint -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterByteArray.allocationSize(value.`sha256`)
+            )
+        }
+    }
+
+    override fun write(value: TlsTrust, buf: ByteBuffer) {
+        when(value) {
+            is TlsTrust.CustomCa -> {
+                buf.putInt(1)
+                FfiConverterByteArray.write(value.`cert`, buf)
+                Unit
+            }
+            is TlsTrust.PinnedFingerprint -> {
+                buf.putInt(2)
+                FfiConverterByteArray.write(value.`sha256`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class Transaction: Disposable  {
 
     data class Confirmed(
@@ -59218,6 +59601,38 @@ public object FfiConverterOptionalTypeTapSignerResponse: FfiConverterRustBuffer<
         } else {
             buf.put(1)
             FfiConverterTypeTapSignerResponse.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeTlsTrust: FfiConverterRustBuffer<TlsTrust?> {
+    override fun read(buf: ByteBuffer): TlsTrust? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeTlsTrust.read(buf)
+    }
+
+    override fun allocationSize(value: TlsTrust?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeTlsTrust.allocationSize(value)
+        }
+    }
+
+    override fun write(value: TlsTrust?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeTlsTrust.write(value, buf)
         }
     }
 }
