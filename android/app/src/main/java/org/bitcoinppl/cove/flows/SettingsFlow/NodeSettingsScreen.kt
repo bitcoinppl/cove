@@ -41,9 +41,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,9 +55,14 @@ import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.ApiType
+import org.bitcoinppl.cove_core.CertificateDecision
+import org.bitcoinppl.cove_core.InternalException
+import org.bitcoinppl.cove_core.NodeCertificate
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+import org.bitcoinppl.cove_core.TlsTrust
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +85,8 @@ fun NodeSettingsScreen(
 
     var isLoading by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
+    var pendingCertificate by remember { mutableStateOf<NodeCertificate?>(null) }
+    var customTls by remember { mutableStateOf<TlsTrust?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
 
@@ -93,6 +102,13 @@ fun NodeSettingsScreen(
     val errorUnknown = stringResource(R.string.node_error_unknown)
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
+    val certificateTitle = stringResource(R.string.node_certificate_title)
+    val certificateMessage = stringResource(R.string.node_certificate_message)
+    val certificateTrust = stringResource(R.string.node_certificate_trust)
+    val certificateCancel = stringResource(R.string.node_certificate_cancel)
+    val errorCertificateRead = stringResource(R.string.node_error_certificate_read)
+    val certificateChangedTitle = stringResource(R.string.node_certificate_changed_title)
+    val certificateChangedMessage = stringResource(R.string.node_certificate_changed_message)
 
     val showCustomFields =
         selectedNodeSelection is NodeSelection.Custom ||
@@ -123,6 +139,7 @@ fun NodeSettingsScreen(
                 if (matchesType) {
                     customUrl = node.url
                     customNodeName = node.name
+                    customTls = node.tls
                 }
             }
         }
@@ -174,6 +191,31 @@ fun NodeSettingsScreen(
         }
     }
 
+    fun showCertificateReadError(message: String?) {
+        errorTitle = errorConnectionFailed
+        errorMessage = String.format(Locale.US, errorCertificateRead, message.orEmpty())
+        showErrorDialog = true
+    }
+
+    // Whether the certificate can be offered for confirmation is decided in the
+    // core, so both apps apply the same rule.
+    suspend fun offerCertificate() {
+        try {
+            when (val decision = withContext(Dispatchers.IO) { nodeSelector.certificateDecision(customUrl) }) {
+                is CertificateDecision.Unrecognized -> pendingCertificate = decision.certificate
+                is CertificateDecision.Changed -> {
+                    errorTitle = certificateChangedTitle
+                    errorMessage = certificateChangedMessage
+                    showErrorDialog = true
+                }
+            }
+        } catch (readError: NodeSelectorException) {
+            showCertificateReadError(readError.message)
+        } catch (readError: InternalException) {
+            showCertificateReadError(readError.message)
+        }
+    }
+
     fun checkAndSaveCustomNode() {
         if (customUrl.isEmpty()) {
             errorTitle = errorTitleDefault
@@ -187,7 +229,12 @@ fun NodeSettingsScreen(
             try {
                 val node =
                     withContext(Dispatchers.IO) {
-                        nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
+                        nodeSelector.parseCustomNode(
+                            customUrl,
+                            selectedNodeName,
+                            customNodeName,
+                            customTls,
+                        )
                     }
 
                 // update fields with parsed values
@@ -211,6 +258,9 @@ fun NodeSettingsScreen(
                 errorTitle = errorConnectionFailed
                 errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
+            } catch (e: NodeSelectorException.CertificateNotTrusted) {
+                android.util.Log.d("NodeSettings", "certificate not trusted, offering it", e)
+                offerCertificate()
             } catch (e: Exception) {
                 errorTitle = errorTitleDefault
                 errorMessage = errorUnknown.format(e.message ?: "")
@@ -219,6 +269,33 @@ fun NodeSettingsScreen(
                 isLoading = false
             }
         }
+    }
+
+    pendingCertificate?.let { certificate ->
+        AlertDialog(
+            onDismissRequest = { pendingCertificate = null },
+            title = { Text(certificateTitle) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MaterialSpacing.small)) {
+                    Text(certificateMessage)
+                    Text(
+                        text = certificate.display,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingCertificate = null
+                    customTls = TlsTrust.PinnedFingerprint(certificate.sha256)
+                    checkAndSaveCustomNode()
+                }) { Text(certificateTrust) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCertificate = null }) { Text(certificateCancel) }
+            },
+        )
     }
 
     Scaffold(
