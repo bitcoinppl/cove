@@ -218,6 +218,13 @@
     <string name="node_error_unknown">Unknown error: %1$s</string>
     <string name="node_error_url_empty">URL cannot be empty</string>
     <string name="node_error_parse_title">Unable to parse URL</string>
+    <string name="node_certificate_title">Unrecognized certificate</string>
+    <string name="node_certificate_message">This server uses a certificate Cove cannot verify. Only continue if this fingerprint matches the one your server reports.</string>
+    <string name="node_certificate_trust">Trust this certificate</string>
+    <string name="node_certificate_changed_title">Certificate changed</string>
+    <string name="node_certificate_changed_message">This server is presenting a different certificate to the one you trusted. It may have been reissued, or something may be intercepting the connection. Cove will not connect until it presents the certificate you trusted.</string>
+    <string name="node_certificate_cancel">Cancel</string>
+    <string name="node_error_certificate_read">Could not read the server\'s certificate: %1$s</string>
     <string name="content_description_back">Back</string>
     <string name="content_description_menu">Menu</string>
     <string name="content_description_qr_code">QR Code</string>
