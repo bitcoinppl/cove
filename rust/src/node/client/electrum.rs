@@ -21,10 +21,16 @@ use tap::TapFallible as _;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
+pub mod transport;
+
+#[cfg(test)]
+pub mod test_server;
+
 use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
 use crate::node::Node;
+use transport::Transport;
 
-type ElectrumClientInner = BdkElectrumClient<Client>;
+type ElectrumClientInner = BdkElectrumClient<Transport>;
 
 #[derive(Debug, Deserialize)]
 struct ElectrumTransactionResponse {
@@ -59,11 +65,18 @@ impl ElectrumClient {
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
+        let trust = node.tls.clone();
 
         // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
-        let inner_client = cove_tokio::unblock::run_blocking(move || Client::new(&url))
-            .await
-            .map_err(Error::CreateElectrumClient)?;
+        let inner_client = cove_tokio::unblock::run_blocking(move || match trust {
+            None => Client::new(&url)
+                .map(|client| Transport::Default(Box::new(client)))
+                .map_err(Error::CreateElectrumClient),
+            Some(trust) => {
+                Transport::connect_pinned(&url, &trust).map_err(Error::CreateElectrumTlsClient)
+            }
+        })
+        .await?;
 
         let bdk_client = BdkElectrumClient::new(inner_client);
         let client = Arc::new(bdk_client);
@@ -342,6 +355,7 @@ mod tests {
             name: "blockstream".to_string(),
             api_type: crate::node::ApiType::Electrum,
             network: cove_types::network::Network::Bitcoin,
+            tls: None,
         })
         .await
         .unwrap();
