@@ -25,12 +25,24 @@ pub struct EsploraClient {
     options: NodeClientOptions,
 }
 
+/// Certificate settings are Electrum only. Honoring them here would mean
+/// building a custom reqwest client, so refuse rather than connect with weaker
+/// trust than the node asked for.
+fn reject_custom_certificates(node: &Node) -> Result<(), Error> {
+    match node.tls {
+        Some(_) => Err(Error::TlsTrustUnsupported(node.api_type)),
+        None => Ok(()),
+    }
+}
+
 impl EsploraClient {
     pub const fn new(client: Arc<AsyncClient>) -> Self {
         Self { client, options: NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE } }
     }
 
     pub fn new_from_node(node: &Node) -> Result<Self, Error> {
+        reject_custom_certificates(node)?;
+
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
             .map_err(Error::CreateEsploraClient)?
@@ -43,6 +55,8 @@ impl EsploraClient {
         node: &Node,
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
+        reject_custom_certificates(node)?;
+
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
             .map_err(Error::CreateEsploraClient)?
@@ -137,5 +151,35 @@ impl EsploraClient {
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
         let stats = self.client.get_address_stats(&address).await.map_err(Error::EsploraAddress)?;
         Ok(stats.chain_stats.tx_count > 0 || stats.mempool_stats.tx_count > 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::tls::TlsTrust;
+    use crate::node::{ApiType, Node};
+    use cove_types::network::Network;
+
+    /// Certificate settings must never be silently dropped: a node configured to
+    /// trust one certificate would otherwise connect using the default roots.
+    #[test]
+    fn esplora_refuses_custom_certificate_settings() {
+        let node = Node {
+            name: "test".to_string(),
+            network: Network::Bitcoin,
+            api_type: ApiType::Esplora,
+            url: "https://esplora.example.com".to_string(),
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![0; 32] }),
+        };
+
+        assert!(matches!(
+            EsploraClient::new_from_node(&node),
+            Err(Error::TlsTrustUnsupported(ApiType::Esplora))
+        ));
+        assert!(matches!(
+            EsploraClient::new_from_node_and_options(&node, NodeClientOptions { batch_size: 1 }),
+            Err(Error::TlsTrustUnsupported(ApiType::Esplora))
+        ));
     }
 }
