@@ -93,8 +93,10 @@ struct OhttpRelaySettingsView: View {
                     .dismissAfter(2)
                     .present()
             }
-        } catch {
+        } catch DatabaseError.GlobalConfig(.InvalidOhttpRelayUrl) {
             showInvalidUrlAlert = true
+        } catch {
+            showUpdateFailedAlert = true
         }
 
         isSaving = false
