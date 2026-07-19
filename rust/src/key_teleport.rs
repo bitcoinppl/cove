@@ -164,7 +164,8 @@ mod tests {
 
     use super::*;
 
-    const DOC_EXAMPLE_R_URL: &str = "https://keyteleport.com/#B$2R0100Y3GFSRDTFB52NIFPRNVF6UMDZ5I4W5INDXYQZCTMYURW7ZB7YXS5ZSOVJIKA";
+    const DOC_EXAMPLE_R_URL: &str =
+        "https://keyteleport.com/#B$2R0100VHT2AGUUH7KUZUUSTOWOIWHJX3XM7GA2N4BHQOXDFHXLVHVA7K6ZO";
 
     #[test]
     fn parses_keyteleport_url_receiver_packet() {

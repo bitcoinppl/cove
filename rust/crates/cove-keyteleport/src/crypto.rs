@@ -13,9 +13,7 @@ use crate::{Error, NumericCode, Result};
 type Aes256Ctr = ctr::Ctr128BE<Aes256>;
 
 const RECEIVER_CODE_DOMAIN: &[u8] = b"COLCARD4EVER";
-const RECEIVER_PUBLIC_KEY_LEN: usize = 33;
-const RECEIVER_PACKET_TAG_LEN: usize = 4;
-pub(crate) const RECEIVER_PACKET_LEN: usize = RECEIVER_PUBLIC_KEY_LEN + RECEIVER_PACKET_TAG_LEN;
+pub(crate) const RECEIVER_PACKET_LEN: usize = 33;
 const PBKDF2_ITERATIONS: u32 = 5000;
 
 pub(crate) struct EphemeralPrivateKey([u8; 32]);
@@ -126,12 +124,9 @@ pub(crate) fn generate_receiver_packet(
     let code = NumericCode::from_u32(numeric_value);
 
     let key = receiver_code_aes_key(&code);
-    let mut packet = [0_u8; RECEIVER_PACKET_LEN];
-    packet[..RECEIVER_PUBLIC_KEY_LEN].copy_from_slice(&public_key_bytes);
-    packet[RECEIVER_PUBLIC_KEY_LEN..].copy_from_slice(&receiver_packet_tag(&public_key_bytes));
-    apply_aes256_ctr(&key, &mut packet);
+    apply_aes256_ctr(&key, &mut public_key_bytes);
 
-    Ok((code, packet))
+    Ok((code, public_key_bytes))
 }
 
 pub(crate) fn decrypt_receiver_pubkey(code: &NumericCode, payload: &[u8]) -> Result<PublicKey> {
@@ -139,19 +134,11 @@ pub(crate) fn decrypt_receiver_pubkey(code: &NumericCode, payload: &[u8]) -> Res
         return Err(Error::InvalidReceiverPacket);
     }
 
-    let mut packet = [0_u8; RECEIVER_PACKET_LEN];
-    packet.copy_from_slice(payload);
+    let mut pubkey = [0_u8; RECEIVER_PACKET_LEN];
+    pubkey.copy_from_slice(payload);
 
     let key = receiver_code_aes_key(code);
-    apply_aes256_ctr(&key, &mut packet);
-
-    let (public_key_bytes, expected_tag) = packet.split_at(RECEIVER_PUBLIC_KEY_LEN);
-    if receiver_packet_tag(public_key_bytes) != expected_tag {
-        return Err(Error::InvalidReceiverPacket);
-    }
-
-    let mut pubkey = [0_u8; RECEIVER_PUBLIC_KEY_LEN];
-    pubkey.copy_from_slice(public_key_bytes);
+    apply_aes256_ctr(&key, &mut pubkey);
 
     pubkey[0] &= 0x01;
     pubkey[0] |= 0x02;
@@ -180,14 +167,6 @@ fn receiver_code_hash(private_key: &EphemeralPrivateKey) -> [u8; 32] {
     bytes.copy_from_slice(&second);
 
     bytes
-}
-
-fn receiver_packet_tag(public_key_bytes: &[u8]) -> [u8; RECEIVER_PACKET_TAG_LEN] {
-    let digest = Sha256::digest(public_key_bytes);
-    let mut tag = [0_u8; RECEIVER_PACKET_TAG_LEN];
-    tag.copy_from_slice(&digest[..RECEIVER_PACKET_TAG_LEN]);
-
-    tag
 }
 
 fn receiver_code_aes_key(code: &NumericCode) -> [u8; 32] {
