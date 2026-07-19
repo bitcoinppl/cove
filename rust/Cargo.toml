@@ -260,7 +260,7 @@ ahash = { workspace = true }
 reqwest = { workspace = true, features = ["json", "rustls-no-provider"], default-features = false }
 
 # tls (needed for crypto provider install in bootstrap)
-rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+rustls = { version = "0.23.40", features = ["ring", "tls12"], default-features = false }
 
 # parsing
 winnow = { workspace = true }
@@ -304,6 +304,7 @@ bdk_wallet = { workspace = true, features = ["test-utils"] }
 ciborium = "0.2.2"
 tempfile = "3.27.0"
 pretty_assertions = "1.4.1"
+rcgen = "0.14.8"
 minicbor = { workspace = true }
 serde_bytes = "0.11.17"
 

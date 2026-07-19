@@ -65,6 +65,12 @@ pub enum Error {
     #[error("failed to create node client: {0}")]
     CreateElectrumClient(electrum_client::Error),
 
+    #[error("failed to create node client with custom certificate settings: {0}")]
+    CreateElectrumTlsClient(electrum::transport::ConnectError),
+
+    #[error("{0} nodes do not support custom certificate settings")]
+    TlsTrustUnsupported(ApiType),
+
     #[error("failed to connect to node: {0}")]
     EsploraConnect(esplora_client::Error),
 
@@ -97,6 +103,24 @@ pub enum Error {
 
     #[error("failed to get transaction: {0}")]
     ElectrumGetTransaction(electrum_client::Error),
+}
+
+impl Error {
+    /// Whether the node was reachable but its certificate was not accepted, the
+    /// one failure the user can resolve by trusting the certificate.
+    pub fn is_certificate_error(&self) -> bool {
+        match self {
+            Self::CreateElectrumTlsClient(error) => {
+                matches!(error, electrum::transport::ConnectError::CertificateRejected(_))
+            }
+            Self::CreateElectrumClient(electrum_client::Error::IOError(error))
+            | Self::ElectrumConnect(electrum_client::Error::IOError(error)) => error
+                .get_ref()
+                .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+                .is_some_and(|error| matches!(error, rustls::Error::InvalidCertificate(_))),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
