@@ -138,7 +138,7 @@ impl DiagnosticsReport {
         let description = self.redacted_user_description(description);
         let report = self.upload_report(description.clone());
 
-        let report_id = upload::submit_report(&report).await.map_err(|error| {
+        let report_id = upload::submit_report(report).await.map_err(|error| {
             tracing::warn!("Failed to submit diagnostics report: {}", error.log_message());
             DiagnosticsError::Submit(error.user_message())
         })?;
