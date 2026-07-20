@@ -284,17 +284,19 @@ fun WalletSettingsScreen(
                                     app.canKeyTeleportSend(metadata.id)
                                 }
 
-                            MaterialSettingsItem(
-                                title = stringResource(R.string.label_wallet_view_secrets),
-                                titleColor = CoveColor.WarningOrange,
-                                onClick = {
-                                    app.pushRoute(Route.SecretWords(metadata.id))
-                                },
-                            )
-                            dangerItemCount++
+                            if (manager.hasRecoveryWords()) {
+                                MaterialSettingsItem(
+                                    title = stringResource(R.string.label_wallet_view_secrets),
+                                    titleColor = CoveColor.WarningOrange,
+                                    onClick = {
+                                        app.pushRoute(Route.SecretWords(metadata.id))
+                                    },
+                                )
+                                dangerItemCount++
+                            }
 
                             if (canKeyTeleportSend) {
-                                MaterialDivider()
+                                if (dangerItemCount > 0) MaterialDivider()
                                 MaterialSettingsItem(
                                     title = "Send with Key Teleport",
                                     titleColor = CoveColor.WarningOrange,

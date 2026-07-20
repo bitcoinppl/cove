@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct KeyTeleportContainer: View {
     @Environment(AppManager.self) private var app
@@ -35,7 +36,7 @@ private struct KeyTeleportLoadedView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 24) {
                 header
 
                 if let alert = manager.alert {
@@ -46,9 +47,14 @@ private struct KeyTeleportLoadedView: View {
 
                 stateContent
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 24)
         }
-        .navigationTitle(title)
+        .scrollDismissesKeyboard(.interactively)
+        .foregroundStyle(.white)
+        .tint(.btnGradientLight)
+        .onboardingRecoveryBackground()
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showScanner) {
             QrCodeScanView(app: app, scannedCode: $scannedCode)
@@ -63,103 +69,110 @@ private struct KeyTeleportLoadedView: View {
         }
     }
 
-    @ViewBuilder
     private var stateContent: some View {
-        switch manager.state {
-        case .idle:
-            switch route {
-            case .receive:
-                KeyTeleportLoadingView()
-            case .send:
+        VStack(alignment: .leading, spacing: 18) {
+            switch manager.state {
+            case .idle:
+                switch route {
+                case .receive:
+                    KeyTeleportLoadingView()
+                case .send:
+                    KeyTeleportScanPasteSection(
+                        pastedText: $pastedText,
+                        scan: { showScanner = true },
+                        paste: paste
+                    )
+                }
+            case let .receiveReady(state):
+                KeyTeleportReceiveReadyView(state: state) {
+                    showScanner = true
+                } share: {
+                    ShareSheet.present(text: state.packet.url())
+                } restart: {
+                    manager.dispatch(.restartReceive)
+                } end: {
+                    manager.dispatch(.endReceive)
+                    app.popRoute()
+                }
+            case .receiveEnterPassword:
+                KeyTeleportPasswordEntryView(password: $senderPassword) {
+                    manager.dispatch(.enterSenderPassword(senderPassword))
+                }
+            case let .receiveMnemonicReview(review):
+                KeyTeleportMnemonicReviewView(review: review, words: mnemonicWords) {
+                    manager.dispatch(.importReceivedWallet)
+                } finish: {
+                    mnemonicWords = nil
+                    loadedMnemonicReviewID = nil
+                    finishReview()
+                }
+                .protectedFromScreenCapture()
+                .task(id: KeyTeleportMnemonicReviewID(review: review)) {
+                    loadMnemonicWords(for: review)
+                }
+            case let .receiveXprvReview(review):
+                KeyTeleportXprvReviewView(review: review, xprv: $xprv) {
+                    xprv = manager.revealXprv()
+                } hide: {
+                    xprv = nil
+                    manager.dispatch(.hideXprv)
+                } importWallet: {
+                    manager.dispatch(.importReceivedWallet)
+                } finish: {
+                    xprv = nil
+                    finishReview()
+                }
+                .protectedFromScreenCapture()
+            case let .receiveMessageReview(review):
+                KeyTeleportMessageReviewView(review: review, finish: finishReview)
+                    .protectedFromScreenCapture()
+            case let .receiveImportedWallet(wallet):
+                KeyTeleportImportedWalletView(wallet: wallet) {
+                    manager.dispatch(.clear)
+                    app.popRoute()
+                }
+            case let .sendChooseWallet(state):
+                KeyTeleportSendChooseWalletView(state: state) { walletId in
+                    manager.dispatch(.selectSendWallet(walletId))
+                }
+
                 KeyTeleportScanPasteSection(
                     pastedText: $pastedText,
                     scan: { showScanner = true },
                     paste: paste
                 )
-            }
-        case let .receiveReplacementRequired(state):
-            KeyTeleportReceiveReadyView(state: state, replacementRequired: true) {
-                manager.dispatch(.confirmReplaceReceive)
-            } scan: {
-                showScanner = true
-            } share: {
-                ShareSheet.present(text: state.packet.url())
-            }
-        case let .receiveReady(state):
-            KeyTeleportReceiveReadyView(state: state, replacementRequired: false) {
-                manager.dispatch(.confirmReplaceReceive)
-            } scan: {
-                showScanner = true
-            } share: {
-                ShareSheet.present(text: state.packet.url())
-            }
-        case .receiveEnterPassword:
-            KeyTeleportPasswordEntryView(password: $senderPassword) {
-                manager.dispatch(.enterSenderPassword(senderPassword))
-            }
-        case let .receiveMnemonicReview(review):
-            KeyTeleportMnemonicReviewView(review: review, words: mnemonicWords) {
-                manager.dispatch(.importReceivedMnemonic)
-            } finish: {
-                mnemonicWords = nil
-                loadedMnemonicReviewID = nil
-                manager.dispatch(.finishReview)
-                app.popRoute()
-            }
-            .protectedFromScreenCapture()
-            .task(id: KeyTeleportMnemonicReviewID(review: review)) {
-                loadMnemonicWords(for: review)
-            }
-        case let .receiveXprvReview(review):
-            KeyTeleportXprvReviewView(review: review, xprv: $xprv) {
-                xprv = manager.revealXprv()
-            } hide: {
-                xprv = nil
-                manager.dispatch(.hideXprv)
-            } finish: {
-                xprv = nil
-                manager.dispatch(.finishReview)
-                app.popRoute()
-            }
-            .protectedFromScreenCapture()
-        case let .sendChooseWallet(state):
-            KeyTeleportSendChooseWalletView(state: state) { walletId in
-                manager.dispatch(.selectSendWallet(walletId))
-            }
-
-            KeyTeleportScanPasteSection(
-                pastedText: $pastedText,
-                scan: { showScanner = true },
-                paste: paste
-            )
-        case let .sendEnterCode(state):
-            KeyTeleportReceiverCodeView(state: state, code: $receiverCode) {
-                manager.dispatch(.enterReceiverCode(receiverCode))
-            }
-        case let .sendConfirm(state):
-            KeyTeleportSendConfirmView(state: state) {
-                manager.dispatch(.confirmSendMnemonic)
-            }
-        case let .sendReady(state):
-            KeyTeleportSendReadyView(state: state) {
-                ShareSheet.present(text: state.packet.url())
-            } finish: {
-                manager.dispatch(.clear)
-                app.popRoute()
+            case let .sendEnterCode(state):
+                KeyTeleportReceiverCodeView(state: state, code: $receiverCode) {
+                    manager.dispatch(.enterReceiverCode(receiverCode))
+                }
+            case let .sendConfirm(state):
+                KeyTeleportSendConfirmView(state: state) {
+                    manager.dispatch(.confirmSendWallet)
+                }
+            case let .sendReady(state):
+                KeyTeleportSendReadyView(state: state) {
+                    ShareSheet.present(text: state.packet.url())
+                } finish: {
+                    manager.dispatch(.clear)
+                    app.popRoute()
+                }
+                .protectedFromScreenCapture()
             }
         }
+        .keyTeleportCard()
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(OnboardingRecoveryTypography.compactTitle)
 
             Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(OnboardingRecoveryTypography.footnote)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var title: String {
@@ -204,15 +217,14 @@ private struct KeyTeleportLoadedView: View {
         let reviewID = KeyTeleportMnemonicReviewID(review: review)
         guard loadedMnemonicReviewID != reviewID else { return }
 
-        guard review.importedWallet == nil else {
-            mnemonicWords = nil
-            loadedMnemonicReviewID = reviewID
-            return
-        }
-
         mnemonicWords = nil
         mnemonicWords = manager.revealMnemonicWords()
         loadedMnemonicReviewID = reviewID
+    }
+
+    private func finishReview() {
+        manager.dispatch(.finishReview)
+        app.popRoute()
     }
 
     private func ingest(_ multiFormat: MultiFormat) {
@@ -229,11 +241,9 @@ private struct KeyTeleportLoadedView: View {
 
 private struct KeyTeleportMnemonicReviewID: Equatable {
     let wordCount: UInt32
-    let importedWalletID: String?
 
     init(review: KeyTeleportMnemonicReview) {
         wordCount = review.wordCount
-        importedWalletID = review.importedWallet.map { "\($0.id)" }
     }
 }
 
@@ -272,6 +282,10 @@ private struct KeyTeleportAlertBanner: View {
             "This Key Teleport packet could not be read."
         case .UnsupportedPsbt:
             "Key Teleport PSBT packets are not supported yet."
+        case .UnsupportedPayload:
+            "This type of Key Teleport payload is not supported yet."
+        case .InvalidPayload:
+            "The transfer was unlocked, but its contents are not valid Key Teleport data."
         case .WrongReceiverCode:
             "The receiver code does not match this request."
         case .WrongTeleportPassword:
@@ -318,38 +332,39 @@ private struct KeyTeleportScanPasteSection: View {
                 Label("Scan QR", systemImage: "qrcode.viewfinder")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(OnboardingPrimaryButtonStyle())
 
-            TextField("Paste Key Teleport packet or link", text: $pastedText, axis: .vertical)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .lineLimit(3, reservesSpace: true)
-                .textFieldStyle(.roundedBorder)
+            TextField(
+                "Paste Key Teleport packet or link",
+                text: $pastedText,
+                prompt: keyTeleportInputPlaceholder("Paste Key Teleport packet or link"),
+                axis: .vertical
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .lineLimit(3, reservesSpace: true)
+            .keyTeleportInputChrome()
 
             Button(action: paste) {
                 Label("Use Pasted Packet", systemImage: "doc.on.clipboard")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(OnboardingSecondaryButtonStyle())
         }
     }
 }
 
 private struct KeyTeleportReceiveReadyView: View {
     let state: KeyTeleportReceiveState
-    let replacementRequired: Bool
-    let replace: () -> Void
     let scan: () -> Void
     let share: () -> Void
+    let restart: () -> Void
+    let end: () -> Void
+
+    @State private var pendingSessionAction: KeyTeleportReceiveSessionAction?
 
     var body: some View {
         VStack(spacing: 18) {
-            if replacementRequired {
-                Text("An active receive session already exists.")
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
-            }
-
             QrCodeView(text: state.packet.bbqrPart())
                 .frame(maxWidth: 280)
                 .frame(maxWidth: .infinity)
@@ -368,26 +383,101 @@ private struct KeyTeleportReceiveReadyView: View {
                     Label("Copy Link", systemImage: "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
+                .tint(.white)
 
                 Button(action: share) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.bordered)
+                .tint(.white)
             }
+
+            Text("Send the link to another Key Teleport-compatible wallet instead of showing the QR code. Enter the receiver code separately.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Button(action: scan) {
                 Label("Scan Sender Response", systemImage: "qrcode.viewfinder")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(OnboardingPrimaryButtonStyle())
 
-            if replacementRequired {
-                Button(role: .destructive, action: replace) {
-                    Text("Replace Receive Session")
-                        .frame(maxWidth: .infinity)
+            HStack {
+                Button {
+                    pendingSessionAction = .restart
+                } label: {
+                    Label("New Session", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
+                .tint(.white)
+                .confirmationDialog(
+                    "Manage Receive Session",
+                    isPresented: isPresentingSessionAction(.restart),
+                    titleVisibility: .visible
+                ) {
+                    Button("Start New Session", role: .destructive) {
+                        pendingSessionAction = nil
+                        restart()
+                    }
+
+                    Button("Cancel", role: .cancel) {
+                        pendingSessionAction = nil
+                    }
+                } message: {
+                    Text(KeyTeleportReceiveSessionAction.restart.message)
+                }
+
+                Button(role: .destructive) {
+                    pendingSessionAction = .end
+                } label: {
+                    Text("End Session")
+                }
+                .buttonStyle(.bordered)
+                .confirmationDialog(
+                    "Manage Receive Session",
+                    isPresented: isPresentingSessionAction(.end),
+                    titleVisibility: .visible
+                ) {
+                    Button("End Session", role: .destructive) {
+                        pendingSessionAction = nil
+                        end()
+                    }
+
+                    Button("Cancel", role: .cancel) {
+                        pendingSessionAction = nil
+                    }
+                } message: {
+                    Text(KeyTeleportReceiveSessionAction.end.message)
+                }
             }
+        }
+    }
+
+    private func isPresentingSessionAction(_ action: KeyTeleportReceiveSessionAction) -> Binding<Bool> {
+        Binding(
+            get: { pendingSessionAction == action },
+            set: { isPresented in
+                if isPresented {
+                    pendingSessionAction = action
+                } else if pendingSessionAction == action {
+                    pendingSessionAction = nil
+                }
+            }
+        )
+    }
+}
+
+private enum KeyTeleportReceiveSessionAction: Equatable {
+    case restart
+    case end
+
+    var message: String {
+        switch self {
+        case .restart:
+            "The current link, QR code, and receiver code will stop working."
+        case .end:
+            "The current receive request will be deleted from this device."
         }
     }
 }
@@ -398,18 +488,93 @@ private struct KeyTeleportPasswordEntryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SecureField("Teleport Password", text: $password)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-                .textFieldStyle(.roundedBorder)
+            KeyTeleportSecureInput(text: $password, submit: submit)
 
             Button(action: submit) {
                 Text("Unlock")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(OnboardingPrimaryButtonStyle())
         }
     }
+}
+
+private struct KeyTeleportSecureInput: View {
+    @Binding var text: String
+    let submit: () -> Void
+
+    @State private var isRevealed = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if isRevealed {
+                    TextField(
+                        "Teleport Password",
+                        text: $text,
+                        prompt: keyTeleportInputPlaceholder("Teleport Password")
+                    )
+                } else {
+                    SecureField(
+                        "Teleport Password",
+                        text: $text,
+                        prompt: keyTeleportInputPlaceholder("Teleport Password")
+                    )
+                }
+            }
+            .foregroundStyle(.white)
+            .tint(.btnGradientLight)
+            .textInputAutocapitalization(.characters)
+            .autocorrectionDisabled()
+            .submitLabel(.go)
+            .onSubmit {
+                guard !text.isEmpty else { return }
+
+                submit()
+            }
+
+            Button {
+                isRevealed.toggle()
+            } label: {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.coveLightGray.opacity(0.82))
+            .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
+        }
+        .keyTeleportInputChrome()
+    }
+}
+
+private struct KeyTeleportInputChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.body)
+            .foregroundStyle(.white)
+            .tint(.btnGradientLight)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.midnightBlue.opacity(0.62))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+            )
+    }
+}
+
+private extension View {
+    func keyTeleportInputChrome() -> some View {
+        modifier(KeyTeleportInputChrome())
+    }
+}
+
+private func keyTeleportInputPlaceholder(_ title: LocalizedStringKey) -> Text {
+    Text(title)
+        .foregroundStyle(.coveLightGray.opacity(0.58))
 }
 
 private struct KeyTeleportMnemonicReviewView: View {
@@ -420,48 +585,42 @@ private struct KeyTeleportMnemonicReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let wallet = review.importedWallet {
-                Text("Imported \(wallet.name)")
-                    .font(.headline)
-                Button("Done", action: finish)
-                    .buttonStyle(.borderedProminent)
-            } else {
-                Text("\(review.wordCount)-word wallet")
-                    .font(.headline)
+            Label("Recovery words received", systemImage: "key.horizontal.fill")
+                .font(.headline)
 
-                if let words {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
-                        ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                            HStack {
-                                Text("\(index + 1)")
-                                    .foregroundStyle(.secondary)
-                                Text(word)
-                                Spacer()
-                            }
-                            .font(.system(.subheadline, design: .monospaced))
-                            .padding(8)
-                            .background(Color.secondary.opacity(0.10))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+            Text("Cove found a \(review.wordCount)-word wallet. Review it below or import it directly.")
+                .font(.subheadline)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
+
+            if let words {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
+                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                        HStack {
+                            Text("\(index + 1)")
+                                .foregroundStyle(.coveLightGray.opacity(0.6))
+                            Text(word)
+                            Spacer()
                         }
+                        .font(.system(.subheadline, design: .monospaced))
+                        .padding(10)
+                        .background(Color.midnightBlue.opacity(0.48))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
-                        .accessibilityLabel("Loading recovery words")
                 }
-
-                if words != nil {
-                    Button(action: importWords) {
-                        Text("Import Wallet")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                Button("Finish Without Importing", role: .destructive, action: finish)
-                    .buttonStyle(.bordered)
+            } else {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .accessibilityLabel("Loading recovery words")
             }
+
+            Button("Import Wallet", action: importWords)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+                .disabled(words == nil)
+
+            Button("Finish Without Importing", action: finish)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
         }
     }
 }
@@ -580,12 +739,17 @@ private struct KeyTeleportXprvReviewView: View {
     @Binding var xprv: String?
     let reveal: () -> Void
     let hide: () -> Void
+    let importWallet: () -> Void
     let finish: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Extended private key")
+            Label("Extended private key received", systemImage: "key.horizontal.fill")
                 .font(.headline)
+
+            Text("Import this key as a hot wallet, or reveal it only when you are ready to handle the private key.")
+                .font(.subheadline)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
 
             if review.revealed, let xprv {
                 Text(xprv)
@@ -593,17 +757,19 @@ private struct KeyTeleportXprvReviewView: View {
                     .textSelection(.enabled)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(Color.midnightBlue.opacity(0.48))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 HStack {
-                    Button { UIPasteboard.general.string = xprv } label: {
+                    Button { copySensitiveText(xprv) } label: {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.bordered)
+                    .tint(.white)
 
                     Button("Hide", action: hide)
                         .buttonStyle(.bordered)
+                        .tint(.white)
                 }
             } else {
                 Text("Reveal only if you are ready to handle this private key.")
@@ -614,12 +780,123 @@ private struct KeyTeleportXprvReviewView: View {
                     Text("Reveal XPRV")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
             }
 
-            Button("Finish", action: finish)
-                .buttonStyle(.bordered)
+            Button("Import Wallet", action: importWallet)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+
+            Button("Finish Without Importing", action: finish)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
         }
+    }
+}
+
+private struct KeyTeleportMessageReviewView: View {
+    let review: KeyTeleportMessageReview
+    let finish: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label(review.items.count == 1 ? "Message received" : "Messages received", systemImage: "note.text")
+                .font(.headline)
+
+            Text("This transfer contains text, not a wallet. Cove has displayed it exactly as received.")
+                .font(.subheadline)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
+
+            ForEach(Array(review.items.enumerated()), id: \.offset) { _, item in
+                KeyTeleportMessageItemView(item: item)
+            }
+
+            Button("Done", action: finish)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+        }
+    }
+}
+
+private struct KeyTeleportMessageItemView: View {
+    let item: KeyTeleportMessageItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            switch item {
+            case let .note(title, text, group):
+                messageHeader(title: title, group: group, systemImage: "note.text")
+                messageField(label: "Message", value: text)
+            case let .password(title, username, password, site, notes, group):
+                messageHeader(title: title, group: group, systemImage: "lock.fill")
+                messageField(label: "Username", value: username)
+                messageField(label: "Password", value: password)
+                messageField(label: "Website", value: site)
+                messageField(label: "Notes", value: notes)
+            }
+        }
+        .padding(16)
+        .background(Color.midnightBlue.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func messageHeader(title: String, group: String, systemImage: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+
+            Spacer()
+
+            if !group.isEmpty {
+                Text(group)
+                    .font(.caption)
+                    .foregroundStyle(.coveLightGray.opacity(0.7))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func messageField(label: String, value: String) -> some View {
+        if !value.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.coveLightGray.opacity(0.58))
+
+                Text(value)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+private struct KeyTeleportImportedWalletView: View {
+    let wallet: WalletMetadata
+    let finish: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            OnboardingStatusHero(
+                systemImage: "checkmark",
+                tint: .green,
+                fillColor: .green.opacity(0.16),
+                iconSize: 22,
+                innerBadgeSize: 58
+            )
+
+            VStack(spacing: 8) {
+                Text("Wallet imported")
+                    .font(OnboardingRecoveryTypography.compactTitle)
+
+                Text("\(wallet.name) is ready to use in Cove.")
+                    .font(.subheadline)
+                    .foregroundStyle(.coveLightGray.opacity(0.74))
+                    .multilineTextAlignment(.center)
+            }
+
+            Button("Done", action: finish)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -645,6 +922,7 @@ private struct KeyTeleportSendChooseWalletView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                .tint(.white)
             }
         }
     }
@@ -660,15 +938,19 @@ private struct KeyTeleportReceiverCodeView: View {
             Text("Sending from \(state.selectedWallet.name)")
                 .font(.headline)
 
-            TextField("Receiver Code", text: $code)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
+            TextField(
+                "Receiver Code",
+                text: $code,
+                prompt: keyTeleportInputPlaceholder("Receiver Code")
+            )
+            .keyboardType(.numberPad)
+            .keyTeleportInputChrome()
 
             Button(action: submit) {
                 Text("Continue")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(OnboardingPrimaryButtonStyle())
         }
     }
 }
@@ -692,7 +974,7 @@ private struct KeyTeleportSendConfirmView: View {
                 Text("Create Sender Response")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(OnboardingPrimaryButtonStyle())
         }
     }
 }
@@ -722,15 +1004,49 @@ private struct KeyTeleportSendReadyView: View {
                     Label("Copy Link", systemImage: "doc.on.doc")
                 }
                 .buttonStyle(.bordered)
+                .tint(.white)
 
                 Button(action: share) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.bordered)
+                .tint(.white)
             }
 
             Button("Done", action: finish)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
         }
     }
+}
+
+private struct KeyTeleportCardModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.duskBlue.opacity(0.58))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.coveLightGray.opacity(0.12), lineWidth: 1)
+            )
+    }
+}
+
+private extension View {
+    func keyTeleportCard() -> some View {
+        modifier(KeyTeleportCardModifier())
+    }
+}
+
+private func copySensitiveText(_ text: String) {
+    UIPasteboard.general.setItems(
+        [[UTType.utf8PlainText.identifier: text]],
+        options: [
+            .localOnly: true,
+            .expirationDate: Date().addingTimeInterval(120),
+        ]
+    )
 }

@@ -97,6 +97,7 @@ struct WalletSettingsView: View {
             WalletSettingsDangerSection(
                 walletName: metadata.name,
                 isHotWallet: metadata.walletType == .hot,
+                hasRecoveryWords: manager.hasRecoveryWords(),
                 canKeyTeleportSend: app.canKeyTeleportSend(walletId: metadata.id),
                 deleteConfirmationMessage: deleteConfirmationMessage,
                 finalDeleteConfirmationMessage: finalDeleteConfirmationMessage,
@@ -279,6 +280,7 @@ private struct WalletSettingsColorButton: View {
 private struct WalletSettingsDangerSection: View {
     let walletName: String
     let isHotWallet: Bool
+    let hasRecoveryWords: Bool
     let canKeyTeleportSend: Bool
     let deleteConfirmationMessage: String
     let finalDeleteConfirmationMessage: String
@@ -295,17 +297,18 @@ private struct WalletSettingsDangerSection: View {
 
     var body: some View {
         Section(header: Text("Danger Zone")) {
-            if isHotWallet {
+            if isHotWallet, hasRecoveryWords {
                 WalletSecretWordsButton(
                     isPresented: $showingSecretWordsConfirmation,
                     showSecretWords: showSecretWords
                 )
-
-                if canKeyTeleportSend {
-                    Button("Send with Key Teleport", action: sendWithKeyTeleport)
-                        .font(.subheadline)
-                }
             }
+
+            if isHotWallet, canKeyTeleportSend {
+                Button("Send with Key Teleport", action: sendWithKeyTeleport)
+                    .font(.subheadline)
+            }
+
             WalletFinalDeleteConfirmationHost(
                 isPresented: $showingFinalDeleteConfirmation,
                 buttonTitle: finalDeleteButtonTitle,

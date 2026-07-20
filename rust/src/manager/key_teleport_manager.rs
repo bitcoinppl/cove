@@ -6,10 +6,10 @@ use std::{
 };
 
 use bip39::Mnemonic;
-use cove_device::keychain::{Keychain, KeychainError};
+use cove_device::keychain::{Keychain, KeychainError, WalletSecret, WalletXprv};
 use cove_keyteleport::{
-    DecodedPayload, NumericCode, Payload, ReceiveRequest, ReceiverSession, SenderSession,
-    TeleportPassword, XprvPayload,
+    DecodedPayload, Error as KeyTeleportError, NotesPayload, NotesRecord, NumericCode, Payload,
+    ReceiverSession, SenderSession, TeleportPassword, XprvPayload,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -20,10 +20,9 @@ use crate::{
     database::{self, Database},
     key_teleport::{KeyTeleportReceiverPacket, KeyTeleportSenderPacket},
     manager::{
-        import_wallet_manager::{ImportWalletError, import_mnemonic_with_target},
+        import_wallet_manager::{ImportWalletError, import_key_teleport_wallet_secret_with_target},
         reconcile_channel::ReconcileChannel,
     },
-    mnemonic::Mnemonic as StoredMnemonic,
     multi_format::StringOrData,
     network::Network,
     wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
@@ -61,15 +60,19 @@ pub enum KeyTeleportManagerReconcileMessage {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum KeyTeleportManagerAction {
     StartReceive,
-    ConfirmReplaceReceive,
-    CancelReceive,
+    /// Invalidates the active receive request and creates a new one
+    RestartReceive,
+    /// Deletes the active receive request
+    EndReceive,
     Ingest(StringOrData),
     StartSendFromWallet(WalletId),
     SelectSendWallet(WalletId),
     EnterReceiverCode(String),
-    ConfirmSendMnemonic,
+    /// Confirms sending the selected wallet's private key material
+    ConfirmSendWallet,
     EnterSenderPassword(String),
-    ImportReceivedMnemonic,
+    /// Imports the received mnemonic or extended private key as a hot wallet
+    ImportReceivedWallet,
     RevealXprv,
     HideXprv,
     FinishReview,
@@ -79,11 +82,14 @@ pub enum KeyTeleportManagerAction {
 #[derive(Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum KeyTeleportManagerState {
     Idle,
-    ReceiveReplacementRequired(KeyTeleportReceiveState),
     ReceiveReady(KeyTeleportReceiveState),
     ReceiveEnterPassword,
     ReceiveMnemonicReview(KeyTeleportMnemonicReview),
     ReceiveXprvReview(KeyTeleportXprvReview),
+    /// Displays received Secure Notes & Passwords content without treating it as a wallet
+    ReceiveMessageReview(KeyTeleportMessageReview),
+    /// Reports the wallet created from received private key material
+    ReceiveImportedWallet(WalletMetadata),
     SendChooseWallet(KeyTeleportSendChooseWallet),
     SendEnterCode(KeyTeleportSendEnterCode),
     SendConfirm(KeyTeleportSendConfirm),
@@ -94,7 +100,6 @@ impl fmt::Debug for KeyTeleportManagerState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Idle => f.write_str("Idle"),
-            Self::ReceiveReplacementRequired(_) => f.write_str("ReceiveReplacementRequired(****)"),
             Self::ReceiveReady(_) => f.write_str("ReceiveReady(****)"),
             Self::ReceiveEnterPassword => f.write_str("ReceiveEnterPassword"),
             Self::ReceiveMnemonicReview(_) => f.write_str("ReceiveMnemonicReview(****)"),
@@ -102,6 +107,13 @@ impl fmt::Debug for KeyTeleportManagerState {
                 .debug_tuple("ReceiveXprvReview")
                 .field(&format_args!("revealed={}", review.revealed))
                 .finish(),
+            Self::ReceiveMessageReview(review) => f
+                .debug_tuple("ReceiveMessageReview")
+                .field(&format_args!("item_count={}", review.items.len()))
+                .finish(),
+            Self::ReceiveImportedWallet(wallet) => {
+                f.debug_tuple("ReceiveImportedWallet").field(&wallet.id).finish()
+            }
             Self::SendChooseWallet(state) => f
                 .debug_struct("SendChooseWallet")
                 .field("eligible_wallets", &state.eligible_wallets)
@@ -145,12 +157,75 @@ impl fmt::Debug for KeyTeleportReceiveState {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyTeleportMnemonicReview {
     pub word_count: u32,
-    pub imported_wallet: Option<WalletMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyTeleportXprvReview {
     pub revealed: bool,
+}
+
+/// Display-ready Secure Notes & Passwords content received through Key Teleport
+#[derive(Clone, PartialEq, Eq, uniffi::Record)]
+pub struct KeyTeleportMessageReview {
+    /// Records in their transmitted order
+    pub items: Vec<KeyTeleportMessageItem>,
+}
+
+impl fmt::Debug for KeyTeleportMessageReview {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyTeleportMessageReview").field("item_count", &self.items.len()).finish()
+    }
+}
+
+/// Display-ready content for one received secure note or password record
+#[derive(Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum KeyTeleportMessageItem {
+    /// A free-form note
+    Note { title: String, text: String, group: String },
+    /// A structured password record
+    Password {
+        title: String,
+        username: String,
+        password: String,
+        site: String,
+        notes: String,
+        group: String,
+    },
+}
+
+impl fmt::Debug for KeyTeleportMessageItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Note { .. } => f.write_str("KeyTeleportMessageItem::Note(****)"),
+            Self::Password { .. } => f.write_str("KeyTeleportMessageItem::Password(****)"),
+        }
+    }
+}
+
+impl From<NotesPayload> for KeyTeleportMessageReview {
+    fn from(notes: NotesPayload) -> Self {
+        let items = notes
+            .records()
+            .iter()
+            .map(|record| match record {
+                NotesRecord::Note(note) => KeyTeleportMessageItem::Note {
+                    title: note.title().to_string(),
+                    text: note.text().to_string(),
+                    group: note.group().to_string(),
+                },
+                NotesRecord::Password(password) => KeyTeleportMessageItem::Password {
+                    title: password.title().to_string(),
+                    username: password.username().to_string(),
+                    password: password.password().to_string(),
+                    site: password.site().to_string(),
+                    notes: password.notes().to_string(),
+                    group: password.group().to_string(),
+                },
+            })
+            .collect();
+
+        Self { items }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -234,13 +309,21 @@ pub enum KeyTeleportAlert {
     #[error("Key Teleport PSBT packets are not supported yet")]
     UnsupportedPsbt,
 
+    #[error("this Key Teleport payload is not supported")]
+    /// The payload uses a valid but unsupported protocol type
+    UnsupportedPayload,
+
+    #[error("the decrypted Key Teleport payload is invalid")]
+    /// The password was valid but the decrypted typed payload was malformed
+    InvalidPayload,
+
     #[error("wrong receiver code")]
     WrongReceiverCode,
 
     #[error("wrong Teleport Password")]
     WrongTeleportPassword,
 
-    #[error("no eligible hot wallets with saved secret words")]
+    #[error("no eligible hot wallets with saved private keys")]
     NoEligibleWallets,
 
     #[error("selected wallet is not eligible")]
@@ -265,8 +348,22 @@ pub enum KeyTeleportAlert {
     Database(String),
 }
 
+impl KeyTeleportAlert {
+    fn from_receive_decode_error(error: KeyTeleportError) -> Self {
+        match error {
+            KeyTeleportError::Checksum => Self::WrongTeleportPassword,
+            KeyTeleportError::UnsupportedPayload(_) => Self::UnsupportedPayload,
+            KeyTeleportError::InvalidMnemonicPayload
+            | KeyTeleportError::InvalidXprvPayload
+            | KeyTeleportError::InvalidNotesPayload => Self::InvalidPayload,
+            error => Self::Protocol(error.to_string()),
+        }
+    }
+}
+
 #[derive(Default)]
 struct PrivateState {
+    active_receive_session: Option<ActiveReceiveSession>,
     pending_receiver_packet: Option<Arc<KeyTeleportReceiverPacket>>,
     selected_send_wallet: Option<WalletMetadata>,
     receiver_code: Option<NumericCode>,
@@ -277,6 +374,7 @@ struct PrivateState {
 impl fmt::Debug for PrivateState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PrivateState")
+            .field("active_receive_session", &self.active_receive_session.is_some())
             .field("pending_receiver_packet", &self.pending_receiver_packet.is_some())
             .field("selected_send_wallet", &self.selected_send_wallet.as_ref().map(|w| &w.id))
             .field("receiver_code", &self.receiver_code.as_ref().map(|_| "****"))
@@ -291,15 +389,51 @@ enum ReceivedSecret {
     Xprv(XprvPayload),
 }
 
+impl ReceivedSecret {
+    fn to_wallet_secret(&self) -> Result<WalletSecret, KeyTeleportAlert> {
+        match self {
+            Self::Mnemonic(mnemonic) => Ok(WalletSecret::Mnemonic(mnemonic.clone())),
+            Self::Xprv(xprv) => WalletXprv::parse(xprv.expose_string())
+                .map(WalletSecret::Xpriv)
+                .map_err(|_| KeyTeleportAlert::InvalidPayload),
+        }
+    }
+}
+
 impl Drop for PrivateState {
     fn drop(&mut self) {
         self.received_secret = None;
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct PersistedReceiveSession {
     private_key_hex: String,
+    created_at_secs: u64,
+    network: Network,
+    wallet_mode: WalletMode,
+}
+
+impl fmt::Debug for PersistedReceiveSession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PersistedReceiveSession")
+            .field("private_key_hex", &"****")
+            .field("created_at_secs", &self.created_at_secs)
+            .field("network", &self.network)
+            .field("wallet_mode", &self.wallet_mode)
+            .finish()
+    }
+}
+
+impl Drop for PersistedReceiveSession {
+    fn drop(&mut self) {
+        self.private_key_hex.zeroize();
+    }
+}
+
+#[derive(Debug)]
+struct ActiveReceiveSession {
+    receiver: ReceiverSession,
     created_at_secs: u64,
     network: Network,
     wallet_mode: WalletMode,
@@ -382,21 +516,16 @@ impl RustKeyTeleportManager {
         self.reconciler.send(Message::ClearAlert);
 
         match action {
-            Action::StartReceive => self.start_receive(false),
-            Action::ConfirmReplaceReceive => self.start_receive(true),
-            Action::CancelReceive => {
-                Keychain::global().delete_key_teleport_receive_session();
-                self.clear_private();
-                self.set_state(KeyTeleportManagerState::Idle);
-                Ok(())
-            }
+            Action::StartReceive => self.start_receive(),
+            Action::RestartReceive => self.restart_receive(),
+            Action::EndReceive => self.end_receive(),
             Action::Ingest(input) => self.ingest(input),
             Action::StartSendFromWallet(wallet_id) => self.start_send_from_wallet(wallet_id),
             Action::SelectSendWallet(wallet_id) => self.select_send_wallet(wallet_id),
             Action::EnterReceiverCode(code) => self.enter_receiver_code(&code),
-            Action::ConfirmSendMnemonic => self.confirm_send_mnemonic(),
+            Action::ConfirmSendWallet => self.confirm_send_wallet(),
             Action::EnterSenderPassword(password) => self.enter_sender_password(&password),
-            Action::ImportReceivedMnemonic => self.import_received_mnemonic(),
+            Action::ImportReceivedWallet => self.import_received_wallet(),
             Action::RevealXprv => {
                 self.set_xprv_revealed(true);
                 Ok(())
@@ -405,12 +534,7 @@ impl RustKeyTeleportManager {
                 self.set_xprv_revealed(false);
                 Ok(())
             }
-            Action::FinishReview => {
-                Keychain::global().delete_key_teleport_receive_session();
-                self.clear_private();
-                self.set_state(KeyTeleportManagerState::Idle);
-                Ok(())
-            }
+            Action::FinishReview => self.end_receive(),
             Action::Clear => {
                 self.clear_private();
                 self.set_state(KeyTeleportManagerState::Idle);
@@ -419,21 +543,48 @@ impl RustKeyTeleportManager {
         }
     }
 
-    fn start_receive(&self, replace: bool) -> Result<(), KeyTeleportAlert> {
+    fn start_receive(&self) -> Result<(), KeyTeleportAlert> {
         if let Some(existing) = self.load_receive_session()? {
-            if !existing.is_expired() && !replace {
-                let state = receive_state_from_session(&existing)?;
-                self.set_state(KeyTeleportManagerState::ReceiveReplacementRequired(state));
-                return Ok(());
+            if !existing.is_expired() {
+                return self.activate_receive_session(ActiveReceiveSession::restore(&existing)?);
             }
 
             Keychain::global().delete_key_teleport_receive_session();
         }
 
-        let session = PersistedReceiveSession::new();
+        self.create_receive_session()
+    }
+
+    fn restart_receive(&self) -> Result<(), KeyTeleportAlert> {
+        Keychain::global().delete_key_teleport_receive_session();
+
+        self.create_receive_session()
+    }
+
+    fn create_receive_session(&self) -> Result<(), KeyTeleportAlert> {
+        let session = ActiveReceiveSession::new();
         session.save()?;
+
+        self.activate_receive_session(session)
+    }
+
+    fn activate_receive_session(
+        &self,
+        session: ActiveReceiveSession,
+    ) -> Result<(), KeyTeleportAlert> {
         let state = receive_state_from_session(&session)?;
+        let mut private = PrivateState::default();
+        private.active_receive_session = Some(session);
+        *self.private.lock() = private;
         self.set_state(KeyTeleportManagerState::ReceiveReady(state));
+
+        Ok(())
+    }
+
+    fn end_receive(&self) -> Result<(), KeyTeleportAlert> {
+        Keychain::global().delete_key_teleport_receive_session();
+        self.clear_private();
+        self.set_state(KeyTeleportManagerState::Idle);
 
         Ok(())
     }
@@ -520,41 +671,57 @@ impl RustKeyTeleportManager {
 
     fn enter_receiver_code(&self, code: &str) -> Result<(), KeyTeleportAlert> {
         let code = NumericCode::from_str(code).map_err(|_| KeyTeleportAlert::WrongReceiverCode)?;
-        let mut private = self.private.lock();
-        let packet =
-            private.pending_receiver_packet.clone().ok_or(KeyTeleportAlert::NoPendingSend)?;
-        let wallet =
-            private.selected_send_wallet.clone().ok_or(KeyTeleportAlert::IneligibleWallet)?;
+        let (packet, wallet) = {
+            let private = self.private.lock();
+            let packet =
+                private.pending_receiver_packet.clone().ok_or(KeyTeleportAlert::NoPendingSend)?;
+            let wallet =
+                private.selected_send_wallet.clone().ok_or(KeyTeleportAlert::IneligibleWallet)?;
+
+            (packet, wallet)
+        };
 
         SenderSession::new(packet.inner(), &code)
             .map_err(|_| KeyTeleportAlert::WrongReceiverCode)?;
-        private.receiver_code = Some(code);
+        self.private.lock().receiver_code = Some(code);
+
+        let warns_passphrase_not_included = Keychain::global()
+            .get_wallet_secret(&wallet.id)?
+            .is_some_and(|secret| matches!(secret, WalletSecret::Mnemonic(_)));
 
         self.set_state(KeyTeleportManagerState::SendConfirm(KeyTeleportSendConfirm {
             selected_wallet: wallet,
-            warns_passphrase_not_included: true,
+            warns_passphrase_not_included,
         }));
 
         Ok(())
     }
 
-    fn confirm_send_mnemonic(&self) -> Result<(), KeyTeleportAlert> {
-        let private = self.private.lock();
-        let packet =
-            private.pending_receiver_packet.clone().ok_or(KeyTeleportAlert::NoPendingSend)?;
-        let wallet =
-            private.selected_send_wallet.clone().ok_or(KeyTeleportAlert::IneligibleWallet)?;
-        let code = private.receiver_code.clone().ok_or(KeyTeleportAlert::WrongReceiverCode)?;
-        drop(private);
+    fn confirm_send_wallet(&self) -> Result<(), KeyTeleportAlert> {
+        let (packet, wallet, code) = {
+            let private = self.private.lock();
+            let packet =
+                private.pending_receiver_packet.clone().ok_or(KeyTeleportAlert::NoPendingSend)?;
+            let wallet =
+                private.selected_send_wallet.clone().ok_or(KeyTeleportAlert::IneligibleWallet)?;
+            let code = private.receiver_code.clone().ok_or(KeyTeleportAlert::WrongReceiverCode)?;
 
-        let mnemonic: Mnemonic = StoredMnemonic::try_from_id(&wallet.id)
-            .map_err(|_| KeyTeleportAlert::IneligibleWallet)?
-            .into();
+            (packet, wallet, code)
+        };
+
+        let secret = Keychain::global()
+            .get_wallet_secret(&wallet.id)?
+            .ok_or(KeyTeleportAlert::IneligibleWallet)?;
         let sender = SenderSession::new(packet.inner(), &code)
             .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
-        let response = sender
-            .send(Payload::mnemonic(mnemonic))
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
+        let payload = match secret {
+            WalletSecret::Mnemonic(mnemonic) => Payload::mnemonic(mnemonic),
+            WalletSecret::Xpriv(xpriv) => {
+                Payload::xprv(xpriv.expose()).map_err(|_| KeyTeleportAlert::InvalidPayload)?
+            }
+        };
+        let response =
+            sender.send(payload).map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
         let state = KeyTeleportManagerState::SendReady(KeyTeleportSendReady {
             packet: Arc::new(KeyTeleportSenderPacket::new(response.packet)),
             password: Arc::new(KeyTeleportPassword::new(response.password)),
@@ -569,7 +736,7 @@ impl RustKeyTeleportManager {
         packet: Arc<KeyTeleportSenderPacket>,
     ) -> Result<(), KeyTeleportAlert> {
         let session = self.active_receive_session()?;
-        let receiver = session.receiver_session()?;
+        let receiver = session.receiver_session();
         receiver.decode_step1(packet.inner()).map_err(|_| KeyTeleportAlert::WrongReceiverCode)?;
 
         self.private.lock().pending_sender_packet = Some(packet);
@@ -588,17 +755,17 @@ impl RustKeyTeleportManager {
             .ok_or(KeyTeleportAlert::NoPendingReceiveSecret)?;
         let password = TeleportPassword::from_str(password)
             .map_err(|_| KeyTeleportAlert::WrongTeleportPassword)?;
-        let receiver = session.receiver_session()?;
+        let receiver = session.receiver_session();
         let decoded = receiver
             .decode(packet.inner(), &password)
-            .map_err(|_| KeyTeleportAlert::WrongTeleportPassword)?;
+            .map_err(KeyTeleportAlert::from_receive_decode_error)?;
 
         match decoded {
             DecodedPayload::Mnemonic(mnemonic) => {
                 let word_count = mnemonic.words().count() as u32;
                 self.private.lock().received_secret = Some(ReceivedSecret::Mnemonic(mnemonic));
                 self.set_state(KeyTeleportManagerState::ReceiveMnemonicReview(
-                    KeyTeleportMnemonicReview { word_count, imported_wallet: None },
+                    KeyTeleportMnemonicReview { word_count },
                 ));
             }
             DecodedPayload::Xprv(xprv) => {
@@ -607,30 +774,36 @@ impl RustKeyTeleportManager {
                     revealed: false,
                 }));
             }
+            DecodedPayload::Notes(notes) => {
+                self.private.lock().received_secret = None;
+                self.set_state(KeyTeleportManagerState::ReceiveMessageReview(notes.into()));
+            }
         }
 
         Ok(())
     }
 
-    fn import_received_mnemonic(&self) -> Result<(), KeyTeleportAlert> {
+    fn import_received_wallet(&self) -> Result<(), KeyTeleportAlert> {
         let session = self.active_receive_session()?;
-        let mnemonic = {
+        let secret = {
             let private = self.private.lock();
-            let Some(ReceivedSecret::Mnemonic(mnemonic)) = private.received_secret.as_ref() else {
+            let Some(secret) = private.received_secret.as_ref() else {
                 return Err(KeyTeleportAlert::NoPendingReceiveSecret);
             };
-            mnemonic.clone()
+
+            secret.to_wallet_secret()?
         };
 
-        let metadata = import_mnemonic_with_target(mnemonic, session.network, session.wallet_mode)
-            .map_err(|error| KeyTeleportAlert::ImportFailed(error.to_string()))?;
+        let metadata = import_key_teleport_wallet_secret_with_target(
+            secret,
+            session.network,
+            session.wallet_mode,
+        )
+        .map_err(|error| KeyTeleportAlert::ImportFailed(error.to_string()))?;
 
         Keychain::global().delete_key_teleport_receive_session();
         self.clear_private();
-        self.set_state(KeyTeleportManagerState::ReceiveMnemonicReview(KeyTeleportMnemonicReview {
-            word_count: 0,
-            imported_wallet: Some(metadata),
-        }));
+        self.set_state(KeyTeleportManagerState::ReceiveImportedWallet(metadata));
 
         Ok(())
     }
@@ -650,16 +823,27 @@ impl RustKeyTeleportManager {
             return Some(KeyTeleportManagerState::Idle);
         }
 
-        receive_state_from_session(&session).map(KeyTeleportManagerState::ReceiveReady).ok()
+        let active = ActiveReceiveSession::restore(&session).ok()?;
+        let state = receive_state_from_session(&active).ok()?;
+        self.private.lock().active_receive_session = Some(active);
+
+        Some(KeyTeleportManagerState::ReceiveReady(state))
     }
 
-    fn active_receive_session(&self) -> Result<PersistedReceiveSession, KeyTeleportAlert> {
-        let Some(session) = self.load_receive_session()? else {
-            return Err(KeyTeleportAlert::NoActiveReceiveSession);
+    fn active_receive_session(&self) -> Result<ActiveReceiveSession, KeyTeleportAlert> {
+        let session = {
+            let private = self.private.lock();
+            let Some(session) = private.active_receive_session.as_ref() else {
+                return Err(KeyTeleportAlert::NoActiveReceiveSession);
+            };
+
+            session.try_clone()?
         };
 
         if session.is_expired() {
             Keychain::global().delete_key_teleport_receive_session();
+            self.clear_private();
+            self.set_state(KeyTeleportManagerState::Idle);
             return Err(KeyTeleportAlert::ReceiveSessionExpired);
         }
 
@@ -700,25 +884,68 @@ impl RustKeyTeleportManager {
     }
 }
 
-impl PersistedReceiveSession {
+impl ActiveReceiveSession {
     fn new() -> Self {
         let database = Database::global();
-        let session = ReceiverSession::new();
-        let mut private_key = session.private_key_bytes();
-        let private_key_hex = hex::encode(private_key);
-        private_key.zeroize();
 
         Self {
-            private_key_hex,
+            receiver: ReceiverSession::new(),
             created_at_secs: now_secs(),
             network: database.global_config.selected_network(),
             wallet_mode: database.global_config.wallet_mode(),
         }
     }
 
+    fn restore(persisted: &PersistedReceiveSession) -> Result<Self, KeyTeleportAlert> {
+        let receiver = persisted.receiver_session()?;
+
+        Ok(Self {
+            receiver,
+            created_at_secs: persisted.created_at_secs,
+            network: persisted.network,
+            wallet_mode: persisted.wallet_mode,
+        })
+    }
+
+    fn try_clone(&self) -> Result<Self, KeyTeleportAlert> {
+        let receiver = ReceiverSession::from_private_key_bytes(self.receiver.private_key_bytes())
+            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
+
+        Ok(Self {
+            receiver,
+            created_at_secs: self.created_at_secs,
+            network: self.network,
+            wallet_mode: self.wallet_mode,
+        })
+    }
+
+    fn save(&self) -> Result<(), KeyTeleportAlert> {
+        let mut private_key = self.receiver.private_key_bytes();
+        let persisted = PersistedReceiveSession {
+            private_key_hex: hex::encode(private_key),
+            created_at_secs: self.created_at_secs,
+            network: self.network,
+            wallet_mode: self.wallet_mode,
+        };
+        private_key.zeroize();
+
+        persisted.save()
+    }
+
+    fn receiver_session(&self) -> &ReceiverSession {
+        &self.receiver
+    }
+
+    fn is_expired(&self) -> bool {
+        now_secs().saturating_sub(self.created_at_secs) >= RECEIVE_SESSION_TTL.as_secs()
+    }
+}
+
+impl PersistedReceiveSession {
     fn save(&self) -> Result<(), KeyTeleportAlert> {
         let value = serde_json::to_string(self)
             .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))?;
+
         Keychain::global()
             .save_key_teleport_receive_session(&value)
             .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))
@@ -740,21 +967,18 @@ impl PersistedReceiveSession {
         session
     }
 
-    fn receive_request(&self) -> Result<ReceiveRequest, KeyTeleportAlert> {
-        self.receiver_session()?
-            .request()
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))
-    }
-
     fn is_expired(&self) -> bool {
         now_secs().saturating_sub(self.created_at_secs) >= RECEIVE_SESSION_TTL.as_secs()
     }
 }
 
 fn receive_state_from_session(
-    session: &PersistedReceiveSession,
+    session: &ActiveReceiveSession,
 ) -> Result<KeyTeleportReceiveState, KeyTeleportAlert> {
-    let request = session.receive_request()?;
+    let request = session
+        .receiver_session()
+        .request()
+        .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
 
     Ok(KeyTeleportReceiveState {
         packet: Arc::new(KeyTeleportReceiverPacket::new(request.packet)),
@@ -792,7 +1016,8 @@ pub(crate) fn is_send_eligible_wallet_id(wallet_id: &WalletId) -> bool {
 }
 
 fn is_send_eligible(wallet: &WalletMetadata) -> bool {
-    wallet.wallet_type == WalletType::Hot && StoredMnemonic::try_from_id(&wallet.id).is_ok()
+    wallet.wallet_type == WalletType::Hot
+        && Keychain::global().get_wallet_secret(&wallet.id).is_ok_and(|secret| secret.is_some())
 }
 
 fn now_secs() -> u64 {
@@ -858,19 +1083,35 @@ mod tests {
     }
 
     #[test]
-    fn start_receive_requires_confirmation_before_replacing_unexpired_session() {
+    fn start_receive_resumes_session_and_restart_replaces_it() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         init_globals();
         let manager = RustKeyTeleportManager::new();
 
         manager.clone().dispatch(Action::StartReceive);
-        assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
+        let first = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
 
         manager.clone().dispatch(Action::StartReceive);
-        assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReplacementRequired(_)));
+        let resumed = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+        assert_eq!(first, resumed);
 
-        manager.clone().dispatch(Action::ConfirmReplaceReceive);
+        manager.clone().dispatch(Action::RestartReceive);
+        let restarted = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+        assert_ne!(resumed, restarted);
         assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
+    }
+
+    #[test]
+    fn end_receive_deletes_session_and_returns_to_idle() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let manager = RustKeyTeleportManager::new();
+
+        manager.clone().dispatch(Action::StartReceive);
+        manager.clone().dispatch(Action::EndReceive);
+
+        assert!(matches!(manager.state(), KeyTeleportManagerState::Idle));
+        assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_none());
     }
 
     #[test]
@@ -904,6 +1145,57 @@ mod tests {
 
         assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
         assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveEnterPassword));
+    }
+
+    #[test]
+    fn displayed_receive_request_remains_usable_if_resume_storage_disappears() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let manager = RustKeyTeleportManager::new();
+
+        manager.clone().dispatch(Action::StartReceive);
+        let request = match manager.state() {
+            KeyTeleportManagerState::ReceiveReady(state) => state,
+            other => panic!("expected receive ready, got {other:?}"),
+        };
+        let sender = SenderSession::with_private_key_and_password(
+            request.packet.inner(),
+            &NumericCode::from_str(&request.numeric_code).unwrap(),
+            [8; 32],
+            TeleportPassword::from_bytes([1, 2, 3, 4, 5]),
+        )
+        .unwrap();
+        let mnemonic = Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let response = sender.send(Payload::mnemonic(mnemonic)).unwrap();
+        let password = response.password.as_display_text();
+        let packet = KeyTeleportSenderPacket::new(response.packet);
+
+        Keychain::global().delete_key_teleport_receive_session();
+        manager.handle_action(Action::Ingest(StringOrData::String(packet.bbqr_part()))).unwrap();
+        manager.handle_action(Action::EnterSenderPassword(password)).unwrap();
+
+        assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveMnemonicReview(_)));
+    }
+
+    #[test]
+    fn receive_decode_errors_preserve_failure_kind() {
+        assert_eq!(
+            KeyTeleportAlert::from_receive_decode_error(KeyTeleportError::Checksum),
+            KeyTeleportAlert::WrongTeleportPassword,
+        );
+        assert_eq!(
+            KeyTeleportAlert::from_receive_decode_error(KeyTeleportError::UnsupportedPayload(
+                cove_keyteleport::UnsupportedPayloadKind::Vault,
+            )),
+            KeyTeleportAlert::UnsupportedPayload,
+        );
+        assert_eq!(
+            KeyTeleportAlert::from_receive_decode_error(KeyTeleportError::InvalidNotesPayload),
+            KeyTeleportAlert::InvalidPayload,
+        );
     }
 
     #[test]
@@ -984,7 +1276,7 @@ mod tests {
     }
 
     #[test]
-    fn send_eligibility_requires_hot_wallet_with_keychain_mnemonic() {
+    fn send_eligibility_requires_hot_wallet_with_keychain_secret() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         init_globals();
         let mut hot_wallet = WalletMetadata::preview_new();
@@ -996,6 +1288,14 @@ mod tests {
         assert!(!is_send_eligible(&hot_wallet));
 
         Keychain::global().save_wallet_key(&hot_wallet.id, mnemonic.clone()).unwrap();
+        assert!(is_send_eligible(&hot_wallet));
+
+        let xpriv = bdk_wallet::bitcoin::bip32::Xpriv::new_master(
+            bdk_wallet::bitcoin::Network::Bitcoin,
+            &[9; 32],
+        )
+        .unwrap();
+        Keychain::global().save_wallet_secret(&hot_wallet.id, xpriv.into()).unwrap();
         assert!(is_send_eligible(&hot_wallet));
 
         hot_wallet.wallet_type = WalletType::Cold;

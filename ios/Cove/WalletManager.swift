@@ -74,6 +74,10 @@ private struct WalletManagerBootstrap {
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
 
+    func hasRecoveryWords() -> Bool {
+        rust.hasRecoveryWords()
+    }
+
     var activeIncompleteInitialScan: Bool {
         // ledger activity and scan status arrive as separate reconcile messages
         ledgerState.initialScanActive || (ledgerState.initialScanIncomplete && scanStatus.isActive)

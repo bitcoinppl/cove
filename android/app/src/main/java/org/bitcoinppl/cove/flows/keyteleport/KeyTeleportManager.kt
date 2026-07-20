@@ -1,10 +1,11 @@
-package org.bitcoinppl.cove.flows.KeyTeleportFlow
+package org.bitcoinppl.cove.flows.keyteleport
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Stable
 class KeyTeleportManager internal constructor(
     private val rust: RustKeyTeleportManager,
+    private val rustDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : KeyTeleportManagerReconciler,
     Closeable {
     private val tag = "KeyTeleportManager"
@@ -52,7 +54,7 @@ class KeyTeleportManager internal constructor(
     fun dispatch(action: KeyTeleportManagerAction) {
         if (isClosed.get()) return
 
-        mainScope.launch(Dispatchers.Default) {
+        mainScope.launch(rustDispatcher) {
             runCatching {
                 rustGuard.withHandle(rust) {
                     dispatch(action)

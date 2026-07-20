@@ -70,9 +70,10 @@ impl PendingPayload {
     pub fn complete(mut self, password: &TeleportPassword) -> Result<DecodedPayload> {
         let noid_key = password.expose_bytes();
         let paranoid_key = self.session_key.paranoid_key(&noid_key);
-        let plaintext = crypto::decrypt_inner(&paranoid_key, &self.inner)?;
+        let mut plaintext = crypto::decrypt_inner(&paranoid_key, &self.inner)?;
         let decoded = DecodedPayload::decode(&plaintext);
 
+        plaintext.zeroize();
         self.inner.zeroize();
 
         decoded

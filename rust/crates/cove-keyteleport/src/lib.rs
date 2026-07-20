@@ -9,7 +9,10 @@ pub mod sender;
 pub use numeric_code::NumericCode;
 pub use packet::{Packet, PsbtPacket, ReceiverPacket, SenderPacket};
 pub use password::TeleportPassword;
-pub use payload::{DecodedPayload, Payload, UnsupportedPayloadKind, XprvPayload};
+pub use payload::{
+    DecodedPayload, NoteRecord, NotesPayload, NotesRecord, PasswordRecord, Payload,
+    UnsupportedPayloadKind, XprvPayload,
+};
 pub use receiver::{PendingPayload, ReceiveRequest, ReceiverSession};
 pub use sender::{SendRequest, SendResponse, SenderSession};
 
@@ -43,6 +46,9 @@ pub enum Error {
 
     #[error("invalid xprv payload")]
     InvalidXprvPayload,
+
+    #[error("invalid secure notes payload")]
+    InvalidNotesPayload,
 
     #[error("checksum verification failed")]
     Checksum,
