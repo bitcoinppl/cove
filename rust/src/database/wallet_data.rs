@@ -42,12 +42,14 @@ pub enum WalletData {
     /// number of addresses scanned
     ScanState(ScanState),
     ReceiveAddressCache(ReceiveAddressCache),
+    PayjoinSenderSession(PayjoinSenderSession),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
 pub enum WalletDataKey {
     ScanState(WalletAddressType),
     ReceiveAddressCache,
+    PayjoinSenderSession,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, uniffi::Enum)]
@@ -77,6 +79,41 @@ impl ReceiveAddressCache {
         self.first_shown_at_secs = now_secs;
         self
     }
+}
+
+/// Consensus-encoded bytes of a bitcoin transaction stored in the database.
+///
+/// `bitcoin::Transaction` does not implement serde natively; storing the consensus-encoded
+/// bytes avoids an orphan-impl problem while keeping the format identical to what is broadcast.
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
+)]
+pub struct TransactionBytes(Vec<u8>);
+
+/// Terminal action decided for a payjoin session before the broadcast completes
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum PendingAction {
+    BroadcastFallback,
+    BroadcastProposal { transaction: TransactionBytes },
+}
+
+/// Event log for an in-flight payjoin sender session, allowing it to survive app restarts
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct PayjoinSenderSession {
+    pub events: Vec<String>,
+    pub fallback_tx: TransactionBytes,
+    #[serde(default)]
+    pub created_at_secs: Option<u64>,
+    #[serde(default)]
+    pub pending_action: Option<PendingAction>,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -177,6 +214,24 @@ impl WalletDataDb {
 
     pub fn delete_receive_address_cache(&self) -> Result<()> {
         self.delete(WalletDataKey::ReceiveAddressCache)
+    }
+
+    pub fn get_payjoin_sender_session(&self) -> Result<Option<PayjoinSenderSession>> {
+        let value = self.get(WalletDataKey::PayjoinSenderSession)?;
+
+        let Some(WalletData::PayjoinSenderSession(session)) = value else {
+            return Ok(None);
+        };
+
+        Ok(Some(session))
+    }
+
+    pub fn set_payjoin_sender_session(&self, session: PayjoinSenderSession) -> Result<()> {
+        self.set(WalletDataKey::PayjoinSenderSession, WalletData::PayjoinSenderSession(session))
+    }
+
+    pub fn delete_payjoin_sender_session(&self) -> Result<()> {
+        self.delete(WalletDataKey::PayjoinSenderSession)
     }
 
     fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
@@ -298,6 +353,7 @@ impl WalletDataKey {
             Self::ScanState(WalletAddressType::WrappedSegwit) => "scan_state_wrapped_segwit",
             Self::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
             Self::ReceiveAddressCache => "receive_address_cache",
+            Self::PayjoinSenderSession => "payjoin_sender_session",
         }
     }
 }
@@ -395,5 +451,48 @@ mod tests {
         db.delete_receive_address_cache().unwrap();
 
         assert_eq!(db.get_receive_address_cache().unwrap(), None);
+    }
+
+    #[test]
+    fn payjoin_sender_session_round_trips() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+        let session = PayjoinSenderSession {
+            events: vec![r#"{"PostedOriginalPsbt":[]}"#.to_string()],
+            fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
+            created_at_secs: None,
+            pending_action: None,
+        };
+
+        db.set_payjoin_sender_session(session.clone()).unwrap();
+
+        assert_eq!(db.get_payjoin_sender_session().unwrap(), Some(session));
+    }
+
+    #[test]
+    fn delete_payjoin_sender_session_clears_session() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+        let session = PayjoinSenderSession {
+            events: vec![r#"{"Closed":"Failure"}"#.to_string()],
+            fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
+            created_at_secs: None,
+            pending_action: None,
+        };
+
+        db.set_payjoin_sender_session(session).unwrap();
+        db.delete_payjoin_sender_session().unwrap();
+
+        assert_eq!(db.get_payjoin_sender_session().unwrap(), None);
+    }
+
+    #[test]
+    fn delete_missing_payjoin_sender_session_succeeds() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+
+        db.delete_payjoin_sender_session().unwrap();
+
+        assert_eq!(db.get_payjoin_sender_session().unwrap(), None);
     }
 }

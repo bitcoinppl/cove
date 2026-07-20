@@ -17,7 +17,7 @@ mod scan;
 mod transaction_confirmation;
 mod transactions;
 
-use super::payjoin::PayjoinActor;
+use super::payjoin::{PayjoinActor, SessionResumption, resume_session};
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -108,6 +108,7 @@ impl Actor for WalletActor {
         self.addr = addr.downgrade();
         self.spawn_scan_actor();
         send!(addr.check_node_connection());
+        send!(addr.resume_payjoin_session());
         Produces::ok(())
     }
 
@@ -183,6 +184,44 @@ impl WalletActor {
     pub async fn balance(&mut self) -> ActorResult<Balance> {
         let balance = self.wallet.balance();
         Produces::ok(balance)
+    }
+
+    /// Resumes a persisted payjoin session from a previous app run, if one exists
+    pub async fn resume_payjoin_session(&mut self) -> ActorResult<()> {
+        if self.payjoin_actor.is_some() {
+            return Produces::ok(());
+        }
+
+        match resume_session(self.db.clone(), self.addr.clone()) {
+            SessionResumption::None => {}
+
+            SessionResumption::Resume(actor) => {
+                self.payjoin_actor = Some(spawn_actor(*actor));
+            }
+
+            SessionResumption::BroadcastStoredProposal { proposal_tx } => {
+                send!(self.addr.handle_payjoin_proposal_broadcast(proposal_tx));
+            }
+
+            SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx } => {
+                send!(self.addr.handle_recovered_payjoin_success(proposal_psbt, fallback_tx));
+            }
+
+            SessionResumption::BroadcastFallback { fallback_tx } => {
+                send!(self.addr.handle_payjoin_fallback(fallback_tx));
+            }
+
+            SessionResumption::ReportError { message } => {
+                send!(self.addr.notify_payjoin_error(message));
+            }
+        }
+
+        Produces::ok(())
+    }
+
+    pub async fn notify_payjoin_error(&mut self, msg: String) -> ActorResult<()> {
+        self.send(WalletManagerReconcileMessage::WalletError(Error::SignAndBroadcastError(msg)));
+        Produces::ok(())
     }
 
     #[into_actor_result]
@@ -1182,7 +1221,6 @@ mod tests {
 
     use crate::wallet::metadata::WalletMetadata;
 
-    use super::transactions::BroadcastTransactionError;
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
         RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
@@ -1193,7 +1231,7 @@ mod tests {
     };
     use crate::{
         database::wallet_data::{
-            label::test_support::wallet_data_db_with_mismatched_output_table,
+            WalletDataDb, label::test_support::wallet_data_db_with_mismatched_output_table,
             test_support::new_test_wallet_data_db,
         },
         manager::wallet_manager::{
@@ -1251,6 +1289,12 @@ mod tests {
     impl super::WalletActor {
         async fn in_memory_wallet_metadata(&mut self) -> act_zero::ActorResult<WalletMetadata> {
             act_zero::Produces::ok(self.wallet.metadata.clone())
+        }
+
+        async fn set_test_wallet_data_db(&mut self, db: WalletDataDb) -> act_zero::ActorResult<()> {
+            self.db = db;
+
+            act_zero::Produces::ok(())
         }
 
         async fn set_last_height_fetched_for_test(
@@ -1643,20 +1687,6 @@ mod tests {
         });
 
         BroadcastEsploraNode { broadcast_requests, server }
-    }
-
-    async fn wait_for_broadcast_count(server: &BroadcastEsploraNode, count: usize) {
-        tokio::time::timeout(Duration::from_secs(2), async {
-            loop {
-                if server.broadcast_requests.load(Ordering::SeqCst) == count {
-                    return;
-                }
-
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("broadcast count is reached");
     }
 
     fn restore_default_bitcoin_node() {
@@ -2201,47 +2231,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn payjoin_proposal_falls_back_only_when_network_broadcast_failed() {
-        let _guard = crate::test_support::global_state_test_lock().lock().await;
-
-        crate::database::test_support::init_test_database();
-        let server = set_broadcast_esplora_node(200).await;
-
-        let metadata = WalletMetadata::preview_new();
-        let mut wallet = persisted_preview_wallet(metadata.clone());
-        mark_wallet_ledger_ready(&mut wallet);
-        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
-
-        call!(addr.handle_payjoin_proposal_broadcast_result(
-            Err(BroadcastTransactionError::PostBroadcastFailed(
-                super::Error::SignAndBroadcastError("bookkeeping failed".to_string())
-            )),
-            test_broadcast_transaction()
-        ))
-        .await
-        .expect("payjoin bookkeeping result is handled");
-
-        tokio::time::sleep(Duration::from_millis(200)).await;
-        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 0);
-
-        call!(addr.handle_payjoin_proposal_broadcast_result(
-            Err(BroadcastTransactionError::BroadcastFailed(super::Error::SignAndBroadcastError(
-                "proposal failed".to_string()
-            ))),
-            test_broadcast_transaction()
-        ))
-        .await
-        .expect("payjoin network result is handled");
-        wait_for_broadcast_count(&server, 1).await;
-
-        restore_default_bitcoin_node();
-        server.server.abort();
-        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
-
-        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test(flavor = "current_thread")]
     async fn slow_height_refresh_does_not_block_unrelated_actor_messages() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
@@ -2602,6 +2591,173 @@ mod tests {
         assert_eq!(
             wallet_scan_progress_start(true, true),
             ScanProgressStart::Delayed(EMPTY_WALLET_SCAN_PROGRESS_DELAY)
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn send_gate_retries_pending_terminal_action_and_rejects_new_send() {
+        crate::database::test_support::init_test_database();
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+
+        let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+
+        let fallback_tx = bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        };
+        crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
+            .create_session(&fallback_tx)
+            .unwrap();
+
+        actor.db = db;
+
+        let empty_psbt = bitcoin::Psbt::from_unsigned_tx(fallback_tx).unwrap();
+        let result = actor.initiate_payment(empty_psbt, None).await;
+        let outcome = actor_value(result).await;
+
+        assert!(
+            matches!(
+                &outcome,
+                Err(super::Error::SignAndBroadcastError(msg)) if msg.contains("retrying")
+            ),
+            "expected 'retrying' error but got: {outcome:?}",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn send_gate_clears_stale_session_when_terminal_tx_already_in_wallet() {
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+        test_keychain();
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([4; 32]) },
+        );
+
+        let outpoint = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(10_000));
+        let terminal_tx =
+            (*wallet.bdk.get_tx(outpoint.txid).expect("tx in wallet").tx_node.tx).clone();
+
+        let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        persister.create_session(&terminal_tx).unwrap();
+        persister.set_pending_fallback().unwrap();
+
+        actor.db = db;
+
+        let dummy_psbt = bitcoin::Psbt::from_unsigned_tx(bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        })
+        .unwrap();
+        let result = actor.initiate_payment(dummy_psbt, None).await;
+        let outcome = actor_value(result).await;
+
+        let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
+        assert!(session.is_none(), "gate should have cleared the stale session record");
+        assert!(matches!(outcome, Err(super::Error::SignAndBroadcastError(_))));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn broadcast_payjoin_terminal_skips_rebroadcast_when_tx_already_in_wallet() {
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([5; 32]) },
+        );
+
+        let outpoint = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(10_000));
+        let terminal_tx =
+            (*wallet.bdk.get_tx(outpoint.txid).expect("tx in wallet").tx_node.tx).clone();
+
+        let (db, _tmp) = new_test_wallet_data_db(wallet.id.clone());
+
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        persister.create_session(&terminal_tx).unwrap();
+        persister.set_pending_proposal(&terminal_tx).unwrap();
+
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+        call!(addr.set_test_wallet_data_db(db.clone())).await.expect("actor responds");
+
+        call!(addr.handle_payjoin_proposal_broadcast(terminal_tx)).await.expect("actor responds");
+
+        for _ in 0..50 {
+            let session = db.get_payjoin_sender_session().expect("db query succeeded");
+            if session.is_none() {
+                return;
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        panic!("session should be cleared when terminal tx is already in wallet");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn recovered_payjoin_signing_failure_retains_session_record() {
+        crate::database::test_support::init_test_database();
+        test_keychain();
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+
+        let (sender, _receiver) = flume::bounded(10);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+
+        let fallback_tx = bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        };
+        crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
+            .create_session(&fallback_tx)
+            .unwrap();
+
+        actor.db = db;
+
+        let proposal_psbt = bitcoin::Psbt::from_unsigned_tx(bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        })
+        .unwrap();
+
+        let result = actor.handle_recovered_payjoin_success(proposal_psbt, fallback_tx).await;
+        actor_value(result).await;
+
+        let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
+        assert!(session.is_some(), "session must be retained when signing fails");
+        assert!(
+            session.unwrap().pending_action.is_none(),
+            "signing failure must not select fallback"
         );
     }
 }

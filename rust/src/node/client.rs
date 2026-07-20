@@ -249,6 +249,14 @@ impl NodeClient {
         }
     }
 
+    /// Fetches a transaction from the mempool or chain; returns `None` if not found.
+    pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
+        match self {
+            Self::Esplora(client) => client.get_transaction(txid).await,
+            Self::Electrum(client) => client.get_transaction(txid).await,
+        }
+    }
+
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
         match self {
             Self::Esplora(client) => client.get_block_id().await,

@@ -34677,6 +34677,7 @@ public enum WalletDataKey: Equatable, Hashable {
     case scanState(WalletAddressType
     )
     case receiveAddressCache
+    case payjoinSenderSession
 
 
 
@@ -34703,6 +34704,8 @@ public struct FfiConverterTypeWalletDataKey: FfiConverterRustBuffer {
 
         case 2: return .receiveAddressCache
 
+        case 3: return .payjoinSenderSession
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -34718,6 +34721,10 @@ public struct FfiConverterTypeWalletDataKey: FfiConverterRustBuffer {
 
         case .receiveAddressCache:
             writeInt(&buf, Int32(2))
+
+
+        case .payjoinSenderSession:
+            writeInt(&buf, Int32(3))
 
         }
     }
