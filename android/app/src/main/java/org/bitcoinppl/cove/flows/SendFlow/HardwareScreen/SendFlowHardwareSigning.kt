@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -255,8 +256,10 @@ internal fun HardwareNfcWriteSheet(
     onDismiss: () -> Unit,
 ) {
     if (showNfcWriteSheet) {
+        val psbtBytes = remember(details) { details.psbtBytes() }
+
         NfcWriteSheet(
-            data = details.psbtBytes(),
+            data = psbtBytes,
             onDismiss = onDismiss,
             onSuccess = onDismiss,
         )

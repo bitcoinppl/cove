@@ -67,7 +67,10 @@ fun TransactionDetailsScreen(
     // read transaction details from cache (observable), fallback to the passed-in presentation
     val transactionDetailsPresentation =
         manager.transactionDetailsPresentations[txId] ?: presentation
-    val transactionDetails = transactionDetailsPresentation.details()
+    val transactionDetails =
+        remember(transactionDetailsPresentation) {
+            transactionDetailsPresentation.details()
+        }
     val numberOfConfirmations = transactionDetailsPresentation.confirmations()?.toInt()
     val lockState = manager.transactionLockStates[txId]
     var isRefreshing by remember { mutableStateOf(false) }
