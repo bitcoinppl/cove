@@ -176,6 +176,7 @@ struct MockCloudState {
     upload_wallet_backup_error_after_successes: Option<(usize, CloudStorageError)>,
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
+    list_namespaces_attempts: usize,
     wallet_file_snapshots: HashMap<String, CloudStorageInventorySnapshot>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallets_pending_confirmation: bool,
@@ -338,6 +339,15 @@ impl MockCloudStorage {
     pub(crate) fn fail_list_namespaces(&self, message: &str) {
         self.state.lock().list_namespaces_error =
             Some(CloudStorageError::DownloadFailed(message.into()));
+    }
+
+    pub(crate) fn fail_list_namespaces_authorization_required(&self, message: &str) {
+        self.state.lock().list_namespaces_error =
+            Some(CloudStorageError::AuthorizationRequired(message.into()));
+    }
+
+    pub(crate) fn list_namespaces_attempt_count(&self) -> usize {
+        self.state.lock().list_namespaces_attempts
     }
 
     pub(crate) fn clear_list_wallet_files_non_interactive_failure(&self) {
@@ -710,7 +720,8 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let state = self.state.lock();
+        let mut state = self.state.lock();
+        state.list_namespaces_attempts += 1;
         if let Some(error) = state.list_namespaces_error.clone() {
             return Err(error);
         }

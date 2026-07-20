@@ -530,12 +530,18 @@ impl RestoreOperation {
 
             let mut namespaces = match cloud.list_namespaces().await {
                 Ok(namespaces) => namespaces,
-                Err(error) => {
+                Err(error) if is_connectivity_related_issue(&error) => {
                     warn!(
                         "Restore: cloud namespace refresh failed refresh_index={refresh_index}: {error}"
                     );
                     session.note_namespace_discovery_failure();
                     Vec::new()
+                }
+                Err(error) => {
+                    return Err(CloudBackupError::cloud_storage_context(
+                        "list cloud backup namespaces",
+                        error,
+                    ));
                 }
             };
             namespaces.sort();

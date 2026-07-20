@@ -165,7 +165,10 @@ impl RustCloudBackupManager {
                     continue;
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
+                    let issue = CloudStorageIssue::from(&error);
+                    if issue == CloudStorageIssue::AuthorizationRequired
+                        || is_connectivity_related_issue(issue)
+                    {
                         return Err(blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error));
                     }
                     warn!("Failed to load cloud-only wallet backup: {error}");

@@ -631,6 +631,23 @@ async fn restore_empty_namespace_list_returns_no_backup_found() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn restore_propagates_namespace_authorization_failure_without_retrying() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    globals.cloud.fail_list_namespaces_authorization_required("cloud account access was declined");
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+
+    assert_eq!(CloudStorageIssue::from(&error), CloudStorageIssue::AuthorizationRequired);
+    assert_eq!(globals.cloud.list_namespaces_attempt_count(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn restore_retries_platform_authorization_discover_failures() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -1176,6 +1193,41 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
             cove_cspp::backup_data::wallet_record_id(first_wallet.id.as_ref()),
         ]
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_preparation_propagates_wallet_authorization_failure() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let wallet = xpub_only_wallet_metadata();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals
+        .cloud
+        .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id(&record_id)]);
+    globals.cloud.fail_wallet_backup_download(
+        namespace,
+        record_id,
+        CloudStorageError::AuthorizationRequired("cloud account access was declined".into()),
+    );
+
+    let result = manager
+        .prepare_restore_all_cloud_wallets(vec![frozen_restore_all_wallet(
+            &wallet,
+            CloudBackupWalletStatus::DeletedFromDevice,
+        )])
+        .await;
+    let error = match result {
+        Ok(_) => panic!("expected authorization failure"),
+        Err(error) => error,
+    };
+
+    assert_eq!(CloudStorageIssue::from(&error), CloudStorageIssue::AuthorizationRequired);
 }
 
 #[tokio::test(flavor = "current_thread")]

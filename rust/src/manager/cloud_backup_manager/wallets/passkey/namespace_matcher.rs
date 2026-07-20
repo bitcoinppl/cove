@@ -66,6 +66,7 @@ impl NamespacePasskeyCandidate {
 pub(crate) struct NamespacePasskeyMatchSession {
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
+    authorization_retrier: PlatformAuthorizationRetrier,
     selected_credential_id: Option<Vec<u8>>,
     discoverable_assertion_completed: bool,
     attempted_candidates: HashSet<CandidateRevisionIdentity>,
@@ -84,6 +85,7 @@ impl NamespacePasskeyMatcher {
         NamespacePasskeyMatchSession {
             cloud: self.cloud.clone(),
             passkey: self.passkey.clone(),
+            authorization_retrier: PlatformAuthorizationRetrier::new(),
             selected_credential_id: None,
             discoverable_assertion_completed: false,
             attempted_candidates: HashSet::new(),
@@ -154,7 +156,8 @@ impl NamespacePasskeyMatchSession {
 
             let (credential_id, prf_output) = match &self.selected_credential_id {
                 Some(credential_id) => {
-                    let auth = PlatformAuthorizationRetrier::new()
+                    let auth = self
+                        .authorization_retrier
                         .authenticate(&self.passkey, credential_id, candidate.encrypted.prf_salt)
                         .await;
                     let prf_output = match auth {
@@ -178,7 +181,8 @@ impl NamespacePasskeyMatchSession {
                 }
                 None => {
                     self.discoverable_assertion_completed = true;
-                    let discovery = PlatformAuthorizationRetrier::new()
+                    let discovery = self
+                        .authorization_retrier
                         .discover(&self.passkey, candidate.encrypted.prf_salt)
                         .await;
                     let discovered = match discovery {
