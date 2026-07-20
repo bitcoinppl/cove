@@ -17090,14 +17090,18 @@ public func FfiConverterTypeKeyTeleportReceiveState_lower(_ value: KeyTeleportRe
 
 
 public struct KeyTeleportSendChooseWallet {
+    /**
+     * Wallets available for the pending receiver request
+     */
     public var eligibleWallets: [WalletMetadata]
-    public var selectedWallet: WalletId?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eligibleWallets: [WalletMetadata], selectedWallet: WalletId?) {
+    public init(
+        /**
+         * Wallets available for the pending receiver request
+         */eligibleWallets: [WalletMetadata]) {
         self.eligibleWallets = eligibleWallets
-        self.selectedWallet = selectedWallet
     }
 
 
@@ -17116,14 +17120,12 @@ public struct FfiConverterTypeKeyTeleportSendChooseWallet: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendChooseWallet {
         return
             try KeyTeleportSendChooseWallet(
-                eligibleWallets: FfiConverterSequenceTypeWalletMetadata.read(from: &buf),
-                selectedWallet: FfiConverterOptionTypeWalletId.read(from: &buf)
+                eligibleWallets: FfiConverterSequenceTypeWalletMetadata.read(from: &buf)
         )
     }
 
     public static func write(_ value: KeyTeleportSendChooseWallet, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeWalletMetadata.write(value.eligibleWallets, into: &buf)
-        FfiConverterOptionTypeWalletId.write(value.selectedWallet, into: &buf)
     }
 }
 
@@ -29311,6 +29313,10 @@ public enum KeyTeleportManagerState {
      */
     case receiveImportedWallet(WalletMetadata
     )
+    /**
+     * Waits for the receiver request after a sending wallet has been fixed
+     */
+    case sendAwaitReceiver
     case sendChooseWallet(KeyTeleportSendChooseWallet
     )
     case sendEnterCode(KeyTeleportSendEnterCode
@@ -29359,16 +29365,18 @@ public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
         case 7: return .receiveImportedWallet(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
 
-        case 8: return .sendChooseWallet(try FfiConverterTypeKeyTeleportSendChooseWallet.read(from: &buf)
+        case 8: return .sendAwaitReceiver
+
+        case 9: return .sendChooseWallet(try FfiConverterTypeKeyTeleportSendChooseWallet.read(from: &buf)
         )
 
-        case 9: return .sendEnterCode(try FfiConverterTypeKeyTeleportSendEnterCode.read(from: &buf)
+        case 10: return .sendEnterCode(try FfiConverterTypeKeyTeleportSendEnterCode.read(from: &buf)
         )
 
-        case 10: return .sendConfirm(try FfiConverterTypeKeyTeleportSendConfirm.read(from: &buf)
+        case 11: return .sendConfirm(try FfiConverterTypeKeyTeleportSendConfirm.read(from: &buf)
         )
 
-        case 11: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
+        case 12: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29412,23 +29420,27 @@ public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
 
 
-        case let .sendChooseWallet(v1):
+        case .sendAwaitReceiver:
             writeInt(&buf, Int32(8))
+
+
+        case let .sendChooseWallet(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypeKeyTeleportSendChooseWallet.write(v1, into: &buf)
 
 
         case let .sendEnterCode(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeKeyTeleportSendEnterCode.write(v1, into: &buf)
 
 
         case let .sendConfirm(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeKeyTeleportSendConfirm.write(v1, into: &buf)
 
 
         case let .sendReady(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeKeyTeleportSendReady.write(v1, into: &buf)
 
         }

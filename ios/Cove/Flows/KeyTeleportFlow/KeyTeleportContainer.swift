@@ -132,16 +132,18 @@ private struct KeyTeleportLoadedView: View {
                     manager.dispatch(.clear)
                     app.popRoute()
                 }
-            case let .sendChooseWallet(state):
-                KeyTeleportSendChooseWalletView(state: state) { walletId in
-                    manager.dispatch(.selectSendWallet(walletId))
-                }
+            case .sendAwaitReceiver:
+                KeyTeleportAwaitReceiverView()
 
                 KeyTeleportScanPasteSection(
                     pastedText: $pastedText,
                     scan: { showScanner = true },
                     paste: paste
                 )
+            case let .sendChooseWallet(state):
+                KeyTeleportSendChooseWalletView(state: state) { walletId in
+                    manager.dispatch(.selectSendWallet(walletId))
+                }
             case let .sendEnterCode(state):
                 KeyTeleportReceiverCodeView(state: state, code: $receiverCode) {
                     manager.dispatch(.enterReceiverCode(receiverCode))
@@ -859,6 +861,19 @@ private struct KeyTeleportImportedWalletView: View {
     }
 }
 
+private struct KeyTeleportAwaitReceiverView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Scan Receiver Request")
+                .font(.headline)
+
+            Text("Scan or paste the request shown on the receiving device.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 private struct KeyTeleportSendChooseWalletView: View {
     let state: KeyTeleportSendChooseWallet
     let select: (WalletId) -> Void
@@ -875,9 +890,6 @@ private struct KeyTeleportSendChooseWalletView: View {
                     HStack {
                         Text(wallet.name)
                         Spacer()
-                        if state.selectedWallet == wallet.id {
-                            Image(systemName: "checkmark")
-                        }
                     }
                 }
                 .buttonStyle(.bordered)

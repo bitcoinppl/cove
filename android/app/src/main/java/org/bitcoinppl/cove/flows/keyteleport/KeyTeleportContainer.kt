@@ -247,8 +247,12 @@ private fun KeyTeleportSendContent(
     onPaste: () -> Unit,
 ) {
     when (state) {
+        KeyTeleportManagerState.SendAwaitReceiver -> {
+            SendAwaitReceiverView(onScan, onPaste)
+        }
+
         is KeyTeleportManagerState.SendChooseWallet -> {
-            SendChooseWalletView(manager, state.v1, onScan, onPaste)
+            SendChooseWalletView(manager, state.v1)
         }
 
         is KeyTeleportManagerState.SendEnterCode -> {

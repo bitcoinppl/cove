@@ -32974,9 +32974,10 @@ public object FfiConverterTypeKeyTeleportReceiveState: FfiConverterRustBuffer<Ke
 
 
 data class KeyTeleportSendChooseWallet (
+    /**
+     * Wallets available for the pending receiver request
+     */
     var `eligibleWallets`: List<WalletMetadata>
-    ,
-    var `selectedWallet`: WalletId?
 
 ): Disposable{
 
@@ -32988,8 +32989,7 @@ data class KeyTeleportSendChooseWallet (
     override fun destroy() {
 
     Disposable.destroy(
-        this.`eligibleWallets`,
-        this.`selectedWallet`
+        this.`eligibleWallets`
     )
     }
 
@@ -33003,18 +33003,15 @@ public object FfiConverterTypeKeyTeleportSendChooseWallet: FfiConverterRustBuffe
     override fun read(buf: ByteBuffer): KeyTeleportSendChooseWallet {
         return KeyTeleportSendChooseWallet(
             FfiConverterSequenceTypeWalletMetadata.read(buf),
-            FfiConverterOptionalTypeWalletId.read(buf),
         )
     }
 
     override fun allocationSize(value: KeyTeleportSendChooseWallet) = (
-            FfiConverterSequenceTypeWalletMetadata.allocationSize(value.`eligibleWallets`) +
-            FfiConverterOptionalTypeWalletId.allocationSize(value.`selectedWallet`)
+            FfiConverterSequenceTypeWalletMetadata.allocationSize(value.`eligibleWallets`)
     )
 
     override fun write(value: KeyTeleportSendChooseWallet, buf: ByteBuffer) {
             FfiConverterSequenceTypeWalletMetadata.write(value.`eligibleWallets`, buf)
-            FfiConverterOptionalTypeWalletId.write(value.`selectedWallet`, buf)
     }
 }
 
@@ -47801,6 +47798,12 @@ sealed class KeyTeleportManagerState: Disposable  {
         companion object
     }
 
+    /**
+     * Waits for the receiver request after a sending wallet has been fixed
+     */
+    object SendAwaitReceiver : KeyTeleportManagerState()
+
+
     data class SendChooseWallet(
         val v1: org.bitcoinppl.cove_core.KeyTeleportSendChooseWallet) : KeyTeleportManagerState()
 
@@ -47881,6 +47884,8 @@ sealed class KeyTeleportManagerState: Disposable  {
     )
 
             }
+            is KeyTeleportManagerState.SendAwaitReceiver -> {// Nothing to destroy
+            }
             is KeyTeleportManagerState.SendChooseWallet -> {
 
     Disposable.destroy(
@@ -47943,16 +47948,17 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
             7 -> KeyTeleportManagerState.ReceiveImportedWallet(
                 FfiConverterTypeWalletMetadata.read(buf),
                 )
-            8 -> KeyTeleportManagerState.SendChooseWallet(
+            8 -> KeyTeleportManagerState.SendAwaitReceiver
+            9 -> KeyTeleportManagerState.SendChooseWallet(
                 FfiConverterTypeKeyTeleportSendChooseWallet.read(buf),
                 )
-            9 -> KeyTeleportManagerState.SendEnterCode(
+            10 -> KeyTeleportManagerState.SendEnterCode(
                 FfiConverterTypeKeyTeleportSendEnterCode.read(buf),
                 )
-            10 -> KeyTeleportManagerState.SendConfirm(
+            11 -> KeyTeleportManagerState.SendConfirm(
                 FfiConverterTypeKeyTeleportSendConfirm.read(buf),
                 )
-            11 -> KeyTeleportManagerState.SendReady(
+            12 -> KeyTeleportManagerState.SendReady(
                 FfiConverterTypeKeyTeleportSendReady.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -48005,6 +48011,12 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
             (
                 4UL
                 + FfiConverterTypeWalletMetadata.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.SendAwaitReceiver -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is KeyTeleportManagerState.SendChooseWallet -> {
@@ -48072,23 +48084,27 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
                 FfiConverterTypeWalletMetadata.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportManagerState.SendChooseWallet -> {
+            is KeyTeleportManagerState.SendAwaitReceiver -> {
                 buf.putInt(8)
+                Unit
+            }
+            is KeyTeleportManagerState.SendChooseWallet -> {
+                buf.putInt(9)
                 FfiConverterTypeKeyTeleportSendChooseWallet.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendEnterCode -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterTypeKeyTeleportSendEnterCode.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendConfirm -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 FfiConverterTypeKeyTeleportSendConfirm.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendReady -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 FfiConverterTypeKeyTeleportSendReady.write(value.v1, buf)
                 Unit
             }
