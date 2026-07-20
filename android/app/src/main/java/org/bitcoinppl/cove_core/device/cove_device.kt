@@ -3688,6 +3688,12 @@ sealed class KeychainException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class WalletSecretTypeMismatch(
+        ) : KeychainException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -3727,6 +3733,7 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
             5 -> KeychainException.Decrypt(
                 FfiConverterString.read(buf),
                 )
+            6 -> KeychainException.WalletSecretTypeMismatch()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -3756,6 +3763,10 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is KeychainException.WalletSecretTypeMismatch -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -3782,6 +3793,10 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
             is KeychainException.Decrypt -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeychainException.WalletSecretTypeMismatch -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

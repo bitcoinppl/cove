@@ -14,6 +14,7 @@ use bitcoin::{
     params::Params,
 };
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
+use cove_device::keychain::Keychain;
 use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
     fees::{FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
@@ -30,10 +31,10 @@ use crate::{
         actor::{WalletActor, current_wallet_unspent_outpoints_for_txid, exclude_locked_outpoints},
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
-    mnemonic::{Mnemonic, MnemonicExt as _},
     node::client::NodeClient,
     transaction::{FeeRate, Transaction, TransactionDetails, TransactionDetailsPresentation, TxId},
     wallet::Address,
+    wallet_secret::WalletSecretExt as _,
 };
 
 #[derive(Debug)]
@@ -580,12 +581,11 @@ impl WalletActor {
         }
 
         let network = self.wallet.network;
-        let mnemonic = Mnemonic::try_from_id(&self.wallet.metadata.id)
-            .tap_err(|error| error!("failed to get mnemonic for wallet: {error}"))
-            .map_err(|_| err("failed to get mnemonic for wallet"))?;
-
-        let descriptors =
-            mnemonic.into_descriptors(None, network, self.wallet.metadata.address_type);
+        let secret = Keychain::global()
+            .get_wallet_secret(&self.wallet.metadata.id)
+            .tap_err(|error| error!("failed to get wallet secret: {error}"))?
+            .ok_or_else(|| err("failed to get wallet secret"))?;
+        let descriptors = secret.into_descriptors(network, self.wallet.metadata.address_type);
 
         let create_params = descriptors.into_create_params().network(network.into());
 

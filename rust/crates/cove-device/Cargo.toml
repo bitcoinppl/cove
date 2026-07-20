@@ -35,6 +35,7 @@ hex = { workspace = true }
 
 # crypto
 rand = { workspace = true }
+zeroize = { workspace = true }
 
 # cbor
 minicbor = { workspace = true }

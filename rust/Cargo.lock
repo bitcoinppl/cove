@@ -1517,6 +1517,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "uniffi 0.31.1",
+ "zeroize",
 ]
 
 [[package]]
