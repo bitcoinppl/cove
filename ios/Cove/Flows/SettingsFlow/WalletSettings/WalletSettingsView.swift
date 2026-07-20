@@ -180,7 +180,7 @@ struct WalletSettingsView: View {
             }
 
             Section(header: Text("Danger Zone")) {
-                if manager.walletMetadata.walletType == .hot {
+                if manager.walletMetadata.walletType == .hot, manager.hasRecoveryWords() {
                     Button {
                         showingSecretWordsConfirmation = true
                     } label: {
@@ -197,16 +197,18 @@ struct WalletSettingsView: View {
                             "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
                         )
                     }
+                }
 
-                    if app.canKeyTeleportSend(walletId: manager.walletMetadata.id) {
-                        Button {
-                            let keyTeleportManager = app.ensureKeyTeleportManager()
-                            keyTeleportManager.dispatch(.startSendFromWallet(manager.walletMetadata.id))
-                            app.pushRoute(RouteFactory().keyTeleportSend())
-                        } label: {
-                            Text("Send with Key Teleport")
-                                .font(.subheadline)
-                        }
+                if manager.walletMetadata.walletType == .hot,
+                   app.canKeyTeleportSend(walletId: manager.walletMetadata.id)
+                {
+                    Button {
+                        let keyTeleportManager = app.ensureKeyTeleportManager()
+                        keyTeleportManager.dispatch(.startSendFromWallet(manager.walletMetadata.id))
+                        app.pushRoute(RouteFactory().keyTeleportSend())
+                    } label: {
+                        Text("Send with Key Teleport")
+                            .font(.subheadline)
                     }
                 }
 

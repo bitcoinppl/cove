@@ -34,7 +34,7 @@ fn xprv_protocol_payload_roundtrips_and_validates_base58check() {
 
     match decoded {
         DecodedPayload::Xprv(xprv) => assert_eq!(xprv.expose_string(), XPRV),
-        DecodedPayload::Mnemonic(_) => panic!("expected xprv"),
+        DecodedPayload::Mnemonic(_) | DecodedPayload::Notes(_) => panic!("expected xprv"),
     }
 
     assert!(matches!(

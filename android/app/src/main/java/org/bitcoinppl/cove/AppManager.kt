@@ -14,7 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
-import org.bitcoinppl.cove.flows.KeyTeleportFlow.KeyTeleportManager
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*

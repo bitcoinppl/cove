@@ -93,6 +93,8 @@ class WalletManager :
     var unsignedTransactions by mutableStateOf<List<UnsignedTransaction>>(emptyList())
         private set
 
+    fun hasRecoveryWords(): Boolean = rust.hasRecoveryWords()
+
     // errors
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
