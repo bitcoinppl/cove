@@ -229,7 +229,7 @@ private fun KeyTeleportReceiveContent(
         }
 
         is KeyTeleportManagerState.ReceiveImportedWallet -> {
-            ReceiveImportedWalletView(manager, state.v1) { app.popRoute() }
+            ReceiveImportedWalletView(manager, state.v1) { app.selectWallet(state.v1.id) }
         }
 
         else -> {

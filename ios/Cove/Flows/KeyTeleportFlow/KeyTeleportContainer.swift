@@ -130,7 +130,7 @@ private struct KeyTeleportLoadedView: View {
             case let .receiveImportedWallet(wallet):
                 KeyTeleportImportedWalletView(wallet: wallet) {
                     manager.dispatch(.clear)
-                    app.popRoute()
+                    app.selectWallet(wallet.id)
                 }
             case .sendAwaitReceiver:
                 KeyTeleportAwaitReceiverView()
