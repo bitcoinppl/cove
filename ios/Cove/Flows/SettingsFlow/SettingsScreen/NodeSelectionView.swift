@@ -58,6 +58,34 @@ struct NodeSelectionView: View {
         }
     }
 
+    @ViewBuilder
+    private func certificateAlertActions(_ alert: CertificateDecision) -> some View {
+        switch alert {
+        case let .unrecognized(certificate):
+            Button("Trust this certificate") {
+                certificateAlert = nil
+                customTls = .pinnedFingerprint(sha256: certificate.sha256)
+                checkAndSaveNode()
+            }
+            Button("Cancel", role: .cancel) {
+                certificateAlert = nil
+                Task { await dismissAllPopups() }
+            }
+        case .changed:
+            Button("OK", role: .cancel) { certificateAlert = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func certificateAlertMessage(_ alert: CertificateDecision) -> some View {
+        switch alert {
+        case let .unrecognized(certificate):
+            Text("This server uses a certificate Cove cannot verify. Only continue if this fingerprint matches the one your server reports.\n\n\(certificate.display)")
+        case .changed:
+            Text("This server is presenting a different certificate to the one you trusted. It may have been reissued, or something may be intercepting the connection. Cove will not connect until it presents the certificate you trusted.")
+        }
+    }
+
     var showCustomUrlField: Bool {
         selectedNodeName.hasPrefix("Custom")
     }
@@ -135,8 +163,7 @@ struct NodeSelectionView: View {
     }
 
     func checkAndSaveNode() {
-        var node: Node? = nil
-
+        let node: Node
         do {
             node = try nodeSelector.parseCustomNode(
                 url: customUrl,
@@ -144,38 +171,33 @@ struct NodeSelectionView: View {
                 enteredName: customNodeName,
                 tls: customTls
             )
-            customUrl = node?.url ?? customUrl
-            customNodeName = node?.name ?? customNodeName
+            customUrl = node.url
+            customNodeName = node.name
+        } catch let NodeSelectorError.ParseNodeUrlError(errorString) {
+            showParseUrlAlert = true
+            parseUrlMessage = errorString
+            return
         } catch {
             showParseUrlAlert = true
-            switch error {
-            case let NodeSelectorError.ParseNodeUrlError(errorString):
-                parseUrlMessage = errorString
-            default:
-                parseUrlMessage = "Unknown error \(error.localizedDescription)"
-            }
+            parseUrlMessage = "Unknown error \(error.localizedDescription)"
+            return
         }
 
-        if let node {
-            Task {
-                showLoadingPopup()
-                let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
+        Task {
+            showLoadingPopup()
 
-                switch result {
-                case .success:
-                    refreshNodeState()
-                    completeLoading(.success("Connected to node successfully"))
-                case let .failure(error):
-                    // The server is reachable but its certificate was rejected.
-                    if case NodeSelectorError.CertificateNotTrusted = error {
-                        await offerCertificate()
-                    } else {
-                        let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
-                        let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
+            do {
+                try await nodeSelector.checkAndSaveNode(node: node)
+                refreshNodeState()
+                completeLoading(.success("Connected to node successfully"))
+            } catch NodeSelectorError.CertificateNotTrusted {
+                // The server is reachable but its certificate was rejected.
+                await offerCertificate()
+            } catch {
+                let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
+                let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
 
-                        completeLoading(.failure(formattedMessage))
-                    }
-                }
+                completeLoading(.failure(formattedMessage))
             }
         }
     }
@@ -307,29 +329,13 @@ struct NodeSelectionView: View {
                 }
             )
         }
-        .alert(certificateAlertTitle, isPresented: $showCertificateAlert, presenting: certificateAlert) { alert in
-            switch alert {
-            case let .unrecognized(certificate):
-                Button("Trust this certificate") {
-                    certificateAlert = nil
-                    customTls = .pinnedFingerprint(sha256: certificate.sha256)
-                    checkAndSaveNode()
-                }
-                Button("Cancel", role: .cancel) {
-                    certificateAlert = nil
-                    Task { await dismissAllPopups() }
-                }
-            case .changed:
-                Button("OK", role: .cancel) { certificateAlert = nil }
-            }
-        } message: { alert in
-            switch alert {
-            case let .unrecognized(certificate):
-                Text("This server uses a certificate Cove cannot verify. Only continue if this fingerprint matches the one your server reports.\n\n\(certificate.display)")
-            case .changed:
-                Text("This server is presenting a different certificate to the one you trusted. It may have been reissued, or something may be intercepting the connection. Cove will not connect until it presents the certificate you trusted.")
-            }
-        }
+        .alert(
+            certificateAlertTitle,
+            isPresented: $showCertificateAlert,
+            presenting: certificateAlert,
+            actions: certificateAlertActions,
+            message: certificateAlertMessage
+        )
     }
 }
 
