@@ -1121,7 +1121,8 @@ fn extract_version_code(content: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_export_env_file, parse_keystore_properties, target_for_abi, target_path_for_android_file,
+        parse_export_env_file, parse_keystore_properties, target_for_abi,
+        target_path_for_android_file,
     };
     use std::fs;
 

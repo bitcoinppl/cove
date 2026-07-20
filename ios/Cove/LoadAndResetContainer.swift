@@ -22,7 +22,7 @@ struct LoadAndResetContainer: View {
             .task(id: route) {
                 do {
                     let generation = app.captureLoadAndResetGeneration()
-                    async let minimumDelay: Void = Task.sleep(
+                    async let minimumDelay: Void = try Task.sleep(
                         for: .milliseconds(loadingTimeMs)
                     )
                     async let preparation = app.prepareLoadAndResetTarget(
