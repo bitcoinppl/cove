@@ -9,10 +9,11 @@ import SwiftUI
 
 /// A grid that displays items in column-major order (top-to-bottom, then left-to-right)
 ///
-/// For a list [1,2,3,4,5,6] with 3 columns, displays as:
+/// For a list [1,2,3,4,5,6] with 2 columns, displays as:
 /// ```
-/// 1  3  5
-/// 2  4  6
+/// 1  4
+/// 2  5
+/// 3  6
 /// ```
 struct ColumnMajorGrid<Item, Content: View>: View {
     let items: [Item]
@@ -22,7 +23,7 @@ struct ColumnMajorGrid<Item, Content: View>: View {
 
     init(
         items: [Item],
-        numberOfColumns: Int = 3,
+        numberOfColumns: Int = 2,
         spacing: CGFloat = 12,
         @ViewBuilder content: @escaping (Int, Item) -> Content
     ) {

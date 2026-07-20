@@ -51,33 +51,26 @@ struct WordsView: View {
             let layout: RecoveryWordsLayout = scrollableLayout ? .stickyBottom : .inline
             let contentWidth = max(proxy.size.width - 32, 0)
 
-            Group {
-                if scrollableLayout {
-                    VStack(spacing: 0) {
-                        ScrollView {
-                            recoveryWordsContent(
-                                layout: layout,
-                                availableWidth: contentWidth
-                            )
-                            .padding(.bottom, 24)
-                        }
-                        .scrollIndicators(.hidden)
-
-                        compactBottomAction
-                    }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .background(
-                        Color.midnightBlue
-                            .ignoresSafeArea(.all)
-                    )
-
-                } else {
+            VStack(spacing: 0) {
+                ScrollView {
                     recoveryWordsContent(
                         layout: layout,
                         availableWidth: contentWidth
                     )
+                    .frame(minHeight: layout == .inline ? proxy.size.height : nil)
+                    .padding(.bottom, layout == .stickyBottom ? 24 : 0)
+                }
+                .scrollIndicators(.hidden)
+
+                if layout == .stickyBottom {
+                    compactBottomAction
                 }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background(
+                Color.midnightBlue
+                    .ignoresSafeArea(.all)
+            )
         }
     }
 
@@ -125,10 +118,6 @@ enum RecoveryWordsLayout {
     case stickyBottom
     case inline
 
-    var usesCompactCardHeight: Bool {
-        self == .stickyBottom
-    }
-
     var showsPrimaryActionInline: Bool {
         self == .inline
     }
@@ -146,13 +135,13 @@ struct RecoveryWordsContent: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            StyledWordCard(tabIndex: $tabIndex, compactHeight: layout.usesCompactCardHeight) {
+            StyledWordCard(tabIndex: $tabIndex, rowCount: wordGridRowCount) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
                     WordCardView(words: wordGroup, availableWidth: availableWidth).tag(index)
                 }
             }
 
-            if !layout.usesCompactCardHeight {
+            if layout == .inline {
                 Spacer()
             }
 
@@ -254,6 +243,10 @@ struct RecoveryWordsContent: View {
             saveWallet: saveWallet
         )
     }
+
+    private var wordGridRowCount: Int {
+        (groupedWords.map(\.count).max() ?? 0) / 2
+    }
 }
 
 struct RecoveryWordsPrimaryActionButton: View {
@@ -294,7 +287,7 @@ struct WordCardView: View {
     let words: [GroupedWord]
     let availableWidth: CGFloat
 
-    private let columnCount = 3
+    private let columnCount = 2
     private let columnSpacing: CGFloat = 12
 
     var body: some View {
@@ -351,7 +344,7 @@ struct StyledWordCard<Content: View>: View {
     @Environment(\.sizeCategory) var sizeCategory
 
     @Binding var tabIndex: Int
-    let compactHeight: Bool
+    let rowCount: Int
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -360,7 +353,13 @@ struct StyledWordCard<Content: View>: View {
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
 
-        tabView.frame(height: usesCompactTypography(sizeCategory: sizeCategory) ? 320 : 260)
+        tabView.frame(height: wordCardHeight)
+    }
+
+    private var wordCardHeight: CGFloat {
+        let rowHeight: CGFloat = usesCompactTypography(sizeCategory: sizeCategory) ? 54 : 48
+
+        return CGFloat(rowCount) * rowHeight + 56
     }
 }
 

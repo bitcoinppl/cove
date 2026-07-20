@@ -385,6 +385,7 @@ private fun WordCardView(
     ColumnMajorGrid(
         items = words,
         modifier = modifier,
+        numColumns = 2,
     ) { _, groupedWord ->
         Box(
             modifier =

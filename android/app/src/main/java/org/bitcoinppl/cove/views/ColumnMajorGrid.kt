@@ -12,17 +12,18 @@ import androidx.compose.ui.unit.dp
 /**
  * A grid that displays items in column-major order (top-to-bottom, then left-to-right)
  *
- * For a list [1,2,3,4,5,6] with 3 columns, displays as:
+ * For a list [1,2,3,4,5,6] with 2 columns, displays as:
  * ```
- * 1  3  5
- * 2  4  6
+ * 1  4
+ * 2  5
+ * 3  6
  * ```
  */
 @Composable
 fun <T> ColumnMajorGrid(
     items: List<T>,
     modifier: Modifier = Modifier,
-    numColumns: Int = 3,
+    numColumns: Int = 2,
     horizontalSpacing: Dp = 12.dp,
     verticalSpacing: Dp = 18.dp,
     content: @Composable (index: Int, item: T) -> Unit,
