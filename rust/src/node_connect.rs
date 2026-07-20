@@ -5,6 +5,7 @@ use crate::node::client::electrum::transport;
 use crate::node::tls::{self, TlsTrust};
 use crate::{database::Database, network::Network, node::Node};
 use cove_macros::impl_default_for;
+use cove_util::ResultExt as _;
 use eyre::{Context, eyre};
 
 pub const BITCOIN_ESPLORA: [(&str, &str); 1] =
@@ -153,14 +154,14 @@ impl NodeSelector {
         Database::global()
             .global_config
             .set_selected_node(&node)
-            .map_err(|error| NodeSelectorError::SetSelectedNodeError(error.to_string()))?;
+            .map_err_str(NodeSelectorError::SetSelectedNodeError)?;
 
         Ok(node)
     }
 
     #[uniffi::method]
     pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url().await.map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
+        node.check_url().await.map_err_debug(Error::NodeAccessError)?;
 
         Ok(())
     }
@@ -176,8 +177,7 @@ impl NodeSelector {
     ) -> Result<Node, Error> {
         let node_type = name.to_ascii_lowercase();
 
-        let url =
-            parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
+        let url = parse_node_url(&url).map_err_str(Error::ParseNodeUrlError)?;
 
         if !has_usable_host(&url) {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
@@ -246,7 +246,7 @@ impl NodeSelector {
         let certificate =
             cove_tokio::unblock::run_blocking(move || transport::peer_certificate(&url))
                 .await
-                .map_err(|error| Error::ReadCertificateError(error.to_string()))?;
+                .map_err_str(Error::ReadCertificateError)?;
 
         let sha256 = tls::fingerprint(&certificate);
 
@@ -278,7 +278,7 @@ impl NodeSelector {
         Database::global()
             .global_config
             .set_selected_node(&node)
-            .map_err(|error| Error::SetSelectedNodeError(error.to_string()))?;
+            .map_err_str(Error::SetSelectedNodeError)?;
 
         Ok(())
     }
@@ -356,9 +356,7 @@ fn would_forget_certificate(saved: &Node, node: &Node) -> bool {
 }
 
 fn normalized_url(url: &str) -> Result<String, Error> {
-    let url = parse_node_url(url)
-        .map_err(|error| Error::ParseNodeUrlError(error.to_string()))?
-        .to_string();
+    let url = parse_node_url(url).map_err_str(Error::ParseNodeUrlError)?.to_string();
 
     Ok(url.strip_suffix('/').unwrap_or(&url).to_string())
 }
