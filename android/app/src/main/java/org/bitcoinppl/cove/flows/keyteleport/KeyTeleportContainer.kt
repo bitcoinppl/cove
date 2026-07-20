@@ -3,7 +3,6 @@ package org.bitcoinppl.cove.flows.keyteleport
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,8 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -41,7 +37,6 @@ import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingBackground
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
-import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
@@ -108,6 +103,9 @@ private fun KeyTeleportScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
+                    actions = {
+                        KeyTeleportToolbarMenu(manager) { app.popRoute() }
+                    },
                 )
             },
         ) { padding ->
@@ -117,8 +115,8 @@ private fun KeyTeleportScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                        .padding(horizontal = 20.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 KeyTeleportRouteHeader(route)
                 KeyTeleportStateCard(app, manager, route, onScan)
@@ -166,8 +164,9 @@ private fun KeyTeleportStateContent(
     onPaste: () -> Unit,
 ) {
     when (val state = manager.state) {
-        is KeyTeleportManagerState.Idle ->
+        is KeyTeleportManagerState.Idle -> {
             KeyTeleportIdleContent(app, manager, route, onScan, onPaste)
+        }
 
         is KeyTeleportManagerState.ReceiveReady,
         is KeyTeleportManagerState.ReceiveEnterPassword,
@@ -175,9 +174,13 @@ private fun KeyTeleportStateContent(
         is KeyTeleportManagerState.ReceiveXprvReview,
         is KeyTeleportManagerState.ReceiveMessageReview,
         is KeyTeleportManagerState.ReceiveImportedWallet,
-        -> KeyTeleportReceiveContent(app, manager, state, onScan, onPaste)
+        -> {
+            KeyTeleportReceiveContent(app, manager, state, onScan)
+        }
 
-        else -> KeyTeleportSendContent(app, manager, state, onScan, onPaste)
+        else -> {
+            KeyTeleportSendContent(app, manager, state, onScan, onPaste)
+        }
     }
 }
 
@@ -202,26 +205,35 @@ private fun KeyTeleportReceiveContent(
     manager: KeyTeleportManager,
     state: KeyTeleportManagerState,
     onScan: () -> Unit,
-    onPaste: () -> Unit,
 ) {
     when (state) {
-        is KeyTeleportManagerState.ReceiveReady ->
-            ReceiveReadyView(manager, state.v1, onScan, onPaste) { app.popRoute() }
+        is KeyTeleportManagerState.ReceiveReady -> {
+            ReceiveReadyView(state.v1, onScan)
+        }
 
-        is KeyTeleportManagerState.ReceiveEnterPassword -> ReceivePasswordView(manager)
-        is KeyTeleportManagerState.ReceiveMnemonicReview ->
+        is KeyTeleportManagerState.ReceiveEnterPassword -> {
+            ReceivePasswordView(manager)
+        }
+
+        is KeyTeleportManagerState.ReceiveMnemonicReview -> {
             ReceiveMnemonicReviewView(manager, state.v1.wordCount.toInt()) { app.popRoute() }
+        }
 
-        is KeyTeleportManagerState.ReceiveXprvReview ->
+        is KeyTeleportManagerState.ReceiveXprvReview -> {
             ReceiveXprvReviewView(manager, state.v1) { app.popRoute() }
+        }
 
-        is KeyTeleportManagerState.ReceiveMessageReview ->
+        is KeyTeleportManagerState.ReceiveMessageReview -> {
             ReceiveMessageReviewView(manager, state.v1) { app.popRoute() }
+        }
 
-        is KeyTeleportManagerState.ReceiveImportedWallet ->
+        is KeyTeleportManagerState.ReceiveImportedWallet -> {
             ReceiveImportedWalletView(manager, state.v1) { app.popRoute() }
+        }
 
-        else -> Unit
+        else -> {
+            Unit
+        }
     }
 }
 
@@ -234,18 +246,28 @@ private fun KeyTeleportSendContent(
     onPaste: () -> Unit,
 ) {
     when (state) {
-        is KeyTeleportManagerState.SendChooseWallet ->
+        is KeyTeleportManagerState.SendChooseWallet -> {
             SendChooseWalletView(manager, state.v1, onScan, onPaste)
+        }
 
-        is KeyTeleportManagerState.SendEnterCode -> SendEnterCodeView(manager, state.v1)
-        is KeyTeleportManagerState.SendConfirm -> SendConfirmView(manager, state.v1)
-        is KeyTeleportManagerState.SendReady ->
+        is KeyTeleportManagerState.SendEnterCode -> {
+            SendEnterCodeView(manager, state.v1)
+        }
+
+        is KeyTeleportManagerState.SendConfirm -> {
+            SendConfirmView(manager, state.v1)
+        }
+
+        is KeyTeleportManagerState.SendReady -> {
             SendReadyView(state.v1) {
                 manager.dispatch(KeyTeleportManagerAction.Clear)
                 app.popRoute()
             }
+        }
 
-        else -> Unit
+        else -> {
+            Unit
+        }
     }
 }
 
@@ -253,36 +275,26 @@ private fun KeyTeleportSendContent(
 private fun KeyTeleportRouteHeader(route: KeyTeleportRoute) {
     val receiving = route == KeyTeleportRoute.RECEIVE
 
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OnboardingStatusHero(
-            icon = if (receiving) Icons.Default.Download else Icons.Default.Upload,
-            pulse = true,
+        Text(
+            text = if (receiving) "Receive by Key Teleport" else "Send by Key Teleport",
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.SemiBold,
         )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = if (receiving) "Receive by Key Teleport" else "Send by Key Teleport",
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text =
-                    if (receiving) {
-                        "Show this request to the sending wallet, then scan the sender response."
-                    } else {
-                        "Scan the receiver request, confirm the wallet, then share the response."
-                    },
-                color = OnboardingTextSecondary,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        Text(
+            text =
+                if (receiving) {
+                    "Show this request to the sending wallet, then scan the sender response."
+                } else {
+                    "Scan or paste the receiver request, confirm the wallet, then share the response."
+                },
+            color = OnboardingTextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 

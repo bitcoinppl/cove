@@ -33,6 +33,7 @@ private struct KeyTeleportLoadedView: View {
     @State private var mnemonicWords: [String]?
     @State private var loadedMnemonicReviewID: KeyTeleportMnemonicReviewID?
     @State private var xprv: String?
+    @State private var pendingSessionAction: KeyTeleportReceiveSessionAction?
 
     var body: some View {
         ScrollView {
@@ -56,6 +57,32 @@ private struct KeyTeleportLoadedView: View {
         .onboardingRecoveryBackground()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showsReadyActions {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    readyActionsMenu
+                }
+            }
+        }
+        .confirmationDialog(
+            "Manage Receive Session",
+            isPresented: isPresentingSessionAction,
+            titleVisibility: .visible
+        ) {
+            if let pendingSessionAction {
+                Button(pendingSessionAction.confirmationTitle, role: .destructive) {
+                    confirmSessionAction(pendingSessionAction)
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingSessionAction = nil
+            }
+        } message: {
+            if let pendingSessionAction {
+                Text(pendingSessionAction.message)
+            }
+        }
         .sheet(isPresented: $showScanner) {
             QrCodeScanView(app: app, scannedCode: $scannedCode)
         }
@@ -86,13 +113,6 @@ private struct KeyTeleportLoadedView: View {
             case let .receiveReady(state):
                 KeyTeleportReceiveReadyView(state: state) {
                     showScanner = true
-                } share: {
-                    ShareSheet.present(text: state.packet.url())
-                } restart: {
-                    manager.dispatch(.restartReceive)
-                } end: {
-                    manager.dispatch(.endReceive)
-                    app.popRoute()
                 }
             case .receiveEnterPassword:
                 KeyTeleportPasswordEntryView(password: $senderPassword) {
@@ -151,8 +171,6 @@ private struct KeyTeleportLoadedView: View {
                 }
             case let .sendReady(state):
                 KeyTeleportSendReadyView(state: state) {
-                    ShareSheet.present(text: state.packet.url())
-                } finish: {
                     manager.dispatch(.clear)
                     app.popRoute()
                 }
@@ -160,6 +178,74 @@ private struct KeyTeleportLoadedView: View {
             }
         }
         .keyTeleportCard()
+    }
+
+    private var showsReadyActions: Bool {
+        switch manager.state {
+        case .receiveReady, .sendReady:
+            true
+        default:
+            false
+        }
+    }
+
+    private var readyActionsMenu: some View {
+        Menu {
+            switch manager.state {
+            case let .receiveReady(state):
+                shareButton(url: state.packet.url())
+
+                Button {
+                    pendingSessionAction = .restart
+                } label: {
+                    Label("New Session", systemImage: "arrow.clockwise")
+                }
+
+                Button(role: .destructive) {
+                    pendingSessionAction = .end
+                } label: {
+                    Label("End Session", systemImage: "xmark.circle")
+                }
+            case let .sendReady(state):
+                shareButton(url: state.packet.url())
+            default:
+                EmptyView()
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("More")
+    }
+
+    private func shareButton(url: String) -> some View {
+        Button {
+            ShareSheet.presentFromMenu(text: url)
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private var isPresentingSessionAction: Binding<Bool> {
+        Binding(
+            get: { pendingSessionAction != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingSessionAction = nil
+                }
+            }
+        )
+    }
+
+    private func confirmSessionAction(_ action: KeyTeleportReceiveSessionAction) {
+        pendingSessionAction = nil
+
+        switch action {
+        case .restart:
+            manager.dispatch(.restartReceive)
+        case .end:
+            manager.dispatch(.endReceive)
+            app.popRoute()
+        }
     }
 
     private var header: some View {
@@ -357,11 +443,6 @@ private struct KeyTeleportScanPasteSection: View {
 private struct KeyTeleportReceiveReadyView: View {
     let state: KeyTeleportReceiveState
     let scan: () -> Void
-    let share: () -> Void
-    let restart: () -> Void
-    let end: () -> Void
-
-    @State private var pendingSessionAction: KeyTeleportReceiveSessionAction?
 
     var body: some View {
         VStack(spacing: 18) {
@@ -378,20 +459,6 @@ private struct KeyTeleportReceiveReadyView: View {
                     .fontWeight(.semibold)
             }
 
-            HStack {
-                Button { UIPasteboard.general.string = state.packet.url() } label: {
-                    Label("Copy Link", systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
-
-                Button(action: share) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
-            }
-
             Text("Send the link to another Key Teleport-compatible wallet instead of showing the QR code. Enter the receiver code separately.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -402,75 +469,22 @@ private struct KeyTeleportReceiveReadyView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
-
-            HStack {
-                Button {
-                    pendingSessionAction = .restart
-                } label: {
-                    Label("New Session", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
-                .confirmationDialog(
-                    "Manage Receive Session",
-                    isPresented: isPresentingSessionAction(.restart),
-                    titleVisibility: .visible
-                ) {
-                    Button("Start New Session", role: .destructive) {
-                        pendingSessionAction = nil
-                        restart()
-                    }
-
-                    Button("Cancel", role: .cancel) {
-                        pendingSessionAction = nil
-                    }
-                } message: {
-                    Text(KeyTeleportReceiveSessionAction.restart.message)
-                }
-
-                Button(role: .destructive) {
-                    pendingSessionAction = .end
-                } label: {
-                    Text("End Session")
-                }
-                .buttonStyle(.bordered)
-                .confirmationDialog(
-                    "Manage Receive Session",
-                    isPresented: isPresentingSessionAction(.end),
-                    titleVisibility: .visible
-                ) {
-                    Button("End Session", role: .destructive) {
-                        pendingSessionAction = nil
-                        end()
-                    }
-
-                    Button("Cancel", role: .cancel) {
-                        pendingSessionAction = nil
-                    }
-                } message: {
-                    Text(KeyTeleportReceiveSessionAction.end.message)
-                }
-            }
         }
-    }
-
-    private func isPresentingSessionAction(_ action: KeyTeleportReceiveSessionAction) -> Binding<Bool> {
-        Binding(
-            get: { pendingSessionAction == action },
-            set: { isPresented in
-                if isPresented {
-                    pendingSessionAction = action
-                } else if pendingSessionAction == action {
-                    pendingSessionAction = nil
-                }
-            }
-        )
     }
 }
 
 private enum KeyTeleportReceiveSessionAction: Equatable {
     case restart
     case end
+
+    var confirmationTitle: String {
+        switch self {
+        case .restart:
+            "Start New Session"
+        case .end:
+            "End Session"
+        }
+    }
 
     var message: String {
         switch self {
@@ -981,7 +995,6 @@ private struct KeyTeleportSendConfirmView: View {
 
 private struct KeyTeleportSendReadyView: View {
     let state: KeyTeleportSendReady
-    let share: () -> Void
     let finish: () -> Void
 
     var body: some View {
@@ -997,20 +1010,6 @@ private struct KeyTeleportSendReadyView: View {
                 Text(state.password.groupedText())
                     .font(.system(.title2, design: .monospaced))
                     .fontWeight(.semibold)
-            }
-
-            HStack {
-                Button { UIPasteboard.general.string = state.packet.url() } label: {
-                    Label("Copy Link", systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
-
-                Button(action: share) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
             }
 
             Button("Done", action: finish)

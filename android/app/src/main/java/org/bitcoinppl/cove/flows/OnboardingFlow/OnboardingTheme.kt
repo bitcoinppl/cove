@@ -376,6 +376,7 @@ internal fun OnboardingPrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    icon: ImageVector? = null,
 ) {
     Button(
         onClick = onClick,
@@ -412,12 +413,24 @@ internal fun OnboardingPrimaryButton(
                     .padding(vertical = 18.dp, horizontal = 18.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = text,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = if (enabled) 1f else 0.45f),
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                icon?.let {
+                    Icon(
+                        imageVector = it,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Text(
+                    text = text,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = if (enabled) 1f else 0.45f),
+                )
+            }
         }
     }
 }

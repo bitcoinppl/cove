@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -137,25 +135,6 @@ internal fun ActionRow(
             Icon(Icons.Default.ContentPaste, contentDescription = null)
             Spacer(Modifier.size(8.dp))
             Text("Paste")
-        }
-    }
-}
-
-@Composable
-internal fun LinkActionsRow(
-    onCopy: () -> Unit,
-    onShare: () -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedButton(onClick = onCopy, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.ContentCopy, contentDescription = null)
-            Spacer(Modifier.size(8.dp))
-            Text("Copy Link")
-        }
-        OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.IosShare, contentDescription = null)
-            Spacer(Modifier.size(8.dp))
-            Text("Share")
         }
     }
 }
