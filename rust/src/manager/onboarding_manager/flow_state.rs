@@ -139,6 +139,13 @@ pub(crate) enum CloudCheckState {
     InFlightWithRetryQueued,
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+enum CloudBackupEnableIntent {
+    #[default]
+    Idle,
+    WaitingForDiscovery,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum CloudRestoreDiscovery {
     Checking,
@@ -187,6 +194,7 @@ pub(crate) struct InternalState {
     pub(crate) cloud_restore_alert_dismissed: bool,
     pub(crate) next_restore_attempt_id: u64,
     pub(crate) ui: OnboardingState,
+    cloud_backup_enable_intent: CloudBackupEnableIntent,
 }
 
 impl InternalState {
@@ -205,6 +213,7 @@ impl InternalState {
             cloud_restore_alert_dismissed,
             next_restore_attempt_id,
             ui,
+            cloud_backup_enable_intent: CloudBackupEnableIntent::Idle,
         }
     }
 
@@ -213,6 +222,14 @@ impl InternalState {
         action: OnboardingAction,
         deferred: &mut DeferredSender<Message>,
     ) -> TransitionCommand {
+        if matches!(action, OnboardingAction::BeginCloudBackupEnable)
+            && self.cloud_restore_discovery == CloudRestoreDiscovery::Checking
+            && matches!(self.flow, FlowState::CloudBackup(_))
+        {
+            self.cloud_backup_enable_intent = CloudBackupEnableIntent::WaitingForDiscovery;
+            return TransitionCommand::None;
+        }
+
         let restore_attempt_id =
             if matches!(action, OnboardingAction::StartRestore | OnboardingAction::RetryRestore) {
                 let attempt_id = self.next_restore_attempt_id;
@@ -237,6 +254,9 @@ impl InternalState {
             && matches!(self.flow, FlowState::HardwareImport | FlowState::SoftwareImport { .. })
         {
             self.cloud_restore_alert_dismissed = true;
+        }
+        if !matches!(self.flow, FlowState::CloudBackup(_)) {
+            self.cloud_backup_enable_intent = CloudBackupEnableIntent::Idle;
         }
 
         self.sync_ui(deferred);
@@ -342,6 +362,15 @@ impl InternalState {
         if should_retry_offline_cloud_check && self.prepare_offline_cloud_check_retry(deferred) {
             self.cloud_check = CloudCheckState::InFlight;
             return TransitionCommand::StartCloudCheck;
+        }
+
+        let enable_was_requested = std::mem::take(&mut self.cloud_backup_enable_intent)
+            == CloudBackupEnableIntent::WaitingForDiscovery;
+        if enable_was_requested && matches!(self.flow, FlowState::CloudBackup(_)) {
+            self.sync_ui(deferred);
+            return TransitionCommand::BeginCloudBackupEnable {
+                discovery: self.cloud_restore_discovery.clone(),
+            };
         }
 
         self.sync_ui(deferred);
@@ -496,9 +525,6 @@ impl FlowState {
             (state @ Self::CloudBackup(_), OnboardingAction::BeginCloudBackupEnable)
                 if cloud_restore_discovery == CloudRestoreDiscovery::Checking =>
             {
-                warn!(
-                    "Onboarding: cloud backup enable requested while restore discovery is checking"
-                );
                 (state, TransitionCommand::None)
             }
             (state @ Self::CloudBackup(_), OnboardingAction::BeginCloudBackupEnable) => (
@@ -1293,6 +1319,83 @@ mod tests {
             state.flow,
             FlowState::RestoreOffer { origin: RestoreOrigin::Welcome, error_message: None }
         ));
+    }
+
+    #[test]
+    fn enable_requested_during_cloud_check_starts_after_discovery_finishes() {
+        let mut state =
+            InternalState::new(FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
+                wallet_id: WalletId::preview_new(),
+            }));
+
+        assert_eq!(
+            apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+            TransitionCommand::StartCloudCheck
+        );
+        assert_eq!(
+            apply_action(&mut state, OnboardingAction::BeginCloudBackupEnable).0,
+            TransitionCommand::None
+        );
+
+        let (command, _) = apply_event(
+            &mut state,
+            InternalEvent::CloudCheckFinished {
+                outcome: CloudCheckOutcome::NoBackupConfirmed,
+                connected: true,
+            },
+        );
+
+        assert_eq!(
+            command,
+            TransitionCommand::BeginCloudBackupEnable {
+                discovery: CloudRestoreDiscovery::NoBackupFound,
+            }
+        );
+        assert_eq!(state.cloud_check, CloudCheckState::Idle);
+    }
+
+    #[test]
+    fn repeated_enable_requests_during_cloud_check_coalesce() {
+        let mut state =
+            InternalState::new(FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
+                wallet_id: WalletId::preview_new(),
+            }));
+        assert_eq!(
+            apply_event(&mut state, InternalEvent::CloudCheckRequested).0,
+            TransitionCommand::StartCloudCheck
+        );
+
+        for _ in 0..2 {
+            assert_eq!(
+                apply_action(&mut state, OnboardingAction::BeginCloudBackupEnable).0,
+                TransitionCommand::None
+            );
+        }
+
+        assert_eq!(
+            apply_event(
+                &mut state,
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(None),
+                    connected: true,
+                },
+            )
+            .0,
+            TransitionCommand::BeginCloudBackupEnable {
+                discovery: CloudRestoreDiscovery::BackupFound(None),
+            }
+        );
+        assert_eq!(
+            apply_event(
+                &mut state,
+                InternalEvent::CloudCheckFinished {
+                    outcome: CloudCheckOutcome::BackupFound(None),
+                    connected: true,
+                },
+            )
+            .0,
+            TransitionCommand::None
+        );
     }
 
     #[test]

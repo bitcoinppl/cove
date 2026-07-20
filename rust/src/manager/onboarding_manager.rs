@@ -374,22 +374,18 @@ impl RustOnboardingManager {
     }
 
     fn finish_cloud_check(self: &Arc<Self>, outcome: CloudCheckOutcome) {
-        let should_retry =
-            self.finish_cloud_check_and_prepare_retry(outcome, CONNECTIVITY_MANAGER.connected());
-        if should_retry {
-            self.spawn_cloud_check();
-        }
+        let command = self.apply_cloud_check_finished(outcome, CONNECTIVITY_MANAGER.connected());
+        self.run_command(command);
     }
 
-    fn finish_cloud_check_and_prepare_retry(
+    fn apply_cloud_check_finished(
         &self,
         outcome: CloudCheckOutcome,
         connected: bool,
-    ) -> bool {
-        let command = self.mutate_state(|state, deferred| {
+    ) -> TransitionCommand {
+        self.mutate_state(|state, deferred| {
             state.apply_event(InternalEvent::CloudCheckFinished { outcome, connected }, deferred)
-        });
-        command == TransitionCommand::StartCloudCheck
+        })
     }
 
     fn apply_event(&self, event: InternalEvent) {
@@ -2285,10 +2281,13 @@ mod tests {
         assert_eq!(cloud_check_state(&manager), CloudCheckState::InFlightWithRetryQueued);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
 
-        assert!(manager.finish_cloud_check_and_prepare_retry(
-            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
-            true,
-        ));
+        assert_eq!(
+            manager.apply_cloud_check_finished(
+                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                true,
+            ),
+            TransitionCommand::StartCloudCheck
+        );
         assert_eq!(cloud_check_state(&manager), CloudCheckState::InFlight);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
         assert_eq!(manager.state().cloud_restore_message, None);
@@ -2304,10 +2303,13 @@ mod tests {
         );
         manager.state.write().cloud_check = CloudCheckState::InFlight;
 
-        assert!(!manager.finish_cloud_check_and_prepare_retry(
-            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
-            true,
-        ));
+        assert_eq!(
+            manager.apply_cloud_check_finished(
+                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                true,
+            ),
+            TransitionCommand::None
+        );
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Inconclusive);
         assert_eq!(cloud_check_state(&manager), CloudCheckState::Idle);
 
@@ -2332,10 +2334,13 @@ mod tests {
 
         manager.handle_connectivity_change(true);
 
-        assert!(manager.finish_cloud_check_and_prepare_retry(
-            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
-            true,
-        ));
+        assert_eq!(
+            manager.apply_cloud_check_finished(
+                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                true,
+            ),
+            TransitionCommand::StartCloudCheck
+        );
         assert_eq!(cloud_check_state(&manager), CloudCheckState::InFlight);
         assert_eq!(manager.state().step, OnboardingStep::CloudCheck);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
@@ -2354,9 +2359,9 @@ mod tests {
 
         manager.handle_connectivity_change(true);
 
-        assert!(
-            !manager
-                .finish_cloud_check_and_prepare_retry(CloudCheckOutcome::NoBackupConfirmed, true,)
+        assert_eq!(
+            manager.apply_cloud_check_finished(CloudCheckOutcome::NoBackupConfirmed, true),
+            TransitionCommand::None
         );
         assert_eq!(cloud_check_state(&manager), CloudCheckState::Idle);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::NoBackupFound);
@@ -2709,8 +2714,6 @@ mod tests {
         flow: FlowState,
         cloud_restore_discovery: CloudRestoreDiscovery,
     ) -> InternalState {
-        let restore_offer_allowed = true;
-        let cloud_restore_alert_dismissed = false;
         let should_offer_cloud_restore =
             matches!(cloud_restore_discovery, CloudRestoreDiscovery::BackupFound(_));
         let cloud_restore_alert_visible = should_offer_cloud_restore
@@ -2720,16 +2723,11 @@ mod tests {
             should_offer_cloud_restore,
             cloud_restore_alert_visible,
         );
+        let mut state = InternalState::new(flow);
+        state.cloud_restore_discovery = cloud_restore_discovery;
+        state.ui = ui;
 
-        InternalState {
-            flow,
-            cloud_check: CloudCheckState::Idle,
-            cloud_restore_discovery,
-            restore_offer_allowed,
-            cloud_restore_alert_dismissed,
-            next_restore_attempt_id: 1,
-            ui,
-        }
+        state
     }
 
     fn preview_manager(
