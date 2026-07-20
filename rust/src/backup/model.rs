@@ -96,6 +96,8 @@ impl Drop for WalletBackup {
 pub enum WalletSecret {
     /// Hot wallet BIP-39 mnemonic
     Mnemonic(String),
+    /// Hot wallet BIP-32 extended private key
+    Xprv(String),
     /// TapSigner encrypted backup bytes
     TapSignerBackup(Vec<u8>),
     /// No secret material (xpub-only / watch-only)
@@ -109,6 +111,7 @@ impl std::fmt::Debug for WalletSecret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Mnemonic(_) => write!(f, "Mnemonic(****)"),
+            Self::Xprv(_) => write!(f, "Xprv(****)"),
             Self::TapSignerBackup(_) => write!(f, "TapSignerBackup(****)"),
             Self::None => write!(f, "None"),
             Self::Unknown => write!(f, "Unknown"),
@@ -172,6 +175,8 @@ impl BackupImportReport {
 #[derive(Debug, uniffi::Enum)]
 pub enum WalletSecretType {
     Mnemonic,
+    /// A BIP32 extended private key
+    Xprv,
     TapSignerBackup,
     None,
     Unknown,
@@ -182,6 +187,7 @@ impl WalletSecretType {
     pub fn display_name(&self) -> String {
         match self {
             Self::Mnemonic => "Mnemonic",
+            Self::Xprv => "Extended Private Key",
             Self::TapSignerBackup => "TapSigner",
             Self::None => "Xpub Only",
             Self::Unknown => "Unknown",
@@ -194,6 +200,7 @@ impl From<&WalletSecret> for WalletSecretType {
     fn from(secret: &WalletSecret) -> Self {
         match secret {
             WalletSecret::Mnemonic(_) => Self::Mnemonic,
+            WalletSecret::Xprv(_) => Self::Xprv,
             WalletSecret::TapSignerBackup(_) => Self::TapSignerBackup,
             WalletSecret::None => Self::None,
             WalletSecret::Unknown => Self::Unknown,

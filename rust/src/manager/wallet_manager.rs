@@ -881,12 +881,23 @@ impl RustWalletManager {
             (metadata.wallet_type, metadata.verified)
         };
 
-        match (wallet_type, verified) {
-            (WalletType::Hot, false) => {
-                "This wallet is not backed up. Make sure you have your secret words saved before deleting.".to_string()
-            }
-            _ => "This action cannot be undone.".to_string(),
+        if wallet_type == WalletType::Hot && !verified {
+            let has_recovery_words = Keychain::global()
+                .get_wallet_secret(&self.metadata.read().id)
+                .ok()
+                .flatten()
+                .is_some_and(|secret| secret.as_mnemonic().is_some());
+
+            return if has_recovery_words {
+                "This wallet is not backed up. Make sure you have your secret words saved before deleting."
+                    .to_string()
+            } else {
+                "This wallet is not backed up. Make sure you have your extended private key saved before deleting."
+                    .to_string()
+            };
         }
+
+        "This action cannot be undone.".to_string()
     }
 
     // only called from the frontend, to make sure all metadata places are up to date,
@@ -917,6 +928,16 @@ impl RustWalletManager {
         let validator = WordValidator::new(mnemonic);
 
         Ok(validator)
+    }
+
+    /// Returns whether this hot wallet is backed by BIP39 recovery words
+    #[uniffi::method]
+    pub fn has_recovery_words(&self) -> bool {
+        Keychain::global()
+            .get_wallet_secret(&self.metadata.read().id)
+            .ok()
+            .flatten()
+            .is_some_and(|secret| secret.as_mnemonic().is_some())
     }
 
     pub fn fees(&self) -> Option<FeeResponse> {
@@ -1283,7 +1304,7 @@ fn downgrade_and_notify_if_needed(
         return Ok(metadata);
     }
 
-    let has_private_key = match Keychain::global().get_wallet_key(&metadata.id) {
+    let has_private_key = match Keychain::global().get_wallet_secret(&metadata.id) {
         Ok(Some(_)) => true,
         Ok(None) => false,
         Err(error) => {

@@ -4,6 +4,7 @@ use bdk_wallet::KeychainKind;
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::miniscript::descriptor::ShInner;
 use bip39::Mnemonic;
+use cove_device::keychain::{WalletSecret, WalletXprv};
 use cove_types::Network;
 use cove_util::result_ext::ResultExt as _;
 use parking_lot::Mutex;
@@ -20,6 +21,7 @@ use crate::{
     mnemonic::MnemonicExt as _,
     tap_card::tap_signer_reader::DeriveInfo,
     wallet_identity::{PublicWalletIdentity, existing_public_wallet_by_identity_strict},
+    wallet_secret::WalletSecretExt as _,
     xpub::{self, XpubError},
 };
 
@@ -43,6 +45,10 @@ pub(crate) enum WalletSource {
         mnemonic: Mnemonic,
         passphrase: Option<String>,
     },
+    PersistedXprivAndSelected {
+        metadata: WalletMetadata,
+        xpriv: WalletXprv,
+    },
     Xpub(String),
     Pubport(Box<pubport::Format>),
     TapSigner {
@@ -57,6 +63,11 @@ pub(crate) enum WalletSource {
         passphrase: Option<String>,
         address_type: WalletAddressType,
     },
+    Xpriv {
+        metadata: WalletMetadata,
+        xpriv: WalletXprv,
+        address_type: WalletAddressType,
+    },
 }
 
 impl WalletBuilder {
@@ -67,7 +78,14 @@ impl WalletBuilder {
     pub(crate) fn build(self) -> Result<Wallet, WalletError> {
         match self.source {
             WalletSource::PersistedAndSelected { metadata, mnemonic, passphrase } => {
-                Self::build_persisted_and_selected(metadata, mnemonic, passphrase)
+                Self::build_persisted_and_selected(
+                    metadata,
+                    WalletSecret::Mnemonic(mnemonic),
+                    passphrase,
+                )
+            }
+            WalletSource::PersistedXprivAndSelected { metadata, xpriv } => {
+                Self::build_persisted_and_selected(metadata, WalletSecret::Xpriv(xpriv), None)
             }
             WalletSource::Xpub(xpub) => Self::build_from_xpub(xpub),
             WalletSource::Pubport(pubport) => Self::build_from_pubport(*pubport),
@@ -77,31 +95,35 @@ impl WalletBuilder {
             WalletSource::Mnemonic { metadata, mnemonic, passphrase, address_type } => {
                 Self::build_from_mnemonic(metadata, mnemonic, passphrase, address_type)
             }
+            WalletSource::Xpriv { metadata, xpriv, address_type } => {
+                Self::build_from_xpriv(metadata, xpriv, address_type)
+            }
         }
     }
 
     fn build_persisted_and_selected(
         metadata: WalletMetadata,
-        mnemonic: Mnemonic,
+        secret: WalletSecret,
         passphrase: Option<String>,
     ) -> Result<Wallet, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
 
         let create_wallet = || -> Result<Wallet, WalletError> {
-            // create bdk wallet filestore, set id to metadata id
-            let me = Self::build_from_mnemonic(
-                metadata.clone(),
-                mnemonic.clone(),
-                passphrase,
-                WalletAddressType::NativeSegwit,
-            )?;
+            let me = match secret.clone() {
+                WalletSecret::Mnemonic(mnemonic) => Self::build_from_mnemonic(
+                    metadata.clone(),
+                    mnemonic,
+                    passphrase,
+                    WalletAddressType::NativeSegwit,
+                ),
+                WalletSecret::Xpriv(xpriv) => {
+                    Self::build_from_xpriv(metadata.clone(), xpriv, WalletAddressType::NativeSegwit)
+                }
+            }?;
 
-            // save mnemonic for private key
-            keychain.save_wallet_key(&me.id, mnemonic.clone())?;
-
-            // save public key in keychain too
-            let xpub = mnemonic.xpub(me.network.into());
+            let xpub = secret.xpub(me.network);
+            keychain.save_wallet_secret(&me.id, secret.clone())?;
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             let (external_descriptor, internal_descriptor) = {
@@ -129,7 +151,6 @@ impl WalletBuilder {
             Err(error) => {
                 error!("failed to create wallet: {error}");
 
-                // delete the secret key, xpub and public descriptor from the keychain
                 keychain.delete_wallet_items(&metadata.id);
 
                 if let Err(error) = delete_wallet_specific_data(&metadata.id) {
@@ -343,7 +364,7 @@ impl WalletBuilder {
         passphrase: Option<String>,
         address_type: WalletAddressType,
     ) -> Result<Wallet, WalletError> {
-        let network = Database::global().global_config.selected_network();
+        let network = metadata.network;
 
         let id = metadata.id.clone();
         let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
@@ -353,6 +374,29 @@ impl WalletBuilder {
 
         metadata.master_fingerprint = descriptors.fingerprint().map(|f| Arc::new(f.into()));
         metadata.origin = origin;
+
+        let wallet = descriptors
+            .into_create_params()
+            .network(network.into())
+            .create_wallet(&mut store.conn)
+            .map_err_str(WalletError::BdkError)?;
+
+        Ok(Wallet { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
+    }
+
+    fn build_from_xpriv(
+        mut metadata: WalletMetadata,
+        xpriv: WalletXprv,
+        address_type: WalletAddressType,
+    ) -> Result<Wallet, WalletError> {
+        let network = metadata.network;
+        let id = metadata.id.clone();
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
+        let descriptors = WalletSecret::Xpriv(xpriv).into_descriptors(network, address_type);
+
+        metadata.master_fingerprint =
+            descriptors.fingerprint().map(|fingerprint| Arc::new(fingerprint.into()));
+        metadata.origin = descriptors.origin().ok();
 
         let wallet = descriptors
             .into_create_params()

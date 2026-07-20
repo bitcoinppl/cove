@@ -1,14 +1,15 @@
 //! Module for interacting with the secure element
 
-use std::{str::FromStr as _, sync::Arc};
+use std::{fmt, str::FromStr as _, sync::Arc};
 
 use cove_util::ResultExt as _;
 
-use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use bip39::Mnemonic;
+use bitcoin::bip32::{Xpriv, Xpub};
 use once_cell::sync::OnceCell;
 use tracing::warn;
+use zeroize::{Zeroize as _, Zeroizing};
 
 use cove_cspp::CsppStore;
 use cove_types::WalletId;
@@ -19,6 +20,140 @@ const LOCAL_DB_KEY_NAME: &str = "local::v1::db_encryption_key";
 const LOCAL_DB_KEY_CRYPTOR: &str = "local::v1::db_encryption_key_cryptor";
 const KEY_TELEPORT_RECEIVE_SESSION: &str = "key_teleport::v1::receive_session";
 const KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR: &str = "key_teleport::v1::receive_session_cryptor";
+const WALLET_SECRET_TAG_PREFIX: &str = "cove::wallet_secret::v1::";
+const WALLET_SECRET_MNEMONIC_TAG: &str = "mnemonic::";
+const WALLET_SECRET_XPRIV_TAG: &str = "xpriv::";
+
+/// A validated BIP32 extended private key backed by zeroizing storage
+#[derive(Clone, PartialEq, Eq)]
+pub struct WalletXprv(String);
+
+impl WalletXprv {
+    /// Validates and wraps an encoded extended private key
+    ///
+    /// # Errors
+    ///
+    /// Returns a BIP32 error when `value` is not a valid extended private key
+    pub fn parse(value: impl Into<String>) -> Result<Self, bitcoin::bip32::Error> {
+        let value = Self(value.into());
+        Xpriv::from_str(&value.0)?;
+
+        Ok(value)
+    }
+
+    /// Exposes the encoded extended private key
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+
+    /// Parses the validated value into an extended private key
+    pub fn to_xpriv(&self) -> Xpriv {
+        Xpriv::from_str(&self.0).expect("WalletXprv must contain a validated extended private key")
+    }
+}
+
+impl fmt::Debug for WalletXprv {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("WalletXprv(<redacted>)")
+    }
+}
+
+impl Drop for WalletXprv {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl From<Xpriv> for WalletXprv {
+    fn from(value: Xpriv) -> Self {
+        Self(value.to_string())
+    }
+}
+
+/// A hot wallet's private key material
+///
+/// Debug output is always redacted so diagnostics cannot expose the secret
+#[derive(Clone, PartialEq, Eq)]
+pub enum WalletSecret {
+    /// A BIP39 mnemonic phrase
+    Mnemonic(Mnemonic),
+
+    /// A BIP32 extended private key
+    Xpriv(WalletXprv),
+}
+
+impl WalletSecret {
+    /// Returns the mnemonic when this secret contains one
+    pub fn as_mnemonic(&self) -> Option<&Mnemonic> {
+        match self {
+            Self::Mnemonic(mnemonic) => Some(mnemonic),
+            Self::Xpriv(_) => None,
+        }
+    }
+
+    /// Returns the extended private key wrapper when this secret contains one
+    pub fn as_xprv(&self) -> Option<&WalletXprv> {
+        match self {
+            Self::Mnemonic(_) => None,
+            Self::Xpriv(xprv) => Some(xprv),
+        }
+    }
+
+    fn serialize(&self) -> Zeroizing<String> {
+        match self {
+            // keep mnemonic values readable by Cove versions before typed wallet secrets
+            Self::Mnemonic(mnemonic) => Zeroizing::new(mnemonic.to_string()),
+            Self::Xpriv(xprv) => Zeroizing::new(format!(
+                "{WALLET_SECRET_TAG_PREFIX}{WALLET_SECRET_XPRIV_TAG}{}",
+                xprv.expose()
+            )),
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, KeychainError> {
+        let Some(tagged_value) = value.strip_prefix(WALLET_SECRET_TAG_PREFIX) else {
+            // wallet secrets saved before typed storage were untagged mnemonics
+            return Mnemonic::from_str(value)
+                .map(Self::Mnemonic)
+                .map_err(|error| KeychainError::ParseSavedValue(error.to_string()));
+        };
+
+        if let Some(mnemonic) = tagged_value.strip_prefix(WALLET_SECRET_MNEMONIC_TAG) {
+            return Mnemonic::from_str(mnemonic)
+                .map(Self::Mnemonic)
+                .map_err(|error| KeychainError::ParseSavedValue(error.to_string()));
+        }
+
+        if let Some(xpriv) = tagged_value.strip_prefix(WALLET_SECRET_XPRIV_TAG) {
+            return WalletXprv::parse(xpriv)
+                .map(Self::Xpriv)
+                .map_err(|error| KeychainError::ParseSavedValue(error.to_string()));
+        }
+
+        Err(KeychainError::ParseSavedValue("unknown wallet secret type".to_string()))
+    }
+}
+
+impl fmt::Debug for WalletSecret {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Mnemonic(_) => formatter.write_str("WalletSecret::Mnemonic(<redacted>)"),
+            Self::Xpriv(_) => formatter.write_str("WalletSecret::Xpriv(<redacted>)"),
+        }
+    }
+}
+
+impl From<Mnemonic> for WalletSecret {
+    fn from(value: Mnemonic) -> Self {
+        Self::Mnemonic(value)
+    }
+}
+
+impl From<Xpriv> for WalletSecret {
+    fn from(value: Xpriv) -> Self {
+        Self::Xpriv(value.into())
+    }
+}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -37,6 +172,9 @@ pub enum KeychainError {
 
     #[error("unable to decrypt: {0}")]
     Decrypt(String),
+
+    #[error("saved wallet secret is not a mnemonic")]
+    WalletSecretTypeMismatch,
 }
 
 #[uniffi::export(callback_interface)]
@@ -245,10 +383,28 @@ impl Keychain {
         id: &WalletId,
         secret_key: Mnemonic,
     ) -> Result<(), KeychainError> {
+        self.save_wallet_secret(id, secret_key.into())
+    }
+
+    /// Saves a hot wallet secret encrypted in the keychain
+    ///
+    /// Mnemonics and extended private keys share the existing wallet mnemonic
+    /// slot, so saving either variant replaces the previously stored secret
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if encryption or saving fails
+    pub fn save_wallet_secret(
+        &self,
+        id: &WalletId,
+        wallet_secret: WalletSecret,
+    ) -> Result<(), KeychainError> {
+        let serialized = wallet_secret.serialize();
+
         self.save_with_fresh_cryptor(
             wallet_mnemonic_encryption_and_nonce_key_name(id),
             wallet_mnemonic_key_name(id),
-            &secret_key.to_string(),
+            &serialized,
             false,
         )
     }
@@ -259,30 +415,53 @@ impl Keychain {
     ///
     /// Returns a `KeychainError` if decryption or parsing fails
     pub fn get_wallet_key(&self, id: &WalletId) -> Result<Option<Mnemonic>, KeychainError> {
-        let key = wallet_mnemonic_key_name(id);
+        self.get_wallet_secret(id)?
+            .map(|secret| match secret {
+                WalletSecret::Mnemonic(mnemonic) => Ok(mnemonic),
+                WalletSecret::Xpriv(_) => Err(KeychainError::WalletSecretTypeMismatch),
+            })
+            .transpose()
+    }
 
-        let Some(encrypted_secret_key) = self.0.get(key) else {
-            return Ok(None);
+    /// Retrieves a hot wallet secret from the keychain
+    ///
+    /// Existing untagged entries are decoded as mnemonics for backward
+    /// compatibility
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if the stored entries are incomplete or the
+    /// secret cannot be decrypted or parsed
+    pub fn get_wallet_secret(&self, id: &WalletId) -> Result<Option<WalletSecret>, KeychainError> {
+        let encrypted_secret = self.0.get(wallet_mnemonic_key_name(id));
+        let encryption_key = self.0.get(wallet_mnemonic_encryption_and_nonce_key_name(id));
+
+        let (encrypted_secret, encryption_key) = match (encrypted_secret, encryption_key) {
+            (None, None) => return Ok(None),
+            (Some(secret), Some(key)) => (secret, key),
+            (Some(_), None) => {
+                return Err(KeychainError::Decrypt(
+                    "encrypted wallet secret found but encryption key is missing".into(),
+                ));
+            }
+            (None, Some(_)) => {
+                return Err(KeychainError::Decrypt(
+                    "wallet secret encryption key found but encrypted secret is missing".into(),
+                ));
+            }
         };
 
-        let Some(encryption_key) = self.0.get(wallet_mnemonic_encryption_and_nonce_key_name(id))
-        else {
-            return Err(KeychainError::Decrypt(
-                "encrypted mnemonic found but encryption key is missing".into(),
-            ));
-        };
-
+        let encryption_key = Zeroizing::new(encryption_key);
         let cryptor = Cryptor::try_from_string(&encryption_key)
-            .map_err(|error| KeychainError::Decrypt(error.to_string()))?;
+            .map_err_prefix("wallet secret encryption key", KeychainError::Decrypt)?;
 
-        let secret_key = cryptor
-            .decrypt_from_string(&encrypted_secret_key)
-            .map_err(|error| KeychainError::Decrypt(error.to_string()))?;
+        let wallet_secret = Zeroizing::new(
+            cryptor
+                .decrypt_from_string(&encrypted_secret)
+                .map_err_prefix("wallet secret", KeychainError::Decrypt)?,
+        );
 
-        let mnemonic = Mnemonic::from_str(&secret_key)
-            .map_err(|error| KeychainError::ParseSavedValue(error.to_string()))?;
-
-        Ok(Some(mnemonic))
+        WalletSecret::parse(&wallet_secret).map(Some)
     }
 
     fn delete_wallet_key(&self, id: &WalletId) -> bool {
@@ -569,6 +748,127 @@ mod tests {
 
     fn make_keychain(mock: MockKeychain) -> Keychain {
         Keychain(Arc::new(Box::new(mock)))
+    }
+
+    fn wallet_id() -> WalletId {
+        WalletId::preview_new()
+    }
+
+    fn mnemonic() -> Mnemonic {
+        Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap()
+    }
+
+    fn xpriv() -> Xpriv {
+        Xpriv::new_master(bitcoin::Network::Bitcoin, &[42; 32]).unwrap()
+    }
+
+    fn save_legacy_wallet_mnemonic(keychain: &Keychain, id: &WalletId, mnemonic: &Mnemonic) {
+        let mut cryptor = Cryptor::new();
+        let encrypted = cryptor.encrypt_to_string(&mnemonic.to_string()).unwrap();
+
+        keychain
+            .0
+            .save(wallet_mnemonic_encryption_and_nonce_key_name(id), cryptor.serialize_to_string())
+            .unwrap();
+        keychain.0.save(wallet_mnemonic_key_name(id), encrypted).unwrap();
+    }
+
+    #[test]
+    fn wallet_secret_mnemonic_roundtrips() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        let expected = mnemonic();
+
+        keychain.save_wallet_secret(&id, WalletSecret::Mnemonic(expected.clone())).unwrap();
+
+        assert_eq!(
+            keychain.get_wallet_secret(&id).unwrap(),
+            Some(WalletSecret::Mnemonic(expected.clone()))
+        );
+        assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected));
+    }
+
+    #[test]
+    fn wallet_secret_mnemonic_keeps_legacy_serialization() {
+        let expected = mnemonic();
+        let serialized = WalletSecret::Mnemonic(expected.clone()).serialize();
+
+        assert_eq!(serialized.as_str(), expected.to_string());
+    }
+
+    #[test]
+    fn legacy_untagged_wallet_mnemonic_remains_readable() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        let expected = mnemonic();
+        save_legacy_wallet_mnemonic(&keychain, &id, &expected);
+
+        assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected.clone()));
+        assert_eq!(
+            keychain.get_wallet_secret(&id).unwrap(),
+            Some(WalletSecret::Mnemonic(expected))
+        );
+    }
+
+    #[test]
+    fn wallet_secret_xpriv_roundtrips() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        let expected = xpriv();
+
+        keychain.save_wallet_secret(&id, expected.into()).unwrap();
+
+        let secret = keychain.get_wallet_secret(&id).unwrap().unwrap();
+        assert_eq!(secret.as_xprv().unwrap().to_xpriv(), expected);
+    }
+
+    #[test]
+    fn mnemonic_getter_reports_xpriv_type_mismatch() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        keychain.save_wallet_secret(&id, xpriv().into()).unwrap();
+
+        assert_eq!(keychain.get_wallet_key(&id), Err(KeychainError::WalletSecretTypeMismatch));
+    }
+
+    #[test]
+    fn saving_wallet_secret_replaces_the_existing_variant() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        keychain.save_wallet_key(&id, mnemonic()).unwrap();
+
+        let expected = xpriv();
+        keychain.save_wallet_secret(&id, expected.into()).unwrap();
+
+        let secret = keychain.get_wallet_secret(&id).unwrap().unwrap();
+        assert_eq!(secret.as_xprv().unwrap().to_xpriv(), expected);
+        assert_eq!(keychain.get_wallet_key(&id), Err(KeychainError::WalletSecretTypeMismatch));
+    }
+
+    #[test]
+    fn wallet_secret_debug_output_is_redacted() {
+        let mnemonic = mnemonic();
+        let mnemonic_debug = format!("{:?}", WalletSecret::Mnemonic(mnemonic.clone()));
+        let xpriv = WalletXprv::from(xpriv());
+        let xpriv_debug = format!("{xpriv:?}");
+
+        assert_eq!(mnemonic_debug, "WalletSecret::Mnemonic(<redacted>)");
+        assert!(!mnemonic_debug.contains(&mnemonic.to_string()));
+        assert_eq!(xpriv_debug, "WalletXprv(<redacted>)");
+        assert!(!xpriv_debug.contains(xpriv.expose()));
+    }
+
+    #[test]
+    fn delete_wallet_items_removes_wallet_secret() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        keychain.save_wallet_secret(&id, xpriv().into()).unwrap();
+
+        assert!(keychain.delete_wallet_items(&id));
+        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
     }
 
     #[test]

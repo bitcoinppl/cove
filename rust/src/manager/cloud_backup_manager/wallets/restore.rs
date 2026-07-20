@@ -3,6 +3,7 @@ use std::str::FromStr as _;
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
+use cove_device::keychain::WalletXprv;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -256,6 +257,19 @@ impl DownloadedWalletBackup {
                             format!("restore mnemonic wallet: {error}").into(),
                         )
                     })?;
+            }
+            LocalWalletSecret::Xprv(value) => {
+                let xpriv = WalletXprv::parse(value.as_str()).map_err(|source| {
+                    CloudBackupError::internal_context("invalid extended private key", source)
+                })?;
+
+                crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv).map_err(
+                    |(error, _)| {
+                        CloudBackupError::Internal(
+                            format!("restore extended-private-key wallet: {error}").into(),
+                        )
+                    },
+                )?;
             }
             _ => {
                 crate::backup::import::restore_cloud_descriptor_wallet(
