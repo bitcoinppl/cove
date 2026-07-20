@@ -51,16 +51,25 @@ internal fun SendIdleView(
 internal fun SendChooseWalletView(
     manager: KeyTeleportManager,
     choose: KeyTeleportSendChooseWallet,
+) {
+    TextBlock(
+        title = "Choose wallet",
+        body = "Select the hot wallet to send.",
+    )
+    WalletChoices(choose.eligibleWallets, selectedWallet = null) {
+        manager.dispatch(KeyTeleportManagerAction.SelectSendWallet(it.id))
+    }
+}
+
+@Composable
+internal fun SendAwaitReceiverView(
     onScan: () -> Unit,
     onPaste: () -> Unit,
 ) {
     TextBlock(
-        title = "Choose wallet",
-        body = "Select the hot wallet to send, then scan or paste the receiver code if needed.",
+        title = "Scan Receiver Request",
+        body = "Scan or paste the request shown on the receiving device.",
     )
-    WalletChoices(choose.eligibleWallets, choose.selectedWallet) {
-        manager.dispatch(KeyTeleportManagerAction.SelectSendWallet(it.id))
-    }
     ActionRow(onScan, onPaste)
 }
 
