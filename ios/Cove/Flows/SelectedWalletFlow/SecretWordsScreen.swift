@@ -7,6 +7,38 @@
 
 import SwiftUI
 
+private enum SecretWordsSensitiveAction {
+    case seedQr
+    case keyTeleport
+
+    var confirmationTitle: String {
+        switch self {
+        case .seedQr:
+            "Show Seed QR?"
+        case .keyTeleport:
+            "Send with Key Teleport?"
+        }
+    }
+
+    var confirmationButtonTitle: String {
+        switch self {
+        case .seedQr:
+            "Show QR Code"
+        case .keyTeleport:
+            "Continue"
+        }
+    }
+
+    var confirmationMessage: String {
+        switch self {
+        case .seedQr:
+            "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to."
+        case .keyTeleport:
+            "Key Teleport sends this wallet's secret words to another device. Only continue if you trust the receiving device and can verify its request."
+        }
+    }
+}
+
 struct SecretWordsScreen: View {
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
@@ -17,7 +49,7 @@ struct SecretWordsScreen: View {
     // private
     @State var words: Mnemonic?
     @State var errorMessage: String?
-    @State private var showSeedQrAlert = false
+    @State private var pendingSensitiveAction: SecretWordsSensitiveAction?
     @State private var showSeedQrSheet = false
 
     let rowHeight = 30.0
@@ -27,20 +59,35 @@ struct SecretWordsScreen: View {
         (words?.words().count ?? 24) / numberOfColumns
     }
 
-    private func presentSeedQrAlert() {
-        guard !showSeedQrAlert, !showSeedQrSheet else {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(200))
-                guard !showSeedQrAlert, !showSeedQrSheet else { return }
-                showSeedQrAlert = true
+    private var showingSensitiveActionConfirmation: Binding<Bool> {
+        Binding(
+            get: { pendingSensitiveAction != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingSensitiveAction = nil
+                }
             }
-            return
-        }
+        )
+    }
 
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
-            guard !showSeedQrAlert, !showSeedQrSheet else { return }
-            showSeedQrAlert = true
+    private func presentConfirmation(for action: SecretWordsSensitiveAction) {
+        // wait for Menu dismissal so the action sheet can anchor to the toolbar button
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard pendingSensitiveAction == nil, !showSeedQrSheet else { return }
+            pendingSensitiveAction = action
+        }
+    }
+
+    private func performSensitiveAction(_ action: SecretWordsSensitiveAction) {
+        pendingSensitiveAction = nil
+
+        switch action {
+        case .seedQr:
+            showSeedQrSheet = true
+        case .keyTeleport:
+            let keyTeleportManager = app.ensureKeyTeleportManager()
+            keyTeleportManager.dispatch(.startSendFromWallet(id))
+            app.pushRoute(RouteFactory().keyTeleportSend())
         }
     }
 
@@ -58,20 +105,47 @@ struct SecretWordsScreen: View {
         .adaptiveToolbarStyle()
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: presentSeedQrAlert) {
-                    Image(systemName: "qrcode")
+                Menu {
+                    Button {
+                        presentConfirmation(for: .seedQr)
+                    } label: {
+                        Label("Seed QR", systemImage: "qrcode")
+                    }
+
+                    Button {
+                        presentConfirmation(for: .keyTeleport)
+                    } label: {
+                        Label("Key Teleport", systemImage: "paperplane")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                         .foregroundStyle(.white)
                 }
-                .accessibilityLabel("Show Seed QR")
+                .accessibilityLabel("Secret words options")
+                .confirmationDialog(
+                    pendingSensitiveAction?.confirmationTitle ?? "",
+                    isPresented: showingSensitiveActionConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    if let pendingSensitiveAction {
+                        Button(pendingSensitiveAction.confirmationButtonTitle) {
+                            performSensitiveAction(pendingSensitiveAction)
+                        }
+                    }
+
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    if let pendingSensitiveAction {
+                        Text(pendingSensitiveAction.confirmationMessage)
+                    }
+                }
             }
         }
-        .modifier(
-            SeedQrPresentationModifier(
-                words: words,
-                showAlert: $showSeedQrAlert,
-                showSheet: $showSeedQrSheet
-            )
-        )
+        .sheet(isPresented: $showSeedQrSheet) {
+            if let words {
+                SeedQrSheetView(words: words)
+            }
+        }
         .background(SecretWordsPatternBackground())
         .background(Color.midnightBlue)
     }
@@ -256,29 +330,6 @@ private struct SecretWordsPatternBackground: View {
             .frame(height: screenHeight * 0.75, alignment: .topTrailing)
             .frame(maxWidth: .infinity)
             .opacity(0.5)
-    }
-}
-
-private struct SeedQrPresentationModifier: ViewModifier {
-    let words: Mnemonic?
-    @Binding var showAlert: Bool
-    @Binding var showSheet: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .alert("Show Seed QR?", isPresented: $showAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Show QR Code") { showSheet = true }
-            } message: {
-                Text(
-                    "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to."
-                )
-            }
-            .sheet(isPresented: $showSheet) {
-                if let words {
-                    SeedQrSheetView(words: words)
-                }
-            }
     }
 }
 

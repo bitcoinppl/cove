@@ -90,8 +90,9 @@ internal fun ReceiveReadyView(
     }
     Text(
         text =
-            "Send the link to another Key Teleport-compatible wallet instead of showing the QR code. " +
-                "Enter the receiver code separately.",
+            "If you can't show the QR code directly, use Share at the top to send the link to another " +
+                "KeyTeleport-compatible wallet. " +
+                "Send the receiver code separately.",
         color = OnboardingTextSecondary,
         style = MaterialTheme.typography.bodySmall,
     )

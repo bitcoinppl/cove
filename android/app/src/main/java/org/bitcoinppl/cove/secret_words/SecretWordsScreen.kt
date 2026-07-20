@@ -18,8 +18,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,8 +69,42 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
+import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.Mnemonic
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.types.WalletId
+
+private enum class SecretWordsSensitiveAction(
+    val confirmationTitle: String,
+    val confirmationButtonTitle: String,
+    val confirmationMessage: String,
+) {
+    SEED_QR(
+        confirmationTitle = "Show Seed QR?",
+        confirmationButtonTitle = "Show QR Code",
+        confirmationMessage =
+            "Your seed words are sensitive and control access to your Bitcoin. " +
+                "QR codes are machine-readable, so be careful who or what device you show this to.",
+    ),
+    KEY_TELEPORT(
+        confirmationTitle = "Send with Key Teleport?",
+        confirmationButtonTitle = "Continue",
+        confirmationMessage =
+            "Key Teleport sends this wallet's secret words to another device. " +
+                "Only continue if you trust the receiving device and can verify its request.",
+    ),
+    ;
+
+    fun perform(
+        showSeedQr: () -> Unit,
+        startKeyTeleport: () -> Unit,
+    ) {
+        when (this) {
+            SEED_QR -> showSeedQr()
+            KEY_TELEPORT -> startKeyTeleport()
+        }
+    }
+}
 
 /**
  * secret words screen - displays recovery phrase with auth guard
@@ -79,7 +118,7 @@ fun SecretWordsScreen(
 ) {
     var words by remember(walletId) { mutableStateOf<Mnemonic?>(null) }
     var errorMessage by remember(walletId) { mutableStateOf<String?>(null) }
-    var showSeedQrAlert by remember { mutableStateOf(false) }
+    var pendingSensitiveAction by remember { mutableStateOf<SecretWordsSensitiveAction?>(null) }
     var showSeedQrSheet by remember { mutableStateOf(false) }
 
     // get auth manager
@@ -159,13 +198,7 @@ fun SecretWordsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showSeedQrAlert = true }) {
-                        Icon(
-                            painter = painterResource(R.drawable.icon_qr_code),
-                            contentDescription = "Show Seed QR",
-                            tint = Color.White,
-                        )
-                    }
+                    SecretWordsToolbarMenu { pendingSensitiveAction = it }
                 },
             )
         },
@@ -256,31 +289,23 @@ fun SecretWordsScreen(
         }
     }
 
-    // seed QR confirmation alert
-    if (showSeedQrAlert) {
-        AlertDialog(
-            onDismissRequest = { showSeedQrAlert = false },
-            title = { Text("Show Seed QR?") },
-            text = {
-                Text(
-                    "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to.",
+    pendingSensitiveAction?.let { action ->
+        SecretWordsActionConfirmation(
+            action = action,
+            onConfirm = {
+                pendingSensitiveAction = null
+                action.perform(
+                    showSeedQr = { showSeedQrSheet = true },
+                    startKeyTeleport = {
+                        val keyTeleportManager = app.getKeyTeleportManager()
+                        keyTeleportManager.dispatch(
+                            KeyTeleportManagerAction.StartSendFromWallet(walletId),
+                        )
+                        app.pushRoute(RouteFactory().keyTeleportSend())
+                    },
                 )
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSeedQrAlert = false
-                        showSeedQrSheet = true
-                    },
-                ) {
-                    Text("Show QR Code")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSeedQrAlert = false }) {
-                    Text("Cancel")
-                }
-            },
+            onDismiss = { pendingSensitiveAction = null },
         )
     }
 
@@ -296,6 +321,67 @@ fun SecretWordsScreen(
             SeedQrSheetContent(seedQrString = words!!.toSeedQrString())
         }
     }
+}
+
+@Composable
+private fun SecretWordsToolbarMenu(onAction: (SecretWordsSensitiveAction) -> Unit) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    IconButton(onClick = { isExpanded = true }) {
+        Icon(
+            imageVector = Icons.Default.MoreVert,
+            contentDescription = "Secret words options",
+            tint = Color.White,
+        )
+    }
+    DropdownMenu(
+        expanded = isExpanded,
+        onDismissRequest = { isExpanded = false },
+    ) {
+        DropdownMenuItem(
+            text = { Text("Seed QR") },
+            leadingIcon = {
+                Icon(Icons.Default.QrCode, contentDescription = null)
+            },
+            onClick = {
+                isExpanded = false
+                onAction(SecretWordsSensitiveAction.SEED_QR)
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("Key Teleport") },
+            leadingIcon = {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+            },
+            onClick = {
+                isExpanded = false
+                onAction(SecretWordsSensitiveAction.KEY_TELEPORT)
+            },
+        )
+    }
+}
+
+@Composable
+private fun SecretWordsActionConfirmation(
+    action: SecretWordsSensitiveAction,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(action.confirmationTitle) },
+        text = { Text(action.confirmationMessage) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(action.confirmationButtonTitle)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 /**

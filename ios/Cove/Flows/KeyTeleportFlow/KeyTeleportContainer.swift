@@ -33,7 +33,7 @@ private struct KeyTeleportLoadedView: View {
     @State private var mnemonicWords: [String]?
     @State private var loadedMnemonicReviewID: KeyTeleportMnemonicReviewID?
     @State private var xprv: String?
-    @State private var pendingSessionAction: KeyTeleportReceiveSessionAction?
+    @State private var showEndSessionConfirmation = false
 
     var body: some View {
         ScrollView {
@@ -62,25 +62,6 @@ private struct KeyTeleportLoadedView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     readyActionsMenu
                 }
-            }
-        }
-        .confirmationDialog(
-            "Manage Receive Session",
-            isPresented: isPresentingSessionAction,
-            titleVisibility: .visible
-        ) {
-            if let pendingSessionAction {
-                Button(pendingSessionAction.confirmationTitle, role: .destructive) {
-                    confirmSessionAction(pendingSessionAction)
-                }
-            }
-
-            Button("Cancel", role: .cancel) {
-                pendingSessionAction = nil
-            }
-        } message: {
-            if let pendingSessionAction {
-                Text(pendingSessionAction.message)
             }
         }
         .sheet(isPresented: $showScanner) {
@@ -195,14 +176,11 @@ private struct KeyTeleportLoadedView: View {
             case let .receiveReady(state):
                 shareButton(url: state.packet.url())
 
-                Button {
-                    pendingSessionAction = .restart
-                } label: {
-                    Label("New Session", systemImage: "arrow.clockwise")
-                }
-
                 Button(role: .destructive) {
-                    pendingSessionAction = .end
+                    // Wait for Menu dismissal so the action sheet can anchor to the toolbar button
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        showEndSessionConfirmation = true
+                    }
                 } label: {
                     Label("End Session", systemImage: "xmark.circle")
                 }
@@ -215,6 +193,19 @@ private struct KeyTeleportLoadedView: View {
             Image(systemName: "ellipsis.circle")
         }
         .accessibilityLabel("More")
+        .confirmationDialog(
+            "End this session?",
+            isPresented: $showEndSessionConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("End Session", role: .destructive) {
+                manager.dispatch(.endReceive)
+                app.popRoute()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The current receive request will be deleted from this device.")
+        }
     }
 
     private func shareButton(url: String) -> some View {
@@ -222,29 +213,6 @@ private struct KeyTeleportLoadedView: View {
             ShareSheet.presentFromMenu(text: url)
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
-        }
-    }
-
-    private var isPresentingSessionAction: Binding<Bool> {
-        Binding(
-            get: { pendingSessionAction != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingSessionAction = nil
-                }
-            }
-        )
-    }
-
-    private func confirmSessionAction(_ action: KeyTeleportReceiveSessionAction) {
-        pendingSessionAction = nil
-
-        switch action {
-        case .restart:
-            manager.dispatch(.restartReceive)
-        case .end:
-            manager.dispatch(.endReceive)
-            app.popRoute()
         }
     }
 
@@ -459,7 +427,7 @@ private struct KeyTeleportReceiveReadyView: View {
                     .fontWeight(.semibold)
             }
 
-            Text("Send the link to another Key Teleport-compatible wallet instead of showing the QR code. Enter the receiver code separately.")
+            Text("If you can't show the QR code directly, use Share at the top to send the link to another KeyTeleport-compatible wallet. Send the receiver code separately.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -469,29 +437,6 @@ private struct KeyTeleportReceiveReadyView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
-        }
-    }
-}
-
-private enum KeyTeleportReceiveSessionAction: Equatable {
-    case restart
-    case end
-
-    var confirmationTitle: String {
-        switch self {
-        case .restart:
-            "Start New Session"
-        case .end:
-            "End Session"
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .restart:
-            "The current link, QR code, and receiver code will stop working."
-        case .end:
-            "The current receive request will be deleted from this device."
         }
     }
 }

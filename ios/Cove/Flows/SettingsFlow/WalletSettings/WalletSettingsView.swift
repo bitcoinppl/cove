@@ -69,12 +69,6 @@ struct WalletSettingsView: View {
         app.pushRoute(Route.secretWords(manager.walletMetadata.id))
     }
 
-    private func sendWithKeyTeleport() {
-        let keyTeleportManager = app.ensureKeyTeleportManager()
-        keyTeleportManager.dispatch(.startSendFromWallet(manager.walletMetadata.id))
-        app.pushRoute(RouteFactory().keyTeleportSend())
-    }
-
     private func prepareDelete() {
         requiredConfirmations = manager.rust.requiredDeletionConfirmations()
         showingDeleteConfirmation = true
@@ -98,7 +92,6 @@ struct WalletSettingsView: View {
                 walletName: metadata.name,
                 isHotWallet: metadata.walletType == .hot,
                 hasRecoveryWords: manager.hasRecoveryWords(),
-                canKeyTeleportSend: app.canKeyTeleportSend(walletId: metadata.id),
                 deleteConfirmationMessage: deleteConfirmationMessage,
                 finalDeleteConfirmationMessage: finalDeleteConfirmationMessage,
                 finalDeleteButtonTitle: finalDeleteButtonTitle,
@@ -108,7 +101,6 @@ struct WalletSettingsView: View {
                 showingSecondDeleteConfirmation: $showingSecondDeleteConfirmation,
                 showingFinalDeleteConfirmation: $showingFinalDeleteConfirmation,
                 showSecretWords: showSecretWords,
-                sendWithKeyTeleport: sendWithKeyTeleport,
                 prepareDelete: prepareDelete,
                 deleteWallet: deleteWallet
             )
@@ -281,7 +273,6 @@ private struct WalletSettingsDangerSection: View {
     let walletName: String
     let isHotWallet: Bool
     let hasRecoveryWords: Bool
-    let canKeyTeleportSend: Bool
     let deleteConfirmationMessage: String
     let finalDeleteConfirmationMessage: String
     let finalDeleteButtonTitle: String
@@ -291,7 +282,6 @@ private struct WalletSettingsDangerSection: View {
     @Binding var showingSecondDeleteConfirmation: Bool
     @Binding var showingFinalDeleteConfirmation: Bool
     let showSecretWords: () -> Void
-    let sendWithKeyTeleport: () -> Void
     let prepareDelete: () -> Void
     let deleteWallet: () -> Void
 
@@ -302,11 +292,6 @@ private struct WalletSettingsDangerSection: View {
                     isPresented: $showingSecretWordsConfirmation,
                     showSecretWords: showSecretWords
                 )
-            }
-
-            if isHotWallet, canKeyTeleportSend {
-                Button("Send with Key Teleport", action: sendWithKeyTeleport)
-                    .font(.subheadline)
             }
 
             WalletFinalDeleteConfirmationHost(
