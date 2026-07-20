@@ -94,7 +94,11 @@ impl TransactionWatcher {
         }
 
         let selected_node = Database::global().global_config.selected_node();
-        let client = self.client.take().filter(|client| client.node() == &selected_node);
+        let connection_identity = selected_node.connection_identity();
+        let client = self
+            .client
+            .take()
+            .filter(|client| client.connection_identity() == &connection_identity);
         let builder = NodeClientBuilder { node: selected_node, options: self.options };
         let tx_id = self.tx_id;
 

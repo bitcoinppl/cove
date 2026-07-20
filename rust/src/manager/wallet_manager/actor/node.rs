@@ -14,7 +14,7 @@ use crate::{
         Error, WalletManagerReconcileMessage,
         actor::{WalletActor, WalletScanGeneration},
     },
-    node::{Node, client::NodeClient},
+    node::{Node, NodeConnectionIdentity, client::NodeClient},
     wallet::metadata::BlockSizeLast,
 };
 
@@ -44,7 +44,7 @@ struct NodeRefreshResult<T> {
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub(crate) struct NodeRefreshKey {
-    node: Node,
+    connection_identity: NodeConnectionIdentity,
     generation: Option<WalletScanGeneration>,
 }
 
@@ -127,7 +127,7 @@ impl WalletActor {
         generation: Option<WalletScanGeneration>,
     ) {
         let node = Database::global().global_config.selected_node();
-        let key = NodeRefreshKey { node, generation };
+        let key = NodeRefreshKey { connection_identity: node.connection_identity(), generation };
         if let Some(in_flight) = self.height_refreshes_in_flight.get_mut(&key) {
             in_flight.attach(reply);
             return;
@@ -138,7 +138,7 @@ impl WalletActor {
         let node_client = self.node_client.clone();
 
         self.addr.send_fut_with(|addr| async move {
-            let result = fetch_node_height(key, node_client).await;
+            let result = fetch_node_height(node, key, node_client).await;
             let _ = call!(addr.handle_height_refresh_result(result)).await;
         });
     }
@@ -149,11 +149,14 @@ impl WalletActor {
         generation: WalletScanGeneration,
     ) {
         let node = Database::global().global_config.selected_node();
-        let key = NodeRefreshKey { node, generation: Some(generation) };
+        let key = NodeRefreshKey {
+            connection_identity: node.connection_identity(),
+            generation: Some(generation),
+        };
         let node_client = self.node_client.clone();
 
         self.addr.send_fut_with(|addr| async move {
-            let result = fetch_node_block_id(key, node_client).await;
+            let result = fetch_node_block_id(node, key, node_client).await;
             let applied = call!(addr.handle_block_id_refresh_result(result)).await;
 
             if let Some(reply) = reply {
@@ -307,11 +310,15 @@ impl WalletActor {
     }
 
     fn is_selected_node(&self, node: &Node) -> bool {
-        Database::global().global_config.selected_node() == *node
+        self.is_selected_connection(&node.connection_identity())
+    }
+
+    fn is_selected_connection(&self, identity: &NodeConnectionIdentity) -> bool {
+        Database::global().global_config.selected_node().connection_identity() == *identity
     }
 
     fn should_apply_node_refresh(&self, key: &NodeRefreshKey) -> bool {
-        self.is_selected_node(&key.node)
+        self.is_selected_connection(&key.connection_identity)
             && key.generation.is_none_or(|generation| generation == self.scan_generation)
     }
 
@@ -375,7 +382,12 @@ impl WalletActor {
 
     pub(crate) fn node_client(&mut self) -> Result<&NodeClient, Error> {
         let selected_node = Database::global().global_config.selected_node();
-        if self.node_client.as_ref().is_some_and(|client| client.node() != &selected_node) {
+        let selected_identity = selected_node.connection_identity();
+        if self
+            .node_client
+            .as_ref()
+            .is_some_and(|client| client.connection_identity() != &selected_identity)
+        {
             self.node_client = None;
         }
 
@@ -394,11 +406,12 @@ async fn checked_node_client(node: &Node) -> Result<NodeClient, Error> {
 }
 
 async fn fetch_node_height(
+    node: Node,
     key: NodeRefreshKey,
     node_client: Option<NodeClient>,
 ) -> HeightRefreshResult {
     let result = async {
-        let node_client = node_client_or_new(&key.node, node_client).await?;
+        let node_client = node_client_or_new(&node, node_client).await?;
         let block_height = node_client.get_height().await.map_err(|_| Error::GetHeightError)?;
 
         Ok(NodeHeightRefresh { node_client, block_height })
@@ -409,11 +422,12 @@ async fn fetch_node_height(
 }
 
 async fn fetch_node_block_id(
+    node: Node,
     key: NodeRefreshKey,
     node_client: Option<NodeClient>,
 ) -> BlockIdRefreshResult {
     let result = async {
-        let node_client = node_client_or_new(&key.node, node_client).await?;
+        let node_client = node_client_or_new(&node, node_client).await?;
         let block_id = node_client.get_block_id().await.map_err(|_| Error::GetHeightError)?;
 
         Ok(NodeBlockIdRefresh { node_client, block_id })
@@ -427,7 +441,10 @@ async fn node_client_or_new(
     node: &Node,
     node_client: Option<NodeClient>,
 ) -> Result<NodeClient, Error> {
-    if let Some(node_client) = node_client.filter(|client| client.node() == node) {
+    let connection_identity = node.connection_identity();
+    if let Some(node_client) =
+        node_client.filter(|client| client.connection_identity() == &connection_identity)
+    {
         return Ok(node_client);
     }
 

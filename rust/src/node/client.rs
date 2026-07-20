@@ -23,7 +23,7 @@ use cove_bdk_progressive_scan::ScanEvent;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::node::Node;
+use crate::node::{Node, NodeConnectionIdentity};
 
 use super::{ApiType, client_builder::NodeClientBuilder};
 
@@ -33,7 +33,7 @@ const ESPLORA_BATCH_SIZE: usize = 1;
 /// A blockchain client bound to the node that created it
 #[derive(Clone)]
 pub struct NodeClient {
-    node: Node,
+    connection_identity: NodeConnectionIdentity,
     backend: NodeClientBackend,
 }
 
@@ -50,7 +50,10 @@ impl core::fmt::Debug for NodeClient {
             NodeClientBackend::Electrum(_) => "Electrum",
         };
 
-        f.debug_struct("NodeClient").field("node", &self.node).field("backend", &backend).finish()
+        f.debug_struct("NodeClient")
+            .field("connection_identity", &self.connection_identity)
+            .field("backend", &backend)
+            .finish()
     }
 }
 
@@ -120,7 +123,7 @@ impl NodeClient {
             }
         };
 
-        Ok(Self { node: node.clone(), backend })
+        Ok(Self { connection_identity: node.connection_identity(), backend })
     }
 
     pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
@@ -147,11 +150,11 @@ impl NodeClient {
             }
         };
 
-        Ok(Self { node: node.clone(), backend })
+        Ok(Self { connection_identity: node.connection_identity(), backend })
     }
 
-    pub(crate) fn node(&self) -> &Node {
-        &self.node
+    pub(crate) fn connection_identity(&self) -> &NodeConnectionIdentity {
+        &self.connection_identity
     }
 
     pub async fn check_url(&self) -> Result<(), Error> {
