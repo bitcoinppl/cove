@@ -90,6 +90,8 @@ pub enum KeyTeleportManagerState {
     ReceiveMessageReview(KeyTeleportMessageReview),
     /// Reports the wallet created from received private key material
     ReceiveImportedWallet(WalletMetadata),
+    /// Waits for the receiver request after a sending wallet has been fixed
+    SendAwaitReceiver,
     SendChooseWallet(KeyTeleportSendChooseWallet),
     SendEnterCode(KeyTeleportSendEnterCode),
     SendConfirm(KeyTeleportSendConfirm),
@@ -114,6 +116,7 @@ impl fmt::Debug for KeyTeleportManagerState {
             Self::ReceiveImportedWallet(wallet) => {
                 f.debug_tuple("ReceiveImportedWallet").field(&wallet.id).finish()
             }
+            Self::SendAwaitReceiver => f.write_str("SendAwaitReceiver"),
             Self::SendChooseWallet(state) => f
                 .debug_struct("SendChooseWallet")
                 .field("eligible_wallets", &state.eligible_wallets)
@@ -230,8 +233,8 @@ impl From<NotesPayload> for KeyTeleportMessageReview {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyTeleportSendChooseWallet {
+    /// Wallets available for the pending receiver request
     pub eligible_wallets: Vec<WalletMetadata>,
-    pub selected_wallet: Option<WalletId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -618,10 +621,7 @@ impl RustKeyTeleportManager {
             return Ok(());
         }
 
-        self.set_state(KeyTeleportManagerState::SendChooseWallet(KeyTeleportSendChooseWallet {
-            eligible_wallets: eligible_wallets(),
-            selected_wallet: Some(wallet.id),
-        }));
+        self.set_state(KeyTeleportManagerState::SendAwaitReceiver);
 
         Ok(())
     }
@@ -635,14 +635,6 @@ impl RustKeyTeleportManager {
             return Err(KeyTeleportAlert::NoEligibleWallets);
         }
 
-        let selected_wallet =
-            Database::global().global_config.selected_wallet().and_then(|selected_id| {
-                eligible_wallets
-                    .iter()
-                    .find(|wallet| wallet.id == selected_id)
-                    .map(|wallet| wallet.id.clone())
-            });
-
         self.private.lock().pending_receiver_packet = Some(packet);
         if let Some(wallet) = self.private.lock().selected_send_wallet.clone() {
             self.set_state(KeyTeleportManagerState::SendEnterCode(KeyTeleportSendEnterCode {
@@ -653,7 +645,6 @@ impl RustKeyTeleportManager {
 
         self.set_state(KeyTeleportManagerState::SendChooseWallet(KeyTeleportSendChooseWallet {
             eligible_wallets,
-            selected_wallet,
         }));
 
         Ok(())
@@ -1082,6 +1073,48 @@ mod tests {
         Keychain::global().delete_key_teleport_receive_session();
     }
 
+    struct SendWalletFixture {
+        wallet: WalletMetadata,
+        original_wallets: Vec<WalletMetadata>,
+    }
+
+    impl SendWalletFixture {
+        fn new() -> Self {
+            let database = Database::global();
+            let mut wallet = WalletMetadata::preview_new();
+            wallet.network = database.global_config.selected_network();
+            wallet.wallet_mode = database.global_config.wallet_mode();
+            let original_wallets =
+                database.wallets.get_all(wallet.network, wallet.wallet_mode).unwrap_or_default();
+            let mnemonic = Mnemonic::from_str(
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            )
+            .unwrap();
+
+            database
+                .wallets
+                .save_all_wallets(wallet.network, wallet.wallet_mode, vec![wallet.clone()])
+                .unwrap();
+            Keychain::global().save_wallet_key(&wallet.id, mnemonic).unwrap();
+
+            Self { wallet, original_wallets }
+        }
+    }
+
+    impl Drop for SendWalletFixture {
+        fn drop(&mut self) {
+            Keychain::global().delete_wallet_items(&self.wallet.id);
+            Database::global()
+                .wallets
+                .save_all_wallets(
+                    self.wallet.network,
+                    self.wallet.wallet_mode,
+                    self.original_wallets.clone(),
+                )
+                .unwrap();
+        }
+    }
+
     #[test]
     fn start_receive_resumes_session_and_restart_replaces_it() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
@@ -1241,6 +1274,43 @@ mod tests {
         let error = manager.handle_action(Action::Ingest(StringOrData::String(packet.bbqr_part())));
 
         assert_eq!(error, Err(KeyTeleportAlert::NoActiveReceiveSession));
+    }
+
+    #[test]
+    fn wallet_started_send_keeps_wallet_fixed_while_awaiting_receiver() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let fixture = SendWalletFixture::new();
+        let manager = RustKeyTeleportManager::new();
+
+        manager.handle_action(Action::StartSendFromWallet(fixture.wallet.id.clone())).unwrap();
+
+        let KeyTeleportManagerState::SendAwaitReceiver = manager.state() else {
+            panic!("expected wallet-fixed send state")
+        };
+
+        assert_eq!(manager.private.lock().selected_send_wallet, Some(fixture.wallet.clone()));
+    }
+
+    #[test]
+    fn receiver_started_send_requires_wallet_choice() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let fixture = SendWalletFixture::new();
+        let manager = RustKeyTeleportManager::new();
+        let receiver = ReceiverSession::from_private_key_bytes([10; 32]).unwrap();
+        let request = receiver.request().unwrap();
+
+        manager
+            .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(
+                request.packet,
+            )))
+            .unwrap();
+
+        let KeyTeleportManagerState::SendChooseWallet(state) = manager.state() else {
+            panic!("expected wallet choice state")
+        };
+        assert_eq!(state.eligible_wallets, vec![fixture.wallet.clone()]);
     }
 
     #[test]
