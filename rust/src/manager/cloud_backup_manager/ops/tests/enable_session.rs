@@ -742,6 +742,38 @@ async fn discard_pending_enable_durable_completion_commits_without_remote_delete
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn committed_pending_enable_journal_cleanup_retries_without_restart() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    manager
+        .pending_enable
+        .begin_pending_enable_local_promotion(
+            &cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            &fixture.passkey,
+        )
+        .unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.commit_master_key_promotion().unwrap();
+
+    assert_eq!(
+        cspp.master_key_promotion_status().unwrap(),
+        cove_cspp::MasterKeyPromotionStatus::None
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_some());
+
+    manager.pending_enable.commit_pending_enable_local_promotion().unwrap();
+
+    assert_active_master_key(&fixture.staged_master_key);
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_local_cleanup_failure_retains_session_and_journal() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

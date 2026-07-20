@@ -544,19 +544,26 @@ impl PendingEnableCoordinator {
                 "pending Cloud Backup enable local promotion is not ready to commit".into(),
             ));
         }
-        if !self.has_staged_namespace(journal.namespace_id())?
-            || !self.has_promotion_status(&[MasterKeyPromotionStatus::Pending(
-                MasterKeyPromotionActiveState::Staged,
-            )])?
-        {
-            return Err(CloudBackupError::Internal(
-                "pending Cloud Backup enable cannot commit mismatched promotion state".into(),
-            ));
+
+        match self.promotion_status()? {
+            MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Staged)
+                if self.has_staged_namespace(journal.namespace_id())? =>
+            {
+                self.cspp().commit_master_key_promotion().map_err(|source| {
+                    CloudBackupError::internal_context("commit staged master key promotion", source)
+                })?;
+            }
+            MasterKeyPromotionStatus::None
+                if self.committed_material_matches_journal(&journal)? => {}
+            MasterKeyPromotionStatus::None
+            | MasterKeyPromotionStatus::Staged
+            | MasterKeyPromotionStatus::Pending(_) => {
+                return Err(CloudBackupError::Internal(
+                    "pending Cloud Backup enable cannot commit mismatched promotion state".into(),
+                ));
+            }
         }
 
-        self.cspp().commit_master_key_promotion().map_err(|source| {
-            CloudBackupError::internal_context("commit staged master key promotion", source)
-        })?;
         cloud_keychain.delete_pending_enable_journal().map_err(|source| {
             CloudBackupError::internal_context("clear committed pending enable state", source)
         })
@@ -664,6 +671,29 @@ impl PendingEnableCoordinator {
             .map_err(|source| {
                 CloudBackupError::internal_context("inspect staged master key", source)
             })
+    }
+
+    fn committed_material_matches_journal(
+        &self,
+        journal: &PendingEnableJournal,
+    ) -> Result<bool, CloudBackupError> {
+        let Some(passkey) = journal.passkey() else {
+            return Ok(false);
+        };
+        let active_namespace = self
+            .cspp()
+            .load_master_key_from_store()
+            .map_err(|source| {
+                CloudBackupError::internal_context("inspect committed master key", source)
+            })?
+            .map(|master_key| master_key.namespace_id());
+        let cloud_keychain = self.cloud_keychain();
+
+        Ok(active_namespace.as_deref() == Some(journal.namespace_id())
+            && cloud_keychain.namespace_id().as_deref() == Some(journal.namespace_id())
+            && cloud_keychain.load_credential_id().as_deref()
+                == Some(passkey.credential_id.as_slice())
+            && cloud_keychain.load_prf_salt() == Some(passkey.prf_salt))
     }
 
     fn promotion_status(&self) -> Result<MasterKeyPromotionStatus, CloudBackupError> {
