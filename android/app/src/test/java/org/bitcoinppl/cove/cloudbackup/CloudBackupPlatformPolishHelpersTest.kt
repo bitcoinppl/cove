@@ -83,7 +83,7 @@ class CloudBackupPlatformPolishHelpersTest {
     }
 
     @Test
-    fun walletRestoreActionNamesTheWalletAndDestination() {
+    fun walletRowNamesAvailableActionsAndRestoreButtonState() {
         val item =
             CloudBackupWalletItem(
                 recordId = "record-1",
@@ -98,9 +98,12 @@ class CloudBackupPlatformPolishHelpersTest {
                 restoreFailure = null,
             )
 
-        assertEquals("Restore Vacation Fund to this device", cloudBackupWalletRowActionLabel(item))
         assertEquals(
-            "Retry restoring Vacation Fund to this device",
+            "Show restore and delete actions for Vacation Fund",
+            cloudBackupWalletRowActionLabel(item),
+        )
+        assertEquals(
+            "Show restore and delete actions for Vacation Fund",
             cloudBackupWalletRowActionLabel(
                 item.copy(
                     restoreFailure =

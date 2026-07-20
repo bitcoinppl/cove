@@ -277,13 +277,7 @@ private fun WalletType.cloudBackupDisplayName(): String =
     }
 
 internal fun cloudBackupWalletRowActionLabel(item: CloudBackupWalletItem): String {
-    val restoreFailure = item.restoreFailure
-
-    return if (restoreFailure == null) {
-        "Restore ${item.name} to this device"
-    } else {
-        "Retry restoring ${item.name} to this device"
-    }
+    return "Show restore and delete actions for ${item.name}"
 }
 
 @Composable
