@@ -96,6 +96,7 @@ private fun KeyTeleportScreen(
                             containerColor = Color.Transparent,
                             titleContentColor = Color.White,
                             navigationIconContentColor = Color.White,
+                            actionIconContentColor = Color.White,
                         ),
                     title = { Text("Key Teleport", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
                     navigationIcon = {

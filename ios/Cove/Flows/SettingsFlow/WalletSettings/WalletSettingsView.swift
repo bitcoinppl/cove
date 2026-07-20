@@ -199,19 +199,6 @@ struct WalletSettingsView: View {
                     }
                 }
 
-                if manager.walletMetadata.walletType == .hot,
-                   app.canKeyTeleportSend(walletId: manager.walletMetadata.id)
-                {
-                    Button {
-                        let keyTeleportManager = app.ensureKeyTeleportManager()
-                        keyTeleportManager.dispatch(.startSendFromWallet(manager.walletMetadata.id))
-                        app.pushRoute(RouteFactory().keyTeleportSend())
-                    } label: {
-                        Text("Send with Key Teleport")
-                            .font(.subheadline)
-                    }
-                }
-
                 Button {
                     requiredConfirmations = manager.rust.requiredDeletionConfirmations()
                     showingDeleteConfirmation = true

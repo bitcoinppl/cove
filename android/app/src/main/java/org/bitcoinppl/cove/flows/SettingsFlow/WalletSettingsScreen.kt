@@ -59,9 +59,7 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.Route
-import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletBirthday
 import org.bitcoinppl.cove_core.WalletColor
@@ -279,33 +277,12 @@ fun WalletSettingsScreen(
                         var dangerItemCount = 0
                         // only show for hot wallets that have a mnemonic
                         if (metadata.walletType == WalletType.HOT) {
-                            val canKeyTeleportSend =
-                                remember(metadata.id, metadata.walletType) {
-                                    app.canKeyTeleportSend(metadata.id)
-                                }
-
                             if (manager.hasRecoveryWords()) {
                                 MaterialSettingsItem(
                                     title = stringResource(R.string.label_wallet_view_secrets),
                                     titleColor = CoveColor.WarningOrange,
                                     onClick = {
                                         app.pushRoute(Route.SecretWords(metadata.id))
-                                    },
-                                )
-                                dangerItemCount++
-                            }
-
-                            if (canKeyTeleportSend) {
-                                if (dangerItemCount > 0) MaterialDivider()
-                                MaterialSettingsItem(
-                                    title = "Send with Key Teleport",
-                                    titleColor = CoveColor.WarningOrange,
-                                    onClick = {
-                                        val keyTeleportManager = app.getKeyTeleportManager()
-                                        keyTeleportManager.dispatch(
-                                            KeyTeleportManagerAction.StartSendFromWallet(metadata.id),
-                                        )
-                                        app.pushRoute(RouteFactory().keyTeleportSend())
                                     },
                                 )
                                 dangerItemCount++

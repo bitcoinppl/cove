@@ -36,11 +36,6 @@ private sealed interface KeyTeleportToolbarActions {
     }
 }
 
-private enum class ReceiveSessionAction {
-    Restart,
-    End,
-}
-
 @Composable
 internal fun KeyTeleportToolbarMenu(
     manager: KeyTeleportManager,
@@ -49,7 +44,7 @@ internal fun KeyTeleportToolbarMenu(
     val actions = manager.state.toolbarActions() ?: return
     val context = LocalContext.current
     var isExpanded by remember(actions) { mutableStateOf(false) }
-    var pendingSessionAction by remember(actions) { mutableStateOf<ReceiveSessionAction?>(null) }
+    var showEndSessionConfirmation by remember(actions) { mutableStateOf(false) }
 
     IconButton(onClick = { isExpanded = true }) {
         Icon(Icons.Default.MoreVert, contentDescription = "Key Teleport options")
@@ -67,39 +62,23 @@ internal fun KeyTeleportToolbarMenu(
         )
         if (actions is KeyTeleportToolbarActions.Receive) {
             DropdownMenuItem(
-                text = { Text("New Session") },
-                onClick = {
-                    isExpanded = false
-                    pendingSessionAction = ReceiveSessionAction.Restart
-                },
-            )
-            DropdownMenuItem(
                 text = { Text("End Session", color = MaterialTheme.colorScheme.error) },
                 onClick = {
                     isExpanded = false
-                    pendingSessionAction = ReceiveSessionAction.End
+                    showEndSessionConfirmation = true
                 },
             )
         }
     }
 
-    pendingSessionAction?.let { action ->
-        ReceiveSessionConfirmation(
-            action = action,
+    if (showEndSessionConfirmation) {
+        EndSessionConfirmation(
             onConfirm = {
-                pendingSessionAction = null
-                when (action) {
-                    ReceiveSessionAction.Restart -> {
-                        manager.dispatch(KeyTeleportManagerAction.RestartReceive)
-                    }
-
-                    ReceiveSessionAction.End -> {
-                        manager.dispatch(KeyTeleportManagerAction.EndReceive)
-                        onEnd()
-                    }
-                }
+                showEndSessionConfirmation = false
+                manager.dispatch(KeyTeleportManagerAction.EndReceive)
+                onEnd()
             },
-            onDismiss = { pendingSessionAction = null },
+            onDismiss = { showEndSessionConfirmation = false },
         )
     }
 }
@@ -112,28 +91,19 @@ private fun KeyTeleportManagerState.toolbarActions(): KeyTeleportToolbarActions?
     }
 
 @Composable
-private fun ReceiveSessionConfirmation(
-    action: ReceiveSessionAction,
+private fun EndSessionConfirmation(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val restarting = action == ReceiveSessionAction.Restart
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (restarting) "Start a new session?" else "End this session?") },
+        title = { Text("End this session?") },
         text = {
-            Text(
-                if (restarting) {
-                    "The current link, QR code, and receiver code will stop working."
-                } else {
-                    "The current receive request will be deleted from this device."
-                },
-            )
+            Text("The current receive request will be deleted from this device.")
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(if (restarting) "Start New Session" else "End Session")
+                Text("End Session")
             }
         },
         dismissButton = {

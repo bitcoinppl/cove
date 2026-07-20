@@ -20,8 +20,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -99,6 +102,7 @@ fun NewWalletSelectScreen(
 ) {
     var showHardwareWalletSheet by remember { mutableStateOf(false) }
     var showNfcHelpSheet by remember { mutableStateOf(false) }
+    var isOverflowMenuOpen by remember { mutableStateOf(false) }
     var nfcCalled by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -208,16 +212,37 @@ fun NewWalletSelectScreen(
                 }
             },
             actions = {
-                IconButton(onClick = onOpenQrScan) {
+                IconButton(onClick = { isOverflowMenuOpen = true }) {
                     Icon(
-                        painter = painterResource(id = R.drawable.icon_qr_code),
-                        contentDescription = "Scan QR",
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More wallet options",
                     )
                 }
-                IconButton(onClick = { triggerNfcScan() }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.icon_contactless),
-                        contentDescription = "NFC",
+
+                DropdownMenu(
+                    expanded = isOverflowMenuOpen,
+                    onDismissRequest = { isOverflowMenuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("QR") },
+                        onClick = {
+                            isOverflowMenuOpen = false
+                            onOpenQrScan()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("NFC") },
+                        onClick = {
+                            isOverflowMenuOpen = false
+                            triggerNfcScan()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("KeyTeleport") },
+                        onClick = {
+                            isOverflowMenuOpen = false
+                            app.pushRoute(RouteFactory().keyTeleportReceive())
+                        },
                     )
                 }
             },
@@ -307,20 +332,6 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f).testTag("newWalletSelect.onThisDevice"),
                         )
                     }
-
-                    ImageButton(
-                        text = "Receive with Key Teleport",
-                        leadingIcon = painterResource(R.drawable.icon_qr_code),
-                        onClick = {
-                            app.pushRoute(RouteFactory().keyTeleportReceive())
-                        },
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary,
-                                contentColor = CoveColor.midnightBlue,
-                            ),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
 
                     // NFC Help button - appears after NFC is called (matching iOS behavior)
                     if (nfcCalled) {
