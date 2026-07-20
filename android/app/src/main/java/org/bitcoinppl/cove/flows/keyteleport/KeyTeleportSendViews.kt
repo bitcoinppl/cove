@@ -12,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import org.bitcoinppl.cove.AppManager
@@ -123,9 +122,7 @@ internal fun SendReadyView(
     onDone: () -> Unit,
 ) {
     val packetText = remember(ready.packet) { ready.packet.bbqrPart() }
-    val url = remember(ready.packet) { ready.packet.url() }
     val password = remember(ready.password) { ready.password.groupedText() }
-    val context = LocalContext.current
 
     SecureScreenEffect()
     TextBlock(
@@ -134,10 +131,6 @@ internal fun SendReadyView(
     )
     PacketQr(packetText)
     SecretCode(password)
-    LinkActionsRow(
-        onCopy = { copyText(context, "Key Teleport", url) },
-        onShare = { shareText(context, "Share Key Teleport", url) },
-    )
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
         Text("Done")
     }

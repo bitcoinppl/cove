@@ -61,6 +61,14 @@ enum ShareSheet {
         topPresenter(from: rootViewController).present(activityViewController, animated: true)
     }
 
+    /// Shows a plain-text share sheet after a transient menu finishes dismissing
+    @MainActor
+    static func presentFromMenu(text: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            present(text: text)
+        }
+    }
+
     /// Shows share sheet for the given file URL
     @MainActor
     static func present(for url: URL) {

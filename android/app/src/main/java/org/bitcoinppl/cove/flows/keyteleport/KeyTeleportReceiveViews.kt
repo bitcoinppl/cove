@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -39,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -47,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingPrimaryButton
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportMessageItem
@@ -60,33 +63,31 @@ private val ImportedWalletSuccessFill = Color(0x297DD195)
 
 @Composable
 internal fun ReceiveReadyView(
-    manager: KeyTeleportManager,
     receive: KeyTeleportReceiveState,
     onScan: () -> Unit,
-    onPaste: () -> Unit,
-    onCancel: () -> Unit,
 ) {
     val packetText = remember(receive.packet) { receive.packet.bbqrPart() }
-    val url = remember(receive.packet) { receive.packet.url() }
-    val context = LocalContext.current
 
-    TextBlock(
-        title = "Receive a wallet",
-        body = "Show this QR to the sender, enter the code there, then scan the response here.",
-    )
     PacketQr(packetText)
-    Text(
-        text = receive.groupedNumericCode,
-        color = Color.White,
-        fontSize = 32.sp,
-        fontWeight = FontWeight.SemiBold,
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        textAlign = TextAlign.Center,
-    )
-    LinkActionsRow(
-        onCopy = { copyText(context, "Key Teleport receiver", url) },
-        onShare = { shareText(context, "Share Receiver Code", url) },
-    )
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = "Receiver Code",
+            color = OnboardingTextSecondary,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(
+            text = receive.groupedNumericCode,
+            color = Color.White,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+    }
     Text(
         text =
             "Send the link to another Key Teleport-compatible wallet instead of showing the QR code. " +
@@ -94,8 +95,11 @@ internal fun ReceiveReadyView(
         color = OnboardingTextSecondary,
         style = MaterialTheme.typography.bodySmall,
     )
-    ActionRow(onScan, onPaste)
-    ReceiveSessionControls(manager, onCancel)
+    OnboardingPrimaryButton(
+        text = "Scan Sender Response",
+        onClick = onScan,
+        icon = Icons.Default.QrCodeScanner,
+    )
 }
 
 @Composable
@@ -299,7 +303,10 @@ private fun MessageItemCard(item: KeyTeleportMessageItem) {
                 if (group.isNotEmpty()) Text(group, color = OnboardingTextSecondary)
             }
             when (item) {
-                is KeyTeleportMessageItem.Note -> MessageField("Message", item.text)
+                is KeyTeleportMessageItem.Note -> {
+                    MessageField("Message", item.text)
+                }
+
                 is KeyTeleportMessageItem.Password -> {
                     MessageField("Username", item.username)
                     MessageField("Password", item.password)
