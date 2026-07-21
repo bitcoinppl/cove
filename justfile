@@ -106,10 +106,10 @@ mobile-artifact-fetch-ios-core ref:
 # build
 # ------------------------------------------------------------------------------
 
-# [long] Build Android debug Rust FFI and Kotlin bindings for all ABIs
+# [bounded] Build Android debug Rust FFI and Kotlin bindings for ARM64 devices
 [group('build')]
 build-android:
-    just xtask build-android debug && just say "done android"
+    just xtask build-android debug --arm64 && just say "done android arm64-v8a"
 
 alias ba := build-android
 
