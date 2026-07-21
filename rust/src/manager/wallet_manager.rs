@@ -778,16 +778,8 @@ impl RustWalletManager {
         .await
         .map_err_str(Error::TransactionDetailsError)??;
 
-        let is_pending = presentation.confirmations().is_none();
-        let presentation = self.refresh_transaction_confirmation(presentation).await;
-
         let tx_id = presentation.tx_id().0;
-
-        send!(self.actor.start_transaction_watcher(tx_id));
-
-        if is_pending {
-            send!(self.actor.perform_scan_for_single_tx_id(tx_id));
-        }
+        send!(self.actor.monitor_transaction_confirmation(tx_id));
 
         Ok(Arc::new(presentation))
     }
@@ -1162,28 +1154,6 @@ impl RustWalletManager {
 }
 
 impl RustWalletManager {
-    async fn refresh_transaction_confirmation(
-        &self,
-        presentation: TransactionDetailsPresentation,
-    ) -> TransactionDetailsPresentation {
-        if presentation.confirmations().is_none() {
-            return presentation;
-        }
-
-        let current_height = match self.force_update_height().await {
-            Ok(current_height) => current_height,
-            Err(error) => {
-                warn!(
-                    "unable to refresh confirmation height for tx_id={}: {error}",
-                    presentation.tx_id()
-                );
-                return presentation;
-            }
-        };
-
-        presentation.with_current_height(current_height)
-    }
-
     fn current_scan_status(&self) -> WalletScanStatus {
         self.scan_status.read().clone()
     }

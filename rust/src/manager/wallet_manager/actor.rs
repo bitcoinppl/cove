@@ -63,6 +63,7 @@ pub struct WalletActor {
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
+    targeted_transaction_scans: transaction_confirmation::TargetedTransactionScans,
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
     receive_address_refresh_timer: Option<AbortableTask<()>>,
     scan_actor: Option<Addr<WalletScanActor>>,
@@ -172,6 +173,7 @@ impl WalletActor {
             scan_status,
             wallet_snapshot,
             transaction_watchers: HashMap::default(),
+            targeted_transaction_scans: Default::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
             scan_actor: None,
@@ -1064,6 +1066,7 @@ impl WalletActor {
 
     fn advance_scan_generation(&mut self) -> WalletScanGeneration {
         self.scan_generation = self.scan_generation.next();
+        self.targeted_transaction_scans.clear();
         self.scan_generation
     }
 
@@ -1202,6 +1205,7 @@ mod tests {
     };
     use cove_bdk_progressive_scan::ScanUpdate;
     use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use cove_tokio::FutureTimeoutExt as _;
     use cove_types::{
         fees::{FeeRateOption, FeeRateOptions, FeeSpeed},
         network::Network as CoveNetwork,
@@ -1508,6 +1512,37 @@ mod tests {
         })
         .await
         .expect("address-type switch restarts wallet scan");
+    }
+
+    async fn wait_for_transaction_details_update(
+        receiver: &flume::Receiver<SingleOrMany>,
+    ) -> Arc<crate::transaction::TransactionDetailsPresentation> {
+        async {
+            loop {
+                let batch = receiver.recv_async().await.expect("reconcile message is emitted");
+                let presentation = match batch {
+                    SingleOrMany::Single(
+                        WalletManagerReconcileMessage::TransactionDetailsUpdated(presentation),
+                    ) => Some(presentation),
+                    SingleOrMany::Many(messages) => {
+                        messages.into_iter().find_map(|message| match message {
+                            WalletManagerReconcileMessage::TransactionDetailsUpdated(
+                                presentation,
+                            ) => Some(presentation),
+                            _ => None,
+                        })
+                    }
+                    _ => None,
+                };
+
+                if let Some(presentation) = presentation {
+                    return presentation;
+                }
+            }
+        }
+        .with_timeout(Duration::from_secs(2))
+        .await
+        .expect("transaction details update is reconciled")
     }
 
     fn drain_reconcile_messages(receiver: &flume::Receiver<SingleOrMany>) {
@@ -2476,6 +2511,79 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn confirmed_transaction_monitoring_returns_before_height_refresh_and_reconciles() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(10, Duration::from_millis(500)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let outpoint = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(20_000));
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+
+        tokio::time::timeout(
+            Duration::from_millis(200),
+            call!(addr.monitor_transaction_confirmation(outpoint.txid)),
+        )
+        .await
+        .expect("local confirmation monitoring does not wait for node height")
+        .expect("confirmation monitoring starts");
+        let presentation = wait_for_transaction_details_update(&receiver).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(presentation.confirmations(), Some(10));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn repeated_confirmation_events_coalesce_targeted_transaction_scan() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_height_esplora_node(10, Duration::from_millis(300)).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+        let tx_id = Txid::all_zeros();
+
+        wait_for_height_request_count(&server, 1).await;
+        tokio::time::sleep(Duration::from_millis(350)).await;
+        server.height_requests.store(0, Ordering::SeqCst);
+
+        call!(addr.handle_transaction_watcher_event(TransactionWatcherEvent::ConfirmedObserved {
+            tx_id
+        }))
+        .await
+        .expect("first confirmation event starts targeted scan");
+        call!(addr.handle_transaction_watcher_event(TransactionWatcherEvent::ConfirmedObserved {
+            tx_id
+        }))
+        .await
+        .expect("duplicate confirmation event is coalesced");
+        let active_scan_count = call!(addr.active_targeted_transaction_scan_count_for_test())
+            .await
+            .expect("active scan count is available");
+        wait_for_height_request_count(&server, 1).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        call!(addr.shutdown()).await.expect("wallet actor shuts down");
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(active_scan_count, 1);
+        assert_eq!(server.height_requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn shutdown_during_confirmation_height_refresh_stops_targeted_sync() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
@@ -2486,7 +2594,7 @@ mod tests {
         let wallet = persisted_preview_wallet(metadata.clone());
         let (addr, _receiver) = spawn_test_wallet_actor(wallet);
 
-        call!(addr.perform_scan_for_single_tx_id(Txid::all_zeros()))
+        call!(addr.start_targeted_transaction_scan_after_block_refresh_for_test(Txid::all_zeros()))
             .await
             .expect("targeted scan actor responds");
         wait_for_height_request_count(&server, 2).await;

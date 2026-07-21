@@ -16,7 +16,42 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default)]
+pub(crate) struct TargetedTransactionScans {
+    active: ahash::HashMap<Txid, WalletScanGeneration>,
+}
+
+impl TargetedTransactionScans {
+    fn start(
+        &mut self,
+        tx_id: Txid,
+        generation: WalletScanGeneration,
+    ) -> Option<TargetedTransactionScan> {
+        if self.active.contains_key(&tx_id) {
+            return None;
+        }
+
+        self.active.insert(tx_id, generation);
+
+        Some(TargetedTransactionScan::new(tx_id, generation))
+    }
+
+    fn contains(&self, scan: TargetedTransactionScan) -> bool {
+        self.active.get(&scan.tx_id) == Some(&scan.generation)
+    }
+
+    fn finish(&mut self, scan: TargetedTransactionScan) {
+        if self.contains(scan) {
+            self.active.remove(&scan.tx_id);
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.active.clear();
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 struct TargetedTransactionScan {
     tx_id: Txid,
     generation: WalletScanGeneration,
@@ -32,6 +67,54 @@ impl TargetedTransactionScan {
 }
 
 impl WalletActor {
+    pub(crate) async fn monitor_transaction_confirmation(
+        &mut self,
+        tx_id: Txid,
+    ) -> ActorResult<()> {
+        let presentation = self.transaction_details_presentation_for_tx_id(tx_id.into())?;
+        if presentation.confirmations().is_none() {
+            return self.start_transaction_watcher(tx_id).await;
+        }
+
+        let generation = self.scan_generation;
+        let height_refresh = self.update_height(generation).await?;
+        self.addr.send_fut_with(|addr| async move {
+            let current_height = match height_refresh.await {
+                Ok(Ok(current_height)) => Some(current_height as u32),
+                _ => None,
+            };
+            send!(addr.finish_transaction_confirmation_monitoring(
+                tx_id,
+                generation,
+                current_height
+            ));
+        });
+
+        Produces::ok(())
+    }
+
+    async fn finish_transaction_confirmation_monitoring(
+        &mut self,
+        tx_id: Txid,
+        generation: WalletScanGeneration,
+        current_height: Option<u32>,
+    ) -> ActorResult<()> {
+        if generation != self.scan_generation {
+            return Produces::ok(());
+        }
+
+        if let Some(current_height) = current_height {
+            let presentation = self
+                .transaction_details_presentation_for_tx_id(tx_id.into())?
+                .with_current_height(current_height);
+            self.send(WalletManagerReconcileMessage::TransactionDetailsUpdated(
+                presentation.into(),
+            ));
+        }
+
+        self.start_transaction_watcher(tx_id).await
+    }
+
     pub async fn start_transaction_watcher(&mut self, tx_id: Txid) -> ActorResult<()> {
         debug!("start_transaction_watcher for txn: {tx_id}");
         if self.transaction_watchers.contains_key(&tx_id) {
@@ -72,7 +155,10 @@ impl WalletActor {
     ) -> ActorResult<()> {
         match event {
             TransactionWatcherEvent::ConfirmedObserved { tx_id } => {
-                let scan = TargetedTransactionScan::new(tx_id, self.scan_generation);
+                let Some(scan) = self.start_targeted_transaction_scan(tx_id) else {
+                    return Produces::ok(());
+                };
+
                 self.handle_watched_transaction_confirmation(scan).await?;
             }
         }
@@ -90,6 +176,8 @@ impl WalletActor {
         self.addr.send_fut_with(|addr| async move {
             if matches!(block_id_refresh.await, Ok(Ok(_))) {
                 send!(addr.perform_scan_for_single_tx(scan));
+            } else {
+                send!(addr.finish_targeted_transaction_scan(scan));
             }
         });
 
@@ -101,11 +189,6 @@ impl WalletActor {
         if let Some(watcher) = self.transaction_watchers.remove(&tx_id) {
             send!(watcher.stop_watching());
         }
-    }
-
-    pub async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
-        let scan = TargetedTransactionScan::new(tx_id, self.scan_generation);
-        self.perform_scan_for_single_tx(scan).await
     }
 
     async fn perform_scan_for_single_tx(
@@ -121,6 +204,8 @@ impl WalletActor {
         self.addr.send_fut_with(|addr| async move {
             if matches!(height_refresh.await, Ok(Ok(_))) {
                 send!(addr.start_single_tx_sync_after_height(scan));
+            } else {
+                send!(addr.finish_targeted_transaction_scan(scan));
             }
         });
 
@@ -141,7 +226,13 @@ impl WalletActor {
 
         let sync_request = sync_request_builder.build();
 
-        let node_client = self.node_client()?.clone();
+        let node_client = match self.node_client() {
+            Ok(node_client) => node_client.clone(),
+            Err(error) => {
+                self.finish_targeted_transaction_scan(scan).await?;
+                return Err(error.into());
+            }
+        };
         let graph = self.wallet.bdk.tx_graph().clone();
 
         let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
@@ -166,6 +257,8 @@ impl WalletActor {
         if !self.should_continue_targeted_transaction_scan(scan) {
             return Produces::ok(());
         }
+
+        self.finish_targeted_transaction_scan(scan).await?;
 
         if scan_result.is_err() {
             self.state = ActorState::FailedSyncScan;
@@ -207,7 +300,8 @@ impl WalletActor {
     }
 
     fn should_continue_targeted_transaction_scan(&self, scan: TargetedTransactionScan) -> bool {
-        if scan.generation == self.scan_generation {
+        if scan.generation == self.scan_generation && self.targeted_transaction_scans.contains(scan)
+        {
             return true;
         }
 
@@ -216,6 +310,24 @@ impl WalletActor {
             scan.generation, self.scan_generation
         );
         false
+    }
+
+    fn start_targeted_transaction_scan(&mut self, tx_id: Txid) -> Option<TargetedTransactionScan> {
+        let scan = self.targeted_transaction_scans.start(tx_id, self.scan_generation);
+        if scan.is_none() {
+            debug!("coalescing targeted transaction scan for tx_id={tx_id}");
+        }
+
+        scan
+    }
+
+    async fn finish_targeted_transaction_scan(
+        &mut self,
+        scan: TargetedTransactionScan,
+    ) -> ActorResult<()> {
+        self.targeted_transaction_scans.finish(scan);
+
+        Produces::ok(())
     }
 }
 
@@ -228,6 +340,23 @@ fn confirmation_count_requires_watcher(confirmations: Option<u32>) -> bool {
 
 #[cfg(test)]
 impl WalletActor {
+    pub(crate) async fn active_targeted_transaction_scan_count_for_test(
+        &mut self,
+    ) -> ActorResult<usize> {
+        Produces::ok(self.targeted_transaction_scans.active.len())
+    }
+
+    pub(crate) async fn start_targeted_transaction_scan_after_block_refresh_for_test(
+        &mut self,
+        tx_id: Txid,
+    ) -> ActorResult<()> {
+        let Some(scan) = self.start_targeted_transaction_scan(tx_id) else {
+            return Produces::ok(());
+        };
+
+        self.perform_scan_for_single_tx(scan).await
+    }
+
     pub(crate) async fn complete_targeted_sync_after_shutdown_for_test(
         &mut self,
         tx_id: Txid,
@@ -241,6 +370,8 @@ impl WalletActor {
 
 #[cfg(test)]
 mod tests {
+    use bitcoin::hashes::Hash as _;
+
     use super::*;
 
     #[test]
@@ -249,5 +380,34 @@ mod tests {
         assert!(confirmation_count_requires_watcher(Some(1)));
         assert!(confirmation_count_requires_watcher(Some(2)));
         assert!(!confirmation_count_requires_watcher(Some(3)));
+    }
+
+    #[test]
+    fn targeted_transaction_scans_allow_only_one_active_scan_per_transaction() {
+        let tx_id = Txid::all_zeros();
+        let generation = WalletScanGeneration::INITIAL;
+        let mut scans = TargetedTransactionScans::default();
+
+        let scan = scans.start(tx_id, generation).expect("first scan starts");
+
+        assert!(scans.start(tx_id, generation).is_none());
+
+        scans.finish(scan);
+
+        assert!(scans.start(tx_id, generation).is_some());
+    }
+
+    #[test]
+    fn stale_targeted_transaction_scan_cannot_finish_current_generation() {
+        let tx_id = Txid::all_zeros();
+        let mut scans = TargetedTransactionScans::default();
+        let stale = scans.start(tx_id, WalletScanGeneration::INITIAL).expect("stale scan starts");
+
+        scans.clear();
+        let current =
+            scans.start(tx_id, WalletScanGeneration::INITIAL.next()).expect("current scan starts");
+        scans.finish(stale);
+
+        assert!(scans.contains(current));
     }
 }
