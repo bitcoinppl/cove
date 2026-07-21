@@ -712,6 +712,52 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         )
     }
 
+    /// Vision text boxes use a bottom-left origin, so smaller midY is closer to the bottom
+    private func assertTextIsInBottomScreenRegion(
+        _ substring: String,
+        maximumNormalizedMidY: CGFloat,
+        in image: UIImage,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+
+        let handler = VNImageRequestHandler(cgImage: cgImage)
+        try handler.perform([request])
+
+        let needle = substring.lowercased()
+        let observations = request.results ?? []
+        guard let observation = observations.first(where: { observation in
+            observation.topCandidates(1).first?
+                .string
+                .lowercased()
+                .contains(needle) == true
+        }) else {
+            let recognizedText = observations
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
+
+            XCTFail(
+                "expected text containing \"\(substring)\" so layout position can be checked, got:\n\(recognizedText)",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        let midY = observation.boundingBox.midY
+        XCTAssertLessThanOrEqual(
+            midY,
+            maximumNormalizedMidY,
+            "expected \"\(substring)\" midY \(midY) to stay within the bottom \(maximumNormalizedMidY) of the screen",
+            file: file,
+            line: line
+        )
+    }
+
     private func assertBluePrimaryActionIsNotClippedAtBottom(
         in image: UIImage,
         file: StaticString = #filePath,
