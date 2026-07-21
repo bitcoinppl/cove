@@ -88,6 +88,7 @@ internal fun SendEnterCodeView(
         label = { Text("Receiver code") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = keyTeleportTextFieldColors(),
         modifier = Modifier.fillMaxWidth(),
     )
     Button(

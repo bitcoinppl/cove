@@ -118,6 +118,7 @@ internal fun ReceivePasswordView(manager: KeyTeleportManager) {
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         visualTransformation = PasswordVisualTransformation(),
+        colors = keyTeleportTextFieldColors(),
         modifier = Modifier.fillMaxWidth(),
     )
     Button(
