@@ -26,19 +26,55 @@ use crate::{
 
 type EsploraError = Box<esplora_client::Error>;
 
+const MAX_INDEXED_TIP_LAG: u32 = 10;
+
+trait IndexedBlockSource {
+    fn block_window(
+        &self,
+        start_height: u32,
+    ) -> BoxFuture<'_, Result<BTreeMap<u32, BlockHash>, EsploraError>>;
+
+    fn tip_height(&self) -> BoxFuture<'_, Result<u32, EsploraError>>;
+}
+
+impl<S> IndexedBlockSource for Arc<esplora_client::AsyncClient<S>>
+where
+    S: Sleeper + Clone + Send + Sync,
+    S::Sleep: Send,
+{
+    fn block_window(
+        &self,
+        start_height: u32,
+    ) -> BoxFuture<'_, Result<BTreeMap<u32, BlockHash>, EsploraError>> {
+        Box::pin(async move {
+            Ok(self
+                .get_block_infos(Some(start_height))
+                .await
+                .map_err(Box::new)?
+                .into_iter()
+                .map(|block| (block.height, block.id))
+                .collect())
+        })
+    }
+
+    fn tip_height(&self) -> BoxFuture<'_, Result<u32, EsploraError>> {
+        Box::pin(async move { self.get_height().await.map_err(Box::new) })
+    }
+}
+
 trait EsploraScanClient: Clone {
     fn scripthash_txs<'a>(
         &'a self,
         spk: &'a Script,
         last_seen: Option<Txid>,
-    ) -> BoxFuture<'a, std::result::Result<Vec<esplora_client::Tx>, EsploraError>>;
+    ) -> BoxFuture<'a, Result<Vec<esplora_client::Tx>, EsploraError>>;
 
     fn chain_update<'a>(
         &'a self,
         latest_blocks: &'a BTreeMap<u32, BlockHash>,
         local_tip: &'a CheckPoint,
         anchors: &'a BTreeSet<(ConfirmationBlockTime, Txid)>,
-    ) -> BoxFuture<'a, std::result::Result<CheckPoint, EsploraError>>;
+    ) -> BoxFuture<'a, Result<CheckPoint, EsploraError>>;
 }
 
 impl<S> EsploraScanClient for Arc<esplora_client::AsyncClient<S>>
@@ -50,7 +86,7 @@ where
         &'a self,
         spk: &'a Script,
         last_seen: Option<Txid>,
-    ) -> BoxFuture<'a, std::result::Result<Vec<esplora_client::Tx>, EsploraError>> {
+    ) -> BoxFuture<'a, Result<Vec<esplora_client::Tx>, EsploraError>> {
         Box::pin(
             async move { self.as_ref().scripthash_txs(spk, last_seen).await.map_err(Box::new) },
         )
@@ -61,7 +97,7 @@ where
         latest_blocks: &'a BTreeMap<u32, BlockHash>,
         local_tip: &'a CheckPoint,
         anchors: &'a BTreeSet<(ConfirmationBlockTime, Txid)>,
-    ) -> BoxFuture<'a, std::result::Result<CheckPoint, EsploraError>> {
+    ) -> BoxFuture<'a, Result<CheckPoint, EsploraError>> {
         Box::pin(
             async move { chain_update(self.as_ref(), latest_blocks, local_tip, anchors).await },
         )
@@ -345,24 +381,51 @@ fn insert_prevouts(
 }
 
 async fn fetch_latest_blocks<S>(
-    client: &esplora_client::AsyncClient<S>,
-) -> std::result::Result<BTreeMap<u32, BlockHash>, EsploraError>
+    client: &Arc<esplora_client::AsyncClient<S>>,
+) -> Result<BTreeMap<u32, BlockHash>, EsploraError>
 where
-    S: Sleeper,
+    S: Sleeper + Clone + Send + Sync,
+    S::Sleep: Send,
 {
-    Ok(client
-        .get_block_infos(None)
-        .await?
-        .into_iter()
-        .map(|block| (block.height, block.id))
-        .collect())
+    let tip_error = match client.get_block_infos(None).await {
+        Ok(blocks) => {
+            return Ok(blocks.into_iter().map(|block| (block.height, block.id)).collect());
+        }
+        Err(error) if is_not_found(&error) => Box::new(error),
+        Err(error) => return Err(Box::new(error)),
+    };
+
+    fetch_latest_indexed_blocks(client).await?.ok_or(tip_error)
+}
+
+async fn fetch_latest_indexed_blocks(
+    client: &impl IndexedBlockSource,
+) -> Result<Option<BTreeMap<u32, BlockHash>>, EsploraError> {
+    let header_tip = client.tip_height().await?;
+    for lag in 0..=MAX_INDEXED_TIP_LAG {
+        let Some(height) = header_tip.checked_sub(lag) else {
+            break;
+        };
+
+        match client.block_window(height).await {
+            Ok(blocks) => return Ok(Some(blocks)),
+            Err(error) if is_not_found(&error) => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    Ok(None)
+}
+
+fn is_not_found(error: &esplora_client::Error) -> bool {
+    matches!(error, esplora_client::Error::HttpResponse { status: 404, .. })
 }
 
 async fn fetch_block<S>(
     client: &esplora_client::AsyncClient<S>,
     latest_blocks: &BTreeMap<u32, BlockHash>,
     height: u32,
-) -> std::result::Result<Option<BlockHash>, EsploraError>
+) -> Result<Option<BlockHash>, EsploraError>
 where
     S: Sleeper,
 {
@@ -390,7 +453,7 @@ async fn chain_update<S>(
     latest_blocks: &BTreeMap<u32, BlockHash>,
     local_tip: &CheckPoint,
     anchors: &BTreeSet<(ConfirmationBlockTime, Txid)>,
-) -> std::result::Result<CheckPoint, EsploraError>
+) -> Result<CheckPoint, EsploraError>
 where
     S: Sleeper,
 {
@@ -440,25 +503,27 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
     use bdk_esplora::esplora_client;
     use bdk_wallet::{
         KeychainKind,
         chain::{
             BlockId, CheckPoint, ConfirmationBlockTime, TxUpdate,
-            bitcoin::{Amount, OutPoint, ScriptBuf, Txid},
+            bitcoin::{Amount, BlockHash, OutPoint, ScriptBuf, Txid},
             spk_client::SpkWithExpectedTxids,
         },
     };
     use futures::future::BoxFuture;
+    use parking_lot::Mutex;
     use tokio_util::sync::CancellationToken;
 
     use crate::{
         Error, ScanEvent,
         core::ScanAccumulator,
         esplora::{
-            EsploraError, EsploraScanClient, fetch_txs_with_keychain_spks,
+            EsploraError, EsploraScanClient, IndexedBlockSource, MAX_INDEXED_TIP_LAG,
+            fetch_latest_indexed_blocks, fetch_txs_with_keychain_spks,
             insert_anchor_or_seen_at_from_status, insert_prevouts, run_with_esplora_client,
         },
         test_fixtures::{
@@ -467,6 +532,55 @@ mod tests {
             external_request, revealed_external_request, txid,
         },
     };
+
+    #[derive(Debug)]
+    struct FakeBlockSource {
+        tip_height: u32,
+        block_windows: Mutex<VecDeque<Result<BTreeMap<u32, BlockHash>, EsploraError>>>,
+        requests: Mutex<Vec<u32>>,
+    }
+
+    impl FakeBlockSource {
+        fn new(
+            tip_height: u32,
+            block_windows: impl IntoIterator<Item = Result<BTreeMap<u32, BlockHash>, EsploraError>>,
+        ) -> Self {
+            Self {
+                tip_height,
+                block_windows: Mutex::new(block_windows.into_iter().collect()),
+                requests: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn requests(&self) -> Vec<u32> {
+            self.requests.lock().clone()
+        }
+    }
+
+    impl IndexedBlockSource for FakeBlockSource {
+        fn block_window(
+            &self,
+            start_height: u32,
+        ) -> BoxFuture<'_, Result<BTreeMap<u32, BlockHash>, EsploraError>> {
+            self.requests.lock().push(start_height);
+            let response =
+                self.block_windows.lock().pop_front().expect("a block-window response is queued");
+
+            Box::pin(async move { response })
+        }
+
+        fn tip_height(&self) -> BoxFuture<'_, Result<u32, EsploraError>> {
+            Box::pin(async move { Ok(self.tip_height) })
+        }
+    }
+
+    fn block_window(height: u32) -> BTreeMap<u32, BlockHash> {
+        BTreeMap::from([(height, block_hash(height as u8))])
+    }
+
+    fn http_error(status: u16, message: &str) -> EsploraError {
+        Box::new(esplora_client::Error::HttpResponse { status, message: message.to_string() })
+    }
 
     #[derive(Clone, Debug)]
     struct FakeEsplora {
@@ -499,7 +613,7 @@ mod tests {
             &'a self,
             _: &'a bdk_wallet::chain::bitcoin::Script,
             _: Option<Txid>,
-        ) -> BoxFuture<'a, std::result::Result<Vec<esplora_client::Tx>, EsploraError>> {
+        ) -> BoxFuture<'a, Result<Vec<esplora_client::Tx>, EsploraError>> {
             Box::pin(async move {
                 match self.responses.pop() {
                     QueuedResponse::Response(txs) => Ok(txs),
@@ -517,8 +631,7 @@ mod tests {
             _: &'a BTreeMap<u32, bdk_wallet::chain::bitcoin::BlockHash>,
             local_tip: &'a bdk_wallet::chain::CheckPoint,
             _: &'a BTreeSet<(ConfirmationBlockTime, Txid)>,
-        ) -> BoxFuture<'a, std::result::Result<bdk_wallet::chain::CheckPoint, EsploraError>>
-        {
+        ) -> BoxFuture<'a, Result<bdk_wallet::chain::CheckPoint, EsploraError>> {
             let chain_update_requests = self.chain_update_requests.clone();
 
             Box::pin(async move {
@@ -526,6 +639,49 @@ mod tests {
                 Ok(local_tip.clone())
             })
         }
+    }
+
+    #[tokio::test]
+    async fn latest_blocks_falls_back_to_latest_indexed_window() {
+        let fake = FakeBlockSource::new(
+            42,
+            [Err(http_error(404, "header-only block not found")), Ok(block_window(41))],
+        );
+
+        let blocks = fetch_latest_indexed_blocks(&fake)
+            .await
+            .expect("indexed-tip search succeeds")
+            .expect("previous block window is indexed");
+
+        assert_eq!(blocks, block_window(41));
+        assert_eq!(fake.requests(), [42, 41]);
+    }
+
+    #[tokio::test]
+    async fn latest_blocks_propagates_non_not_found_error() {
+        let fake = FakeBlockSource::new(42, [Err(http_error(500, "backend unavailable"))]);
+
+        let error =
+            fetch_latest_indexed_blocks(&fake).await.expect_err("server error must be preserved");
+
+        assert!(matches!(*error, esplora_client::Error::HttpResponse { status: 500, .. }));
+        assert_eq!(fake.requests(), [42]);
+    }
+
+    #[tokio::test]
+    async fn latest_blocks_bounds_indexed_tip_search() {
+        let responses =
+            (0..=MAX_INDEXED_TIP_LAG).map(|_| Err(http_error(404, "block window unavailable")));
+        let fake = FakeBlockSource::new(42, responses);
+
+        let blocks =
+            fetch_latest_indexed_blocks(&fake).await.expect("not-found errors are handled");
+
+        assert!(blocks.is_none());
+        assert_eq!(
+            fake.requests(),
+            (0..=MAX_INDEXED_TIP_LAG).map(|lag| 42 - lag).collect::<Vec<_>>()
+        );
     }
 
     #[test]
