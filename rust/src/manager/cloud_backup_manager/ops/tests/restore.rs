@@ -116,7 +116,7 @@ async fn restore_from_local_master_key_propagates_store_read_errors() {
     ));
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_counts_unsupported_wallet_versions_as_failures() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -194,7 +194,7 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
         );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_queues_reupload_when_cloud_upload_confirmation_lags() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -614,7 +614,7 @@ async fn restore_duplicate_wallets_with_failures_preserves_existing_configured_s
     assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(existing_namespace));
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_empty_namespace_list_returns_no_backup_found() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -732,7 +732,7 @@ async fn restore_does_not_persist_first_passkey_match_before_restore_work_succee
     assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_counts_listed_missing_wallet_backups_as_failures() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -781,7 +781,7 @@ async fn restore_counts_listed_missing_wallet_backups_as_failures() {
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(1));
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_sanitizes_non_connectivity_wallet_download_errors() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -836,7 +836,7 @@ async fn restore_sanitizes_non_connectivity_wallet_download_errors() {
     assert!(!report.failed_wallet_errors[0].contains(&failed_record_id));
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_reports_label_warning_without_failing_wallet_restore() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -1268,7 +1268,7 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
     assert_eq!(globals.passkey.discover_count(), 0);
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_fails_when_all_wallet_backups_are_unsupported() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -1311,7 +1311,7 @@ async fn restore_fails_when_all_wallet_backups_are_unsupported() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
