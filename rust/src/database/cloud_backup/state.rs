@@ -316,6 +316,25 @@ impl PersistedCloudBackupState {
         true
     }
 
+    pub(crate) fn set_drive_account_switch_phase(
+        &mut self,
+        transition_id: u64,
+        phase: PersistedDriveAccountSwitchPhase,
+    ) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+        let Some(account_switch) = configured.drive_account_switch.as_mut() else {
+            return false;
+        };
+        if account_switch.transition_id != transition_id {
+            return false;
+        }
+
+        account_switch.phase = phase;
+        true
+    }
+
     pub(crate) fn clear_drive_account_switch(&mut self, transition_id: u64) -> bool {
         let Self::Configured(configured) = self else {
             return false;
