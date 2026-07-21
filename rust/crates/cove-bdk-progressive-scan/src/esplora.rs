@@ -27,8 +27,6 @@ use crate::{
 
 type EsploraError = Box<esplora_client::Error>;
 
-const MAX_INDEXED_TIP_LAG: u32 = 10;
-
 trait IndexedBlockSource {
     fn block_window(
         &self,
@@ -410,23 +408,43 @@ where
     fetch_latest_indexed_blocks(client).await?.ok_or(tip_error)
 }
 
+// binary-search the highest indexed block window when header tip races ahead
 async fn fetch_latest_indexed_blocks(
     client: &impl IndexedBlockSource,
 ) -> Result<Option<BTreeMap<u32, BlockHash>>, EsploraError> {
     let header_tip = client.tip_height().await?;
-    for lag in 0..=MAX_INDEXED_TIP_LAG {
-        let Some(height) = header_tip.checked_sub(lag) else {
-            break;
-        };
 
-        match client.block_window(height).await {
-            Ok(blocks) => return Ok(Some(blocks)),
-            Err(error) if is_not_found(&error) => {}
+    match client.block_window(header_tip).await {
+        Ok(blocks) => return Ok(Some(blocks)),
+        Err(error) if is_not_found(&error) => {}
+        Err(error) => return Err(error),
+    }
+
+    if header_tip == 0 {
+        return Ok(None);
+    }
+
+    // search [0, header_tip) for the highest height that returns a window
+    let mut low = 0u32;
+    let mut high = header_tip;
+    let mut best = None;
+
+    while low < high {
+        let mid = low + (high - low) / 2;
+
+        match client.block_window(mid).await {
+            Ok(blocks) => {
+                best = Some(blocks);
+                low = mid.saturating_add(1);
+            }
+            Err(error) if is_not_found(&error) => {
+                high = mid;
+            }
             Err(error) => return Err(error),
         }
     }
 
-    Ok(None)
+    Ok(best)
 }
 
 fn is_not_found(error: &esplora_client::Error) -> bool {
@@ -515,7 +533,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+    use std::collections::{BTreeMap, BTreeSet};
 
     use bdk_esplora::esplora_client;
     use bdk_wallet::{
@@ -535,8 +553,7 @@ mod tests {
         core::ScanAccumulator,
         esplora::{
             EsploraError, EsploraScanClient, EsploraScanSession, IndexedBlockSource,
-            MAX_INDEXED_TIP_LAG, fetch_latest_indexed_blocks, insert_anchor_or_seen_at_from_status,
-            insert_prevouts,
+            fetch_latest_indexed_blocks, insert_anchor_or_seen_at_from_status, insert_prevouts,
         },
         scanner::ProgressiveScannerParts,
         test_fixtures::{
@@ -549,18 +566,28 @@ mod tests {
     #[derive(Debug)]
     struct FakeBlockSource {
         tip_height: u32,
-        block_windows: Mutex<VecDeque<Result<BTreeMap<u32, BlockHash>, EsploraError>>>,
+        // highest height with an indexed window; heights above this return 404
+        latest_indexed: Option<u32>,
+        // optional forced non-404 error for a specific height
+        forced_error_at: Option<(u32, u16, String)>,
         requests: Mutex<Vec<u32>>,
     }
 
     impl FakeBlockSource {
-        fn new(
-            tip_height: u32,
-            block_windows: impl IntoIterator<Item = Result<BTreeMap<u32, BlockHash>, EsploraError>>,
-        ) -> Self {
+        fn with_indexed_tip(tip_height: u32, latest_indexed: Option<u32>) -> Self {
             Self {
                 tip_height,
-                block_windows: Mutex::new(block_windows.into_iter().collect()),
+                latest_indexed,
+                forced_error_at: None,
+                requests: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn with_error_at(tip_height: u32, height: u32, status: u16, message: &str) -> Self {
+            Self {
+                tip_height,
+                latest_indexed: None,
+                forced_error_at: Some((height, status, message.to_string())),
                 requests: Mutex::new(Vec::new()),
             }
         }
@@ -576,8 +603,17 @@ mod tests {
             start_height: u32,
         ) -> BoxFuture<'_, Result<BTreeMap<u32, BlockHash>, EsploraError>> {
             self.requests.lock().push(start_height);
-            let response =
-                self.block_windows.lock().pop_front().expect("a block-window response is queued");
+
+            let response = if let Some((height, status, message)) = &self.forced_error_at
+                && *height == start_height
+            {
+                Err(http_error(*status, message))
+            } else {
+                match self.latest_indexed {
+                    Some(indexed) if start_height <= indexed => Ok(block_window(start_height)),
+                    _ => Err(http_error(404, "header-only block not found")),
+                }
+            };
 
             Box::pin(async move { response })
         }
@@ -588,7 +624,7 @@ mod tests {
     }
 
     fn block_window(height: u32) -> BTreeMap<u32, BlockHash> {
-        BTreeMap::from([(height, block_hash(height as u8))])
+        BTreeMap::from([(height, block_hash((height % 256) as u8))])
     }
 
     fn http_error(status: u16, message: &str) -> EsploraError {
@@ -688,10 +724,7 @@ mod tests {
 
     #[tokio::test]
     async fn latest_blocks_falls_back_to_latest_indexed_window() {
-        let fake = FakeBlockSource::new(
-            42,
-            [Err(http_error(404, "header-only block not found")), Ok(block_window(41))],
-        );
+        let fake = FakeBlockSource::with_indexed_tip(42, Some(41));
 
         let blocks = fetch_latest_indexed_blocks(&fake)
             .await
@@ -699,12 +732,32 @@ mod tests {
             .expect("previous block window is indexed");
 
         assert_eq!(blocks, block_window(41));
-        assert_eq!(fake.requests(), [42, 41]);
+        assert!(fake.requests().contains(&42));
+        assert!(fake.requests().contains(&41));
+        assert_eq!(*fake.requests().last().expect("at least one request"), 41);
+    }
+
+    #[tokio::test]
+    async fn latest_blocks_recovers_from_long_indexing_lag() {
+        // more than a fixed 10-block walk could cover
+        let fake = FakeBlockSource::with_indexed_tip(100, Some(50));
+
+        let blocks = fetch_latest_indexed_blocks(&fake)
+            .await
+            .expect("indexed-tip search succeeds")
+            .expect("distant indexed window is found");
+
+        assert_eq!(blocks, block_window(50));
+        assert!(
+            fake.requests().len() < 20,
+            "binary search should avoid linear walk over the full lag: {:?}",
+            fake.requests()
+        );
     }
 
     #[tokio::test]
     async fn latest_blocks_propagates_non_not_found_error() {
-        let fake = FakeBlockSource::new(42, [Err(http_error(500, "backend unavailable"))]);
+        let fake = FakeBlockSource::with_error_at(42, 42, 500, "backend unavailable");
 
         let error =
             fetch_latest_indexed_blocks(&fake).await.expect_err("server error must be preserved");
@@ -714,19 +767,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn latest_blocks_bounds_indexed_tip_search() {
-        let responses =
-            (0..=MAX_INDEXED_TIP_LAG).map(|_| Err(http_error(404, "block window unavailable")));
-        let fake = FakeBlockSource::new(42, responses);
+    async fn latest_blocks_returns_none_when_no_height_is_indexed() {
+        let fake = FakeBlockSource::with_indexed_tip(42, None);
 
         let blocks =
             fetch_latest_indexed_blocks(&fake).await.expect("not-found errors are handled");
 
         assert!(blocks.is_none());
-        assert_eq!(
-            fake.requests(),
-            (0..=MAX_INDEXED_TIP_LAG).map(|lag| 42 - lag).collect::<Vec<_>>()
-        );
+        assert!(fake.requests().contains(&42));
+        assert!(fake.requests().contains(&0));
     }
 
     #[test]
