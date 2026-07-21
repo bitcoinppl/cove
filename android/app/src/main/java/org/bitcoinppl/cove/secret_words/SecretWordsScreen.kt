@@ -192,12 +192,11 @@ fun SecretWordsScreen(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = maxHeight)
+                        .padding(top = 16.dp)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Spacer(Modifier.height(16.dp))
-
                 // words grid
                 if (words != null) {
                     RecoveryWordsGrid(

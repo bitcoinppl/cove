@@ -56,6 +56,7 @@ struct SecretWordsScreen: View {
                     .frame(minHeight: proxy.size.height, alignment: .top)
                     .safeAreaPadding(.bottom, 24)
             }
+            .padding(.top, 16)
             .scrollIndicators(.hidden)
         }
         .onAppear {
@@ -176,7 +177,8 @@ struct SecretWordsScreen: View {
                 }
             }
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.bottom)
     }
 }
 
