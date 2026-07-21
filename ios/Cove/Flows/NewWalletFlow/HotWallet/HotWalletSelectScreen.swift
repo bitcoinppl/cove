@@ -37,8 +37,8 @@ struct HotWalletSelectScreen: View {
             Group {
                 if scrollableLayout {
                     ScrollView {
-                        mainContent(usesFlexibleTopSpacer: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .bottom)
+                        bottomActionLayout()
+                            .frame(minHeight: proxy.size.height)
                     }
                     .scrollIndicators(.hidden)
                 } else {
@@ -59,23 +59,6 @@ struct HotWalletSelectScreen: View {
         .navigationTitle("Add New Wallet")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-    }
-
-    private func mainContent(usesFlexibleTopSpacer: Bool) -> some View {
-        VStack(spacing: 28) {
-            if usesFlexibleTopSpacer {
-                Spacer()
-            }
-
-            promptContent
-
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
-
-            walletChoiceActions
-        }
-        .padding()
-        .frame(maxHeight: .infinity)
     }
 
     private func bottomActionLayout() -> some View {

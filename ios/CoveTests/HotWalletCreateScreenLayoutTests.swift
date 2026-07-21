@@ -44,6 +44,16 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         addScreenshotAttachment(image, name: "compact-hot-wallet-select")
         try saveAuditScreenshotIfDirectoryRequested(image, name: "hot-wallet-select-after.png")
         try assertPrimaryActionIsNotClippedAtBottom(in: image)
+        try assertTextIsInBottomScreenRegion(
+            "do you already",
+            maximumNormalizedMidY: 0.5,
+            in: image
+        )
+        try assertTextIsInBottomScreenRegion(
+            "create new wallet",
+            maximumNormalizedMidY: 0.25,
+            in: image
+        )
 
         let recognizedText = try normalizedRecognizedText(in: image)
 
