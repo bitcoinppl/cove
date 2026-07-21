@@ -363,7 +363,7 @@ pub(crate) enum CloudBackupError {
     Compatibility(String),
 
     #[error(
-        "This passkey did not unlock backups currently available in iCloud. Wait for iCloud to finish syncing, then try again."
+        "This passkey did not unlock backups currently available in cloud storage. Wait for cloud storage to finish syncing, then try again."
     )]
     PasskeyMismatch,
 
@@ -555,6 +555,15 @@ mod tests {
         assert_eq!(unsupported, UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE);
         assert_ne!(cancellation, missing);
         assert_ne!(missing, unsupported);
+    }
+
+    #[test]
+    fn passkey_mismatch_reader_message_is_provider_neutral() {
+        let message = CloudBackupError::PasskeyMismatch.reader_message();
+
+        assert!(message.contains("cloud storage"));
+        assert!(!message.contains("iCloud"));
+        assert!(!message.contains("Google Drive"));
     }
 
     #[test]
