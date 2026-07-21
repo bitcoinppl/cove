@@ -67,24 +67,24 @@ class AndroidCloudStorageAccess internal constructor(
                 logDriveWarning("failed to clear unstaged drive token", error)
             }
 
-            throw IllegalStateException("google drive account selection could not be saved")
+            error("google drive account selection could not be saved")
         }
 
         logDriveDebug("staged google drive account for Cloud Backup")
         return DriveAccountSelectionOutcome.Changed
     }
 
-    internal fun pendingAccountSwitchTransitionId(): ULong? {
-        val transitionId = accountBindingStore.pendingTransitionId() ?: return null
-        if (accountBindingStore.isIdentityStaged(transitionId)) {
-            return transitionId
+    internal fun pendingAccountSwitchTransitionId(): ULong? =
+        accountBindingStore.pendingTransitionId()?.let { transitionId ->
+            if (accountBindingStore.isIdentityStaged(transitionId)) {
+                transitionId
+            } else {
+                check(accountBindingStore.rollbackStagedIdentity(transitionId)) {
+                    "incomplete google drive account selection could not be cleared"
+                }
+                null
+            }
         }
-
-        check(accountBindingStore.rollbackStagedIdentity(transitionId)) {
-            "incomplete google drive account selection could not be cleared"
-        }
-        return null
-    }
 
     internal fun commitAccountSwitch(transitionId: ULong): Boolean =
         accountBindingStore.commitStagedIdentity(transitionId)

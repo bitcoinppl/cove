@@ -251,37 +251,42 @@ internal class SharedPreferencesDriveAccountBindingStore(
 
     override fun commitStagedIdentity(transitionId: ULong): Boolean {
         val pendingTransitionId = storedPendingTransitionId()
-        if (pendingTransitionId == null) {
-            return preferences.contains(KEY_COMMITTED_TRANSITION_ID) &&
-                preferences.getLong(KEY_COMMITTED_TRANSITION_ID, 0).toULong() == transitionId
+        return when {
+            pendingTransitionId == null ->
+                preferences.contains(KEY_COMMITTED_TRANSITION_ID) &&
+                    preferences.getLong(KEY_COMMITTED_TRANSITION_ID, 0).toULong() == transitionId
+            pendingTransitionId != transitionId -> false
+            else ->
+                pendingIdentity()?.let { identity ->
+                    preferences
+                        .edit()
+                        .putString(KEY_ID, identity.googleAccountId)
+                        .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
+                        .putString(KEY_EMAIL, identity.email)
+                        .putLong(KEY_COMMITTED_TRANSITION_ID, transitionId.toLong())
+                        .remove(KEY_PENDING_TRANSITION_ID)
+                        .remove(KEY_PENDING_ID)
+                        .remove(KEY_PENDING_PERMISSION_ID)
+                        .remove(KEY_PENDING_EMAIL)
+                        .commit()
+                } ?: false
         }
-        if (pendingTransitionId != transitionId) return false
-        val identity = pendingIdentity() ?: return false
-
-        return preferences
-            .edit()
-            .putString(KEY_ID, identity.googleAccountId)
-            .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
-            .putString(KEY_EMAIL, identity.email)
-            .putLong(KEY_COMMITTED_TRANSITION_ID, transitionId.toLong())
-            .remove(KEY_PENDING_TRANSITION_ID)
-            .remove(KEY_PENDING_ID)
-            .remove(KEY_PENDING_PERMISSION_ID)
-            .remove(KEY_PENDING_EMAIL)
-            .commit()
     }
 
     override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
-        val pendingTransitionId = storedPendingTransitionId() ?: return true
-        if (pendingTransitionId != transitionId) return false
-
-        return preferences
-            .edit()
-            .remove(KEY_PENDING_TRANSITION_ID)
-            .remove(KEY_PENDING_ID)
-            .remove(KEY_PENDING_PERMISSION_ID)
-            .remove(KEY_PENDING_EMAIL)
-            .commit()
+        val pendingTransitionId = storedPendingTransitionId()
+        return when {
+            pendingTransitionId == null -> true
+            pendingTransitionId == transitionId ->
+                preferences
+                    .edit()
+                    .remove(KEY_PENDING_TRANSITION_ID)
+                    .remove(KEY_PENDING_ID)
+                    .remove(KEY_PENDING_PERMISSION_ID)
+                    .remove(KEY_PENDING_EMAIL)
+                    .commit()
+            else -> false
+        }
     }
 
     override fun clearIdentity() {

@@ -100,12 +100,9 @@ internal class DriveTokenProvider(
         }
     }
 
-    private suspend fun verifiedDriveAccessToken(interactive: Boolean): DriveAccessToken =
-        verifiedDriveAccessToken(interactive, retryIdentityLookup = true)
-
     private suspend fun verifiedDriveAccessToken(
         interactive: Boolean,
-        retryIdentityLookup: Boolean,
+        retryIdentityLookup: Boolean = true,
     ): DriveAccessToken {
         val unresolvedAccess = driveAuthorization.accessToken(interactive)
         val access =

@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -119,6 +118,7 @@ class CloudBackupManager private constructor(
     ): T =
         withRust(block) ?: defaultValue
 
+    @Suppress("RedundantSuspendModifier")
     private suspend fun <T> withRustSuspend(
         block: suspend RustCloudBackupManager.() -> T,
     ): T {
@@ -393,38 +393,41 @@ class CloudBackupManager private constructor(
         }
     }
 
-    internal suspend fun switchDriveAccount(
-        selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
-    ) {
-        check(driveAccountSwitchCallbacks?.pendingTransitionId?.invoke() == null) {
+    internal suspend fun switchDriveAccount() {
+        val callbacks = checkNotNull(driveAccountSwitchCallbacks) {
+            "Google Drive account switching is unavailable"
+        }
+        check(callbacks.pendingTransitionId() == null) {
             "a Google Drive account switch is already being recovered"
         }
         val transitionId = withRustSuspend { beginDriveAccountSwitch() }
 
+        var transitionCompleted = false
         try {
-            val selection = selectAccount(transitionId)
+            val selection = callbacks.selectAccount(transitionId)
             if (selection == DriveAccountSelectionOutcome.Unchanged) {
                 val rolledBack = withContext(NonCancellable) {
                     rollbackDriveAccountSwitch(transitionId)
                 }
                 check(rolledBack) { "unchanged Google Drive account switch could not be released" }
+
+                transitionCompleted = true
                 return
             }
 
             withRustSuspend { continueDriveAccountSwitch(transitionId) }
-        } catch (error: CancellationException) {
-            withContext(NonCancellable) {
-                rollbackDriveAccountSwitch(transitionId)
+
+            transitionCompleted = true
+        } finally {
+            if (!transitionCompleted) {
+                withContext(NonCancellable) {
+                    rollbackDriveAccountSwitch(transitionId)
+                }
             }
-            throw error
-        } catch (error: Throwable) {
-            withContext(NonCancellable) {
-                rollbackDriveAccountSwitch(transitionId)
-            }
-            throw error
         }
     }
 
+    @Suppress("RedundantSuspendModifier")
     private suspend fun rollbackDriveAccountSwitch(transitionId: ULong): Boolean {
         val cancelled = runCatching { withRustSuspend { cancelDriveAccountSwitch(transitionId) } }
             .onFailure { error -> Log.w(TAG, "failed to cancel drive account switch", error) }
@@ -433,15 +436,21 @@ class CloudBackupManager private constructor(
             return false
         }
 
-        val rolledBack = driveAccountSwitchCallbacks?.rollback?.invoke(transitionId) == true
+        val rolledBack =
+            runCatching { driveAccountSwitchCallbacks?.rollback?.invoke(transitionId) == true }
+                .onFailure { error -> Log.e(TAG, "failed to roll back staged drive account", error) }
+                .getOrDefault(false)
         if (!rolledBack) {
             Log.e(TAG, "failed to roll back staged drive account")
-            return false
         }
 
-        return runCatching { withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) } }
-            .onFailure { error -> Log.w(TAG, "failed to confirm drive account rollback", error) }
-            .isSuccess
+        val confirmed =
+            rolledBack &&
+                runCatching { withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) } }
+                    .onFailure { error -> Log.w(TAG, "failed to confirm drive account rollback", error) }
+                    .isSuccess
+
+        return confirmed
     }
 
     override fun reconcile(message: CloudBackupReconcileMessage) {
@@ -553,13 +562,15 @@ class CloudBackupManager private constructor(
             onCloudBackupDisabled = callback
         }
 
-        fun setDriveAccountSwitchCallbacks(
+        internal fun setDriveAccountSwitchCallbacks(
             pendingTransitionId: () -> ULong?,
+            selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
             commit: (ULong) -> Boolean,
             rollback: (ULong) -> Boolean,
         ) {
             driveAccountSwitchCallbacks = DriveAccountSwitchCallbacks(
                 pendingTransitionId = pendingTransitionId,
+                selectAccount = selectAccount,
                 commit = commit,
                 rollback = rollback,
             )
@@ -567,6 +578,7 @@ class CloudBackupManager private constructor(
 
         private data class DriveAccountSwitchCallbacks(
             val pendingTransitionId: () -> ULong?,
+            val selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
             val commit: (ULong) -> Boolean,
             val rollback: (ULong) -> Boolean,
         )
