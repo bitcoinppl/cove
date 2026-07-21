@@ -34,8 +34,8 @@ struct WordsView: View {
 
     init(manager: PendingWalletManager, initialTabIndex: Int = 0) {
         self.manager = manager
-        self.groupedWords = manager.rust.bip39WordsGrouped()
-        self.tabIndex = initialTabIndex
+        _groupedWords = State(initialValue: manager.rust.bip39WordsGrouped())
+        _tabIndex = State(initialValue: initialTabIndex)
     }
 
     var lastIndex: Int {
@@ -72,6 +72,35 @@ struct WordsView: View {
                     .ignoresSafeArea(.all)
             )
         }
+        .navigationTitle("Backup your wallet")
+        .navigationBarTitleDisplayMode(.inline)
+        .adaptiveToolbarStyle()
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    showConfirmationAlert = true
+                }) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+        }
+        .alert(isPresented: $showConfirmationAlert) {
+            Alert(
+                title: Text("⚠️ Wallet Not Saved ⚠️"),
+                message: Text("You will have to write down a new set of words."),
+                primaryButton: .destructive(Text("Yes, Go Back")) {
+                    dismiss()
+                },
+                secondaryButton: .cancel(Text("Cancel"))
+            )
+        }
+        .navigationBarBackButtonHidden(true)
     }
 
     private func recoveryWordsContent(layout: RecoveryWordsLayout, availableWidth: CGFloat) -> some View {
@@ -79,11 +108,9 @@ struct WordsView: View {
             groupedWords: groupedWords,
             tabIndex: $tabIndex,
             lastIndex: lastIndex,
-            showConfirmationAlert: $showConfirmationAlert,
             layout: layout,
             availableWidth: availableWidth,
-            saveWallet: saveWallet,
-            dismiss: { dismiss() }
+            saveWallet: saveWallet
         )
     }
 
@@ -127,11 +154,9 @@ struct RecoveryWordsContent: View {
     let groupedWords: [[GroupedWord]]
     @Binding var tabIndex: Int
     let lastIndex: Int
-    @Binding var showConfirmationAlert: Bool
     let layout: RecoveryWordsLayout
     let availableWidth: CGFloat
     let saveWallet: () -> Void
-    let dismiss: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
@@ -193,11 +218,6 @@ struct RecoveryWordsContent: View {
             }
         }
         .padding()
-        .navigationBarTitleDisplayMode(.inline)
-        .adaptiveToolbarStyle()
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)
@@ -208,32 +228,6 @@ struct RecoveryWordsContent: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
-        .navigationTitle("Backup your wallet")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: {
-                    showConfirmationAlert = true
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                    }
-                    .foregroundStyle(.white)
-                }
-            }
-        }
-        .alert(isPresented: $showConfirmationAlert) {
-            Alert(
-                title: Text("⚠️ Wallet Not Saved ⚠️"),
-                message: Text("You will have to write down a new set of words."),
-                primaryButton: .destructive(Text("Yes, Go Back")) {
-                    dismiss()
-                },
-                secondaryButton: .cancel(Text("Cancel"))
-            )
-        }
-        .navigationBarBackButtonHidden(true)
     }
 
     private var primaryActionButton: some View {

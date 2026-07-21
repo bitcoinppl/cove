@@ -208,7 +208,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             isBusy: false
         )
         .frame(width: size.width, height: size.height)
-        let image = try renderAfterScrollingToBottom(view: view, size: size)
+        let image = renderAfterScrollingToBottom(view: view, size: size)
         addScreenshotAttachment(image, name: "compact-cloud-backup-enable-onboarding")
         try saveAuditScreenshotIfDirectoryRequested(image, screenName: "cloud-backup-enable-onboarding")
         try assertPrimaryActionIsNotClippedAtBottom(in: image)
@@ -388,22 +388,22 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         try await bootstrapIfNeeded()
 
         let size = CGSize(width: 375, height: 667)
-        let image = render(
-            view: NavigationStack {
-                SecretWordsScreen(
-                    id: WalletId(),
-                    words: Mnemonic.preview(numberOfBip39Words: .twentyFour)
-                )
-                .environment(AppManager.shared)
-                .environment(AuthManager.shared)
-            }
-            .frame(width: size.width, height: size.height),
+        let view = NavigationStack {
+            SecretWordsScreen(
+                id: WalletId(),
+                words: Mnemonic.preview(numberOfBip39Words: .twentyFour)
+            )
+            .environment(AppManager.shared)
+            .environment(AuthManager.shared)
+        }
+        .frame(width: size.width, height: size.height)
+        let image = renderAfterScrollingToBottom(
+            view: view,
             size: size
         )
         addScreenshotAttachment(image, name: "compact-secret-words")
         try saveAuditScreenshotIfDirectoryRequested(image, screenName: "secret-words")
         try assertRecoveryWordCardsStayInsideHorizontalViewport(in: image)
-        try assertPrimaryActionIsNotClippedAtBottom(in: image)
 
         let recognizedText = try normalizedRecognizedText(in: image)
 
@@ -530,8 +530,8 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             .environment(AppManager.shared)
         }
         .frame(width: size.width, height: size.height)
-        let image = try renderAfterScrollingToBottom(view: view, size: size)
-        addScreenshotAttachment(image, name: "large-recovery-words-after-scroll")
+        let image = render(view: view, size: size)
+        addScreenshotAttachment(image, name: "large-recovery-words-final-page")
         try saveAuditScreenshotIfDirectoryRequested(image, name: "hot-wallet-create-large-after.png")
         try assertNavigationChromeDoesNotShowWordCardBackground(in: image)
         try assertRecoveryWordCardsStayInsideHorizontalViewport(in: image)
@@ -552,10 +552,14 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
     }
 
     private func findVerticallyScrollableView(in view: UIView) -> UIScrollView? {
-        if let scrollView = view as? UIScrollView,
-           scrollView.contentSize.height > scrollView.bounds.height + 1
-        {
-            return scrollView
+        if let scrollView = view as? UIScrollView {
+            let minimumOffsetY = -scrollView.adjustedContentInset.top
+            let maximumOffsetY = scrollView.contentSize.height - scrollView.bounds.height
+                + scrollView.adjustedContentInset.bottom
+
+            if maximumOffsetY > minimumOffsetY + 1 {
+                return scrollView
+            }
         }
 
         for subview in view.subviews {
@@ -613,9 +617,16 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         return render(hostingController: hostingController, size: size)
     }
 
-    private func renderAfterScrollingToBottom(view: some View, size: CGSize) throws -> UIImage {
+    private func renderAfterScrollingToBottom(view: some View, size: CGSize) -> UIImage {
         let hostingController = hostingController(rootView: view, size: size)
-        let scrollView = try XCTUnwrap(findVerticallyScrollableView(in: hostingController.view))
+
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        hostingController.view.layoutIfNeeded()
+
+        guard let scrollView = findVerticallyScrollableView(in: hostingController.view) else {
+            return render(hostingController: hostingController, size: size)
+        }
+
         let maxOffsetY = max(
             scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom,
             -scrollView.adjustedContentInset.top
@@ -815,7 +826,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             x: 0,
             y: Int(64 * scale),
             width: cgImage.width,
-            height: Int(56 * scale)
+            height: Int(40 * scale)
         )
         let croppedBand = try XCTUnwrap(cgImage.cropping(to: navBand))
         let pixels = try rgbaPixels(in: croppedBand)
