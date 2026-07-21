@@ -10,6 +10,11 @@ internal fun routeStackContainsSendWallet(
     walletId: WalletId,
 ): Boolean = default.sendWalletId() == walletId || routes.any { it.sendWalletId() == walletId }
 
+internal fun shouldShowNoBalanceAlertOnEntry(
+    sendRoute: SendRoute,
+    spendableSats: ULong,
+): Boolean = spendableSats == 0uL && sendRoute.requiresSpendableBalanceOnEntry()
+
 private fun Route.sendWalletId(): WalletId? =
     when (this) {
         is Route.Send -> v1.walletId()
@@ -22,4 +27,15 @@ private fun SendRoute.walletId(): WalletId =
         is SendRoute.CoinControlSetAmount -> id
         is SendRoute.HardwareExport -> id
         is SendRoute.Confirm -> v1.id
+    }
+
+private fun SendRoute.requiresSpendableBalanceOnEntry(): Boolean =
+    when (this) {
+        is SendRoute.SetAmount,
+        is SendRoute.CoinControlSetAmount,
+        -> true
+
+        is SendRoute.HardwareExport,
+        is SendRoute.Confirm,
+        -> false
     }

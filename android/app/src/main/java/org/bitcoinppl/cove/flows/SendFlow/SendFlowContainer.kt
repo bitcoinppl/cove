@@ -27,6 +27,7 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.shouldShowNoBalanceAlertOnEntry
 import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
 import org.bitcoinppl.cove.flows.SendFlow.HardwareScreen.SendFlowHardwareScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.CoinControlSetAmountScreen
@@ -155,9 +156,13 @@ fun SendFlowContainer(
                 }
             }
 
-            // check for zero balance
-            LaunchedEffect(wm.balance) {
-                if (wm.balance.spendable().asSats() == 0u.toULong()) {
+            LaunchedEffect(wm, sendRoute) {
+                if (
+                    shouldShowNoBalanceAlertOnEntry(
+                        sendRoute = sendRoute,
+                        spendableSats = wm.balance.spendable().asSats(),
+                    )
+                ) {
                     presenter.alertState = TaggedItem(SendFlowAlertState.Error(SendFlowException.NoBalance()))
                 }
             }
