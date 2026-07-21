@@ -28,6 +28,7 @@ struct WordsView: View {
     @State private var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
+    @State private var isSaving = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
@@ -110,6 +111,7 @@ struct WordsView: View {
             lastIndex: lastIndex,
             layout: layout,
             availableWidth: availableWidth,
+            isSaving: isSaving,
             saveWallet: saveWallet
         )
     }
@@ -122,6 +124,7 @@ struct WordsView: View {
             RecoveryWordsPrimaryActionButton(
                 tabIndex: $tabIndex,
                 lastIndex: lastIndex,
+                isSaving: isSaving,
                 saveWallet: saveWallet
             )
         }
@@ -132,10 +135,14 @@ struct WordsView: View {
     }
 
     private func saveWallet() {
+        guard !isSaving else { return }
+        isSaving = true
+
         do {
             let result = try manager.rust.saveWallet()
             app.resetRoute(to: result.routes)
         } catch {
+            isSaving = false
             Log.error("Error \(error)")
         }
     }
@@ -156,6 +163,7 @@ struct RecoveryWordsContent: View {
     let lastIndex: Int
     let layout: RecoveryWordsLayout
     let availableWidth: CGFloat
+    let isSaving: Bool
     let saveWallet: () -> Void
 
     var body: some View {
@@ -234,6 +242,7 @@ struct RecoveryWordsContent: View {
         RecoveryWordsPrimaryActionButton(
             tabIndex: $tabIndex,
             lastIndex: lastIndex,
+            isSaving: isSaving,
             saveWallet: saveWallet
         )
     }
@@ -246,6 +255,7 @@ struct RecoveryWordsContent: View {
 struct RecoveryWordsPrimaryActionButton: View {
     @Binding var tabIndex: Int
     let lastIndex: Int
+    let isSaving: Bool
     let saveWallet: () -> Void
 
     var body: some View {
@@ -253,6 +263,8 @@ struct RecoveryWordsPrimaryActionButton: View {
             Button(action: saveWallet) {
                 primaryActionLabel("Save Wallet")
             }
+            .disabled(isSaving)
+            .opacity(isSaving ? 0.7 : 1)
         } else {
             Button(action: {
                 withAnimation { tabIndex += 1 }
