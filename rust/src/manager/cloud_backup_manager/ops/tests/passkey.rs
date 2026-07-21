@@ -353,10 +353,13 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
     let NamespaceMatchOutcome::Matched(matches) = outcome else {
         panic!("expected multiple namespace matches");
     };
-    let matched_namespaces =
+    let mut matched_namespaces =
         matches.into_iter().map(|matched| matched.namespace_id).collect::<Vec<_>>();
+    let mut expected_namespaces = vec![first_namespace, second_namespace];
+    matched_namespaces.sort();
+    expected_namespaces.sort();
 
-    assert_eq!(matched_namespaces, vec![first_namespace, second_namespace]);
+    assert_eq!(matched_namespaces, expected_namespaces);
 }
 
 #[tokio::test(flavor = "current_thread")]
