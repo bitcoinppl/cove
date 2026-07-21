@@ -7,7 +7,7 @@ use std::{
 
 use label::LabelsTable;
 use once_cell::sync::Lazy;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -23,6 +23,10 @@ use ahash::AHashMap as HashMap;
 
 pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
+
+/// Per-wallet locks so concurrent opens of the same id serialize without blocking other wallets
+static DATABASE_OPEN_LOCKS: Lazy<Mutex<HashMap<WalletId, Arc<Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn database_location(id: &WalletId, location: &Path) -> Result<PathBuf, std::io::Error> {
     let dir = location.join(id.as_str());
@@ -311,9 +315,21 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
     let path = database_location(id, location)
         .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
-    let mut db_connections = DATABASE_CONNECTIONS.write();
-    if let Some(db) = db_connections.get(id) {
-        return Ok(db.clone());
+    // fast path when the connection is already registered
+    if let Some(db) = DATABASE_CONNECTIONS.read().get(id).cloned() {
+        return Ok(db);
+    }
+
+    // only serialize opens for this wallet id; other wallets keep opening in parallel
+    let open_lock = {
+        let mut locks = DATABASE_OPEN_LOCKS.lock();
+        locks.entry(id.clone()).or_insert_with(|| Arc::new(Mutex::new(()))).clone()
+    };
+    let _open_guard = open_lock.lock();
+
+    // another caller may have finished opening while we waited
+    if let Some(db) = DATABASE_CONNECTIONS.read().get(id).cloned() {
+        return Ok(db);
     }
 
     let db = super::encrypted_backend::open_or_create_database(&path).map_err(|e| match e {
@@ -324,7 +340,7 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
     })?;
 
     let db = Arc::new(db);
-    db_connections.insert(id.clone(), db.clone());
+    DATABASE_CONNECTIONS.write().insert(id.clone(), db.clone());
 
     Ok(db)
 }
@@ -333,11 +349,15 @@ pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
     delete_database_at_location(id, &WALLET_DATA_DIR)
 }
 
+/// Drop all cached wallet data connections and open locks
+pub fn clear_database_connections() {
+    DATABASE_CONNECTIONS.write().clear();
+    DATABASE_OPEN_LOCKS.lock().clear();
+}
+
 fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std::io::Error> {
-    {
-        let mut db_connections = DATABASE_CONNECTIONS.write();
-        db_connections.remove(id);
-    }
+    DATABASE_CONNECTIONS.write().remove(id);
+    DATABASE_OPEN_LOCKS.lock().remove(id);
 
     std::fs::remove_file(database_location(id, location)?)
 }
@@ -372,11 +392,16 @@ pub(crate) mod test_support {
 
     pub(crate) fn new_test_wallet_data_db(id: WalletId) -> (WalletDataDb, tempfile::TempDir) {
         crate::database::encrypted_backend::tests::set_test_encryption_key();
-        DATABASE_CONNECTIONS.write().remove(&id);
+        clear_wallet_registry_entry(&id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
         let db =
             WalletDataDb::new_with_db_location(id, tmp.path()).expect("failed to create test db");
         (db, tmp)
+    }
+
+    pub(crate) fn clear_wallet_registry_entry(id: &WalletId) {
+        DATABASE_CONNECTIONS.write().remove(id);
+        DATABASE_OPEN_LOCKS.lock().remove(id);
     }
 }
 
@@ -389,7 +414,7 @@ mod tests {
     fn concurrent_new_or_existing_calls_share_one_database_handle() {
         crate::database::encrypted_backend::tests::set_test_encryption_key();
         let wallet_id = WalletId::preview_new_random();
-        DATABASE_CONNECTIONS.write().remove(&wallet_id);
+        test_support::clear_wallet_registry_entry(&wallet_id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
         let location = Arc::new(tmp.path().to_path_buf());
         let barrier = Arc::new(Barrier::new(16));
@@ -415,7 +440,50 @@ mod tests {
 
         assert!(databases.windows(2).all(|pair| Arc::ptr_eq(&pair[0].db, &pair[1].db)));
 
-        DATABASE_CONNECTIONS.write().remove(&wallet_id);
+        test_support::clear_wallet_registry_entry(&wallet_id);
+    }
+
+    #[test]
+    fn concurrent_opens_for_different_wallets_succeed_independently() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        let wallet_ids = (0..8).map(|_| WalletId::preview_new_random()).collect::<Vec<_>>();
+        for wallet_id in &wallet_ids {
+            test_support::clear_wallet_registry_entry(wallet_id);
+        }
+
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let location = Arc::new(tmp.path().to_path_buf());
+        let barrier = Arc::new(Barrier::new(wallet_ids.len()));
+
+        let handles = wallet_ids
+            .iter()
+            .cloned()
+            .map(|wallet_id| {
+                let location = Arc::clone(&location);
+                let barrier = Arc::clone(&barrier);
+
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    WalletDataDb::new_with_db_location(wallet_id, location.as_ref().as_path())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let databases = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("wallet data open thread should not panic"))
+            .collect::<Result<Vec<_>>>()
+            .expect("all concurrent independent wallet data opens should succeed");
+
+        for left in 0..databases.len() {
+            for right in (left + 1)..databases.len() {
+                assert!(!Arc::ptr_eq(&databases[left].db, &databases[right].db));
+            }
+        }
+
+        for wallet_id in &wallet_ids {
+            test_support::clear_wallet_registry_entry(wallet_id);
+        }
     }
 
     #[test]
