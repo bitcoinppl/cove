@@ -34,8 +34,8 @@ struct WordsView: View {
 
     init(manager: PendingWalletManager, initialTabIndex: Int = 0) {
         self.manager = manager
-        self.groupedWords = manager.rust.bip39WordsGrouped()
-        self.tabIndex = initialTabIndex
+        _groupedWords = State(initialValue: manager.rust.bip39WordsGrouped())
+        _tabIndex = State(initialValue: initialTabIndex)
     }
 
     var lastIndex: Int {
@@ -51,34 +51,56 @@ struct WordsView: View {
             let layout: RecoveryWordsLayout = scrollableLayout ? .stickyBottom : .inline
             let contentWidth = max(proxy.size.width - 32, 0)
 
-            Group {
-                if scrollableLayout {
-                    VStack(spacing: 0) {
-                        ScrollView {
-                            recoveryWordsContent(
-                                layout: layout,
-                                availableWidth: contentWidth
-                            )
-                            .padding(.bottom, 24)
-                        }
-                        .scrollIndicators(.hidden)
-
-                        compactBottomAction
-                    }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .background(
-                        Color.midnightBlue
-                            .ignoresSafeArea(.all)
-                    )
-
-                } else {
+            VStack(spacing: 0) {
+                ScrollView {
                     recoveryWordsContent(
                         layout: layout,
                         availableWidth: contentWidth
                     )
+                    .frame(minHeight: layout == .inline ? proxy.size.height : nil)
+                    .padding(.bottom, layout == .stickyBottom ? 24 : 0)
+                }
+                .scrollIndicators(.hidden)
+
+                if layout == .stickyBottom {
+                    compactBottomAction
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background(
+                Color.midnightBlue
+                    .ignoresSafeArea(.all)
+            )
+        }
+        .navigationTitle("Backup your wallet")
+        .navigationBarTitleDisplayMode(.inline)
+        .adaptiveToolbarStyle()
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    showConfirmationAlert = true
+                }) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                    }
+                    .foregroundStyle(.white)
                 }
             }
         }
+        .alert(isPresented: $showConfirmationAlert) {
+            Alert(
+                title: Text("⚠️ Wallet Not Saved ⚠️"),
+                message: Text("You will have to write down a new set of words."),
+                primaryButton: .destructive(Text("Yes, Go Back")) {
+                    dismiss()
+                },
+                secondaryButton: .cancel(Text("Cancel"))
+            )
+        }
+        .navigationBarBackButtonHidden(true)
     }
 
     private func recoveryWordsContent(layout: RecoveryWordsLayout, availableWidth: CGFloat) -> some View {
@@ -86,11 +108,9 @@ struct WordsView: View {
             groupedWords: groupedWords,
             tabIndex: $tabIndex,
             lastIndex: lastIndex,
-            showConfirmationAlert: $showConfirmationAlert,
             layout: layout,
             availableWidth: availableWidth,
-            saveWallet: saveWallet,
-            dismiss: { dismiss() }
+            saveWallet: saveWallet
         )
     }
 
@@ -125,10 +145,6 @@ enum RecoveryWordsLayout {
     case stickyBottom
     case inline
 
-    var usesCompactCardHeight: Bool {
-        self == .stickyBottom
-    }
-
     var showsPrimaryActionInline: Bool {
         self == .inline
     }
@@ -138,21 +154,19 @@ struct RecoveryWordsContent: View {
     let groupedWords: [[GroupedWord]]
     @Binding var tabIndex: Int
     let lastIndex: Int
-    @Binding var showConfirmationAlert: Bool
     let layout: RecoveryWordsLayout
     let availableWidth: CGFloat
     let saveWallet: () -> Void
-    let dismiss: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
-            StyledWordCard(tabIndex: $tabIndex, compactHeight: layout.usesCompactCardHeight) {
+            StyledWordCard(tabIndex: $tabIndex, rowCount: wordGridRowCount) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
                     WordCardView(words: wordGroup, availableWidth: availableWidth).tag(index)
                 }
             }
 
-            if !layout.usesCompactCardHeight {
+            if layout == .inline {
                 Spacer()
             }
 
@@ -204,11 +218,6 @@ struct RecoveryWordsContent: View {
             }
         }
         .padding()
-        .navigationBarTitleDisplayMode(.inline)
-        .adaptiveToolbarStyle()
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)
@@ -219,32 +228,6 @@ struct RecoveryWordsContent: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
-        .navigationTitle("Backup your wallet")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: {
-                    showConfirmationAlert = true
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                    }
-                    .foregroundStyle(.white)
-                }
-            }
-        }
-        .alert(isPresented: $showConfirmationAlert) {
-            Alert(
-                title: Text("⚠️ Wallet Not Saved ⚠️"),
-                message: Text("You will have to write down a new set of words."),
-                primaryButton: .destructive(Text("Yes, Go Back")) {
-                    dismiss()
-                },
-                secondaryButton: .cancel(Text("Cancel"))
-            )
-        }
-        .navigationBarBackButtonHidden(true)
     }
 
     private var primaryActionButton: some View {
@@ -253,6 +236,10 @@ struct RecoveryWordsContent: View {
             lastIndex: lastIndex,
             saveWallet: saveWallet
         )
+    }
+
+    private var wordGridRowCount: Int {
+        (groupedWords.map(\.count).max() ?? 0) / 2
     }
 }
 
@@ -294,7 +281,7 @@ struct WordCardView: View {
     let words: [GroupedWord]
     let availableWidth: CGFloat
 
-    private let columnCount = 3
+    private let columnCount = 2
     private let columnSpacing: CGFloat = 12
 
     var body: some View {
@@ -351,7 +338,7 @@ struct StyledWordCard<Content: View>: View {
     @Environment(\.sizeCategory) var sizeCategory
 
     @Binding var tabIndex: Int
-    let compactHeight: Bool
+    let rowCount: Int
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -360,7 +347,13 @@ struct StyledWordCard<Content: View>: View {
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
 
-        tabView.frame(height: usesCompactTypography(sizeCategory: sizeCategory) ? 320 : 260)
+        tabView.frame(height: wordCardHeight)
+    }
+
+    private var wordCardHeight: CGFloat {
+        let rowHeight: CGFloat = usesCompactTypography(sizeCategory: sizeCategory) ? 54 : 48
+
+        return CGFloat(rowCount) * rowHeight + 56
     }
 }
 

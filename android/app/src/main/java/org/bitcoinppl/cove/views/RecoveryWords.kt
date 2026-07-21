@@ -60,6 +60,7 @@ private fun RecoveryWordsPager(
                 onToggleIndex = onToggleIndex,
             )
         }
+
         Spacer(Modifier.height(16.dp))
 
         // Indicator
@@ -87,6 +88,7 @@ private fun RecoveryWordsGrid(
     ColumnMajorGrid(
         items = words,
         modifier = modifier,
+        numColumns = 2,
     ) { index, word ->
         val globalIndex = startIndexOffset + index + 1
         RecoveryWordChip(
