@@ -9472,7 +9472,7 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func switchToDifferentWalletAddressType(walletAddressType: WalletAddressType) async throws
 
-    func transactionDetails(txId: TxId) async throws  -> TransactionDetails
+    func transactionDetails(txId: TxId) async throws  -> TransactionDetailsPresentation
 
     func unlockedSpendableBalance() async throws  -> Amount
 
@@ -9539,10 +9539,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      * Use this for displaying confirmed/unconfirmed transaction amounts in lists.
      */
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived)  -> String
-
-    func numberOfConfirmations(blockHeight: UInt32) async throws  -> UInt32
-
-    func numberOfConfirmationsFmt(blockHeight: UInt32) async throws  -> String
 
     func selectedFiatCurrency()  -> FiatCurrency
 
@@ -10208,7 +10204,7 @@ open func switchToDifferentWalletAddressType(walletAddressType: WalletAddressTyp
         )
 }
 
-open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
+open func transactionDetails(txId: TxId)async throws  -> TransactionDetailsPresentation  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -10220,7 +10216,7 @@ open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
             pollFunc: ffi_cove_rust_future_poll_u64,
             completeFunc: ffi_cove_rust_future_complete_u64,
             freeFunc: ffi_cove_rust_future_free_u64,
-            liftFunc: FfiConverterTypeTransactionDetails_lift,
+            liftFunc: FfiConverterTypeTransactionDetailsPresentation_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -10421,40 +10417,6 @@ open func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> Stri
         FfiConverterTypeSentAndReceived_lower(sentAndReceived),uniffiCallStatus
     )
 })
-}
-
-open func numberOfConfirmations(blockHeight: UInt32)async throws  -> UInt32  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt32.lower(blockHeight)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_u32,
-            completeFunc: ffi_cove_rust_future_complete_u32,
-            freeFunc: ffi_cove_rust_future_free_u32,
-            liftFunc: FfiConverterUInt32.lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
-}
-
-open func numberOfConfirmationsFmt(blockHeight: UInt32)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_number_of_confirmations_fmt(
-                    self.uniffiCloneHandle(),
-                    FfiConverterUInt32.lower(blockHeight)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
 }
 
 open func selectedFiatCurrency() -> FiatCurrency  {
@@ -11785,6 +11747,213 @@ public func FfiConverterTypeTransactionDetails_lift(_ handle: UInt64) throws -> 
 #endif
 public func FfiConverterTypeTransactionDetails_lower(_ value: TransactionDetails) -> UInt64 {
     return FfiConverterTypeTransactionDetails.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Transaction details and their current confirmation presentation
+ */
+public protocol TransactionDetailsPresentationProtocol: AnyObject, Sendable {
+
+    /**
+     * Returns confirmations for confirmed transactions
+     */
+    func confirmations()  -> UInt32?
+
+    /**
+     * Returns the transaction details
+     */
+    func details()  -> TransactionDetails
+
+    /**
+     * Returns the transaction identifier
+     */
+    func txId()  -> TxId
+
+}
+/**
+ * Transaction details and their current confirmation presentation
+ */
+open class TransactionDetailsPresentation: TransactionDetailsPresentationProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_transactiondetailspresentation(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_transactiondetailspresentation(handle, $0) }
+    }
+
+
+    /**
+     * Creates a confirmed received preview presentation
+     */
+public static func previewConfirmedReceived() -> TransactionDetailsPresentation  {
+    return try!  FfiConverterTypeTransactionDetailsPresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_transactiondetailspresentation_preview_confirmed_received(uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Creates a confirmed sent preview presentation
+     */
+public static func previewConfirmedSent() -> TransactionDetailsPresentation  {
+    return try!  FfiConverterTypeTransactionDetailsPresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_transactiondetailspresentation_preview_confirmed_sent(uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Creates a pending received preview presentation
+     */
+public static func previewPendingReceived() -> TransactionDetailsPresentation  {
+    return try!  FfiConverterTypeTransactionDetailsPresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_transactiondetailspresentation_preview_pending_received(uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Creates a pending sent preview presentation
+     */
+public static func previewPendingSent() -> TransactionDetailsPresentation  {
+    return try!  FfiConverterTypeTransactionDetailsPresentation_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_transactiondetailspresentation_preview_pending_sent(uniffiCallStatus
+    )
+})
+}
+
+
+
+    /**
+     * Returns confirmations for confirmed transactions
+     */
+open func confirmations() -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_transactiondetailspresentation_confirmations(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Returns the transaction details
+     */
+open func details() -> TransactionDetails  {
+    return try!  FfiConverterTypeTransactionDetails_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_transactiondetailspresentation_details(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Returns the transaction identifier
+     */
+open func txId() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_transactiondetailspresentation_tx_id(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransactionDetailsPresentation: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = TransactionDetailsPresentation
+
+    public static func lift(_ handle: UInt64) throws -> TransactionDetailsPresentation {
+        return TransactionDetailsPresentation(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: TransactionDetailsPresentation) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionDetailsPresentation {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: TransactionDetailsPresentation, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionDetailsPresentation_lift(_ handle: UInt64) throws -> TransactionDetailsPresentation {
+    return try FfiConverterTypeTransactionDetailsPresentation.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransactionDetailsPresentation_lower(_ value: TransactionDetailsPresentation) -> UInt64 {
+    return FfiConverterTypeTransactionDetailsPresentation.lower(value)
 }
 
 
@@ -16942,60 +17111,6 @@ public func FfiConverterTypeTapSignerSetupComplete_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetupComplete) -> RustBuffer {
     return FfiConverterTypeTapSignerSetupComplete.lower(value)
-}
-
-
-public struct TransactionConfirmationUpdate {
-    public var txId: TxId
-    public var confirmations: UInt32
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(txId: TxId, confirmations: UInt32) {
-        self.txId = txId
-        self.confirmations = confirmations
-    }
-
-
-
-
-}
-
-#if compiler(>=6)
-extension TransactionConfirmationUpdate: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeTransactionConfirmationUpdate: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionConfirmationUpdate {
-        return
-            try TransactionConfirmationUpdate(
-                txId: FfiConverterTypeTxId.read(from: &buf),
-                confirmations: FfiConverterUInt32.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: TransactionConfirmationUpdate, into buf: inout [UInt8]) {
-        FfiConverterTypeTxId.write(value.txId, into: &buf)
-        FfiConverterUInt32.write(value.confirmations, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTransactionConfirmationUpdate_lift(_ buf: RustBuffer) throws -> TransactionConfirmationUpdate {
-    return try FfiConverterTypeTransactionConfirmationUpdate.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTransactionConfirmationUpdate_lower(_ value: TransactionConfirmationUpdate) -> RustBuffer {
-    return FfiConverterTypeTransactionConfirmationUpdate.lower(value)
 }
 
 
@@ -35163,7 +35278,7 @@ public func FfiConverterTypeWalletLoadState_lower(_ value: WalletLoadState) -> R
 
 
 
-public enum WalletManagerAction {
+public enum WalletManagerAction: Equatable, Hashable {
 
     case updateName(String
     )
@@ -35180,8 +35295,6 @@ public enum WalletManagerAction {
     case toggleShowLabels
     case selectCurrentWalletAddressType
     case selectedWalletDisappeared
-    case startTransactionWatcher(TxId
-    )
     case openReceiveAddress
     case createNewReceiveAddress
     case closeReceiveAddress(UInt64
@@ -35233,14 +35346,11 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
 
         case 11: return .selectedWalletDisappeared
 
-        case 12: return .startTransactionWatcher(try FfiConverterTypeTxId.read(from: &buf)
-        )
+        case 12: return .openReceiveAddress
 
-        case 13: return .openReceiveAddress
+        case 13: return .createNewReceiveAddress
 
-        case 14: return .createNewReceiveAddress
-
-        case 15: return .closeReceiveAddress(try FfiConverterUInt64.read(from: &buf)
+        case 14: return .closeReceiveAddress(try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -35299,21 +35409,16 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
 
 
-        case let .startTransactionWatcher(v1):
-            writeInt(&buf, Int32(12))
-            FfiConverterTypeTxId.write(v1, into: &buf)
-
-
         case .openReceiveAddress:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
 
 
         case .createNewReceiveAddress:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
 
 
         case let .closeReceiveAddress(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
             FfiConverterUInt64.write(v1, into: &buf)
 
         }
@@ -35748,9 +35853,7 @@ public enum WalletManagerReconcileMessage {
     )
     case transactionUpdated(Transaction
     )
-    case transactionDetailsUpdated(TransactionDetails
-    )
-    case transactionConfirmationsUpdated(TransactionConfirmationUpdate
+    case transactionDetailsUpdated(TransactionDetailsPresentation
     )
     case nodeConnectionFailed(String
     )
@@ -35819,54 +35922,51 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 6: return .transactionUpdated(try FfiConverterTypeTransaction.read(from: &buf)
         )
 
-        case 7: return .transactionDetailsUpdated(try FfiConverterTypeTransactionDetails.read(from: &buf)
+        case 7: return .transactionDetailsUpdated(try FfiConverterTypeTransactionDetailsPresentation.read(from: &buf)
         )
 
-        case 8: return .transactionConfirmationsUpdated(try FfiConverterTypeTransactionConfirmationUpdate.read(from: &buf)
+        case 8: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
         )
 
-        case 9: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
+        case 9: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
 
-        case 10: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
+        case 10: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
         )
 
-        case 11: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
+        case 11: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
 
-        case 12: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
+        case 12: return .unknownError(try FfiConverterString.read(from: &buf)
         )
 
-        case 13: return .unknownError(try FfiConverterString.read(from: &buf)
+        case 13: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
         )
 
-        case 14: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        case 14: return .unsignedTransactionsChanged
+
+        case 15: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
         )
 
-        case 15: return .unsignedTransactionsChanged
-
-        case 16: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        case 16: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
         )
 
-        case 17: return .hotWalletKeyMissing(try FfiConverterTypeWalletId.read(from: &buf)
+        case 17: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
         )
 
-        case 18: return .receiveAddressUpdated(try FfiConverterTypeReceiveAddressState.read(from: &buf)
+        case 18: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
         )
 
-        case 19: return .receiveAddressPresentationUpdated(try FfiConverterTypeReceiveAddressPresentation.read(from: &buf)
+        case 19: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
         )
 
-        case 20: return .receiveAddressLoadingChanged(try FfiConverterBool.read(from: &buf)
+        case 20: return .receiveAddressError(try FfiConverterString.read(from: &buf)
         )
 
-        case 21: return .receiveAddressError(try FfiConverterString.read(from: &buf)
+        case 21: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 22: return .receiveAddressClosed(try FfiConverterUInt64.read(from: &buf)
-        )
-
-        case 23: return .payjoinTxBroadcast
+        case 22: return .payjoinTxBroadcast
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -35908,85 +36008,80 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
 
         case let .transactionDetailsUpdated(v1):
             writeInt(&buf, Int32(7))
-            FfiConverterTypeTransactionDetails.write(v1, into: &buf)
-
-
-        case let .transactionConfirmationsUpdated(v1):
-            writeInt(&buf, Int32(8))
-            FfiConverterTypeTransactionConfirmationUpdate.write(v1, into: &buf)
+            FfiConverterTypeTransactionDetailsPresentation.write(v1, into: &buf)
 
 
         case let .nodeConnectionFailed(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletMetadataChanged(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
 
 
         case let .walletBalanceChanged(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeBalance.write(v1, into: &buf)
 
 
         case let .walletError(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
         case let .unknownError(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .walletScannerResponse(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeScannerResponse.write(v1, into: &buf)
 
 
         case .unsignedTransactionsChanged:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
 
 
         case let .sendFlowError(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
 
 
         case let .hotWalletKeyMissing(v1):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
         case let .receiveAddressUpdated(v1):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeReceiveAddressState.write(v1, into: &buf)
 
 
         case let .receiveAddressPresentationUpdated(v1):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeReceiveAddressPresentation.write(v1, into: &buf)
 
 
         case let .receiveAddressLoadingChanged(v1):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(19))
             FfiConverterBool.write(v1, into: &buf)
 
 
         case let .receiveAddressError(v1):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(20))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .receiveAddressClosed(v1):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(21))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
         case .payjoinTxBroadcast:
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(22))
 
         }
     }
@@ -41690,7 +41785,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_switch_to_different_wallet_address_type() != 37401) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34155) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_transaction_details() != 34051) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834) {
@@ -41736,12 +41831,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 9013) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 30789) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations_fmt() != 43101) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency() != 25350) {
@@ -42041,6 +42130,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_transactiondetails_tx_id() != 32068) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_transactiondetailspresentation_confirmations() != 27444) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetailspresentation_details() != 37876) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetailspresentation_tx_id() != 2428) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_unsignedtransaction_details() != 3548) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -42252,6 +42350,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_pending_sent() != 26743) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_transactiondetailspresentation_preview_confirmed_received() != 59252) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_transactiondetailspresentation_preview_confirmed_sent() != 58168) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_transactiondetailspresentation_preview_pending_received() != 49046) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_transactiondetailspresentation_preview_pending_sent() != 59555) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_unsignedtransaction_preview_new() != 60973) {

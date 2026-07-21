@@ -36,17 +36,17 @@ private struct TransactionDetailsLoader: View {
     @State private var error: Error?
     @State private var didLoadInitialDetails = false
 
-    private var transactionDetails: TransactionDetails? {
-        manager.transactionDetails[txId]
+    private var transactionDetailsPresentation: TransactionDetailsPresentation? {
+        manager.transactionDetailsPresentations[txId]
     }
 
     var body: some View {
         Group {
-            if let transactionDetails {
+            if let transactionDetailsPresentation {
                 TransactionDetailsView(
                     id: id,
                     txId: txId,
-                    transactionDetails: transactionDetails,
+                    transactionDetailsPresentation: transactionDetailsPresentation,
                     refreshOnAppear: !didLoadInitialDetails,
                     manager: manager
                 )
@@ -64,7 +64,7 @@ private struct TransactionDetailsLoader: View {
     }
 
     private func loadTransactionDetails() async {
-        if transactionDetails != nil { return }
+        if transactionDetailsPresentation != nil { return }
 
         await MainActor.run {
             error = nil

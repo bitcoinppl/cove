@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 
 use bdk_wallet::Wallet as BdkWallet;
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
@@ -78,6 +78,98 @@ pub struct TransactionDetails {
 pub enum PendingOrConfirmed {
     Pending(PendingDetails),
     Confirmed(ConfirmedDetails),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum TransactionConfirmationPresentation {
+    Pending,
+    Confirmed(NonZeroU32),
+}
+
+/// Transaction details and their current confirmation presentation
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+pub struct TransactionDetailsPresentation {
+    details: Arc<TransactionDetails>,
+    confirmation: TransactionConfirmationPresentation,
+}
+
+impl TransactionDetailsPresentation {
+    pub(crate) fn new(details: TransactionDetails, current_height: u32) -> Self {
+        Self::from_arc(Arc::new(details), current_height)
+    }
+
+    fn from_arc(details: Arc<TransactionDetails>, current_height: u32) -> Self {
+        let confirmation = match details.block_number() {
+            Some(block_height) => TransactionConfirmationPresentation::Confirmed(
+                confirmed_transaction_confirmation_count(block_height, current_height),
+            ),
+            None => TransactionConfirmationPresentation::Pending,
+        };
+
+        Self { details, confirmation }
+    }
+
+    pub(crate) fn with_current_height(&self, current_height: u32) -> Self {
+        Self::from_arc(self.details.clone(), current_height)
+    }
+}
+
+pub(crate) fn confirmed_transaction_confirmation_count(
+    block_height: u32,
+    current_height: u32,
+) -> NonZeroU32 {
+    let confirmations = current_height.saturating_sub(block_height).saturating_add(1);
+    NonZeroU32::new(confirmations).expect("saturating confirmation count is always non-zero")
+}
+
+#[uniffi::export]
+impl TransactionDetailsPresentation {
+    /// Creates a confirmed received preview presentation
+    #[uniffi::constructor]
+    pub fn preview_confirmed_received() -> Self {
+        Self::new(TransactionDetails::preview_confirmed_received(), 840_002)
+    }
+
+    /// Creates a confirmed sent preview presentation
+    #[uniffi::constructor]
+    pub fn preview_confirmed_sent() -> Self {
+        Self::new(TransactionDetails::preview_confirmed_sent(), 840_002)
+    }
+
+    /// Creates a pending received preview presentation
+    #[uniffi::constructor]
+    pub fn preview_pending_received() -> Self {
+        Self::new(TransactionDetails::preview_pending_received(), 840_002)
+    }
+
+    /// Creates a pending sent preview presentation
+    #[uniffi::constructor]
+    pub fn preview_pending_sent() -> Self {
+        Self::new(TransactionDetails::preview_pending_sent(), 840_002)
+    }
+
+    /// Returns the transaction details
+    #[uniffi::method]
+    pub fn details(&self) -> Arc<TransactionDetails> {
+        self.details.clone()
+    }
+
+    /// Returns confirmations for confirmed transactions
+    #[uniffi::method]
+    pub fn confirmations(&self) -> Option<u32> {
+        match self.confirmation {
+            TransactionConfirmationPresentation::Pending => None,
+            TransactionConfirmationPresentation::Confirmed(confirmations) => {
+                Some(confirmations.get())
+            }
+        }
+    }
+
+    /// Returns the transaction identifier
+    #[uniffi::method]
+    pub fn tx_id(&self) -> TxId {
+        self.details.tx_id()
+    }
 }
 
 impl TransactionDetails {
@@ -614,6 +706,43 @@ mod tests {
     fn preview_constructors_default_to_not_rbf() {
         assert!(!TransactionDetails::preview_new_confirmed().is_rbf_signaling);
         assert!(!TransactionDetails::preview_pending_sent().is_rbf_signaling);
+    }
+
+    #[test]
+    fn confirmed_transaction_always_has_at_least_one_confirmation() {
+        assert_eq!(confirmed_transaction_confirmation_count(840_000, 839_999).get(), 1);
+        assert_eq!(confirmed_transaction_confirmation_count(840_000, 840_000).get(), 1);
+        assert_eq!(confirmed_transaction_confirmation_count(840_000, 840_002).get(), 3);
+    }
+
+    #[test]
+    fn confirmation_count_saturates_at_u32_max() {
+        assert_eq!(confirmed_transaction_confirmation_count(0, u32::MAX).get(), u32::MAX);
+    }
+
+    #[test]
+    fn pending_presentation_has_no_confirmation_count() {
+        let presentation = TransactionDetailsPresentation::new(
+            TransactionDetails::preview_pending_received(),
+            840_002,
+        );
+
+        assert_eq!(presentation.confirmations(), None);
+        assert!(!presentation.details().is_confirmed());
+    }
+
+    #[test]
+    fn confirmed_presentation_never_has_zero_confirmations() {
+        let mut details = TransactionDetails::preview_confirmed_received();
+        details.pending_or_confirmed = PendingOrConfirmed::Confirmed(ConfirmedDetails {
+            block_number: 840_000,
+            confirmation_time: 0,
+        });
+
+        let presentation = TransactionDetailsPresentation::new(details, 839_999);
+
+        assert_eq!(presentation.confirmations(), Some(1));
+        assert!(presentation.details().is_confirmed());
     }
 
     #[test]

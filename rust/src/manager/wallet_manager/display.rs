@@ -146,21 +146,8 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
-        // always get fresh height to ensure confirmation count reflects latest blocks
-        let current_height = self.force_update_height().await?;
-        if block_height > current_height { Ok(0) } else { Ok(current_height - block_height + 1) }
-    }
-
-    #[uniffi::method]
     pub fn display_confirmation_count(&self, confirmations: u32) -> String {
         format_confirmation_count(confirmations)
-    }
-
-    #[uniffi::method]
-    pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
-        let number_of_confirmations = self.number_of_confirmations(block_height).await?;
-        Ok(format_confirmation_count(number_of_confirmations))
     }
 }
 
