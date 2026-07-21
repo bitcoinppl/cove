@@ -160,11 +160,14 @@ class WalletManager :
         fun install(): WalletManager {
             check(consumed.compareAndSet(false, true)) { "Wallet manager bootstrap already consumed" }
 
-            return try {
-                WalletManager(initialState.metadata.id, rust, initialState)
-            } catch (error: Exception) {
-                closeRust()
-                throw error
+            var installed = false
+            try {
+                return WalletManager(initialState.metadata.id, rust, initialState)
+                    .also { installed = true }
+            } finally {
+                if (!installed) {
+                    closeRust()
+                }
             }
         }
 
@@ -186,15 +189,18 @@ class WalletManager :
             fun create(id: WalletId): Bootstrap {
                 val rust = RustWalletManager(id)
 
-                return try {
-                    Bootstrap(rust, rust.initialState())
-                } catch (error: Exception) {
-                    try {
-                        rust.shutdown()
-                    } finally {
-                        rust.close()
+                var created = false
+                try {
+                    return Bootstrap(rust, rust.initialState())
+                        .also { created = true }
+                } finally {
+                    if (!created) {
+                        try {
+                            rust.shutdown()
+                        } finally {
+                            rust.close()
+                        }
                     }
-                    throw error
                 }
             }
         }
@@ -241,15 +247,17 @@ class WalletManager :
                 }
 
             var manager: WalletManager? = null
+            var loaded = false
             try {
                 currentCoroutineContext().ensureActive()
 
                 return withContext(Dispatchers.Main.immediate) {
                     bootstrap.install().also { manager = it }
+                }.also { loaded = true }
+            } finally {
+                if (!loaded) {
+                    manager?.close() ?: bootstrap.close()
                 }
-            } catch (error: Exception) {
-                manager?.close() ?: bootstrap.close()
-                throw error
             }
         }
 

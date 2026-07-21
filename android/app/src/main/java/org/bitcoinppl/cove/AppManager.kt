@@ -487,6 +487,24 @@ class AppManager private constructor() : FfiReconcile {
         walletId: WalletId,
         generation: GenerationToken,
     ): WalletRoutePreparation {
+        val recovery = walletTransitionRecovery(walletId)
+
+        var candidateId = recovery.nextCandidate()
+        while (candidateId != null) {
+            val manager = loadWalletRouteCandidate(candidateId, generation)
+            if (manager != null) {
+                ensureWalletRouteGenerationIsCurrent(generation, candidateId)
+
+                prepareLoadedWalletRoute(manager, candidateId, recovery)?.let { return it }
+            }
+
+            candidateId = recovery.nextCandidate()
+        }
+
+        return recoverMissingWalletRoute(generation)
+    }
+
+    private suspend fun walletTransitionRecovery(walletId: WalletId): WalletTransitionRecovery {
         val cachedId = withContext(Dispatchers.Main.immediate) { walletManager?.id }
         val displayedIds =
             withContext(Dispatchers.IO) {
@@ -494,60 +512,71 @@ class AppManager private constructor() : FfiReconcile {
                     .getOrElse { emptyList() }
                     .map(WalletMetadata::id)
             }
-        val recovery =
-            WalletTransitionRecovery.create(
-                requestedId = walletId,
-                cachedId = cachedId,
-                displayedIds = displayedIds,
-            )
 
-        while (true) {
-            val candidateId = recovery.nextCandidate() ?: break
-            val manager =
-                try {
-                    getWalletManagerLoaded(candidateId) {
-                        router.isNavigationGenerationCurrent(generation)
-                    }
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: WalletManagerException.DatabaseCorruption) {
-                    Log.e(tag, "Wallet database corrupted for ${error.`id`}: ${error.`error`}", error)
-                    withContext(Dispatchers.Main.immediate) {
-                        alertState =
-                            TaggedItem(
-                                AppAlertState.WalletDatabaseCorrupted(
-                                    walletId = error.`id`,
-                                    error = error.`error`,
-                                ),
-                            )
-                    }
-                    continue
-                } catch (error: Exception) {
-                    Log.e(tag, "Unable to prepare wallet $candidateId", error)
-                    continue
+        return WalletTransitionRecovery.create(
+            requestedId = walletId,
+            cachedId = cachedId,
+            displayedIds = displayedIds,
+        )
+    }
+
+    private suspend fun loadWalletRouteCandidate(
+        candidateId: WalletId,
+        generation: GenerationToken,
+    ): WalletManager? {
+        val result =
+            runCatchingCancellable(tag, "Unable to prepare wallet $candidateId") {
+                getWalletManagerLoaded(candidateId) {
+                    router.isNavigationGenerationCurrent(generation)
                 }
-
-            if (!router.isNavigationGenerationCurrent(generation)) {
-                throw CancellationException("Wallet route changed while loading $candidateId")
             }
-
-            if (!recovery.isFallback(candidateId)) {
-                return WalletRoutePreparation.Ready(manager)
-            }
-
-            try {
-                withContext(Dispatchers.Main.immediate) {
-                    selectWalletWithoutNavigationGeneration(candidateId)
-                }
-
-                return WalletRoutePreparation.RouteRedirected
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.e(tag, "Unable to select fallback wallet $candidateId", error)
+        val error = result.exceptionOrNull()
+        if (error is WalletManagerException.DatabaseCorruption) {
+            withContext(Dispatchers.Main.immediate) {
+                alertState =
+                    TaggedItem(
+                        AppAlertState.WalletDatabaseCorrupted(
+                            walletId = error.`id`,
+                            error = error.`error`,
+                        ),
+                    )
             }
         }
 
+        return result.getOrNull()
+    }
+
+    private fun ensureWalletRouteGenerationIsCurrent(
+        generation: GenerationToken,
+        candidateId: WalletId,
+    ) {
+        if (!router.isNavigationGenerationCurrent(generation)) {
+            throw CancellationException("Wallet route changed while loading $candidateId")
+        }
+    }
+
+    private suspend fun prepareLoadedWalletRoute(
+        manager: WalletManager,
+        candidateId: WalletId,
+        recovery: WalletTransitionRecovery,
+    ): WalletRoutePreparation? {
+        if (!recovery.isFallback(candidateId)) {
+            return WalletRoutePreparation.Ready(manager)
+        }
+
+        val selected =
+            runCatchingCancellable(tag, "Unable to select fallback wallet $candidateId") {
+                withContext(Dispatchers.Main.immediate) {
+                    selectWalletWithoutNavigationGeneration(candidateId)
+                }
+            }.isSuccess
+
+        return if (selected) WalletRoutePreparation.RouteRedirected else null
+    }
+
+    private suspend fun recoverMissingWalletRoute(
+        generation: GenerationToken,
+    ): WalletRoutePreparation {
         if (!router.isNavigationGenerationCurrent(generation)) {
             throw CancellationException("Wallet route changed while recovering wallet selection")
         }
