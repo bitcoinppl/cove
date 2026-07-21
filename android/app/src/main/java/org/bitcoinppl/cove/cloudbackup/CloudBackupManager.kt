@@ -473,10 +473,21 @@ class CloudBackupManager private constructor(
                         Log.e(TAG, "failed to commit staged drive account")
                         return@launch
                     }
-                    runCatching {
+                    val confirmed = runCatching {
                         withRustSuspend { confirmDriveAccountSwitchCommitted(transitionId) }
+                    }
+                        .onFailure { error ->
+                            Log.e(TAG, "failed to confirm drive account commit", error)
+                        }
+                        .isSuccess
+                    if (!confirmed) return@launch
+
+                    runCatching {
+                        check(driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId) == true) {
+                            "committed drive account transition could not be finalized"
+                        }
                     }.onFailure { error ->
-                        Log.e(TAG, "failed to confirm drive account commit", error)
+                        Log.e(TAG, "failed to finalize drive account commit", error)
                     }
                 }
             }
@@ -566,12 +577,14 @@ class CloudBackupManager private constructor(
             pendingTransitionId: () -> ULong?,
             selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
             commit: (ULong) -> Boolean,
+            finalizeCommit: (ULong) -> Boolean,
             rollback: (ULong) -> Boolean,
         ) {
             driveAccountSwitchCallbacks = DriveAccountSwitchCallbacks(
                 pendingTransitionId = pendingTransitionId,
                 selectAccount = selectAccount,
                 commit = commit,
+                finalizeCommit = finalizeCommit,
                 rollback = rollback,
             )
         }
@@ -580,6 +593,7 @@ class CloudBackupManager private constructor(
             val pendingTransitionId: () -> ULong?,
             val selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
             val commit: (ULong) -> Boolean,
+            val finalizeCommit: (ULong) -> Boolean,
             val rollback: (ULong) -> Boolean,
         )
 

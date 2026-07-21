@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.cloudbackup
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -106,5 +107,22 @@ class DriveAccountBindingTest {
         verifyDriveAccountBinding(store, verified)
 
         assertEquals(verified, store.selectedIdentity())
+    }
+
+    @Test
+    fun driveAccountBindingEnrichmentPreservesCommittedTransitionReplay() {
+        val store = TestDriveAccountBindingStore()
+        val staged = DriveAccountIdentity(googleAccountId = "account-1", email = null)
+        val verified = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+
+        assertTrue(store.stageIdentity(7UL, staged))
+        assertTrue(store.commitStagedIdentity(7UL))
+
+        verifyDriveAccountBinding(store, verified)
+
+        assertEquals(verified, store.selectedIdentity())
+        assertTrue(store.commitStagedIdentity(7UL))
+        assertTrue(store.finalizeCommittedIdentity(7UL))
+        assertFalse(store.commitStagedIdentity(7UL))
     }
 }

@@ -156,7 +156,6 @@ internal class TestDriveAccountBindingStore(
             pendingIdentity = identity
         } else {
             this.identity = identity
-            committedTransitionId = null
         }
     }
 
@@ -200,6 +199,16 @@ internal class TestDriveAccountBindingStore(
                 true
             } ?: false
         }
+    }
+
+    override fun finalizeCommittedIdentity(transitionId: ULong): Boolean {
+        val currentTransitionId = committedTransitionId ?: return true
+        if (currentTransitionId != transitionId) {
+            return false
+        }
+
+        committedTransitionId = null
+        return true
     }
 
     override fun rollbackStagedIdentity(transitionId: ULong): Boolean {

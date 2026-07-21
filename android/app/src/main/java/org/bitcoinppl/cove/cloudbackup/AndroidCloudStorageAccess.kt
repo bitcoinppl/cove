@@ -89,6 +89,9 @@ class AndroidCloudStorageAccess internal constructor(
     internal fun commitAccountSwitch(transitionId: ULong): Boolean =
         accountBindingStore.commitStagedIdentity(transitionId)
 
+    internal fun finalizeAccountSwitchCommit(transitionId: ULong): Boolean =
+        accountBindingStore.finalizeCommittedIdentity(transitionId)
+
     internal fun rollbackAccountSwitch(transitionId: ULong): Boolean =
         accountBindingStore.rollbackStagedIdentity(transitionId)
 

@@ -72,6 +72,7 @@ open class CoveApplication : Application() {
                     pendingTransitionId = access::pendingAccountSwitchTransitionId,
                     selectAccount = access::selectAccountForCloudBackup,
                     commit = access::commitAccountSwitch,
+                    finalizeCommit = access::finalizeAccountSwitchCommit,
                     rollback = access::rollbackAccountSwitch,
                 )
             }

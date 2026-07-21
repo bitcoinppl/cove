@@ -158,6 +158,8 @@ internal interface DriveAccountBindingStore {
 
     fun commitStagedIdentity(transitionId: ULong): Boolean
 
+    fun finalizeCommittedIdentity(transitionId: ULong): Boolean
+
     fun rollbackStagedIdentity(transitionId: ULong): Boolean
 }
 
@@ -215,7 +217,6 @@ internal class SharedPreferencesDriveAccountBindingStore(
             .putString(KEY_ID, identity.googleAccountId)
             .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
             .putString(KEY_EMAIL, identity.email)
-            .remove(KEY_COMMITTED_TRANSITION_ID)
             .apply()
     }
 
@@ -252,9 +253,7 @@ internal class SharedPreferencesDriveAccountBindingStore(
     override fun commitStagedIdentity(transitionId: ULong): Boolean {
         val pendingTransitionId = storedPendingTransitionId()
         return when {
-            pendingTransitionId == null ->
-                preferences.contains(KEY_COMMITTED_TRANSITION_ID) &&
-                    preferences.getLong(KEY_COMMITTED_TRANSITION_ID, 0).toULong() == transitionId
+            pendingTransitionId == null -> storedCommittedTransitionId() == transitionId
             pendingTransitionId != transitionId -> false
             else ->
                 pendingIdentity()?.let { identity ->
@@ -272,6 +271,22 @@ internal class SharedPreferencesDriveAccountBindingStore(
                 } ?: false
         }
     }
+
+    override fun finalizeCommittedIdentity(transitionId: ULong): Boolean {
+        val committedTransitionId = storedCommittedTransitionId() ?: return true
+        if (committedTransitionId != transitionId) {
+            return false
+        }
+
+        return preferences.edit().remove(KEY_COMMITTED_TRANSITION_ID).commit()
+    }
+
+    private fun storedCommittedTransitionId(): ULong? =
+        if (preferences.contains(KEY_COMMITTED_TRANSITION_ID)) {
+            preferences.getLong(KEY_COMMITTED_TRANSITION_ID, 0).toULong()
+        } else {
+            null
+        }
 
     override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
         val pendingTransitionId = storedPendingTransitionId()
