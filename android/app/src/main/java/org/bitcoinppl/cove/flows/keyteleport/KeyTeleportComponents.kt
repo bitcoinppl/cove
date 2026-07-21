@@ -21,8 +21,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -119,6 +121,13 @@ internal fun TextBlock(
         Text(text = body, color = Color.White.copy(alpha = 0.74f), lineHeight = 20.sp)
     }
 }
+
+@Composable
+internal fun keyTeleportTextFieldColors(): TextFieldColors =
+    OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+    )
 
 @Composable
 internal fun ActionRow(
