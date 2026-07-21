@@ -22,6 +22,7 @@ use crate::{
         clone_full_scan_response, send_complete_async_unless_cancelled, send_progress,
         send_update_async,
     },
+    scanner::ProgressiveScannerParts,
 };
 
 type EsploraError = Box<esplora_client::Error>;
@@ -130,215 +131,226 @@ where
 
     pub async fn run(self) -> Result<FullScanResponse<K>> {
         let parts = self.scanner.into_parts();
-        let request = parts.request;
-        let chain_tip = request.chain_tip();
-        let latest_blocks = match chain_tip {
+        let latest_blocks = match parts.request.chain_tip() {
             Some(_) => Some(fetch_latest_blocks(&self.client).await?),
             None => None,
         };
 
-        run_with_esplora_client(
-            request,
-            parts.stop_gap,
-            parts.events,
-            parts.cancel_token,
+        EsploraScanSession::run_parts(
+            parts,
             self.client.clone(),
             latest_blocks,
-            parts.last_revealed_indices,
             self.parallel_requests,
         )
         .await
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn run_with_esplora_client<K, C>(
-    mut request: FullScanRequest<K>,
+struct EsploraScanSession<K, C> {
+    client: C,
+    start_time: u64,
     stop_gap: usize,
     events: flume::Sender<ScanEvent<K>>,
     cancel_token: tokio_util::sync::CancellationToken,
-    client: C,
+    chain_tip: Option<CheckPoint>,
     latest_blocks: Option<BTreeMap<u32, BlockHash>>,
-    last_revealed_indices: BTreeMap<K, u32>,
     parallel_requests: usize,
-) -> Result<FullScanResponse<K>>
-where
-    K: Ord + Clone + Send,
-    C: EsploraScanClient + Clone + Send + Sync,
-{
-    let start_time = request.start_time();
-    let keychains = request.keychains();
-    let chain_tip = request.chain_tip();
-    let mut scan = ScanAccumulator::<K>::new(stop_gap);
-
-    for keychain in keychains {
-        if cancel_token.is_cancelled() {
-            return Err(Error::Cancelled);
-        }
-
-        let keychain_spks =
-            request.iter_spks(keychain.clone()).map(|(spk_i, spk)| (spk_i, spk.into()));
-        let keychain_result = fetch_txs_with_keychain_spks(
-            client.clone(),
-            start_time,
-            &events,
-            &chain_tip,
-            latest_blocks.as_ref(),
-            &cancel_token,
-            &mut scan,
-            keychain.clone(),
-            keychain_spks,
-            last_revealed_indices.get(&keychain).copied(),
-            stop_gap,
-            parallel_requests,
-        )
-        .await?;
-        scan.finish_keychain(keychain, keychain_result);
-    }
-
-    if cancel_token.is_cancelled() {
-        return Err(Error::Cancelled);
-    }
-
-    let (tx_update, last_active_indices) = scan.into_response_parts();
-    let chain_update = match (chain_tip, latest_blocks) {
-        (Some(chain_tip), Some(latest_blocks)) => {
-            Some(client.chain_update(&latest_blocks, &chain_tip, &tx_update.anchors).await?)
-        }
-        _ => None,
-    };
-    let response = FullScanResponse { chain_update, tx_update, last_active_indices };
-
-    send_complete_async_unless_cancelled(
-        &events,
-        &cancel_token,
-        clone_full_scan_response(&response),
-    )
-    .await?;
-
-    Ok(response)
+    scan: ScanAccumulator<K>,
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn fetch_txs_with_keychain_spks<K, I, C>(
-    client: C,
-    start_time: u64,
-    events: &flume::Sender<ScanEvent<K>>,
-    chain_tip: &Option<CheckPoint>,
-    latest_blocks: Option<&BTreeMap<u32, BlockHash>>,
-    cancel_token: &tokio_util::sync::CancellationToken,
-    scan: &mut ScanAccumulator<K>,
-    keychain: K,
-    keychain_spks: I,
-    last_revealed_index: Option<u32>,
-    stop_gap: usize,
-    parallel_requests: usize,
-) -> Result<KeychainScanResult>
+impl<K, C> EsploraScanSession<K, C>
 where
     K: Ord + Clone + Send,
-    I: Iterator<Item = Indexed<SpkWithExpectedTxids>> + Send,
     C: EsploraScanClient + Clone + Send + Sync,
 {
-    type TxsOfSpkIndex = (u32, Vec<esplora_client::Tx>, HashSet<Txid>, HashSet<Txid>);
+    async fn run_parts(
+        parts: ProgressiveScannerParts<K>,
+        client: C,
+        latest_blocks: Option<BTreeMap<u32, BlockHash>>,
+        parallel_requests: usize,
+    ) -> Result<FullScanResponse<K>> {
+        let ProgressiveScannerParts {
+            mut request,
+            stop_gap,
+            events,
+            cancel_token,
+            last_revealed_indices,
+        } = parts;
+        let start_time = request.start_time();
+        let chain_tip = request.chain_tip();
+        let scan = ScanAccumulator::new(stop_gap);
+        let session = Self {
+            client,
+            start_time,
+            stop_gap,
+            events,
+            cancel_token,
+            chain_tip,
+            latest_blocks,
+            parallel_requests,
+            scan,
+        };
 
-    let mut update = TxUpdate::<ConfirmationBlockTime>::default();
-    let mut stop_gap = StopGapTracker::new(stop_gap, last_revealed_index);
-    let mut batcher = SpkBatcher::new(keychain_spks);
+        session.run(&mut request, &last_revealed_indices).await
+    }
 
-    loop {
-        if cancel_token.is_cancelled() {
+    async fn run(
+        mut self,
+        request: &mut FullScanRequest<K>,
+        last_revealed_indices: &BTreeMap<K, u32>,
+    ) -> Result<FullScanResponse<K>> {
+        for keychain in request.keychains() {
+            if self.cancel_token.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+
+            let keychain_spks =
+                request.iter_spks(keychain.clone()).map(|(spk_i, spk)| (spk_i, spk.into()));
+            let keychain_result = self
+                .scan_keychain(
+                    keychain.clone(),
+                    keychain_spks,
+                    last_revealed_indices.get(&keychain).copied(),
+                )
+                .await?;
+            self.scan.finish_keychain(keychain, keychain_result);
+        }
+
+        if self.cancel_token.is_cancelled() {
             return Err(Error::Cancelled);
         }
 
-        let spks = batcher.next_batch(parallel_requests);
-        if spks.is_empty() {
-            break;
-        }
+        let (tx_update, last_active_indices) = self.scan.into_response_parts();
+        let chain_update = match (self.chain_tip, self.latest_blocks) {
+            (Some(chain_tip), Some(latest_blocks)) => Some(
+                self.client.chain_update(&latest_blocks, &chain_tip, &tx_update.anchors).await?,
+            ),
+            _ => None,
+        };
+        let response = FullScanResponse { chain_update, tx_update, last_active_indices };
 
-        let handles = spks
-            .into_iter()
-            .map(|(spk_index, spk)| {
-                let client = client.clone();
-                let expected_txids = spk.expected_txids;
-                let spk = spk.spk;
-                async move {
-                    let mut last_seen = None;
-                    let mut spk_txs = Vec::new();
-                    loop {
-                        let txs = client.scripthash_txs(&spk, last_seen).await?;
-                        let tx_count = txs.len();
-                        last_seen = txs.last().map(|tx| tx.txid);
-                        spk_txs.extend(txs);
-                        if tx_count < 25 {
-                            break;
-                        }
-                    }
-                    let got_txids = spk_txs.iter().map(|tx| tx.txid).collect::<HashSet<_>>();
-                    Result::<TxsOfSpkIndex, EsploraError>::Ok((
-                        spk_index,
-                        spk_txs,
-                        got_txids,
-                        expected_txids,
-                    ))
-                }
-            })
-            .collect::<FuturesOrdered<_>>();
+        send_complete_async_unless_cancelled(
+            &self.events,
+            &self.cancel_token,
+            clone_full_scan_response(&response),
+        )
+        .await?;
 
-        let mut partial_update = TxUpdate::<ConfirmationBlockTime>::default();
-        for (index, txs, got_txids, expected_txids) in
-            handles.try_collect::<Vec<TxsOfSpkIndex>>().await?
-        {
-            let used = !txs.is_empty();
-            let scan_progress = scan.checked(keychain.clone(), used);
-            send_progress(events, scan_progress);
-            stop_gap.record_spk(index, used);
-
-            for tx in txs {
-                if !scan.insert_txid(tx.txid) {
-                    continue;
-                }
-
-                partial_update.txs.push(tx.to_tx().into());
-                insert_anchor_or_seen_at_from_status(
-                    &mut partial_update,
-                    start_time,
-                    tx.txid,
-                    tx.status,
-                );
-                insert_prevouts(&mut partial_update, tx.vin);
-            }
-            insert_evicted_ats_from_expected(
-                &mut partial_update,
-                &expected_txids,
-                &got_txids,
-                start_time,
-            );
-        }
-
-        if !partial_update.is_empty() {
-            let partial_chain_update = match (chain_tip, latest_blocks) {
-                (Some(chain_tip), Some(latest_blocks)) => Some(
-                    client.chain_update(latest_blocks, chain_tip, &partial_update.anchors).await?,
-                ),
-                _ => None,
-            };
-            let scan_update = scan_update_for_keychain(
-                keychain.clone(),
-                &partial_update,
-                partial_chain_update,
-                stop_gap.last_active_index(),
-            );
-
-            send_update_async(events, scan_update).await?;
-            update.extend(partial_update);
-        }
-
-        if stop_gap.reached_stop_gap() {
-            break;
-        }
+        Ok(response)
     }
 
-    Ok(KeychainScanResult::new(update, stop_gap.last_active_index()))
+    async fn scan_keychain<I>(
+        &mut self,
+        keychain: K,
+        keychain_spks: I,
+        last_revealed_index: Option<u32>,
+    ) -> Result<KeychainScanResult>
+    where
+        I: Iterator<Item = Indexed<SpkWithExpectedTxids>> + Send,
+    {
+        type TxsOfSpkIndex = (u32, Vec<esplora_client::Tx>, HashSet<Txid>, HashSet<Txid>);
+
+        let mut update = TxUpdate::<ConfirmationBlockTime>::default();
+        let mut stop_gap = StopGapTracker::new(self.stop_gap, last_revealed_index);
+        let mut batcher = SpkBatcher::new(keychain_spks);
+
+        loop {
+            if self.cancel_token.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+
+            let spks = batcher.next_batch(self.parallel_requests);
+            if spks.is_empty() {
+                break;
+            }
+
+            let handles = spks
+                .into_iter()
+                .map(|(spk_index, spk)| {
+                    let client = self.client.clone();
+                    let expected_txids = spk.expected_txids;
+                    let spk = spk.spk;
+                    async move {
+                        let mut last_seen = None;
+                        let mut spk_txs = Vec::new();
+                        loop {
+                            let txs = client.scripthash_txs(&spk, last_seen).await?;
+                            let tx_count = txs.len();
+                            last_seen = txs.last().map(|tx| tx.txid);
+                            spk_txs.extend(txs);
+                            if tx_count < 25 {
+                                break;
+                            }
+                        }
+                        let got_txids = spk_txs.iter().map(|tx| tx.txid).collect::<HashSet<_>>();
+                        Result::<TxsOfSpkIndex, EsploraError>::Ok((
+                            spk_index,
+                            spk_txs,
+                            got_txids,
+                            expected_txids,
+                        ))
+                    }
+                })
+                .collect::<FuturesOrdered<_>>();
+
+            let mut partial_update = TxUpdate::<ConfirmationBlockTime>::default();
+            for (index, txs, got_txids, expected_txids) in
+                handles.try_collect::<Vec<TxsOfSpkIndex>>().await?
+            {
+                let used = !txs.is_empty();
+                let scan_progress = self.scan.checked(keychain.clone(), used);
+                send_progress(&self.events, scan_progress);
+                stop_gap.record_spk(index, used);
+
+                for tx in txs {
+                    if !self.scan.insert_txid(tx.txid) {
+                        continue;
+                    }
+
+                    partial_update.txs.push(tx.to_tx().into());
+                    insert_anchor_or_seen_at_from_status(
+                        &mut partial_update,
+                        self.start_time,
+                        tx.txid,
+                        tx.status,
+                    );
+                    insert_prevouts(&mut partial_update, tx.vin);
+                }
+                insert_evicted_ats_from_expected(
+                    &mut partial_update,
+                    &expected_txids,
+                    &got_txids,
+                    self.start_time,
+                );
+            }
+
+            if !partial_update.is_empty() {
+                let partial_chain_update = match (&self.chain_tip, &self.latest_blocks) {
+                    (Some(chain_tip), Some(latest_blocks)) => Some(
+                        self.client
+                            .chain_update(latest_blocks, chain_tip, &partial_update.anchors)
+                            .await?,
+                    ),
+                    _ => None,
+                };
+                let scan_update = scan_update_for_keychain(
+                    keychain.clone(),
+                    &partial_update,
+                    partial_chain_update,
+                    stop_gap.last_active_index(),
+                );
+
+                send_update_async(&self.events, scan_update).await?;
+                update.extend(partial_update);
+            }
+
+            if stop_gap.reached_stop_gap() {
+                break;
+            }
+        }
+
+        Ok(KeychainScanResult::new(update, stop_gap.last_active_index()))
+    }
 }
 
 fn insert_anchor_or_seen_at_from_status(
@@ -511,7 +523,7 @@ mod tests {
         chain::{
             BlockId, CheckPoint, ConfirmationBlockTime, TxUpdate,
             bitcoin::{Amount, BlockHash, OutPoint, ScriptBuf, Txid},
-            spk_client::SpkWithExpectedTxids,
+            spk_client::{FullScanRequest, SpkWithExpectedTxids},
         },
     };
     use futures::future::BoxFuture;
@@ -522,10 +534,11 @@ mod tests {
         Error, ScanEvent,
         core::ScanAccumulator,
         esplora::{
-            EsploraError, EsploraScanClient, IndexedBlockSource, MAX_INDEXED_TIP_LAG,
-            fetch_latest_indexed_blocks, fetch_txs_with_keychain_spks,
-            insert_anchor_or_seen_at_from_status, insert_prevouts, run_with_esplora_client,
+            EsploraError, EsploraScanClient, EsploraScanSession, IndexedBlockSource,
+            MAX_INDEXED_TIP_LAG, fetch_latest_indexed_blocks, insert_anchor_or_seen_at_from_status,
+            insert_prevouts,
         },
+        scanner::ProgressiveScannerParts,
         test_fixtures::{
             QueuedResponse, ResponseQueue, SharedCounter, block_hash, collect_events,
             confirmed_esplora_tx, empty_spks, esplora_input, esplora_tx, event_channel,
@@ -641,6 +654,38 @@ mod tests {
         }
     }
 
+    fn keychain_session(
+        client: FakeEsplora,
+        events: flume::Sender<ScanEvent<&'static str>>,
+    ) -> EsploraScanSession<&'static str, FakeEsplora> {
+        EsploraScanSession {
+            client,
+            start_time: 7,
+            stop_gap: 2,
+            events,
+            cancel_token: CancellationToken::new(),
+            chain_tip: None,
+            latest_blocks: None,
+            parallel_requests: 1,
+            scan: ScanAccumulator::new(2),
+        }
+    }
+
+    fn scanner_parts<K>(
+        request: FullScanRequest<K>,
+        events: flume::Sender<ScanEvent<K>>,
+        cancel_token: CancellationToken,
+        last_revealed_indices: BTreeMap<K, u32>,
+    ) -> ProgressiveScannerParts<K> {
+        ProgressiveScannerParts {
+            request,
+            stop_gap: 2,
+            events,
+            cancel_token,
+            last_revealed_indices,
+        }
+    }
+
     #[tokio::test]
     async fn latest_blocks_falls_back_to_latest_indexed_window() {
         let fake = FakeBlockSource::new(
@@ -688,26 +733,11 @@ mod tests {
     fn empty_histories_emit_progress_without_updates_until_stop_gap() {
         let fake = FakeEsplora::with_responses([Vec::new(), Vec::new(), Vec::new()]);
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = None;
+        let mut session = keychain_session(fake, events);
         let spks = empty_spks(5);
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake,
-            7,
-            &events,
-            &chain_tip,
-            None,
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            1,
-        ))
-        .expect("scan succeeds");
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None))
+            .expect("scan succeeds");
 
         let events = collect_events(receiver);
         assert!(result.update.is_empty());
@@ -721,26 +751,11 @@ mod tests {
         let txid = txid(8);
         let fake = FakeEsplora::with_responses([vec![esplora_tx(txid)], Vec::new(), Vec::new()]);
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = None;
+        let mut session = keychain_session(fake, events);
         let spks = empty_spks(5);
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake,
-            7,
-            &events,
-            &chain_tip,
-            None,
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            1,
-        ))
-        .expect("scan succeeds");
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None))
+            .expect("scan succeeds");
 
         let events = collect_events(receiver);
         let updates = events
@@ -769,28 +784,14 @@ mod tests {
             Vec::new(),
         ]);
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = None;
+        let mut session = keychain_session(fake, events);
+        session.parallel_requests = 2;
         let spks = [4, 1, 5, 6]
             .into_iter()
             .map(|index| (index, SpkWithExpectedTxids::from(ScriptBuf::new())));
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake,
-            7,
-            &events,
-            &chain_tip,
-            None,
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            2,
-        ))
-        .expect("scan succeeds");
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None))
+            .expect("scan succeeds");
 
         let update = receiver
             .try_iter()
@@ -810,27 +811,13 @@ mod tests {
         let tx = confirmed_esplora_tx(txid, 2, block_hash(2), 123);
         let fake = FakeEsplora::with_responses([vec![tx], Vec::new(), Vec::new()]);
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
-        let latest_blocks = BTreeMap::new();
+        let mut session = keychain_session(fake, events);
+        session.chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
+        session.latest_blocks = Some(BTreeMap::new());
         let spks = empty_spks(5);
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake,
-            7,
-            &events,
-            &chain_tip,
-            Some(&latest_blocks),
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            1,
-        ))
-        .expect("scan succeeds");
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None))
+            .expect("scan succeeds");
 
         let updates = receiver
             .try_iter()
@@ -855,27 +842,13 @@ mod tests {
         let fake =
             FakeEsplora::with_responses([vec![make_tx()], vec![make_tx()], Vec::new(), Vec::new()]);
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
-        let latest_blocks = BTreeMap::new();
+        let mut session = keychain_session(fake.clone(), events);
+        session.chain_tip = Some(CheckPoint::new(BlockId { height: 1, hash: block_hash(1) }));
+        session.latest_blocks = Some(BTreeMap::new());
         let spks = empty_spks(5);
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake.clone(),
-            7,
-            &events,
-            &chain_tip,
-            Some(&latest_blocks),
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            1,
-        ))
-        .expect("scan succeeds");
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None))
+            .expect("scan succeeds");
 
         let updates = receiver
             .try_iter()
@@ -900,14 +873,10 @@ mod tests {
         drop(receiver);
         let cancel_token = CancellationToken::new();
 
-        let result = futures::executor::block_on(run_with_esplora_client(
-            request,
-            2,
-            events,
-            cancel_token,
+        let result = futures::executor::block_on(EsploraScanSession::run_parts(
+            scanner_parts(request, events, cancel_token, BTreeMap::new()),
             fake,
             None,
-            BTreeMap::new(),
             1,
         ));
 
@@ -918,26 +887,11 @@ mod tests {
     fn cancelled_scan_returns_cancelled_without_update() {
         let fake = FakeEsplora::with_responses([Vec::new()]);
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        cancel_token.cancel();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = None;
+        let mut session = keychain_session(fake, events);
+        session.cancel_token.cancel();
         let spks = empty_spks(5);
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake,
-            7,
-            &events,
-            &chain_tip,
-            None,
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            1,
-        ));
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None));
 
         assert!(matches!(result, Err(Error::Cancelled)));
         assert!(receiver.try_iter().next().is_none());
@@ -947,25 +901,10 @@ mod tests {
     fn provider_error_does_not_emit_update() {
         let fake = FakeEsplora::with_history_error();
         let (events, receiver) = event_channel();
-        let cancel_token = CancellationToken::new();
-        let mut scan = ScanAccumulator::new(2);
-        let chain_tip = None;
+        let mut session = keychain_session(fake, events);
         let spks = empty_spks(5);
 
-        let result = futures::executor::block_on(fetch_txs_with_keychain_spks(
-            fake,
-            7,
-            &events,
-            &chain_tip,
-            None,
-            &cancel_token,
-            &mut scan,
-            "external",
-            spks,
-            None,
-            2,
-            1,
-        ));
+        let result = futures::executor::block_on(session.scan_keychain("external", spks, None));
 
         assert!(matches!(result, Err(Error::Esplora(_))));
         assert!(receiver.try_iter().next().is_none());
@@ -978,14 +917,10 @@ mod tests {
         let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
 
-        let response = futures::executor::block_on(run_with_esplora_client(
-            request,
-            2,
-            events,
-            cancel_token,
+        let response = futures::executor::block_on(EsploraScanSession::run_parts(
+            scanner_parts(request, events, cancel_token, BTreeMap::new()),
             fake,
             None,
-            BTreeMap::new(),
             1,
         ))
         .expect("scan succeeds");
@@ -1007,14 +942,10 @@ mod tests {
         let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
 
-        let response = futures::executor::block_on(run_with_esplora_client(
-            request,
-            2,
-            events,
-            cancel_token,
+        let response = futures::executor::block_on(EsploraScanSession::run_parts(
+            scanner_parts(request, events, cancel_token, last_revealed_indices),
             fake,
             None,
-            last_revealed_indices,
             1,
         ))
         .expect("scan succeeds");
@@ -1041,14 +972,10 @@ mod tests {
         drop(receiver);
         let cancel_token = CancellationToken::new();
 
-        let result = futures::executor::block_on(run_with_esplora_client(
-            request,
-            2,
-            events,
-            cancel_token,
+        let result = futures::executor::block_on(EsploraScanSession::run_parts(
+            scanner_parts(request, events, cancel_token, BTreeMap::new()),
             fake,
             None,
-            BTreeMap::new(),
             1,
         ));
 
@@ -1063,14 +990,10 @@ mod tests {
         let cancel_token = CancellationToken::new();
         cancel_token.cancel();
 
-        let result = futures::executor::block_on(run_with_esplora_client(
-            request,
-            2,
-            events,
-            cancel_token,
+        let result = futures::executor::block_on(EsploraScanSession::run_parts(
+            scanner_parts(request, events, cancel_token, BTreeMap::new()),
             fake,
             None,
-            BTreeMap::new(),
             1,
         ));
 
@@ -1086,14 +1009,10 @@ mod tests {
         let (events, receiver) = event_channel();
         let cancel_token = CancellationToken::new();
 
-        let result = futures::executor::block_on(run_with_esplora_client(
-            request,
-            2,
-            events,
-            cancel_token,
+        let result = futures::executor::block_on(EsploraScanSession::run_parts(
+            scanner_parts(request, events, cancel_token, BTreeMap::new()),
             fake,
             None,
-            BTreeMap::new(),
             1,
         ));
 
