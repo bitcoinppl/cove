@@ -12,10 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportSendChooseWallet
 import org.bitcoinppl.cove_core.KeyTeleportSendConfirm
@@ -110,13 +108,6 @@ internal fun SendConfirmView(
         title = "Confirm send",
         body = "Key Teleport will create an encrypted transfer for ${confirm.selectedWallet.name}.",
     )
-    if (confirm.warnsPassphraseNotIncluded) {
-        Text(
-            text = "BIP39 passphrases are not included. The receiver must know the passphrase separately.",
-            color = CoveColor.WarningOrange,
-            fontWeight = FontWeight.Medium,
-        )
-    }
     Button(
         onClick = { manager.dispatch(KeyTeleportManagerAction.ConfirmSendWallet) },
         modifier = Modifier.fillMaxWidth(),

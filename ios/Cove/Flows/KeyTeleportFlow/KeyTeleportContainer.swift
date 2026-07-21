@@ -935,12 +935,6 @@ private struct KeyTeleportSendConfirmView: View {
             Text("Send \(state.selectedWallet.name)")
                 .font(.headline)
 
-            if state.warnsPassphraseNotIncluded {
-                Text("Only the wallet words will be sent. Any BIP39 passphrase is not included.")
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
-            }
-
             Button(action: confirm) {
                 Text("Create Sender Response")
                     .frame(maxWidth: .infinity)
