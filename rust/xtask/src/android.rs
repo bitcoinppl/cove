@@ -20,6 +20,7 @@ use xshell::{cmd, Shell};
 // Android build constants
 const ANDROID_TARGETS: &[&str] =
     &["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"];
+const ARM64_ANDROID_TARGET: &str = "aarch64-linux-android";
 const JNI_LIBS_DIR: &str = "../android/app/src/main/jniLibs";
 const ANDROID_KOTLIN_DIR: &str = "../android/app/src/main/java";
 const BINDINGS_DIR: &str = "./bindings/kotlin";
@@ -58,6 +59,7 @@ pub enum BuildProfile {
 #[derive(Debug, Clone, Copy)]
 pub enum AndroidBuildTargets {
     All,
+    Arm64,
     ConnectedDevice,
 }
 
@@ -136,6 +138,7 @@ fn connected_device_target(sh: &Shell) -> Result<&'static str> {
 fn resolve_targets(sh: &Shell, build_targets: AndroidBuildTargets) -> Result<Vec<&'static str>> {
     match build_targets {
         AndroidBuildTargets::All => Ok(ANDROID_TARGETS.to_vec()),
+        AndroidBuildTargets::Arm64 => Ok(vec![ARM64_ANDROID_TARGET]),
         AndroidBuildTargets::ConnectedDevice => Ok(vec![connected_device_target(sh)?]),
     }
 }
@@ -175,8 +178,14 @@ pub fn build_android(
         }
     }
 
-    if matches!(build_targets, AndroidBuildTargets::ConnectedDevice) {
-        print_warning("Only building native Rust library for the connected Android device ABI");
+    match build_targets {
+        AndroidBuildTargets::All => {}
+        AndroidBuildTargets::Arm64 => {
+            print_warning("Only building native Rust library for ARM64 Android devices");
+        }
+        AndroidBuildTargets::ConnectedDevice => {
+            print_warning("Only building native Rust library for the connected Android device ABI");
+        }
     }
 
     // build for each target
