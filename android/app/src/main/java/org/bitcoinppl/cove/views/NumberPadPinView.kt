@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.performPinKeyPressHaptic
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import kotlin.math.roundToInt
 
@@ -59,8 +61,37 @@ fun NumberPadPinView(
 ) {
     var pin by remember { mutableStateOf("") }
     var animateField by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val hapticFeedback = LocalHapticFeedback.current
+
+    fun enterDigit(digit: String) {
+        if (isSubmitting || pin.length >= pinLength) return
+
+        hapticFeedback.performPinKeyPressHaptic()
+        pin += digit
+
+        if (pin.length == pinLength) {
+            val submittedPin = pin
+            isSubmitting = true
+
+            scope.launch {
+                delay(100)
+
+                if (isPinCorrect(submittedPin)) {
+                    pin = ""
+                    isSubmitting = false
+                    onUnlock(submittedPin)
+                } else {
+                    animateField = !animateField
+                    delay(490)
+                    pin = ""
+                    isSubmitting = false
+                }
+            }
+        }
+    }
 
     // shake animation on wrong PIN
     LaunchedEffect(animateField) {
@@ -168,25 +199,7 @@ fun NumberPadPinView(
             // numbers 1-9
             items((1..9).toList()) { number ->
                 NumberButton(number.toString()) {
-                    if (pin.length < pinLength) {
-                        pin += number.toString()
-
-                        // check PIN when complete
-                        if (pin.length == pinLength) {
-                            scope.launch {
-                                delay(100) // brief delay for user feedback
-
-                                if (isPinCorrect(pin)) {
-                                    onUnlock(pin)
-                                    pin = ""
-                                } else {
-                                    animateField = !animateField
-                                    delay(490) // wait for animation to complete
-                                    pin = ""
-                                }
-                            }
-                        }
-                    }
+                    enterDigit(number.toString())
                 }
             }
 
@@ -217,25 +230,7 @@ fun NumberPadPinView(
             // 0 button (bottom center)
             item {
                 NumberButton("0") {
-                    if (pin.length < pinLength) {
-                        pin += "0"
-
-                        // check PIN when complete
-                        if (pin.length == pinLength) {
-                            scope.launch {
-                                delay(100) // brief delay for user feedback
-
-                                if (isPinCorrect(pin)) {
-                                    onUnlock(pin)
-                                    pin = ""
-                                } else {
-                                    animateField = !animateField
-                                    delay(490) // wait for animation to complete
-                                    pin = ""
-                                }
-                            }
-                        }
-                    }
+                    enterDigit("0")
                 }
             }
 
@@ -247,7 +242,12 @@ fun NumberPadPinView(
                             .fillMaxWidth()
                             .testTag("numberPadPin.delete")
                             .clickable(
-                                onClick = { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
+                                onClick = {
+                                    if (isSubmitting || pin.isEmpty()) return@clickable
+
+                                    hapticFeedback.performPinKeyPressHaptic()
+                                    pin = pin.dropLast(1)
+                                },
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() },
                             ).padding(vertical = 20.dp),
