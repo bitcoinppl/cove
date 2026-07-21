@@ -50,8 +50,16 @@ struct CloudBackupDetailScreen: View {
                 isPasskeyMissing: isPasskeyMissing,
                 isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                 shouldShowLoadingState: shouldShowLoadingState,
-                onRecreate: { showRecreateConfirmation = true },
-                onReinitialize: { showReinitializeConfirmation = true }
+                onRecreate: {
+                    guard manager.isDetailInventoryComplete else { return }
+
+                    showRecreateConfirmation = true
+                },
+                onReinitialize: {
+                    guard manager.isDetailInventoryComplete else { return }
+
+                    showReinitializeConfirmation = true
+                }
             )
         }
         .navigationTitle("Cloud Backup")
@@ -60,6 +68,7 @@ struct CloudBackupDetailScreen: View {
             manager.dispatch(action: .enterDetail)
         }
         .onDisappear {
+            manager.dispatch(action: .closeDetail)
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
         }
         .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
@@ -76,8 +85,12 @@ struct CloudBackupDetailScreen: View {
             titleVisibility: .visible
         ) {
             Button("Recreate", role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 manager.dispatch(action: .recreateManifest)
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
@@ -90,8 +103,12 @@ struct CloudBackupDetailScreen: View {
             titleVisibility: .visible
         ) {
             Button("Reinitialize", role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 manager.dispatch(action: .reinitializeBackup)
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
@@ -117,7 +134,10 @@ struct CloudBackupDetailFormContent: View {
             UnsupportedPasskeyProviderContent(manager: manager)
         } else if isPasskeyMissing {
             MissingPasskeyContent(manager: manager)
-            DisableCloudBackupSection(manager: manager, detail: manager.detail)
+
+            if manager.isDetailInventoryComplete {
+                DisableCloudBackupSection(manager: manager, detail: manager.detail)
+            }
         } else {
             CloudBackupPendingUploadConfirmationSection(manager: manager)
 
@@ -133,7 +153,7 @@ struct CloudBackupDetailFormContent: View {
                 onRecreate: onRecreate,
                 onReinitialize: onReinitialize
             )
-            if manager.detail != nil {
+            if manager.detail != nil, manager.isDetailInventoryComplete {
                 DisableCloudBackupSection(manager: manager, detail: manager.detail)
             }
         }
@@ -147,76 +167,159 @@ struct CloudBackupStatusSection: View {
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
 
-    var body: some View {
-        if isVerifying, !hasVerificationResult {
-            Section {
-                VStack {
-                    ProgressView("Verifying cloud backup...")
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            }
-        } else if let detail = manager.detail, !isCancelled {
-            DetailFormContent(
-                detail: detail,
-                syncHealth: manager.syncHealth,
-                manager: manager
-            )
-        } else if shouldShowLoadingState {
-            Section {
-                VStack(spacing: 12) {
-                    ProgressView("Loading cloud backup...")
+    @AccessibilityFocusState private var inventoryErrorFocused: Bool
 
-                    Text("Finishing setup and fetching backup details")
+    var body: some View {
+        Group {
+            if manager.isDetailInventoryChecking, manager.detail != nil {
+                Section {
+                    HStack {
+                        ProgressView()
+                            .padding(.trailing, 8)
+
+                        Text("Checking for more cloud backups...")
+                    }
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("cloudBackup.inventory.checking")
+                }
+            }
+
+            if let error = manager.detailError {
+                Section {
+                    Label("Cloud backup inventory is incomplete", systemImage: "exclamationmark.icloud")
+                        .foregroundStyle(Color.statusError)
+                        .accessibilityFocused($inventoryErrorFocused)
+                        .accessibilityIdentifier("cloudBackup.inventory.incomplete")
+
+                    Text(error)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        manager.dispatch(action: .refreshDetail)
+                    } label: {
+                        Label("Check Again", systemImage: "arrow.clockwise")
+                    }
+                    .accessibilityIdentifier("cloudBackup.inventory.checkAgain")
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+            }
+
+            if isVerifying, !hasVerificationResult {
+                Section {
+                    VStack {
+                        ProgressView("Verifying cloud backup...")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+            } else if let detail = manager.detail, !isCancelled {
+                DetailFormContent(
+                    detail: detail,
+                    syncHealth: manager.syncHealth,
+                    manager: manager
+                )
+            } else if shouldShowLoadingState, manager.detailError == nil {
+                Section {
+                    VStack(spacing: 12) {
+                        ProgressView("Loading cloud backup...")
+
+                        Text("Finishing setup and fetching backup details")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
             }
         }
+        .onChange(of: manager.detailError, initial: true) { _, error in
+            inventoryErrorFocused = error != nil
+        }
+    }
+}
+
+enum CloudBackupPendingUploadAccessibilityStatus: Hashable {
+    case hidden
+    case confirming
+    case authorizationRequired
+    case failed
+}
+
+func cloudBackupPendingUploadAccessibilityStatus(
+    verificationState: CloudBackupVerificationState?,
+    syncState: CloudBackupSyncState?
+) -> CloudBackupPendingUploadAccessibilityStatus {
+    guard case .awaitingUploadConfirmation = verificationState else { return .hidden }
+
+    return switch syncState {
+    case .blocked: .authorizationRequired
+    case .failed: .failed
+    default: .confirming
     }
 }
 
 struct CloudBackupPendingUploadConfirmationSection: View {
     let manager: CloudBackupManager
 
+    @AccessibilityFocusState private var focusedStatus: CloudBackupPendingUploadAccessibilityStatus?
+
+    private var accessibilityStatus: CloudBackupPendingUploadAccessibilityStatus {
+        cloudBackupPendingUploadAccessibilityStatus(
+            verificationState: manager.verificationState,
+            syncState: manager.syncState
+        )
+    }
+
     var body: some View {
-        switch manager.verificationState {
-        case .awaitingUploadConfirmation:
-            if case .blocked = manager.syncState {
-                Section {
-                    Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
-                        .foregroundStyle(.orange)
-                }
-            } else if case let .failed(message) = manager.syncState {
-                Section {
-                    Label("Latest upload could not be confirmed", systemImage: "exclamationmark.icloud")
-                        .foregroundStyle(Color.statusError)
+        Group {
+            switch manager.verificationState {
+            case .awaitingUploadConfirmation:
+                if case .blocked = manager.syncState {
+                    Section {
+                        Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
+                            .foregroundStyle(.orange)
+                            .accessibilityFocused($focusedStatus, equals: .authorizationRequired)
+                    }
+                } else if case let .failed(message) = manager.syncState {
+                    Section {
+                        Label("Latest upload could not be confirmed", systemImage: "exclamationmark.icloud")
+                            .foregroundStyle(Color.statusError)
+                            .accessibilityFocused($focusedStatus, equals: .failed)
 
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    Button {
-                        manager.dispatch(action: .syncUnsynced)
-                    } label: {
-                        Label("Try Again", systemImage: "arrow.clockwise")
+                        Button {
+                            manager.dispatch(action: .syncUnsynced)
+                        } label: {
+                            Label("Try Again", systemImage: "arrow.clockwise")
+                        }
+                    }
+                } else {
+                    Section {
+                        HStack {
+                            ProgressView()
+                                .padding(.trailing, 8)
+
+                            Text("Confirming latest cloud upload")
+                        }
                     }
                 }
-            } else {
-                Section {
-                    HStack {
-                        ProgressView()
-                            .padding(.trailing, 8)
-
-                        Text("Confirming latest cloud upload")
-                    }
-                }
+            default:
+                EmptyView()
             }
-        default:
-            EmptyView()
+        }
+        .onChange(of: accessibilityStatus, initial: true) { _, status in
+            switch status {
+            case .authorizationRequired, .failed:
+                focusedStatus = status
+            case .hidden, .confirming:
+                focusedStatus = nil
+            }
         }
     }
 }

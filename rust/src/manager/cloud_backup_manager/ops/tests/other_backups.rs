@@ -156,7 +156,7 @@ async fn other_backup_summary_fails_closed_when_wallet_listing_is_missing() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn detail_refresh_marks_other_backups_failed_when_namespace_inspection_fails() {
+async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fails() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -176,16 +176,16 @@ async fn detail_refresh_marks_other_backups_failed_when_namespace_inspection_fai
     let Some(CloudBackupDetailResult::Success(detail)) =
         manager.refresh_cloud_backup_detail().await
     else {
-        panic!("expected cloud backup detail");
+        panic!("expected usable current cloud backup detail");
     };
 
     let CloudBackupOtherBackupsState::LoadFailed { error } = detail.other_backups else {
-        panic!("expected failed other backups state");
+        panic!("expected isolated other-backups failure");
     };
-    assert_eq!(
-        error,
-        "offline: Reconnect to the internet, then try refreshing cloud backup details again"
-    );
+
+    assert!(error.contains("Reconnect to the internet"), "{error}");
+    assert!(detail.up_to_date.is_empty());
+    assert!(detail.needs_sync.is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]

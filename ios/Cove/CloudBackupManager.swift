@@ -3,10 +3,35 @@ import SwiftUI
 
 extension WeakReconciler: CloudBackupManagerReconciler where Reconciler == CloudBackupManager {}
 
+extension CloudBackupDetailState {
+    var retainedDetailState: LoadedCloudBackupDetail? {
+        switch self {
+        case let .complete(state): state
+        case let .checking(retained): retained
+        case let .failed(_, _, retained): retained
+        case .notLoaded: nil
+        }
+    }
+
+    var inventoryError: String? {
+        guard case let .failed(_, error, _) = self else { return nil }
+        return error
+    }
+
+    var isChecking: Bool {
+        guard case .checking = self else { return false }
+        return true
+    }
+
+    var isComplete: Bool {
+        guard case .complete = self else { return false }
+        return true
+    }
+}
+
 @Observable
 final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler, @unchecked Sendable {
     static let shared = CloudBackupManager()
-    private static let staleVerificationThreshold: TimeInterval = 60 * 60 * 24 * 30
 
     typealias Action = CloudBackupManagerAction
     typealias Message = CloudBackupReconcileMessage
@@ -71,6 +96,11 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
     var lifecycleFailureMessage: String? {
         guard case let .failed(failure) = state.lifecycle else { return nil }
         return failure.message
+    }
+
+    var pendingEnableRecovery: CloudBackupPendingEnableRecovery? {
+        guard case let .pendingEnableRecovery(recovery) = state.lifecycle else { return nil }
+        return recovery
     }
 
     var isLifecycleDisabled: Bool {
@@ -197,22 +227,20 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         rust.isCloudBackupEnabled()
     }
 
-    var lastVerifiedAt: Date? {
-        guard case let .verified(report: _, lastVerifiedAt: lastVerifiedAt) = verificationState else { return nil }
-        guard let lastVerifiedAt else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(lastVerifiedAt))
-    }
-
-    var isVerificationStale: Bool {
-        if isBackgroundVerifying { return false }
-        guard isCloudBackupAvailable, !isUnverified else { return false }
-        guard let lastVerifiedAt else { return true }
-        return Date.now.timeIntervalSince(lastVerifiedAt) >= Self.staleVerificationThreshold
-    }
-
     var detail: CloudBackupDetail? {
-        guard case let .loaded(state: loaded) = configuredState?.detail else { return nil }
-        return loaded.detail
+        configuredState?.detail.retainedDetailState?.detail
+    }
+
+    var detailError: String? {
+        configuredState?.detail.inventoryError
+    }
+
+    var isDetailInventoryChecking: Bool {
+        configuredState?.detail.isChecking == true
+    }
+
+    var isDetailInventoryComplete: Bool {
+        configuredState?.detail.isComplete == true
     }
 
     var verificationPresentation: CloudBackupVerificationPresentation {
@@ -223,23 +251,25 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         switch configuredState?.detail {
         case nil, .notLoaded:
             .notFetched
-        case .loading:
-            .loading
-        case let .loaded(state: loaded):
+        case let .checking(retained):
+            retained?.cloudOnly ?? .loading
+        case let .complete(state: loaded):
             loaded.cloudOnly
-        case let .failed(error):
-            .failed(error: error)
+        case let .failed(_, error, retained):
+            retained?.cloudOnly ?? .failed(error: error)
         }
     }
 
     var cloudOnlyOperation: CloudOnlyOperation {
-        guard case let .loaded(state: loaded) = configuredState?.detail else { return .idle }
-        return loaded.cloudOnlyOperation
+        configuredState?.detail.retainedDetailState?.cloudOnlyOperation ?? .idle
+    }
+
+    var restoreAllState: CloudBackupRestoreAllState {
+        configuredState?.restoreAll ?? .notShown
     }
 
     var otherBackupsOperation: OtherBackupsOperation {
-        guard case let .loaded(state: loaded) = configuredState?.detail else { return .idle }
-        return loaded.otherBackupsOperation
+        configuredState?.detail.retainedDetailState?.otherBackupsOperation ?? .idle
     }
 
     func dispatch(action: Action) {
@@ -252,6 +282,32 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
 
     func startVerification(source: CloudBackupVerificationSource = .settings) {
         dispatch(.startVerification(source))
+    }
+
+    func startRestoreAll() {
+        dispatch(.startRestoreAll)
+    }
+
+    func retryRestoreAllRemaining() {
+        dispatch(.retryRestoreAllRemaining)
+    }
+
+    func cancelRestoreAll() {
+        dispatch(.cancelRestoreAll)
+    }
+
+    func consumeEnableCompletion(_ completion: TaggedItem<CloudBackupEnableContext>) {
+        guard enableCompletion?.id == completion.id else { return }
+
+        enableCompletion = nil
+    }
+
+    func onboardingEnableCompletionReadiness() async -> CloudBackupOnboardingCompletionReadiness {
+        await withCheckedContinuation { continuation in
+            rustBridge.async {
+                continuation.resume(returning: self.rust.onboardingEnableCompletionReadiness())
+            }
+        }
     }
 
     func apply(_ message: Message) {

@@ -129,7 +129,7 @@ internal fun VerificationSection(
             }
 
             CloudBackupVerificationState.AwaitingUploadConfirmation -> {
-                PasskeyConfirmedSectionContent(manager)
+                UploadConfirmationPendingContent()
             }
 
             is CloudBackupVerificationState.Failed -> {
@@ -161,8 +161,8 @@ internal fun VerificationSection(
             else -> Unit
         }
 
-        val needsSync = manager.detail?.needsSync?.isNotEmpty() == true
-        if (needsSync) {
+        val hasNeedsSync = manager.detail?.needsSync?.isNotEmpty() == true
+        if (shouldShowCloudBackupSyncAction(hasNeedsSync, manager.syncState)) {
             CloudBackupSimpleActionCard(
                 title = "Sync Now",
                 icon = Icons.Default.Refresh,
@@ -207,6 +207,36 @@ private fun CancelledVerificationActions(
         onClick = { manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery) },
         leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
     )
+}
+
+@Composable
+private fun UploadConfirmationPendingContent() {
+    val colors = cloudBackupVisualColors()
+
+    CloudBackupGlassCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Cloud Backup enabled",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.success,
+            )
+            Text(
+                "Cove is still confirming that your encrypted backup is visible in Google Drive. " +
+                    "You can leave this screen while confirmation continues in the background.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryText,
+            )
+        }
+    }
 }
 
 @Composable
@@ -367,8 +397,9 @@ private fun VerificationFailureContent(
             MaterialSettingsItem(
                 title = "Recreate Backup Index",
                 subtitle = failure.warning,
-                onClick = onRecreate,
+                onClick = if (manager.isDetailInventoryComplete) onRecreate else null,
                 leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                modifier = Modifier.cloudBackupActionEnabled(manager.isDetailInventoryComplete),
             )
         }
 
@@ -378,8 +409,9 @@ private fun VerificationFailureContent(
             MaterialSettingsItem(
                 title = "Reinitialize Cloud Backup",
                 subtitle = failure.warning,
-                onClick = onReinitialize,
+                onClick = if (manager.isDetailInventoryComplete) onReinitialize else null,
                 leadingContent = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
+                modifier = Modifier.cloudBackupActionEnabled(manager.isDetailInventoryComplete),
             )
         }
 

@@ -45,6 +45,9 @@ pub enum PasskeyFailureReason {
     #[error("platform authorization failed")]
     PlatformAuthorizationFailed,
 
+    #[error("platform authorization failed after presentation")]
+    PlatformAuthorizationFailedAfterPresentation,
+
     #[error("invalid response")]
     InvalidResponse,
 

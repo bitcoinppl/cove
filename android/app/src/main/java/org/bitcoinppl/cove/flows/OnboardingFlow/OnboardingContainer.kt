@@ -37,7 +37,10 @@ internal fun OnboardingContainer(
                 },
             )
 
-        OnboardingStep.CLOUD_CHECK -> CloudCheckContent()
+        OnboardingStep.CLOUD_CHECK ->
+            CloudCheckContent(
+                onContinue = { manager.dispatch(OnboardingAction.ContinueSetup) },
+            )
 
         OnboardingStep.RESTORE_OFFER ->
             BackableOnboardingStep(manager) {
@@ -62,7 +65,8 @@ internal fun OnboardingContainer(
         OnboardingStep.RESTORE_UNAVAILABLE ->
             BackableOnboardingStep(manager) {
                 OnboardingRestoreUnavailableScreen(
-                    onContinue = { manager.dispatch(OnboardingAction.ContinueWithoutCloudRestore) },
+                    onCheckAgain = { manager.dispatch(OnboardingAction.CheckCloudRestoreAgain) },
+                    onContinue = { manager.dispatch(OnboardingAction.ContinueSetup) },
                     onBack = { manager.dispatch(OnboardingAction.Back) },
                 )
             }

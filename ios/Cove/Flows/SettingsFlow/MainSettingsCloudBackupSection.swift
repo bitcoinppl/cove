@@ -19,6 +19,8 @@ struct MainSettingsCloudBackupSection: View {
                     MainSettingsCloudBackupEnablingRow()
                 case .restoring:
                     MainSettingsCloudBackupRestoringRow()
+                case .pendingEnableRecovery:
+                    cloudBackupRecoveryContent()
                 case let .failed(failure):
                     cloudBackupErrorContent(message: failure.message)
                 case .configured:
@@ -28,6 +30,24 @@ struct MainSettingsCloudBackupSection: View {
                     )
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func cloudBackupRecoveryContent() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "exclamationmark.icloud")
+                    .foregroundStyle(Color.statusWarning)
+                Text("Cloud Backup Needs Recovery")
+            }
+            Text("Open to review interrupted setup")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        SettingsRow(title: "Review", symbol: "arrow.right") {
+            onEnable()
         }
     }
 
@@ -68,15 +88,17 @@ struct MainSettingsCloudBackupEnabledRow: View {
     let onOpenDetail: () -> Void
 
     var body: some View {
-        HStack {
-            MainSettingsCloudBackupEnabledStatus(status: status)
-            Spacer()
-            settingsChevron
+        Button(action: onOpenDetail) {
+            HStack {
+                MainSettingsCloudBackupEnabledStatus(status: status)
+                Spacer()
+                settingsChevron
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onOpenDetail()
-        }
+        .buttonStyle(.plain)
+        .frame(minHeight: 44)
+        .accessibilityHint("Opens Cloud Backup details")
     }
 
     private var settingsChevron: some View {
@@ -176,6 +198,14 @@ struct MainSettingsCloudBackupEnabledStatus: View {
                 color: Color.statusWarning
             )
 
+        case .recoveryRequired:
+            cloudBackupStatusContent(
+                symbol: "exclamationmark.icloud",
+                title: "Cloud Backup Needs Recovery",
+                message: "Open to review interrupted setup",
+                color: Color.statusWarning
+            )
+
         case let .authorizationRequired(message):
             cloudBackupStatusContent(
                 symbol: "exclamationmark.icloud",
@@ -211,7 +241,7 @@ struct MainSettingsCloudBackupEnabledStatus: View {
                 Text(message)
                     .font(.caption2)
                     .foregroundStyle(color)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

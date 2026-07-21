@@ -119,7 +119,7 @@ impl CloudBackupSupervisor {
         claim: Option<CloudBackupExclusiveOperationClaim>,
         continuation: DeepVerificationContinuation,
     ) {
-        self.pending_verification_completion = None;
+        self.detail_workflow.clear_pending_completion();
         if matches!(
             manager.state.read().verification_presentation(),
             CloudBackupVerificationPresentation::ManualVerifying { .. }
@@ -153,13 +153,13 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
     ) -> ActorResult<()> {
         if let Some(claim) = claim
-            && self.active_operation != Some(claim)
+            && self.active_operation.claim() != Some(claim)
         {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
             if claim.is_some() {
-                self.active_operation = None;
+                self.active_operation.clear();
             }
             return Produces::ok(());
         };
@@ -263,11 +263,11 @@ impl CloudBackupSupervisor {
             CloudBackupError,
         >,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -288,7 +288,7 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                self.runtime_passkey_authorization = Some(authorization);
+                self.detail_workflow.set_authorization(authorization);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager
                         .resume_deep_verify_after_wrapper_repair(
@@ -322,11 +322,11 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
         result: CloudBackupDeepVerificationStep,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -386,11 +386,11 @@ impl CloudBackupSupervisor {
             DeepVerificationResult,
         >,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -444,11 +444,11 @@ impl CloudBackupSupervisor {
             DeepVerificationResult,
         >,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -483,17 +483,25 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
         completion: CloudBackupDeepVerificationAutoSyncCompletion,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
         let (result, pending_completion) = completion.into_parts();
-        if let Some(pending_completion) = pending_completion {
-            manager.replace_pending_verification_completion(pending_completion);
+        if let Some(pending_completion) = pending_completion
+            && let Err(error) = manager.replace_pending_verification_completion(pending_completion)
+        {
+            self.finish_deep_verification_continuation_with_error(
+                manager,
+                claim,
+                continuation,
+                error,
+            );
+            return Produces::ok(());
         }
         self.finish_deep_verification_continuation(manager, Some(claim), continuation, result);
         Produces::ok(())
@@ -520,6 +528,16 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
         result: DeepVerificationResult,
     ) {
+        let should_refresh_open_detail =
+            matches!(continuation, DeepVerificationContinuation::Manual { .. })
+                && matches!(
+                    &result,
+                    DeepVerificationResult::Verified(_)
+                        | DeepVerificationResult::AwaitingUploadConfirmation(_)
+                        | DeepVerificationResult::PasskeyConfirmed(_)
+                        | DeepVerificationResult::PasskeyMissing(_)
+                );
+
         if continuation.terminal_policy()
             == DeepVerificationTerminalPolicy::ClearActiveOperationBeforeConnectivityRetry
             && let Some(claim) = claim.take()
@@ -536,6 +554,11 @@ impl CloudBackupSupervisor {
         manager.persist_verification_result(&result);
         manager.handle_deep_verification_result(result);
 
+        if should_refresh_open_detail {
+            let plan = self.detail_workflow.request_refresh();
+            self.handle_detail_refresh_plan(manager.clone(), plan);
+        }
+
         if continuation.terminal_policy()
             == DeepVerificationTerminalPolicy::ClearActiveOperationAfterTerminalHandling
             && let Some(claim) = claim
@@ -549,7 +572,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -558,11 +581,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupReuploadedWallets, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -588,15 +611,15 @@ impl CloudBackupSupervisor {
                         &CloudBackupError::UnsupportedPasskeyProvider,
                     ),
                 );
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -609,11 +632,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -631,9 +654,9 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -646,11 +669,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPreparedPasskeyWrapperRepair, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -676,7 +699,7 @@ impl CloudBackupSupervisor {
                 manager.apply_recovery_state(RecoveryState::Idle);
                 manager
                     .present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::RepairPasskey);
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
@@ -686,15 +709,15 @@ impl CloudBackupSupervisor {
                         &CloudBackupError::UnsupportedPasskeyProvider,
                     ),
                 );
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -710,11 +733,11 @@ impl CloudBackupSupervisor {
             CloudBackupError,
         >,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -728,15 +751,23 @@ impl CloudBackupSupervisor {
                 {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
-                        error: error.to_string(),
+                        error: error.reader_message(),
                     });
-                    self.active_operation = None;
+                    self.active_operation.clear();
                     manager.project_exclusive_operation_finished(claim);
                     return Produces::ok(());
                 }
 
-                self.runtime_passkey_authorization = Some(authorization);
-                manager.finish_passkey_wrapper_repair(uploaded);
+                self.detail_workflow.set_authorization(authorization);
+                if let Err(error) = manager.finish_passkey_wrapper_repair(uploaded) {
+                    manager.apply_recovery_state(RecoveryState::Failed {
+                        action: RecoveryAction::RepairPasskey,
+                        error: error.reader_message(),
+                    });
+                    self.active_operation.clear();
+                    manager.project_exclusive_operation_finished(claim);
+                    return Produces::ok(());
+                }
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.prepare_passkey_repair_finalization().await;
                     send!(addr.complete_repair_passkey_finalization(claim, result));
@@ -745,9 +776,9 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -760,11 +791,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPasskeyRepairFinalization, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -772,17 +803,18 @@ impl CloudBackupSupervisor {
             .and_then(|finalization| manager.apply_passkey_repair_finalization(finalization))
         {
             Ok(()) => {
+                let detail_claim = self.detail_workflow.start_operation_result();
                 self.addr.send_fut_with(move |addr| async move {
                     let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_repair_passkey_refresh_detail(claim, result));
+                    send!(addr.complete_repair_passkey_refresh_detail(claim, detail_claim, result));
                 });
             }
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -793,30 +825,27 @@ impl CloudBackupSupervisor {
     pub async fn complete_repair_passkey_refresh_detail(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
+        detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
-        match result {
-            Some(CloudBackupDetailResult::Success(detail)) => {
-                manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
-            }
-            Some(CloudBackupDetailResult::AccessError(error)) => {
-                warn!("Failed to refresh detail after passkey repair: {error}");
-            }
-            None => {}
+        if self.detail_workflow.is_latest_result(detail_claim)
+            && let Some(result) = result
+        {
+            apply_refresh_detail_result(&manager, &result);
         }
 
         manager.refresh_sync_health();
         manager.apply_recovery_state(RecoveryState::Idle);
         manager.apply_verification_state(VerificationState::Idle);
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }

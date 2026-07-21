@@ -2,9 +2,14 @@ use cove_cspp::CsppStore as _;
 use cove_device::keychain::{Keychain, KeychainError};
 use tracing::warn;
 
+use super::{
+    PENDING_ENABLE_JOURNAL_VERSION, PendingEnableJournal, PendingEnableLocalMetadataSnapshot,
+};
+
 pub(crate) const CSPP_CREDENTIAL_ID_KEY: &str = "cspp::v1::credential_id";
 pub(crate) const CSPP_PRF_SALT_KEY: &str = "cspp::v1::prf_salt";
 pub(crate) const CSPP_NAMESPACE_ID_KEY: &str = "cspp::v1::namespace_id";
+pub(crate) const CSPP_PENDING_ENABLE_JOURNAL_KEY: &str = "cspp::v1::pending_enable_journal";
 
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBackupKeychain(Keychain);
@@ -18,6 +23,15 @@ pub(crate) enum CloudBackupKeychainError {
         "failed to roll back cloud backup keychain save after original error: {original}; rollback error: {rollback}"
     )]
     RollbackFailed { original: KeychainError, rollback: KeychainError },
+
+    #[error("could not encode pending Cloud Backup enable state: {0}")]
+    EncodePendingEnable(serde_json::Error),
+
+    #[error("could not decode pending Cloud Backup enable state: {0}")]
+    DecodePendingEnable(serde_json::Error),
+
+    #[error("unsupported pending Cloud Backup enable state version {0}")]
+    UnsupportedPendingEnableVersion(u8),
 }
 
 impl CloudBackupKeychain {
@@ -67,6 +81,59 @@ impl CloudBackupKeychain {
             (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
             (CSPP_NAMESPACE_ID_KEY, namespace_id.to_owned()),
         ])
+    }
+
+    pub(crate) fn snapshot_passkey_metadata(&self) -> PendingEnableLocalMetadataSnapshot {
+        PendingEnableLocalMetadataSnapshot {
+            credential_id: self.0.get(CSPP_CREDENTIAL_ID_KEY.into()),
+            prf_salt: self.0.get(CSPP_PRF_SALT_KEY.into()),
+            namespace_id: self.0.get(CSPP_NAMESPACE_ID_KEY.into()),
+        }
+    }
+
+    pub(crate) fn restore_passkey_metadata(
+        &self,
+        snapshot: &PendingEnableLocalMetadataSnapshot,
+    ) -> Result<(), CloudBackupKeychainError> {
+        self.restore_entries(&[
+            (CSPP_CREDENTIAL_ID_KEY.into(), snapshot.credential_id.clone()),
+            (CSPP_PRF_SALT_KEY.into(), snapshot.prf_salt.clone()),
+            (CSPP_NAMESPACE_ID_KEY.into(), snapshot.namespace_id.clone()),
+        ])?;
+        Ok(())
+    }
+
+    pub(crate) fn save_pending_enable_journal(
+        &self,
+        journal: &PendingEnableJournal,
+    ) -> Result<(), CloudBackupKeychainError> {
+        let encoded = serde_json::to_string(journal)
+            .map_err(CloudBackupKeychainError::EncodePendingEnable)?;
+        self.0.save(CSPP_PENDING_ENABLE_JOURNAL_KEY.into(), encoded)?;
+        Ok(())
+    }
+
+    pub(crate) fn load_pending_enable_journal(
+        &self,
+    ) -> Result<Option<PendingEnableJournal>, CloudBackupKeychainError> {
+        let Some(encoded) = self.0.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()) else {
+            return Ok(None);
+        };
+
+        let journal: PendingEnableJournal = serde_json::from_str(&encoded)
+            .map_err(CloudBackupKeychainError::DecodePendingEnable)?;
+        if journal.version() != PENDING_ENABLE_JOURNAL_VERSION {
+            return Err(CloudBackupKeychainError::UnsupportedPendingEnableVersion(
+                journal.version(),
+            ));
+        }
+
+        Ok(Some(journal))
+    }
+
+    pub(crate) fn delete_pending_enable_journal(&self) -> Result<(), CloudBackupKeychainError> {
+        self.delete_keychain_item_if_present(CSPP_PENDING_ENABLE_JOURNAL_KEY)?;
+        Ok(())
     }
 
     pub(crate) fn load_credential_id(&self) -> Option<Vec<u8>> {
@@ -143,6 +210,10 @@ impl CloudBackupKeychain {
         }
 
         if self.delete_prf_salt().is_err() {
+            failed = true;
+        }
+
+        if self.delete_pending_enable_journal().is_err() {
             failed = true;
         }
 

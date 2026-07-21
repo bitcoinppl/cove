@@ -849,8 +849,9 @@ mod tests {
             .select_wallet(manager.db.id.clone())
             .expect("selected wallet is set");
 
+        manager.ensure_selected_wallet().expect("selected wallet accepts import");
         manager
-            ._import_labels(sample_bip329_labels())
+            .save_imported_labels(Arc::unwrap_or_clone(sample_bip329_labels()).0, false)
             .expect("import into selected wallet succeeds");
 
         assert!(manager.db.labels.number_of_labels().expect("labels count loads") > 0);

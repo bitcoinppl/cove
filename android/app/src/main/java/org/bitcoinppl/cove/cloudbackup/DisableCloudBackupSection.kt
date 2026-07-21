@@ -34,6 +34,7 @@ import org.bitcoinppl.cove_core.OtherBackupsOperation
 internal fun DisableCloudBackupSection(
     manager: CloudBackupManager,
     detail: CloudBackupDetail?,
+    allowDisable: Boolean,
 ) {
     var showUnavailable by remember { mutableStateOf(false) }
     var showFirstConfirmation by remember { mutableStateOf(false) }
@@ -52,12 +53,14 @@ internal fun DisableCloudBackupSection(
 
     manager.disableFailure?.let { failure ->
         ErrorInlineMessage(failure.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-        CloudBackupSimpleActionCard(
-            title = "Try Again",
-            icon = Icons.Default.Refresh,
-            tint = colors.danger,
-            onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
-        )
+        if (allowDisable) {
+            CloudBackupSimpleActionCard(
+                title = "Try Again",
+                icon = Icons.Default.Refresh,
+                tint = colors.danger,
+                onClick = { manager.dispatch(CloudBackupManagerAction.DisableCloudBackup) },
+            )
+        }
 
         if (failure.canKeepEnabled) {
             CloudBackupSimpleActionCard(
@@ -84,24 +87,26 @@ internal fun DisableCloudBackupSection(
         }
     }
 
-    TextButton(
-        onClick = {
-            if (unavailableMessage != null) {
-                showUnavailable = true
-            } else {
-                showFirstConfirmation = true
-            }
-        },
-        enabled = !manager.isDisablingCloudBackup,
-        modifier =
-            Modifier
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        colors = ButtonDefaults.textButtonColors(contentColor = colors.danger),
-    ) {
-        Text("Disable Cloud Backup", style = MaterialTheme.typography.bodySmall)
-    }
+    if (allowDisable) {
+        TextButton(
+            onClick = {
+                if (unavailableMessage != null) {
+                    showUnavailable = true
+                } else {
+                    showFirstConfirmation = true
+                }
+            },
+            enabled = !manager.isDisablingCloudBackup,
+            modifier =
+                Modifier
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            colors = ButtonDefaults.textButtonColors(contentColor = colors.danger),
+        ) {
+            Text("Disable Cloud Backup", style = MaterialTheme.typography.bodySmall)
+        }
 
-    Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+    }
 
     if (showUnavailable) {
         AlertDialog(
@@ -123,6 +128,7 @@ internal fun DisableCloudBackupSection(
             text = { Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.") },
             confirmButton = {
                 TextButton(
+                    enabled = allowDisable,
                     onClick = {
                         showFirstConfirmation = false
                         showFinalConfirmation = true
@@ -146,6 +152,7 @@ internal fun DisableCloudBackupSection(
             },
             confirmButton = {
                 TextButton(
+                    enabled = allowDisable,
                     onClick = {
                         showFinalConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.DisableCloudBackup)
@@ -163,6 +170,10 @@ private fun disableUnavailableMessage(
     manager: CloudBackupManager,
     detail: CloudBackupDetail?,
 ): String? {
+    if (!manager.isDetailInventoryComplete) {
+        return "Cove is still checking Cloud Backup."
+    }
+
     if (manager.isDisablingCloudBackup) {
         return "Cove is already disabling Cloud Backup."
     }

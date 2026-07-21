@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
 
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_state() {
@@ -47,7 +48,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
     run_disable_cloud_backup(&manager).await;
     let error = disable_failure_message(&manager);
 
-    assert!(error.contains("clear cloud backup local keychain state"), "{error}");
+    assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
     assert!(!globals.cloud.has_namespace(&namespace));
     let PersistedCloudBackupState::Disabling(disabling) =
         Database::global().cloud_backup_state.get().unwrap()
@@ -55,12 +56,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
         panic!("expected persisted disabling state");
     };
     assert!(disabling.delete_started_at.is_some());
-    assert!(
-        disabling
-            .last_error
-            .as_deref()
-            .is_some_and(|message| message.contains("clear cloud backup local keychain state"))
-    );
+    assert!(disabling.last_error.as_deref() == Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 
     run_disable_cloud_backup(&manager).await;
@@ -407,16 +403,14 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
     run_disable_cloud_backup(&manager).await;
     let error = disable_failure_message(&manager);
 
-    assert!(error.contains("delete failed"), "{error}");
+    assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
     let PersistedCloudBackupState::Disabling(disabling) =
         Database::global().cloud_backup_state.get().unwrap()
     else {
         panic!("expected persisted disabling state");
     };
     assert!(disabling.delete_started_at.is_some());
-    assert!(
-        disabling.last_error.as_deref().is_some_and(|message| message.contains("delete failed"))
-    );
+    assert_eq!(disabling.last_error.as_deref(), Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
     assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 }
@@ -439,7 +433,10 @@ async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
     run_disable_cloud_backup(&manager).await;
     let error = disable_failure_message(&manager);
 
-    assert!(error.contains("list wallet backups"), "{error}");
+    assert_eq!(
+        error,
+        CloudBackupError::from(CloudStorageError::NotFound(String::new())).reader_message()
+    );
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 4);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
     assert!(globals.cloud.has_namespace(&namespace));
@@ -536,7 +533,7 @@ async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namesp
 
     run_disable_cloud_backup(&manager).await;
     let error = disable_failure_message(&manager);
-    assert!(error.contains("delete failed"), "{error}");
+    assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
 
     run_keep_cloud_backup_enabled(&manager).await;
 

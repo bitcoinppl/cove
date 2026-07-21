@@ -33,8 +33,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,9 +56,17 @@ import java.util.Locale
 
 private val CloudBackupDetailDateFormatter =
     DateTimeFormatter.ofPattern("MMM d, yyyy 'at' h:mm a", Locale.getDefault())
+private const val DISABLED_ACTION_ALPHA = 0.48f
 
 internal val CloudBackupDetailSectionSpacing = 14.dp
 internal val CloudBackupSectionTitleContentSpacing = 10.dp
+
+internal fun Modifier.cloudBackupActionEnabled(enabled: Boolean): Modifier =
+    if (enabled) {
+        this
+    } else {
+        alpha(DISABLED_ACTION_ALPHA).semantics { disabled() }
+    }
 
 internal data class CloudBackupVisualColors(
     val background: Color,
@@ -175,6 +188,10 @@ internal fun ErrorStateCard(
     body: String,
 ) {
     Card(
+        modifier =
+            Modifier.semantics(mergeDescendants = true) {
+                liveRegion = LiveRegionMode.Polite
+            },
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
@@ -420,7 +437,12 @@ internal fun ErrorInlineMessage(
     val colors = cloudBackupVisualColors()
 
     CloudBackupGlassCard(
-        modifier = modifier.fillMaxWidth(),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {
+                    liveRegion = LiveRegionMode.Polite
+                },
         fill = colors.dangerFill,
         border = colors.dangerBorder,
         shape = RoundedCornerShape(16.dp),

@@ -17,13 +17,8 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        if !self.start_saved_passkey_confirmation(
-            manager.clone(),
-            claim,
-            pending,
-            SavedPasskeyConfirmationRetry::Manual,
-        ) {
-            self.active_operation = None;
+        if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
+            self.active_operation.clear();
             manager.project_exclusive_operation_finished(claim);
         }
 
@@ -33,14 +28,13 @@ impl CloudBackupSupervisor {
     pub async fn complete_saved_passkey_confirmation(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        retry: SavedPasskeyConfirmationRetry,
         result: CloudBackupSavedPasskeyConfirmation,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -54,32 +48,15 @@ impl CloudBackupSupervisor {
                 manager.apply_enable_state(CloudBackupEnableState::UploadingBackup);
                 self.schedule_enable_upload(manager, claim, confirmed);
             }
-            CloudBackupSavedPasskeyConfirmation::Retry { pending, error }
-                if retry.should_retry(&error) =>
-            {
-                warn!("Automatic saved passkey confirmation will retry: {error}");
-                self.pending_enable_session = Some(pending);
-                manager.apply_enable_state(CloudBackupEnableState::WaitingForPasskeyAvailability);
-
-                if !self.schedule_enable_saved_passkey_wait_with_retry(claim, retry.after_retry()) {
-                    manager.apply_enable_state(
-                        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
-                            SavedPasskeyConfirmationMode::Manual,
-                        ),
-                    );
-                    self.active_operation = None;
-                    manager.project_exclusive_operation_finished(claim);
-                }
-            }
             CloudBackupSavedPasskeyConfirmation::Retry { pending, error } => {
-                warn!("Confirm saved passkey will retry: {error}");
+                warn!("Confirm saved passkey requires manual retry: {error}");
                 self.pending_enable_session = Some(pending);
                 manager.apply_enable_state(
                     CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                         SavedPasskeyConfirmationMode::Manual,
                     ),
                 );
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             CloudBackupSavedPasskeyConfirmation::Failed(error) => {
@@ -128,24 +105,6 @@ impl CloudBackupSupervisor {
         true
     }
 
-    pub(crate) fn schedule_enable_saved_passkey_wait_with_retry(
-        &self,
-        claim: CloudBackupExclusiveOperationClaim,
-        retry: SavedPasskeyConfirmationRetry,
-    ) -> bool {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule enable saved-passkey wait without supervisor addr");
-            return false;
-        };
-
-        cove_tokio::task::spawn(async move {
-            delay_before_new_passkey_auth().await;
-            send!(addr.complete_enable_saved_passkey_retry_wait(claim, retry));
-        });
-
-        true
-    }
-
     pub async fn complete_enable_saved_passkey_wait(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
@@ -163,11 +122,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         retry: SavedPasskeyConfirmationRetry,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -180,7 +139,7 @@ impl CloudBackupSupervisor {
                 );
                 self.finish_enable_operation(manager, claim);
             }
-            SavedPasskeyConfirmationRetry::Automatic { .. } => {
+            SavedPasskeyConfirmationRetry::Automatic => {
                 let pending = match self.pending_enable_session.take() {
                     Some(session @ PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)) => {
                         session
@@ -193,7 +152,7 @@ impl CloudBackupSupervisor {
                     }
                 };
 
-                if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending, retry) {
+                if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
                     self.clear_abandoned_enable_progress(&manager, claim);
                     self.finish_enable_operation(manager, claim);
                 }
@@ -208,7 +167,6 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         pending: PendingEnableSession,
-        retry: SavedPasskeyConfirmationRetry,
     ) -> bool {
         let Some(addr) = self.addr() else {
             self.pending_enable_session = Some(pending);
@@ -219,7 +177,7 @@ impl CloudBackupSupervisor {
         manager.apply_enable_state(CloudBackupEnableState::ConfirmingSavedPasskey);
         addr.send_fut_with(move |addr| async move {
             let result = manager.confirm_saved_passkey_from_session(pending).await;
-            send!(addr.complete_saved_passkey_confirmation(claim, retry, result));
+            send!(addr.complete_saved_passkey_confirmation(claim, result));
         });
 
         true

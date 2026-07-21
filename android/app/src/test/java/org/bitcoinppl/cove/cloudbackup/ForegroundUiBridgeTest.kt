@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -49,6 +50,27 @@ class ForegroundUiBridgeTest {
             launcher.launched.await()
 
             ForegroundUiBridge.pause(activity)
+            val result = ActivityResult(RESULT_OK, Intent("drive.authorization"))
+            ForegroundUiBridge.handleAuthorizationResult(result)
+
+            assertEquals(result, received.await())
+            ForegroundUiBridge.detach(activity)
+        }
+
+    @Test
+    fun authorizationWaitRemainsPendingWithoutAWatchdog() =
+        runBlocking {
+            val activity = unsafeInstance<FragmentActivity>()
+            val launcher = RecordingAuthorizationLauncher()
+            ForegroundUiBridge.attach(activity, launcher)
+
+            val received = async { ForegroundUiBridge.launchAuthorization(intentSenderRequest()) }
+            launcher.launched.await()
+
+            mainDispatcher.scheduler.advanceTimeBy(5 * 60_000L)
+
+            assertFalse(received.isCompleted)
+
             val result = ActivityResult(RESULT_OK, Intent("drive.authorization"))
             ForegroundUiBridge.handleAuthorizationResult(result)
 

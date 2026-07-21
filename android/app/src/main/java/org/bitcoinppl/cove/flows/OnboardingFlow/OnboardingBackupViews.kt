@@ -68,6 +68,7 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableBusyOverlay
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupEnableOnboardingView
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.cloudbackup.CloudBackupPendingEnableRecoveryContent
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupConfiguredState
@@ -199,4 +200,71 @@ internal fun OnboardingBackupWalletView(
     }
 }
 
+@Composable
+internal fun ReportOnboardingCloudBackupEnabled(
+    backupManager: CloudBackupManager,
+    onEnabled: () -> Unit,
+) {
+    var didReportEnabled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(backupManager.enableCompletion?.id, backupManager.lifecycle) {
+        if (didReportEnabled) return@LaunchedEffect
+
+        val completion = backupManager.enableCompletion
+        if (completion != null && isOnboardingCloudBackupEnableCompletion(completion.item)) {
+            backupManager.consumeEnableCompletion(completion)
+            didReportEnabled = true
+            onEnabled()
+            return@LaunchedEffect
+        }
+
+        val readiness = backupManager.onboardingEnableCompletionReadiness()
+        if (
+            didReportEnabled ||
+            !shouldCompleteOnboardingCloudBackupFromPersistedState(readiness)
+        ) {
+            return@LaunchedEffect
+        }
+
+        didReportEnabled = true
+        onEnabled()
+    }
+}
+
+@Composable
+internal fun OnboardingCloudBackupPresentationContent(
+    presentation: OnboardingCloudBackupStepPresentation,
+    branch: OnboardingBranch?,
+    actions: OnboardingCloudBackupStepActions,
+) {
+    when (presentation) {
+        is OnboardingCloudBackupStepPresentation.PendingEnableRecovery -> {
+            CloudBackupPendingEnableRecoveryContent(
+                recovery = presentation.recovery,
+                onConfirmCleanup = {
+                    routeOnboardingCloudBackupRecoveryIntent(
+                        OnboardingCloudBackupRecoveryIntent.REMOVE_INCOMPLETE_SETUP,
+                        dispatch = actions.dispatch,
+                        onSkip = actions.onSkip,
+                    )
+                },
+                onCancel = {
+                    routeOnboardingCloudBackupRecoveryIntent(
+                        OnboardingCloudBackupRecoveryIntent.SKIP,
+                        dispatch = actions.dispatch,
+                        onSkip = actions.onSkip,
+                    )
+                },
+            )
+        }
+
+        OnboardingCloudBackupStepPresentation.Enable -> {
+            OnboardingCloudBackupEnableContent(
+                branch = branch,
+                onEnable = actions.onEnable,
+                onSkip = actions.onSkip,
+            )
+        }
+    }
+}
 

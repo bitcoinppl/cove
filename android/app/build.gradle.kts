@@ -19,6 +19,8 @@ android {
         versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["notAnnotation"] =
+            "org.bitcoinppl.cove.test.StagedProcessFullLaunchTest"
         vectorDrawables {
             useSupportLibrary = true
         }

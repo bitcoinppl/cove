@@ -3,6 +3,7 @@ use super::*;
 mod discard;
 mod passkey_confirmation;
 mod recovery;
+mod restart;
 mod start;
 mod upload_finalization;
 
@@ -12,37 +13,17 @@ pub(crate) enum PendingEnableUploadSelection {
     RetryOrForceNewConfirmation,
 }
 
-const AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES: u8 = 2;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {
     Manual,
-    Automatic { retries_remaining: u8 },
+    Automatic,
 }
 
 impl SavedPasskeyConfirmationRetry {
     fn for_mode(mode: SavedPasskeyConfirmationMode) -> Self {
         match mode {
             SavedPasskeyConfirmationMode::Manual => Self::Manual,
-            SavedPasskeyConfirmationMode::Automatic => {
-                Self::Automatic { retries_remaining: AUTOMATIC_SAVED_PASSKEY_CONFIRMATION_RETRIES }
-            }
-        }
-    }
-
-    fn should_retry(self, error: &CloudBackupError) -> bool {
-        matches!(
-            self,
-            Self::Automatic { retries_remaining } if retries_remaining > 0
-        ) && matches!(error, CloudBackupError::Passkey(_))
-    }
-
-    fn after_retry(self) -> Self {
-        match self {
-            Self::Manual => Self::Manual,
-            Self::Automatic { retries_remaining } => {
-                Self::Automatic { retries_remaining: retries_remaining.saturating_sub(1) }
-            }
+            SavedPasskeyConfirmationMode::Automatic => Self::Automatic,
         }
     }
 }
@@ -50,8 +31,10 @@ impl SavedPasskeyConfirmationRetry {
 pub(crate) struct EnableRecoveryFinalization {
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: [u8; 32],
     pub(crate) active_critical_key: zeroize::Zeroizing<[u8; 32]>,
-    pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
+    pub(crate) pending_completion: PendingVerificationCompletion,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
 }
 
@@ -60,8 +43,10 @@ impl std::fmt::Debug for EnableRecoveryFinalization {
         f.debug_struct("EnableRecoveryFinalization")
             .field("context", &self.context)
             .field("namespace_id", &"<redacted>")
+            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field("prf_salt", &"<redacted>")
             .field("active_critical_key", &"<redacted>")
-            .field("pending_uploads_count", &self.pending_uploads.len())
+            .field("pending_uploads_count", &self.pending_completion.uploads().len())
             .field("cleanup_sources_count", &self.cleanup_sources.len())
             .finish()
     }
@@ -72,8 +57,26 @@ pub(crate) struct EnableUploadFinalization {
     pub(crate) passkey: zeroize::Zeroizing<UnpersistedPrfKey>,
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
-    pub(crate) encrypted_master: cove_cspp::backup_data::EncryptedMasterKeyBackup,
-    pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
+    pub(crate) pending_completion: PendingVerificationCompletion,
+}
+
+fn enable_pending_verification_completion(
+    namespace_id: String,
+    pending_uploads: Vec<PendingVerificationUpload>,
+) -> PendingVerificationCompletion {
+    PendingVerificationCompletion::new(
+        DeepVerificationReport {
+            master_key_wrapper_repaired: false,
+            local_master_key_repaired: false,
+            credential_recovered: false,
+            wallets_verified: 0,
+            wallets_failed: 0,
+            wallets_unsupported: 0,
+            detail: None,
+        },
+        namespace_id,
+        pending_uploads,
+    )
 }
 
 impl CloudBackupSupervisor {
@@ -94,7 +97,7 @@ impl CloudBackupSupervisor {
         manager.apply_enable_state(CloudBackupEnableState::Idle);
         manager
             .reconcile_runtime_status(RustCloudBackupManager::status_for_operation_error(&error));
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -121,12 +124,12 @@ impl CloudBackupSupervisor {
                 manager.reconcile_runtime_status(runtime_status);
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::ReinitializeBackup,
-                    error: error.to_string(),
+                    error: error.reader_message(),
                 });
             }
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -152,7 +155,7 @@ impl CloudBackupSupervisor {
             }
         }
 
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 }

@@ -166,7 +166,12 @@ internal fun isCloudBackupPresentationPresentable(
 }
 
 @Stable
-class CloudBackupPresentationCoordinator {
+class CloudBackupPresentationCoordinator internal constructor(
+    private val rootPromptSource: () -> CloudBackupRootPrompt = {
+        CloudBackupManager.getInstance().rootPrompt
+    },
+    private val presentationDelayMs: Long = PRESENTATION_DELAY_MS,
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var transitionJob: Job? = null
     private var ignoreNextDismissEvent = false
@@ -215,7 +220,7 @@ class CloudBackupPresentationCoordinator {
         }
 
     fun reconcile() {
-        val desired = CloudBackupManager.getInstance().rootPrompt.toRootPresentation()
+        val desired = rootPromptSource().toRootPresentation()
 
         if (desired == null) {
             requiresPresentationDelay = false
@@ -285,10 +290,10 @@ class CloudBackupPresentationCoordinator {
         transitionJob?.cancel()
         transitionJob =
             scope.launch {
-                delay(PRESENTATION_DELAY_MS)
+                delay(presentationDelayMs)
                 transitionJob = null
                 val queued = queuedPresentation ?: return@launch
-                if (CloudBackupManager.getInstance().rootPrompt.toRootPresentation() != queued) {
+                if (rootPromptSource().toRootPresentation() != queued) {
                     queuedPresentation = null
                     return@launch
                 }
@@ -342,6 +347,38 @@ private fun CloudBackupRootPrompt.toRootPresentation(): CloudBackupRootPresentat
 
 private fun existingPasskeyButtonTitle(hint: CloudBackupPasskeyHint?): String =
     hint?.let { "Use Existing Passkey (${it.nameSuffix})" } ?: "Use Existing Passkey"
+
+internal data class CloudBackupPasskeyChoicePresentation(
+    val passkeyHint: CloudBackupPasskeyHint?,
+    val message: String,
+    val secondaryActionTitle: String?,
+)
+
+internal fun cloudBackupPasskeyChoicePresentation(
+    intent: CloudBackupPasskeyChoiceIntent,
+): CloudBackupPasskeyChoicePresentation =
+    when (intent) {
+        is CloudBackupPasskeyChoiceIntent.Enable ->
+            CloudBackupPasskeyChoicePresentation(
+                passkeyHint = intent.v2,
+                message = "Would you like to use an existing passkey or start a new backup?",
+                secondaryActionTitle = "Start a New Backup",
+            )
+        is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly ->
+            CloudBackupPasskeyChoicePresentation(
+                passkeyHint = intent.v2,
+                message =
+                    "Cloud Backup may already exist. Use your existing passkey to continue, " +
+                        "or cancel and try again later.",
+                secondaryActionTitle = null,
+            )
+        is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
+            CloudBackupPasskeyChoicePresentation(
+                passkeyHint = null,
+                message = "Would you like to use an existing passkey or create a new one?",
+                secondaryActionTitle = "Create New Passkey",
+            )
+    }
 
 private fun existingBackupMessage(hint: CloudBackupPasskeyHint?): String =
     hint?.let {
@@ -491,42 +528,50 @@ fun CloudBackupPresentationHost(
         }
 
         is CloudBackupRootPresentation.PasskeyChoice -> {
+            val passkeyChoice = cloudBackupPasskeyChoicePresentation(presentation.intent)
+
             ChoiceAlertDialog(
                 title = "Passkey Options",
-                message = "Would you like to use an existing passkey or create a new one?",
+                message = passkeyChoice.message,
                 choices =
-                    listOf(
-                        DialogChoice(
-                            existingPasskeyButtonTitle(
-                                (presentation.intent as? CloudBackupPasskeyChoiceIntent.Enable)?.v2,
-                            ),
-                        ) {
-                            coordinator.dismissCurrentPresentation()
-                            when (val intent = presentation.intent) {
-                                is CloudBackupPasskeyChoiceIntent.Enable ->
-                                    manager.dispatch(
-                                        CloudBackupManagerAction.AcceptEnablePrompt(
-                                            CloudBackupEnablePromptChoice.USE_EXISTING,
-                                        ),
-                                    )
-                                is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
-                                    manager.dispatch(CloudBackupManagerAction.RepairPasskey)
-                            }
-                        },
-                        DialogChoice("Create New Passkey") {
-                            coordinator.dismissCurrentPresentation()
-                            when (val intent = presentation.intent) {
-                                is CloudBackupPasskeyChoiceIntent.Enable ->
-                                    manager.dispatch(
-                                        CloudBackupManagerAction.AcceptEnablePrompt(
-                                            CloudBackupEnablePromptChoice.CREATE_NEW,
-                                        ),
-                                    )
-                                is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
-                                    manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
-                            }
-                        },
-                    ),
+                    buildList {
+                        add(
+                            DialogChoice(existingPasskeyButtonTitle(passkeyChoice.passkeyHint)) {
+                                coordinator.dismissCurrentPresentation()
+                                when (presentation.intent) {
+                                    is CloudBackupPasskeyChoiceIntent.Enable,
+                                    is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly,
+                                    ->
+                                        manager.dispatch(
+                                            CloudBackupManagerAction.AcceptEnablePrompt(
+                                                CloudBackupEnablePromptChoice.USE_EXISTING,
+                                            ),
+                                        )
+                                    is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
+                                        manager.dispatch(CloudBackupManagerAction.RepairPasskey)
+                                }
+                            },
+                        )
+
+                        val secondaryActionTitle = passkeyChoice.secondaryActionTitle
+                            ?: return@buildList
+                        add(
+                            DialogChoice(secondaryActionTitle) {
+                                coordinator.dismissCurrentPresentation()
+                                when (presentation.intent) {
+                                    is CloudBackupPasskeyChoiceIntent.Enable ->
+                                        manager.dispatch(
+                                            CloudBackupManagerAction.AcceptEnablePrompt(
+                                                CloudBackupEnablePromptChoice.CREATE_NEW,
+                                            ),
+                                        )
+                                    is CloudBackupPasskeyChoiceIntent.EnableExistingPasskeyOnly -> Unit
+                                    is CloudBackupPasskeyChoiceIntent.RepairPasskey ->
+                                        manager.dispatch(CloudBackupManagerAction.RepairPasskeyNoDiscovery)
+                                }
+                            },
+                        )
+                    },
                 onDismiss = {
                     if (!coordinator.consumeDismissEvent()) {
                         manager.dispatch(CloudBackupManagerAction.DismissPasskeyChoicePrompt)

@@ -148,6 +148,7 @@ impl CloudWalletInventory {
                 .or(Some(wallet.local_label_count)),
             backup_updated_at: self.backup_updated_at_for_wallet(wallet),
             sync_status: self.sync_status_for_wallet(wallet),
+            restore_failure: None,
             record_id: wallet.record_id.clone(),
         }
     }

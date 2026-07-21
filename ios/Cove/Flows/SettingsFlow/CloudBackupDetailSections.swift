@@ -162,10 +162,13 @@ struct DisableCloudBackupSection: View {
                     .foregroundStyle(Color.statusError)
 
                 Button {
+                    guard manager.isDetailInventoryComplete else { return }
+
                     manager.dispatch(action: .disableCloudBackup)
                 } label: {
                     Label("Try Again", systemImage: "arrow.clockwise")
                 }
+                .disabled(!manager.isDetailInventoryComplete)
 
                 if failure.canKeepEnabled {
                     Button {
@@ -177,6 +180,8 @@ struct DisableCloudBackupSection: View {
             }
 
             Button(role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 if unavailableMessage != nil {
                     showingUnavailableAlert = true
                 } else {
@@ -186,7 +191,7 @@ struct DisableCloudBackupSection: View {
                 Text("Disable Cloud Backup")
                     .font(.footnote)
             }
-            .disabled(manager.isDisablingCloudBackup)
+            .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
         }
         .alert("Cloud Backup Can't Be Disabled Yet", isPresented: $showingUnavailableAlert) {
@@ -200,16 +205,24 @@ struct DisableCloudBackupSection: View {
             titleVisibility: .visible
         ) {
             Button("Continue", role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 showingFinalConfirmation = true
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.")
         }
         .alert("Delete Cloud Backups?", isPresented: $showingFinalConfirmation) {
             Button("Delete Cloud Backups and Disable", role: .destructive) {
+                guard manager.isDetailInventoryComplete else { return }
+
                 manager.dispatch(action: .disableCloudBackup)
             }
+            .disabled(!manager.isDetailInventoryComplete)
+
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.")

@@ -15,6 +15,9 @@ pub(crate) fn cloud_check_inconclusive_message(issue: CloudCheckIssue) -> String
         CloudCheckIssue::CloudUnavailable => {
             "We couldn't confirm whether a cloud backup is available because cloud storage may be unavailable. You can still try restoring with your passkey if you're reinstalling this device.".into()
         }
+        CloudCheckIssue::BackupMetadataPending => {
+            "Cove found cloud backup data, but its recovery files are still loading. You can try restoring now or check again in a moment.".into()
+        }
         CloudCheckIssue::Unknown => {
             "We couldn't confirm whether a cloud backup is available. You can still try restoring with your passkey if you're reinstalling this device.".into()
         }
@@ -27,9 +30,24 @@ pub(crate) struct CloudRestoreBackupSnapshot {
     pub(crate) provider_hint: Option<CloudRestoreProviderHint>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum CloudRestoreInspectionError {
+    #[error(transparent)]
+    Storage(#[from] CloudStorageError),
+
+    #[error("cloud backup namespace metadata is visible before its recovery files")]
+    BackupMetadataPending,
+}
+
+impl CloudRestoreInspectionError {
+    fn is_retryable(&self) -> bool {
+        matches!(self, Self::BackupMetadataPending)
+    }
+}
+
 pub(crate) async fn inspect_cloud_restore_backup(
     cloud: CloudStorageClient,
-) -> Result<CloudRestoreBackupSnapshot, CloudStorageError> {
+) -> Result<CloudRestoreBackupSnapshot, CloudRestoreInspectionError> {
     let namespaces = cloud.list_namespaces().await?;
     if namespaces.is_empty() {
         info!("Onboarding: cloud backup namespace check found no namespaces");
@@ -53,25 +71,27 @@ struct InspectedCloudRestoreNamespaces {
 async fn inspect_cloud_restore_namespaces(
     cloud: &CloudStorageClient,
     namespaces: Vec<String>,
-) -> Result<InspectedCloudRestoreNamespaces, CloudStorageError> {
+) -> Result<InspectedCloudRestoreNamespaces, CloudRestoreInspectionError> {
     let mut hints = Vec::new();
     let mut found_backup = false;
-    let mut first_non_not_found_error = None;
+    let mut fallback_download_error = None;
 
     for namespace in namespaces {
         let master_json = match cloud.download_master_key_backup(namespace.clone()).await {
             Ok(master_json) => master_json,
             Err(error @ CloudStorageError::NotFound(_)) => {
                 info!("No cloud restore backup namespace={namespace} reason=not_found");
-                record_cloud_restore_download_error(&mut first_non_not_found_error, error);
+                record_cloud_restore_download_error(&mut fallback_download_error, error);
                 continue;
             }
             Err(error) => {
                 info!("No cloud restore backup namespace={namespace} reason=download_failed");
-                record_cloud_restore_download_error(&mut first_non_not_found_error, error);
+                record_cloud_restore_download_error(&mut fallback_download_error, error);
                 continue;
             }
         };
+
+        found_backup = true;
 
         let Ok(encrypted) = serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json) else {
             info!(
@@ -79,7 +99,6 @@ async fn inspect_cloud_restore_namespaces(
             );
             continue;
         };
-        found_backup = true;
 
         if encrypted.remote_metadata.normalized_master_key(&namespace).is_err() {
             info!(
@@ -116,19 +135,26 @@ async fn inspect_cloud_restore_namespaces(
         });
     }
 
-    if let Some(error) = first_non_not_found_error {
-        return Err(error);
+    match fallback_download_error {
+        Some(CloudStorageError::NotFound(_)) | None => {
+            Err(CloudRestoreInspectionError::BackupMetadataPending)
+        }
+        Some(error) => Err(error.into()),
     }
-
-    Ok(InspectedCloudRestoreNamespaces { has_backup: false, provider_hint: None })
 }
 
 pub(crate) fn record_cloud_restore_download_error(
-    first_non_not_found_error: &mut Option<CloudStorageError>,
+    fallback_download_error: &mut Option<CloudStorageError>,
     error: CloudStorageError,
 ) {
-    if !matches!(error, CloudStorageError::NotFound(_)) {
-        first_non_not_found_error.get_or_insert(error);
+    let should_replace = match fallback_download_error {
+        None => true,
+        Some(CloudStorageError::NotFound(_)) => !matches!(error, CloudStorageError::NotFound(_)),
+        Some(_) => false,
+    };
+
+    if should_replace {
+        *fallback_download_error = Some(error);
     }
 }
 
@@ -152,7 +178,9 @@ pub(crate) async fn determine_cloud_check_outcome<F, Fut, S>(
 ) -> CloudCheckOutcome
 where
     F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<CloudRestoreBackupSnapshot, CloudStorageError>>,
+    Fut: std::future::Future<
+            Output = Result<CloudRestoreBackupSnapshot, CloudRestoreInspectionError>,
+        >,
     S: backon::Sleeper,
 {
     let max_retries = 6;
@@ -168,7 +196,10 @@ where
             .with_max_times(max_retries),
     )
     .sleep(sleep)
-    .notify(|error: &CloudStorageError, _| warn!("Onboarding: cloud backup check failed: {error}"))
+    .when(CloudRestoreInspectionError::is_retryable)
+    .notify(|error: &CloudRestoreInspectionError, _| {
+        warn!("Onboarding: cloud backup check failed: {error}");
+    })
     .await;
 
     match result {
@@ -180,7 +211,11 @@ where
             info!("Onboarding: cloud backup check completed backup_found=false");
             CloudCheckOutcome::NoBackupConfirmed
         }
-        Err(error) => {
+        Err(CloudRestoreInspectionError::BackupMetadataPending) => {
+            warn!("Onboarding: cloud backup recovery metadata is still loading");
+            CloudCheckOutcome::Inconclusive(CloudCheckIssue::BackupMetadataPending)
+        }
+        Err(CloudRestoreInspectionError::Storage(error)) => {
             warn!("Onboarding: final cloud backup check failed: {error}");
             CloudCheckOutcome::Inconclusive(error.into())
         }

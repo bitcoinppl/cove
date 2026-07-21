@@ -64,7 +64,7 @@ struct VerificationSection: View {
                 CloudBackupPasskeyConfirmedSection(manager: manager, isBusy: isBusy)
             }
         case .awaitingUploadConfirmation:
-            CloudBackupPasskeyConfirmedSection(manager: manager, isBusy: isBusy)
+            CloudBackupUploadConfirmationPendingSection()
         case let .failed(failure):
             failureSection(failure)
         }
@@ -214,6 +214,8 @@ struct VerificationSection: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(role: .destructive) {
+            guard manager.isDetailInventoryComplete else { return }
+
             action()
         } label: {
             if manager.destructiveOperationState == operation {
@@ -226,7 +228,7 @@ struct VerificationSection: View {
                 Label(title, systemImage: systemImage)
             }
         }
-        .disabled(isBusy)
+        .disabled(isBusy || !manager.isDetailInventoryComplete)
     }
 
     private func retryButton(retryAction: CloudBackupRetryAction?) -> some View {
@@ -240,6 +242,19 @@ struct VerificationSection: View {
             Label("Try Again", systemImage: "arrow.clockwise")
         }
         .disabled(isBusy)
+    }
+}
+
+private struct CloudBackupUploadConfirmationPendingSection: View {
+    var body: some View {
+        Section {
+            Label("Cloud Backup enabled", systemImage: "icloud.and.arrow.up.fill")
+                .foregroundStyle(Color.statusSuccess)
+
+            Text("Cove is still confirming that your encrypted backup is visible in iCloud. You can leave this screen while confirmation continues in the background.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

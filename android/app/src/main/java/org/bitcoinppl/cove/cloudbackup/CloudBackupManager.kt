@@ -5,25 +5,32 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
+import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
+import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
 import org.bitcoinppl.cove_core.CloudBackupProgress
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
+import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupState
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
@@ -31,10 +38,10 @@ import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
+import org.bitcoinppl.cove_core.LoadedCloudBackupDetail
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.RustCloudBackupManager
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
-import java.util.concurrent.atomic.AtomicBoolean
 
 @Stable
 class CloudBackupManager private constructor(
@@ -68,6 +75,9 @@ class CloudBackupManager private constructor(
         private set
 
     var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
+        private set
+
+    var enableCompletion by mutableStateOf<TaggedItem<CloudBackupEnableContext>?>(null)
         private set
 
     private var hasReconciledDisabledState = false
@@ -126,8 +136,17 @@ class CloudBackupManager private constructor(
     val syncState: CloudBackupSyncState?
         get() = configuredState?.sync
 
+    val restoreAllState: CloudBackupRestoreAllState
+        get() = configuredState?.restoreAll ?: CloudBackupRestoreAllState.NotShown
+
+    val isRestoreAllRunning: Boolean
+        get() = restoreAllState is CloudBackupRestoreAllState.Running
+
     val lifecycleFailureMessage: String?
         get() = (state.lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message
+
+    val pendingEnableRecovery: CloudBackupPendingEnableRecovery?
+        get() = (state.lifecycle as? CloudBackupLifecycle.PendingEnableRecovery)?.v1
 
     val isLifecycleDisabled: Boolean
         get() = state.lifecycle is CloudBackupLifecycle.Disabled
@@ -183,9 +202,23 @@ class CloudBackupManager private constructor(
         get() =
             when (val lifecycle = state.lifecycle) {
                 is CloudBackupLifecycle.Configured ->
-                    (lifecycle.v1.detail as? CloudBackupDetailState.Loaded)?.state?.detail
+                    when (val detail = lifecycle.v1.detail) {
+                        is CloudBackupDetailState.Complete -> detail.state.detail
+                        is CloudBackupDetailState.Checking -> detail.retained?.detail
+                        is CloudBackupDetailState.Failed -> detail.retained?.detail
+                        else -> null
+                    }
                 else -> null
             }
+
+    val detailError: String?
+        get() = (configuredState?.detail as? CloudBackupDetailState.Failed)?.error
+
+    val isDetailInventoryChecking: Boolean
+        get() = configuredState?.detail is CloudBackupDetailState.Checking
+
+    val isDetailInventoryComplete: Boolean
+        get() = configuredState?.detail is CloudBackupDetailState.Complete
 
     val verificationPresentation: CloudBackupVerificationPresentation
         get() = configuredState?.verificationPresentation ?: CloudBackupVerificationPresentation.Hidden(null)
@@ -196,9 +229,10 @@ class CloudBackupManager private constructor(
                 is CloudBackupLifecycle.Configured ->
                     when (val detail = lifecycle.v1.detail) {
                         is CloudBackupDetailState.NotLoaded -> CloudOnlyState.NotFetched
-                        is CloudBackupDetailState.Loading -> CloudOnlyState.Loading
-                        is CloudBackupDetailState.Loaded -> detail.state.cloudOnly
-                        is CloudBackupDetailState.Failed -> CloudOnlyState.Failed(detail.v1)
+                        is CloudBackupDetailState.Checking -> detail.retained?.cloudOnly ?: CloudOnlyState.Loading
+                        is CloudBackupDetailState.Complete -> detail.state.cloudOnly
+                        is CloudBackupDetailState.Failed ->
+                            detail.retained?.cloudOnly ?: CloudOnlyState.Failed(detail.error)
                     }
                 else -> CloudOnlyState.NotFetched
             }
@@ -207,8 +241,7 @@ class CloudBackupManager private constructor(
         get() =
             when (val lifecycle = state.lifecycle) {
                 is CloudBackupLifecycle.Configured ->
-                    (lifecycle.v1.detail as? CloudBackupDetailState.Loaded)
-                        ?.state
+                    loadedDetailState(lifecycle.v1.detail)
                         ?.cloudOnlyOperation ?: CloudOnlyOperation.Idle
                 else -> CloudOnlyOperation.Idle
             }
@@ -217,11 +250,18 @@ class CloudBackupManager private constructor(
         get() =
             when (val lifecycle = state.lifecycle) {
                 is CloudBackupLifecycle.Configured ->
-                    (lifecycle.v1.detail as? CloudBackupDetailState.Loaded)
-                        ?.state
+                    loadedDetailState(lifecycle.v1.detail)
                         ?.otherBackupsOperation ?: OtherBackupsOperation.Idle
                 else -> OtherBackupsOperation.Idle
             }
+
+    private fun loadedDetailState(detail: CloudBackupDetailState): LoadedCloudBackupDetail? =
+        when (detail) {
+            is CloudBackupDetailState.Complete -> detail.state
+            is CloudBackupDetailState.Checking -> detail.retained
+            is CloudBackupDetailState.Failed -> detail.retained
+            else -> null
+        }
 
     val destructiveOperationState: CloudBackupDestructiveOperationState
         get() = configuredState?.destructiveOperation ?: CloudBackupDestructiveOperationState.Idle
@@ -246,19 +286,6 @@ class CloudBackupManager private constructor(
     val isConfigured: Boolean
         get() = state.lifecycle is CloudBackupLifecycle.Configured
 
-    val lastVerifiedAt: ULong?
-        get() =
-            when (
-                val verification =
-                    (state.lifecycle as? CloudBackupLifecycle.Configured)?.v1?.verification
-            ) {
-                is CloudBackupVerificationState.Verified -> verification.lastVerifiedAt
-                else -> null
-            }
-
-    val isVerificationStale: Boolean
-        get() = lastVerifiedAt == null && isCloudBackupAvailable && !shouldPromptVerification
-
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
             runCatching {
@@ -271,6 +298,19 @@ class CloudBackupManager private constructor(
                 }
         }
     }
+
+    fun consumeEnableCompletion(completion: TaggedItem<CloudBackupEnableContext>) {
+        if (enableCompletion?.id != completion.id) return
+
+        enableCompletion = null
+    }
+
+    suspend fun onboardingEnableCompletionReadiness(): CloudBackupOnboardingCompletionReadiness =
+        withContext(Dispatchers.IO) {
+            withRustOr(CloudBackupOnboardingCompletionReadiness.NOT_READY) {
+                onboardingEnableCompletionReadiness()
+            }
+        }
 
     fun syncPersistedState() {
         rustScope.launch {
@@ -340,7 +380,8 @@ class CloudBackupManager private constructor(
         when (message) {
             is CloudBackupReconcileMessage.Lifecycle ->
                 state = state.copy(lifecycle = message.v1, settingsRowStatus = message.v2)
-            is CloudBackupReconcileMessage.EnableCompleted -> Unit
+            is CloudBackupReconcileMessage.EnableCompleted ->
+                enableCompletion = TaggedItem(message.v1)
         }.let {}
 
         refreshPersistedEnabledState(forceDisabledNotification = wasDisablingCloudBackup)

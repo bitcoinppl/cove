@@ -3,7 +3,7 @@ import AuthenticationServices
 @_exported import CoveCore
 import Foundation
 
-private enum PasskeyOperationContext: Equatable {
+enum PasskeyOperationContext: Equatable {
     case registration
     case discoverAssertion
     case authenticateAssertion
@@ -29,6 +29,15 @@ private enum PasskeyOperationContext: Equatable {
             .authenticateAssertion
         }
     }
+}
+
+func passkeyUnexpectedCredentialError(
+    operation: PasskeyOperation
+) -> PasskeyError {
+    PasskeyError.RequestFailed(
+        operation: operation,
+        reason: .unexpectedCredentialType
+    )
 }
 
 final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
@@ -210,17 +219,15 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             return ctrl
         }
 
-        _ = controller
-        let credential = try delegate.waitForResult()
+        let credential = try delegate.waitForResult {
+            controller.cancel()
+        }
 
         guard
             let registration =
             credential as? ASAuthorizationPlatformPublicKeyCredentialRegistration
         else {
-            throw PasskeyError.RequestFailed(
-                operation: .registration,
-                reason: .unexpectedCredentialType
-            )
+            throw passkeyUnexpectedCredentialError(operation: .registration)
         }
 
         Log.info("[PASSKEY] registration request succeeded credential_len=\(registration.credentialID.count)")
@@ -314,20 +321,15 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             return ctrl
         }
 
-        _ = controller
-        let credential = try delegate.waitForResult()
+        let credential = try delegate.waitForResult {
+            controller.cancel()
+        }
 
         guard
             let assertion =
             credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion
         else {
-            if credentialId == nil {
-                throw PasskeyError.NoCredentialFound
-            }
-            throw PasskeyError.RequestFailed(
-                operation: context.operation,
-                reason: .unexpectedCredentialType
-            )
+            throw passkeyUnexpectedCredentialError(operation: context.operation)
         }
 
         Log.info("[PASSKEY] \(context.logDescription) request succeeded credential_len=\(assertion.credentialID.count)")
@@ -389,27 +391,46 @@ private func passkeyPresentationAnchor() -> ASPresentationAnchor {
     return ASPresentationAnchor()
 }
 
-private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
+final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     ASAuthorizationControllerPresentationContextProviding
 {
+    static let interactiveRequestTimeout: TimeInterval = 5 * 60
+
     private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private let timeout: TimeInterval
     private var result: Result<ASAuthorizationCredential, Error>?
     private let context: PasskeyOperationContext
+    private var didRequestPresentationAnchor = false
 
-    init(context: PasskeyOperationContext) {
+    init(
+        context: PasskeyOperationContext,
+        timeout: TimeInterval = PasskeyDelegate.interactiveRequestTimeout
+    ) {
         self.context = context
+        self.timeout = timeout
     }
 
-    func waitForResult() throws -> ASAuthorizationCredential {
-        let status = semaphore.wait(timeout: .now() + 120)
-        if status == .timedOut {
-            Log.error("[PASSKEY] \(context.logDescription) timed out after 120s")
-            throw PasskeyError.RequestFailed(
+    func waitForResult(
+        cancelController: @escaping @Sendable () -> Void
+    ) throws -> ASAuthorizationCredential {
+        let waitResult = semaphore.wait(timeout: .now() + timeout)
+
+        if waitResult == .timedOut {
+            let timeoutError = PasskeyError.RequestFailed(
                 operation: context.operation,
-                reason: .timedOut
+                reason: .platformAuthorizationFailedAfterPresentation
             )
+
+            if complete(with: .failure(timeoutError)) {
+                Log.warn(
+                    "[PASSKEY] \(context.logDescription) timed out after \(timeout)s"
+                )
+                DispatchQueue.main.async(execute: cancelController)
+            }
         }
-        guard let result else {
+
+        guard let result = lock.withLock({ result }) else {
             throw PasskeyError.RequestFailed(
                 operation: context.operation,
                 reason: .unknown(diagnosticMessage: "no result received from delegate")
@@ -419,74 +440,126 @@ private class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        passkeyPresentationAnchor()
+        lock.withLock {
+            didRequestPresentationAnchor = true
+        }
+
+        return passkeyPresentationAnchor()
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Log.info("[PASSKEY] \(context.logDescription) completed credential_type=\(type(of: authorization.credential))")
-        result = .success(authorization.credential)
-        semaphore.signal()
+        if complete(with: .success(authorization.credential)) {
+            Log.info("[PASSKEY] \(context.logDescription) completed credential_type=\(type(of: authorization.credential))")
+        }
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
+        let didRequestPresentationAnchor = lock.withLock {
+            self.didRequestPresentationAnchor
+        }
+        let result: Result<ASAuthorizationCredential, Error>
+        let logMessage: String
+        let shouldWarn: Bool
+
         switch error as? ASAuthorizationError {
         case let authError?:
-            switch authError.code {
-            case .canceled:
-                Log.info(
-                    "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
-                )
+            switch passkeyAuthorizationFailure(
+                for: authError.code,
+                didRequestPresentationAnchor: didRequestPresentationAnchor,
+                diagnosticMessage: error.localizedDescription
+            ) {
+            case .userCancelled:
                 result = .failure(PasskeyError.UserCancelled)
-            case .failed where context == .discoverAssertion:
-                Log.warn(
-                    "[PASSKEY] \(context.logDescription) platform authorization failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
-                )
+                logMessage = "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                shouldWarn = false
+            case let .requestFailed(reason):
                 result = .failure(
                     PasskeyError.RequestFailed(
                         operation: context.operation,
-                        reason: .platformAuthorizationFailed
+                        reason: reason
                     )
                 )
-            default:
-                Log.warn(
-                    "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) description=\(error.localizedDescription)"
-                )
-                result = .failure(
-                    PasskeyError.RequestFailed(
-                        operation: context.operation,
-                        reason: passkeyFailureReason(
-                            for: authError.code,
-                            diagnosticMessage: error.localizedDescription
-                        )
-                    )
-                )
+                logMessage = "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                shouldWarn = true
             }
         case nil:
-            Log.warn("[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)")
             result = .failure(
                 PasskeyError.RequestFailed(
                     operation: context.operation,
                     reason: .unknown(diagnosticMessage: error.localizedDescription)
                 )
             )
+            logMessage = "[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)"
+            shouldWarn = true
         }
-        semaphore.signal()
+
+        guard complete(with: result) else { return }
+
+        if shouldWarn {
+            Log.warn(logMessage)
+        } else {
+            Log.info(logMessage)
+        }
+    }
+
+    @discardableResult
+    private func complete(
+        with result: Result<ASAuthorizationCredential, Error>
+    ) -> Bool {
+        let didComplete = lock.withLock {
+            guard self.result == nil else { return false }
+
+            self.result = result
+            return true
+        }
+
+        if didComplete {
+            semaphore.signal()
+        }
+
+        return didComplete
     }
 }
 
-private func passkeyFailureReason(
+enum PasskeyAuthorizationFailure {
+    case userCancelled
+    case requestFailed(PasskeyFailureReason)
+}
+
+func passkeyAuthorizationFailure(
     for code: ASAuthorizationError.Code,
+    didRequestPresentationAnchor: Bool,
+    diagnosticMessage: String
+) -> PasskeyAuthorizationFailure {
+    if code == .canceled {
+        return .userCancelled
+    }
+
+    return .requestFailed(
+        passkeyFailureReason(
+            for: code,
+            didRequestPresentationAnchor: didRequestPresentationAnchor,
+            diagnosticMessage: diagnosticMessage
+        )
+    )
+}
+
+func passkeyFailureReason(
+    for code: ASAuthorizationError.Code,
+    didRequestPresentationAnchor: Bool,
     diagnosticMessage: String
 ) -> PasskeyFailureReason {
     switch code {
+    case .failed where !didRequestPresentationAnchor:
+        .platformAuthorizationFailed
     case .failed:
-        .unknown(diagnosticMessage: diagnosticMessage)
+        .platformAuthorizationFailedAfterPresentation
     case .invalidResponse:
         .invalidResponse
     case .notHandled:

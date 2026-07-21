@@ -14,7 +14,7 @@ mod other_backup_operations;
 mod restore;
 mod sync;
 
-pub(crate) use cloud_only::CloudBackupPreparedCloudWalletDelete;
+pub(crate) use cloud_only::{CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll};
 pub(crate) use disable::{CloudBackupDisablePreparation, CloudBackupKeepEnabledPreparation};
 pub(crate) use enable::{
     CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,

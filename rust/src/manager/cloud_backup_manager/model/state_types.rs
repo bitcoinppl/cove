@@ -1,5 +1,6 @@
 use cove_device::cloud_storage::CloudSyncHealth;
 
+use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent,
     CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupRootPrompt,
@@ -64,13 +65,67 @@ pub struct LoadedCloudBackupDetail {
     pub other_backups_operation: OtherBackupsOperation,
 }
 
+/// Typed reason why provider inventory could not be confirmed complete
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupInventoryIncompleteReason {
+    AuthorizationRequired,
+    Offline,
+    ProviderUnavailable,
+    Unknown,
+}
+
+impl From<CloudStorageIssue> for CloudBackupInventoryIncompleteReason {
+    fn from(issue: CloudStorageIssue) -> Self {
+        match issue {
+            CloudStorageIssue::AuthorizationRequired => Self::AuthorizationRequired,
+            CloudStorageIssue::Offline => Self::Offline,
+            CloudStorageIssue::Unavailable => Self::ProviderUnavailable,
+            CloudStorageIssue::NotFound
+            | CloudStorageIssue::QuotaExceeded
+            | CloudStorageIssue::Other => Self::Unknown,
+        }
+    }
+}
+
 /// Public loading state for the cloud backup detail screen
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupDetailState {
     NotLoaded,
-    Loading,
-    Loaded { state: LoadedCloudBackupDetail },
-    Failed(String),
+    Checking {
+        retained: Option<LoadedCloudBackupDetail>,
+    },
+    Complete {
+        state: LoadedCloudBackupDetail,
+    },
+    Failed {
+        reason: CloudBackupInventoryIncompleteReason,
+        error: String,
+        retained: Option<LoadedCloudBackupDetail>,
+    },
+}
+
+/// Rust-owned Restore All availability and in-process progress
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupRestoreAllState {
+    NotShown,
+    StartDisabled {
+        wallet_count: u32,
+    },
+    StartAvailable {
+        wallet_count: u32,
+    },
+    Running {
+        completed: u32,
+        total: u32,
+        current_wallet_name: Option<String>,
+        cancellation_requested: bool,
+    },
+    RetryDisabled {
+        wallet_count: u32,
+    },
+    RetryAvailable {
+        wallet_count: u32,
+    },
 }
 
 /// Public configured-backup state projected from the private reducer
@@ -81,6 +136,7 @@ pub struct CloudBackupConfiguredState {
     pub sync: CloudBackupSyncState,
     pub destructive_operation: CloudBackupDestructiveOperationState,
     pub detail: CloudBackupDetailState,
+    pub restore_all: CloudBackupRestoreAllState,
     pub root_prompt: CloudBackupRootPrompt,
     pub sync_health: CloudSyncHealth,
     pub verification_presentation: CloudBackupVerificationPresentation,
@@ -114,6 +170,21 @@ pub struct CloudBackupFailure {
     pub message: String,
 }
 
+/// Availability of local-only cleanup for an interrupted Cloud Backup enable
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupPendingEnableCleanupState {
+    SupportOnly,
+    Available,
+    Cleaning,
+}
+
+/// Privacy-safe recovery state for an interrupted Cloud Backup enable
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupPendingEnableRecovery {
+    pub support_code: String,
+    pub cleanup: CloudBackupPendingEnableCleanupState,
+}
+
 /// Public top-level cloud backup lifecycle
 #[expect(clippy::large_enum_variant, reason = "exported UniFFI enum keeps payloads inline")]
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -122,5 +193,6 @@ pub enum CloudBackupLifecycle {
     Enabling(CloudBackupEnableFlow),
     Restoring(CloudBackupRestoreFlow),
     Configured(CloudBackupConfiguredState),
+    PendingEnableRecovery(CloudBackupPendingEnableRecovery),
     Failed(CloudBackupFailure),
 }

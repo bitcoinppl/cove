@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +54,8 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupProgress
+import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 
 internal enum class CloudBackupEnableOnboardingContext {
     STANDARD,
@@ -79,6 +82,7 @@ internal fun CloudBackupEnableOnboardingView(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 18.dp),
         ) {
@@ -217,7 +221,13 @@ internal fun CloudBackupEnableOnboardingView(
 }
 
 @Composable
-internal fun CloudBackupEnableBusyOverlay(enableFlow: CloudBackupEnableFlow?) {
+internal fun CloudBackupEnableBusyOverlay(
+    enableFlow: CloudBackupEnableFlow?,
+    verificationPresentation: CloudBackupVerificationPresentation,
+) {
+    val copy = cloudBackupEnableBusyCopy(enableFlow, verificationPresentation)
+    val progressFraction = cloudBackupProgressFraction(copy.progress)
+
     Box(
         modifier =
             Modifier
@@ -231,21 +241,34 @@ internal fun CloudBackupEnableBusyOverlay(enableFlow: CloudBackupEnableFlow?) {
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                modifier =
+                    Modifier
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
+                        .semantics {
+                            copy.progress?.let {
+                                stateDescription = "Completed ${it.completed} of ${it.total}"
+                            }
+                        },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                CircularProgressIndicator(color = Color.White)
-                val (title, subtitle) = cloudBackupEnableBusyCopy(enableFlow)
+                if (progressFraction == null) {
+                    CircularProgressIndicator(color = Color.White)
+                } else {
+                    CircularProgressIndicator(
+                        progress = { progressFraction },
+                        color = Color.White,
+                    )
+                }
                 Text(
-                    text = title,
+                    text = copy.title,
                     color = Color.White,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    text = subtitle,
+                    text = copy.subtitle,
                     color = OnboardingTextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
@@ -255,28 +278,76 @@ internal fun CloudBackupEnableBusyOverlay(enableFlow: CloudBackupEnableFlow?) {
     }
 }
 
-private fun cloudBackupEnableBusyCopy(enableFlow: CloudBackupEnableFlow?): Pair<String, String> =
-    when (enableFlow) {
+internal data class CloudBackupEnableBusyCopy(
+    val title: String,
+    val subtitle: String,
+    val progress: CloudBackupProgress? = null,
+)
+
+internal fun cloudBackupProgressFraction(progress: CloudBackupProgress?): Float? {
+    val knownProgress = progress?.takeIf { it.total > 0u } ?: return null
+
+    return (knownProgress.completed.toFloat() / knownProgress.total.toFloat()).coerceIn(0f, 1f)
+}
+
+internal fun cloudBackupEnableBusyCopy(
+    enableFlow: CloudBackupEnableFlow?,
+    verificationPresentation: CloudBackupVerificationPresentation,
+): CloudBackupEnableBusyCopy {
+    if (verificationPresentation is CloudBackupVerificationPresentation.BackgroundConfirming) {
+        return CloudBackupEnableBusyCopy(
+            title = "Confirming your encrypted backup...",
+            subtitle =
+                "Cove is still confirming that your encrypted backup is visible in Google Drive. " +
+                    "You can leave this screen while confirmation continues in the background.",
+        )
+    }
+
+    return when (enableFlow) {
         CloudBackupEnableFlow.CreatingPasskey ->
-            "Creating your passkey..." to "Cloud Backup will continue automatically"
+            CloudBackupEnableBusyCopy(
+                title = "Creating your passkey...",
+                subtitle = "Cloud Backup will continue automatically",
+            )
         CloudBackupEnableFlow.WaitingForPasskeyAvailability ->
-            "Checking that your passkey is available..." to
-                "This can take a few seconds after saving it in your passkey/password manager app"
+            CloudBackupEnableBusyCopy(
+                title = "Checking that your passkey is available...",
+                subtitle =
+                    "This can take a few seconds after saving it in your passkey/password manager app",
+            )
         is CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation ->
-            "Checking that your passkey is available..." to
-                "This can take a few seconds after saving it in your passkey/password manager app"
+            CloudBackupEnableBusyCopy(
+                title = "Checking that your passkey is available...",
+                subtitle =
+                    "This can take a few seconds after saving it in your passkey/password manager app",
+            )
         CloudBackupEnableFlow.ConfirmingSavedPasskey ->
-            "Confirming your passkey..." to "Cloud Backup will continue automatically"
-        is CloudBackupEnableFlow.UploadingInitialBackup,
-        is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial,
-        ->
-            "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+            CloudBackupEnableBusyCopy(
+                title = "Confirming your passkey...",
+                subtitle = "Cloud Backup will continue automatically",
+            )
+        is CloudBackupEnableFlow.UploadingInitialBackup -> uploadBusyCopy(enableFlow.progress)
+        is CloudBackupEnableFlow.RetryingUploadWithStagedMaterial ->
+            uploadBusyCopy(enableFlow.progress)
         is CloudBackupEnableFlow.AwaitingForceNewConfirmation,
         is CloudBackupEnableFlow.AwaitingPasskeyChoice,
         CloudBackupEnableFlow.DiscoveringExistingBackup,
         null,
-        -> "Creating your encrypted backup..." to "Cloud Backup will continue automatically"
+        ->
+            CloudBackupEnableBusyCopy(
+                title = "Creating your encrypted backup...",
+                subtitle = "Cloud Backup will continue automatically",
+            )
     }
+}
+
+private fun uploadBusyCopy(progress: CloudBackupProgress?): CloudBackupEnableBusyCopy =
+    CloudBackupEnableBusyCopy(
+        title = "Creating your encrypted backup...",
+        subtitle = progress?.let { "Completed ${it.completed} of ${it.total}" }
+            ?: "Cloud Backup will continue automatically",
+        progress = progress,
+    )
 
 @Composable
 private fun OnboardingToggleCard(

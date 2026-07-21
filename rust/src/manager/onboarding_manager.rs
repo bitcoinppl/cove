@@ -4,16 +4,18 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     app::FfiApp,
     database::Database,
     manager::{
         cloud_backup_manager::{
-            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupPasskeyHint,
-            CloudBackupRestoreEvent, CloudBackupRestoreFlow, CloudBackupRestoreReport,
-            CloudBackupVerificationSource, CloudStorageIssue, SavedPasskeyConfirmationMode,
+            CLOUD_BACKUP_MANAGER, CloudBackupEnableContext,
+            CloudBackupOnboardingCompletionReadiness, CloudBackupPasskeyChoiceIntent,
+            CloudBackupPasskeyHint, CloudBackupRestoreEvent, CloudBackupRestoreFlow,
+            CloudBackupRestoreReport, CloudBackupVerificationSource, CloudStorageIssue,
+            SavedPasskeyConfirmationMode,
         },
         connectivity_manager::CONNECTIVITY_MANAGER,
     },
@@ -37,8 +39,8 @@ mod progress;
 
 #[cfg(test)]
 use self::cloud_restore::{
-    CloudRestoreBackupSnapshot, choose_restore_provider_hint, record_cloud_restore_download_error,
-    resolve_provider_hint,
+    CloudRestoreBackupSnapshot, CloudRestoreInspectionError, choose_restore_provider_hint,
+    record_cloud_restore_download_error, resolve_provider_hint,
 };
 pub(crate) use self::cloud_restore::{
     cloud_check_inconclusive_message, determine_cloud_check_outcome, inspect_cloud_restore_backup,
@@ -149,6 +151,8 @@ impl From<CloudRestoreProviderHint> for CloudBackupPasskeyHint {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum OnboardingAction {
+    ContinueSetup,
+    CheckCloudRestoreAgain,
     ContinueFromWelcome,
     SelectHasBitcoin { has_bitcoin: bool },
     SelectStorage { selection: OnboardingStorageSelection },
@@ -211,6 +215,7 @@ pub(crate) enum CloudCheckOutcome {
 pub(crate) enum CloudCheckIssue {
     Offline,
     CloudUnavailable,
+    BackupMetadataPending,
     Unknown,
 }
 
@@ -239,9 +244,13 @@ impl RustOnboardingManager {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
         let has_wallets = !Database::global().wallets.all().unwrap_or_default().is_empty();
+        let should_resume_onboarding_enable = CLOUD_BACKUP_MANAGER
+            .onboarding_enable_completion_readiness()
+            != CloudBackupOnboardingCompletionReadiness::NotReady;
         let resolution = resolve_initial_flow(
             Self::load_onboarding_progress(),
             has_wallets,
+            should_resume_onboarding_enable,
             |wallet_id, network, wallet_mode| {
                 let wallet_exists = Database::global()
                     .wallets
@@ -337,7 +346,7 @@ impl RustOnboardingManager {
         self.run_command(command);
     }
 
-    fn start_cloud_check(self: &Arc<Self>) {
+    fn start_cloud_check(&self) {
         let command = self.mutate_state(|state, deferred| {
             state.apply_event(InternalEvent::CloudCheckRequested, deferred)
         });
@@ -365,22 +374,18 @@ impl RustOnboardingManager {
     }
 
     fn finish_cloud_check(self: &Arc<Self>, outcome: CloudCheckOutcome) {
-        let should_retry =
-            self.finish_cloud_check_and_prepare_retry(outcome, CONNECTIVITY_MANAGER.connected());
-        if should_retry {
-            self.spawn_cloud_check();
-        }
+        let command = self.apply_cloud_check_finished(outcome, CONNECTIVITY_MANAGER.connected());
+        self.run_command(command);
     }
 
-    fn finish_cloud_check_and_prepare_retry(
+    fn apply_cloud_check_finished(
         &self,
         outcome: CloudCheckOutcome,
         connected: bool,
-    ) -> bool {
-        let command = self.mutate_state(|state, deferred| {
+    ) -> TransitionCommand {
+        self.mutate_state(|state, deferred| {
             state.apply_event(InternalEvent::CloudCheckFinished { outcome, connected }, deferred)
-        });
-        command == TransitionCommand::StartCloudCheck
+        })
     }
 
     fn apply_event(&self, event: InternalEvent) {
@@ -391,6 +396,7 @@ impl RustOnboardingManager {
     fn run_command(&self, command: TransitionCommand) {
         match command {
             TransitionCommand::None => {}
+            TransitionCommand::RequestCloudCheck => self.start_cloud_check(),
             TransitionCommand::StartCloudCheck => self.spawn_cloud_check(),
             TransitionCommand::CreateWallet(branch) => self.create_wallet_for_branch(branch),
             TransitionCommand::StartRestore { attempt_id } => {
@@ -472,12 +478,29 @@ impl RustOnboardingManager {
         CLOUD_BACKUP_MANAGER.clear_existing_backup_found_prompt();
         CLOUD_BACKUP_MANAGER.clear_passkey_choice_prompt();
 
-        match OnboardingCloudBackupEnableStart::from_discovery(discovery) {
-            OnboardingCloudBackupEnableStart::ConfirmExistingBackup(hint) => {
+        let Some(start) = OnboardingCloudBackupEnableStart::from_discovery(discovery) else {
+            warn!("Onboarding: ignored cloud backup enable while restore discovery is checking");
+            return;
+        };
+
+        match start {
+            OnboardingCloudBackupEnableStart::ConfirmKnownBackup(hint) => {
                 info!("Onboarding: confirming existing cloud backup before creating passkey");
                 CLOUD_BACKUP_MANAGER.present_existing_backup_found_prompt(
                     context,
                     hint.map(CloudBackupPasskeyHint::from),
+                );
+            }
+            OnboardingCloudBackupEnableStart::RequireExistingPasskey => {
+                info!("Onboarding: backup metadata is pending; requiring existing passkey");
+                CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
+                    CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, None),
+                );
+            }
+            OnboardingCloudBackupEnableStart::ChooseExistingOrNew => {
+                info!("Onboarding: cloud backup discovery was inconclusive; asking passkey choice");
+                CLOUD_BACKUP_MANAGER.present_passkey_choice_prompt(
+                    CloudBackupPasskeyChoiceIntent::Enable(context, None),
                 );
             }
             OnboardingCloudBackupEnableStart::CreateNewPasskey => {
@@ -856,25 +879,39 @@ mod tests {
             OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::BackupFound(
                 None,
             )),
-            OnboardingCloudBackupEnableStart::ConfirmExistingBackup(None),
+            Some(OnboardingCloudBackupEnableStart::ConfirmKnownBackup(None)),
         );
     }
 
     #[test]
-    fn onboarding_cloud_backup_enable_start_creates_new_without_passkey_discovery_by_default() {
+    fn onboarding_cloud_backup_enable_start_only_creates_after_confirmed_empty_discovery() {
         assert_eq!(
             OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::NoBackupFound),
-            OnboardingCloudBackupEnableStart::CreateNewPasskey,
+            Some(OnboardingCloudBackupEnableStart::CreateNewPasskey),
         );
         assert_eq!(
             OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::Checking),
-            OnboardingCloudBackupEnableStart::CreateNewPasskey,
+            None,
         );
+        for issue in
+            [CloudCheckIssue::Offline, CloudCheckIssue::CloudUnavailable, CloudCheckIssue::Unknown]
+        {
+            assert_eq!(
+                OnboardingCloudBackupEnableStart::from_discovery(
+                    CloudRestoreDiscovery::Inconclusive(issue),
+                ),
+                Some(OnboardingCloudBackupEnableStart::ChooseExistingOrNew),
+            );
+        }
+    }
+
+    #[test]
+    fn pending_backup_metadata_requires_existing_backup_confirmation() {
         assert_eq!(
             OnboardingCloudBackupEnableStart::from_discovery(CloudRestoreDiscovery::Inconclusive(
-                CloudCheckIssue::Offline,
+                CloudCheckIssue::BackupMetadataPending,
             )),
-            OnboardingCloudBackupEnableStart::CreateNewPasskey,
+            Some(OnboardingCloudBackupEnableStart::RequireExistingPasskey),
         );
     }
 
@@ -908,7 +945,7 @@ mod tests {
     }
 
     #[test]
-    fn begin_cloud_backup_enable_preserves_checking_discovery() {
+    fn begin_cloud_backup_enable_is_ignored_while_discovery_is_checking() {
         let wallet_id = WalletId::new();
         let mut flow = FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
             wallet_id: wallet_id.clone(),
@@ -922,12 +959,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(
-            command,
-            TransitionCommand::BeginCloudBackupEnable {
-                discovery: CloudRestoreDiscovery::Checking
-            }
-        );
+        assert_eq!(command, TransitionCommand::None);
         match flow {
             FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
@@ -1662,7 +1694,7 @@ mod tests {
 
     #[test]
     fn empty_wallet_startup_begins_at_welcome_and_starts_background_cloud_check() {
-        let resolution = resolve_initial_flow(None, false, |_, _, _| None);
+        let resolution = resolve_initial_flow(None, false, false, |_, _, _| None);
 
         assert!(!resolution.clear_persisted_progress);
         assert!(resolution.start_cloud_check);
@@ -2249,10 +2281,13 @@ mod tests {
         assert_eq!(cloud_check_state(&manager), CloudCheckState::InFlightWithRetryQueued);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
 
-        assert!(manager.finish_cloud_check_and_prepare_retry(
-            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
-            true,
-        ));
+        assert_eq!(
+            manager.apply_cloud_check_finished(
+                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                true,
+            ),
+            TransitionCommand::StartCloudCheck
+        );
         assert_eq!(cloud_check_state(&manager), CloudCheckState::InFlight);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
         assert_eq!(manager.state().cloud_restore_message, None);
@@ -2268,10 +2303,13 @@ mod tests {
         );
         manager.state.write().cloud_check = CloudCheckState::InFlight;
 
-        assert!(!manager.finish_cloud_check_and_prepare_retry(
-            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
-            true,
-        ));
+        assert_eq!(
+            manager.apply_cloud_check_finished(
+                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                true,
+            ),
+            TransitionCommand::None
+        );
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Inconclusive);
         assert_eq!(cloud_check_state(&manager), CloudCheckState::Idle);
 
@@ -2296,10 +2334,13 @@ mod tests {
 
         manager.handle_connectivity_change(true);
 
-        assert!(manager.finish_cloud_check_and_prepare_retry(
-            CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
-            true,
-        ));
+        assert_eq!(
+            manager.apply_cloud_check_finished(
+                CloudCheckOutcome::Inconclusive(CloudCheckIssue::Offline),
+                true,
+            ),
+            TransitionCommand::StartCloudCheck
+        );
         assert_eq!(cloud_check_state(&manager), CloudCheckState::InFlight);
         assert_eq!(manager.state().step, OnboardingStep::CloudCheck);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::Checking);
@@ -2318,9 +2359,9 @@ mod tests {
 
         manager.handle_connectivity_change(true);
 
-        assert!(
-            !manager
-                .finish_cloud_check_and_prepare_retry(CloudCheckOutcome::NoBackupConfirmed, true,)
+        assert_eq!(
+            manager.apply_cloud_check_finished(CloudCheckOutcome::NoBackupConfirmed, true),
+            TransitionCommand::None
         );
         assert_eq!(cloud_check_state(&manager), CloudCheckState::Idle);
         assert_eq!(manager.state().cloud_restore_state, OnboardingCloudRestoreState::NoBackupFound);
@@ -2360,18 +2401,80 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn cloud_check_retries_errors_and_returns_inconclusive() {
+    async fn cloud_check_does_not_retry_non_retryable_storage_errors() {
+        let attempts = Arc::new(Mutex::new(0));
+        let attempt_log = Arc::clone(&attempts);
         let outcome = determine_cloud_check_outcome(
-            || async { Err(CloudStorageError::NotAvailable("network timed out".into())) },
+            move || {
+                let attempt_log = Arc::clone(&attempt_log);
+
+                async move {
+                    *attempt_log.lock().unwrap() += 1;
+                    Err(CloudRestoreInspectionError::Storage(CloudStorageError::NotAvailable(
+                        "platform deadline expired".into(),
+                    )))
+                }
+            },
             |_| async {},
         )
         .await;
 
         assert_eq!(outcome, CloudCheckOutcome::Inconclusive(CloudCheckIssue::CloudUnavailable));
+        assert_eq!(*attempts.lock().unwrap(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cloud_check_retries_pending_metadata_until_backup_is_readable() {
+        let attempts = Arc::new(Mutex::new(0));
+        let attempt_log = Arc::clone(&attempts);
+        let outcome = determine_cloud_check_outcome(
+            move || {
+                let attempt_log = Arc::clone(&attempt_log);
+
+                async move {
+                    let mut attempts = attempt_log.lock().unwrap();
+                    *attempts += 1;
+                    if *attempts == 1 {
+                        return Err(CloudRestoreInspectionError::BackupMetadataPending);
+                    }
+
+                    Ok(CloudRestoreBackupSnapshot { has_backup: true, provider_hint: None })
+                }
+            },
+            |_| async {},
+        )
+        .await;
+
+        assert_eq!(outcome, CloudCheckOutcome::BackupFound(None));
+        assert_eq!(*attempts.lock().unwrap(), 2);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn exhausted_pending_metadata_remains_inconclusive() {
+        let attempts = Arc::new(Mutex::new(0));
+        let attempt_log = Arc::clone(&attempts);
+        let outcome = determine_cloud_check_outcome(
+            move || {
+                let attempt_log = Arc::clone(&attempt_log);
+
+                async move {
+                    *attempt_log.lock().unwrap() += 1;
+                    Err(CloudRestoreInspectionError::BackupMetadataPending)
+                }
+            },
+            |_| async {},
+        )
+        .await;
+
+        assert_eq!(
+            outcome,
+            CloudCheckOutcome::Inconclusive(CloudCheckIssue::BackupMetadataPending)
+        );
+        assert_eq!(*attempts.lock().unwrap(), 7);
     }
 
     #[test]
-    fn cloud_restore_download_error_tracking_ignores_not_found_before_harder_error() {
+    fn cloud_restore_download_error_tracking_prefers_harder_error_over_not_found() {
         let mut error = None;
 
         record_cloud_restore_download_error(
@@ -2384,6 +2487,18 @@ mod tests {
         );
 
         assert_eq!(error, Some(CloudStorageError::NotAvailable("iCloud unavailable".into())));
+    }
+
+    #[test]
+    fn cloud_restore_download_error_tracking_retains_not_found() {
+        let mut error = None;
+
+        record_cloud_restore_download_error(
+            &mut error,
+            CloudStorageError::NotFound("pending-namespace".into()),
+        );
+
+        assert_eq!(error, Some(CloudStorageError::NotFound("pending-namespace".into())));
     }
 
     #[test]
@@ -2467,7 +2582,7 @@ mod tests {
         };
 
         let flow = progress
-            .restore_flow(|requested_wallet_id, _, _| {
+            .restore_flow(false, |requested_wallet_id, _, _| {
                 assert_eq!(requested_wallet_id, &wallet_id);
                 Some(mnemonic.clone())
             })
@@ -2478,6 +2593,35 @@ mod tests {
                 assert_eq!(flow.wallet_id, wallet_id);
                 assert_eq!(flow.branch, OnboardingBranch::Exchange);
                 assert!(flow.secret_words_saved);
+                assert!(!flow.cloud_backup_enabled);
+            }
+            other => panic!("unexpected flow state: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn persisted_created_wallet_progress_resumes_pending_cloud_backup_enable() {
+        let wallet_id = WalletId::new();
+        let mnemonic = Mnemonic::parse(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .expect("should parse mnemonic");
+        let progress = OnboardingProgress::CreatedWallet {
+            wallet_id: wallet_id.clone(),
+            branch: OnboardingBranch::NewUser,
+            network: Network::Bitcoin,
+            wallet_mode: WalletMode::Main,
+            secret_words_saved: false,
+            cloud_backup_enabled: false,
+        };
+
+        let resolution =
+            resolve_initial_flow(Some(progress), false, true, |_, _, _| Some(mnemonic.clone()));
+
+        match resolution.flow {
+            FlowState::CloudBackup(CloudBackupFlow::CreatedWallet(flow)) => {
+                assert_eq!(flow.wallet_id, wallet_id);
+                assert_eq!(flow.branch, OnboardingBranch::NewUser);
                 assert!(!flow.cloud_backup_enabled);
             }
             other => panic!("unexpected flow state: {other:?}"),
@@ -2496,6 +2640,7 @@ mod tests {
                 cloud_backup_enabled: false,
             }),
             true,
+            false,
             |_, _, _| None,
         );
 
@@ -2569,8 +2714,6 @@ mod tests {
         flow: FlowState,
         cloud_restore_discovery: CloudRestoreDiscovery,
     ) -> InternalState {
-        let restore_offer_allowed = true;
-        let cloud_restore_alert_dismissed = false;
         let should_offer_cloud_restore =
             matches!(cloud_restore_discovery, CloudRestoreDiscovery::BackupFound(_));
         let cloud_restore_alert_visible = should_offer_cloud_restore
@@ -2580,16 +2723,11 @@ mod tests {
             should_offer_cloud_restore,
             cloud_restore_alert_visible,
         );
+        let mut state = InternalState::new(flow);
+        state.cloud_restore_discovery = cloud_restore_discovery;
+        state.ui = ui;
 
-        InternalState {
-            flow,
-            cloud_check: CloudCheckState::Idle,
-            cloud_restore_discovery,
-            restore_offer_allowed,
-            cloud_restore_alert_dismissed,
-            next_restore_attempt_id: 1,
-            ui,
-        }
+        state
     }
 
     fn preview_manager(

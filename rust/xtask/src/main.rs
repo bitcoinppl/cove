@@ -76,9 +76,17 @@ enum Commands {
         command: Vec<String>,
     },
 
-    /// Run manual Android full-launch onboarding UI tests
+    /// Run all manual Android UI tests, including staged process-death scenarios
     #[command(name = "android-ui-manual")]
     AndroidUiManual,
+
+    /// Run the staged Android Cloud Backup process-death scenario
+    #[command(name = "android-ui-durable-relaunch")]
+    AndroidUiDurableRelaunch,
+
+    /// Run the staged Android Restore All process-death scenario
+    #[command(name = "android-ui-restore-all-relaunch")]
+    AndroidUiRestoreAllRelaunch,
 
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
@@ -292,6 +300,10 @@ fn main() -> Result<()> {
         Commands::AndroidStayAwake { command } => android::run_with_stay_awake(&command),
 
         Commands::AndroidUiManual => android::run_manual_ui_tests(),
+
+        Commands::AndroidUiDurableRelaunch => android::run_durable_relaunch_ui_test(),
+
+        Commands::AndroidUiRestoreAllRelaunch => android::run_restore_all_relaunch_ui_test(),
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);

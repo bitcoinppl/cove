@@ -18,6 +18,7 @@
     <string name="cloud_backup_status_syncing">Syncing</string>
     <string name="cloud_backup_status_no_files">No backup files found</string>
     <string name="cloud_backup_status_drive_unavailable">Google Drive unavailable</string>
+    <string name="cloud_backup_status_recovery_required">Cloud Backup needs recovery — open to review</string>
     <string name="cloud_backup_status_drive_authorization_required">Google Drive access needed: %1$s</string>
     <string name="cloud_backup_status_passkey_missing">Passkey missing</string>
     <string name="cloud_backup_status_passkey_provider_unsupported">Passkey provider unsupported</string>

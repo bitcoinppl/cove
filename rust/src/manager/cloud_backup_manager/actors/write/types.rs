@@ -1,4 +1,6 @@
-use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedCloudBlobSyncState};
+use crate::database::cloud_backup::{
+    CloudBackupRecordKey, PersistedCloudBlobSyncState, PersistedPendingVerificationCompletion,
+};
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::wallet::metadata::WalletId;
@@ -30,10 +32,10 @@ impl CloudBackupUploadedWallet {
 }
 
 /// Whether finalizing uploaded wallets should preserve or reset verification
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum CloudBackupUploadedWalletsStateMode {
     PreserveVerification,
-    ResetVerification,
+    ResetVerificationWithPendingCompletion(PersistedPendingVerificationCompletion),
 }
 
 /// Candidate wallet counts used when cloud listing is best-effort
