@@ -466,7 +466,7 @@ impl WalletActor {
     pub async fn initiate_payment(
         &mut self,
         psbt: Psbt,
-        payjoin_endpoint: Option<String>,
+        _payjoin_endpoint: Option<String>,
     ) -> ActorResult<Result<(), Error>> {
         if let Err(error) = self.ensure_ledger_ready_for_spend() {
             return Produces::ok(Err(error));
@@ -534,22 +534,15 @@ impl WalletActor {
             }
         }
 
-        match payjoin_endpoint {
-            None => {
-                let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
-                    Ok(result) => result,
-                    Err(error) => return Produces::ok(Err(error)),
-                };
+        let (_, transaction) = match self.do_sign_original_psbt(psbt).await {
+            Ok(result) => result,
+            Err(error) => return Produces::ok(Err(error)),
+        };
 
-                self.start_broadcast_transaction(transaction)
-            }
-            Some(endpoint) => {
-                let result = self.initiate_payjoin_payment(psbt, endpoint).await;
-                Produces::ok(result)
-            }
-        }
+        self.start_broadcast_transaction(transaction)
     }
 
+    #[allow(dead_code)]
     async fn initiate_payjoin_payment(
         &mut self,
         psbt: Psbt,

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use act_zero::*;
 use bdk_wallet::chain::bitcoin::Psbt;
 use bitcoin::{

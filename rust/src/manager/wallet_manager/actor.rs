@@ -2231,6 +2231,59 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn payjoin_uri_completes_via_normal_broadcast_when_gated() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        test_keychain();
+
+        crate::database::test_support::init_test_database();
+        let server = set_broadcast_esplora_node(200).await;
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([1; 32]) },
+        );
+        receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(100_000));
+
+        // preview wallet skips keychain storage, so save the mnemonic manually for signing
+        Keychain::global()
+            .save_wallet_key(&metadata.id, test_mnemonic())
+            .expect("mnemonic stored in test keychain");
+
+        let (sender, _receiver) = flume::bounded(100);
+        let wallet_snapshot = test_wallet_snapshot(&wallet);
+        let mut actor =
+            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
+                .expect("actor is created");
+
+        let result = actor
+            .build_tx(Amount::from_sat(50_000), Address::preview_new(), one_sat_vbyte_fee_rate())
+            .await;
+        let psbt = actor_value(result).await.expect("psbt is built");
+
+        let addr = spawn_actor(actor);
+
+        let result = call!(
+            addr.initiate_payment(psbt, Some("https://payjoin.example.com/endpoint".to_string()))
+        )
+        .await
+        .expect("initiate_payment actor responds");
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        result.expect("broadcast succeeds");
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn slow_height_refresh_does_not_block_unrelated_actor_messages() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
