@@ -311,12 +311,9 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
     let path = database_location(id, location)
         .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
-    // check if we already have a database connection for this id and return it
-    {
-        let db_connections = DATABASE_CONNECTIONS.read();
-        if let Some(db) = db_connections.get(id) {
-            return Ok(db.clone());
-        }
+    let mut db_connections = DATABASE_CONNECTIONS.write();
+    if let Some(db) = db_connections.get(id) {
+        return Ok(db.clone());
     }
 
     let db = super::encrypted_backend::open_or_create_database(&path).map_err(|e| match e {
@@ -326,7 +323,6 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
         other => WalletDataError::DatabaseAccess { id: id.clone(), error: other.to_string() },
     })?;
 
-    let mut db_connections = DATABASE_CONNECTIONS.write();
     let db = Arc::new(db);
     db_connections.insert(id.clone(), db.clone());
 
@@ -387,6 +383,40 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Barrier;
+
+    #[test]
+    fn concurrent_new_or_existing_calls_share_one_database_handle() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        let wallet_id = WalletId::preview_new_random();
+        DATABASE_CONNECTIONS.write().remove(&wallet_id);
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let location = Arc::new(tmp.path().to_path_buf());
+        let barrier = Arc::new(Barrier::new(16));
+
+        let handles = (0..16)
+            .map(|_| {
+                let wallet_id = wallet_id.clone();
+                let location = Arc::clone(&location);
+                let barrier = Arc::clone(&barrier);
+
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    WalletDataDb::new_with_db_location(wallet_id, location.as_ref().as_path())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let databases = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("wallet data open thread should not panic"))
+            .collect::<Result<Vec<_>>>()
+            .expect("all concurrent wallet data opens should succeed");
+
+        assert!(databases.windows(2).all(|pair| Arc::ptr_eq(&pair[0].db, &pair[1].db)));
+
+        DATABASE_CONNECTIONS.write().remove(&wallet_id);
+    }
 
     #[test]
     fn receive_address_cache_round_trips() {
