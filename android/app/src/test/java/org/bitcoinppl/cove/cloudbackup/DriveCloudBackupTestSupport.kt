@@ -176,39 +176,42 @@ internal class TestDriveAccountBindingStore(
         transitionId: ULong,
         identity: DriveAccountIdentity,
     ): Boolean {
-        if (!stageSucceeds) {
-            if (retainFailedStage) {
-                pendingTransitionId = transitionId
-                pendingIdentity = identity
-            }
-            return false
-        }
-        if (pendingTransitionId != null && pendingTransitionId != transitionId) return false
+        val transitionMatches = pendingTransitionId == null || pendingTransitionId == transitionId
+        val succeeds = stageSucceeds && transitionMatches
+        val shouldRetain = succeeds || !stageSucceeds && retainFailedStage
 
-        pendingTransitionId = transitionId
-        pendingIdentity = identity
-        return true
+        if (shouldRetain) {
+            pendingTransitionId = transitionId
+            pendingIdentity = identity
+        }
+
+        return succeeds
     }
 
     override fun commitStagedIdentity(transitionId: ULong): Boolean {
-        if (pendingTransitionId == null) return committedTransitionId == transitionId
-        if (pendingTransitionId != transitionId) return false
-        val stagedIdentity = pendingIdentity ?: return false
-
-        identity = stagedIdentity
-        pendingTransitionId = null
-        pendingIdentity = null
-        committedTransitionId = transitionId
-        return true
+        return when {
+            pendingTransitionId == null -> committedTransitionId == transitionId
+            pendingTransitionId != transitionId -> false
+            else -> pendingIdentity?.let { stagedIdentity ->
+                identity = stagedIdentity
+                pendingTransitionId = null
+                pendingIdentity = null
+                committedTransitionId = transitionId
+                true
+            } ?: false
+        }
     }
 
     override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
-        if (pendingTransitionId == null) return true
-        if (pendingTransitionId != transitionId) return false
-
-        pendingTransitionId = null
-        pendingIdentity = null
-        return true
+        return when {
+            pendingTransitionId == null -> true
+            pendingTransitionId != transitionId -> false
+            else -> {
+                pendingTransitionId = null
+                pendingIdentity = null
+                true
+            }
+        }
     }
 }
 
