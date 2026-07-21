@@ -79,14 +79,16 @@ fun NumberPadPinView(
             scope.launch {
                 delay(100)
 
-                if (isPinCorrect(submittedPin)) {
-                    pin = ""
-                    isSubmitting = false
-                    onUnlock(submittedPin)
-                } else {
-                    animateField = !animateField
-                    delay(490)
-                    pin = ""
+                try {
+                    if (isPinCorrect(submittedPin)) {
+                        pin = ""
+                        onUnlock(submittedPin)
+                    } else {
+                        animateField = !animateField
+                        delay(490)
+                        pin = ""
+                    }
+                } finally {
                     isSubmitting = false
                 }
             }
