@@ -1,4 +1,5 @@
 use super::*;
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 
 #[tokio::test(flavor = "current_thread")]
 async fn non_missing_discovery_failure_never_registers_enable_passkey() {
@@ -73,6 +74,118 @@ async fn passkey_match_treats_user_cancel_as_user_declined() {
     .unwrap();
 
     assert!(matches!(outcome, NamespaceMatchOutcome::UserDeclined));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_propagates_upload_state_authorization_required() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    globals.cloud.fail_backup_upload_state(
+        namespace.clone(),
+        MASTER_KEY_RECORD_ID.into(),
+        CloudStorageError::AuthorizationRequired("reconnect cloud account".into()),
+    );
+
+    let result = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&[namespace])
+    .await;
+    let error = match result {
+        Ok(_) => panic!("expected cloud authorization error"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        &error,
+        CloudBackupError::CloudStorage(CloudStorageError::AuthorizationRequired(_))
+    ));
+    assert_eq!(CloudStorageIssue::from(&error), CloudStorageIssue::AuthorizationRequired);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_propagates_master_wrapper_authorization_required() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_master_key_download_authorization_required(
+        namespace.clone(),
+        "reconnect cloud account",
+    );
+
+    let result = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&[namespace])
+    .await;
+    let error = match result {
+        Ok(_) => panic!("expected cloud authorization error"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        &error,
+        CloudBackupError::CloudStorage(CloudStorageError::AuthorizationRequired(_))
+    ));
+    assert_eq!(CloudStorageIssue::from(&error), CloudStorageIssue::AuthorizationRequired);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_keeps_pending_upload_state_inconclusive() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
+
+    let outcome = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&[namespace])
+    .await
+    .unwrap();
+
+    assert!(matches!(outcome, NamespaceMatchOutcome::Inconclusive));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_keeps_transient_master_wrapper_failure_inconclusive() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_master_key_download_offline(namespace.clone(), "cloud temporarily offline");
+
+    let outcome = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&[namespace])
+    .await
+    .unwrap();
+
+    assert!(matches!(outcome, NamespaceMatchOutcome::Inconclusive));
 }
 
 #[tokio::test(flavor = "current_thread")]

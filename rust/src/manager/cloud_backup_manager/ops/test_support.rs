@@ -159,6 +159,7 @@ struct MockCloudState {
     wallet_files: HashMap<String, Vec<String>>,
     master_key_backups: HashMap<String, Vec<u8>>,
     master_key_download_errors: HashMap<String, CloudStorageError>,
+    backup_upload_state_errors: HashMap<(String, String), CloudStorageError>,
     master_key_download_attempts: usize,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
@@ -375,6 +376,15 @@ impl MockCloudStorage {
             .lock()
             .master_key_download_errors
             .insert(namespace, CloudStorageError::AuthorizationRequired(message.into()));
+    }
+
+    pub(crate) fn fail_backup_upload_state(
+        &self,
+        namespace: String,
+        record_id: String,
+        error: CloudStorageError,
+    ) {
+        self.state.lock().backup_upload_state_errors.insert((namespace, record_id), error);
     }
 
     pub(crate) fn fail_wallet_backup_upload(&self, message: &str) {
@@ -802,6 +812,12 @@ impl CloudStorageAccess for MockCloudStorage {
         _policy: CloudAccessPolicy,
     ) -> Result<bool, CloudStorageError> {
         let state = self.state.lock();
+        if let Some(error) =
+            state.backup_upload_state_errors.get(&(namespace.clone(), record_id.clone())).cloned()
+        {
+            return Err(error);
+        }
+
         if record_id == MASTER_KEY_RECORD_ID {
             if state.uploaded_master_key_pending_confirmation
                 && state.master_key_backups.contains_key(&namespace)

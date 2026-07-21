@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use cove_cspp::backup_data::{
     EncryptedMasterKeyBackup, MASTER_KEY_RECORD_ID, MasterKeyBackupVersion,
 };
-use cove_device::cloud_storage::CloudStorageClient;
+use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use sha2::{Digest as _, Sha256};
 use tracing::{info, warn};
@@ -124,7 +124,7 @@ impl NamespacePasskeyMatchSession {
         &mut self,
         namespaces: &[String],
     ) -> Result<NamespaceMatchSnapshotOutcome, CloudBackupError> {
-        let mut candidates = self.download_candidates(namespaces).await;
+        let mut candidates = self.download_candidates(namespaces).await?;
         candidates.sort_by(|left, right| {
             right
                 .registration_timestamp()
@@ -244,7 +244,7 @@ impl NamespacePasskeyMatchSession {
     async fn download_candidates(
         &mut self,
         namespaces: &[String],
-    ) -> Vec<NamespacePasskeyCandidate> {
+    ) -> Result<Vec<NamespacePasskeyCandidate>, CloudBackupError> {
         let mut seen_namespaces = HashSet::new();
         let mut candidates = Vec::with_capacity(namespaces.len());
 
@@ -266,6 +266,9 @@ impl NamespacePasskeyMatchSession {
                     self.had_inconclusive_cloud_failure = true;
                     continue;
                 }
+                Err(error @ CloudStorageError::AuthorizationRequired(_)) => {
+                    return Err(error.into());
+                }
                 Err(error) => {
                     warn!("Failed to read passkey candidate upload state: {error}");
                     self.had_inconclusive_cloud_failure = true;
@@ -275,9 +278,12 @@ impl NamespacePasskeyMatchSession {
 
             let master_json = match self.cloud.download_master_key_backup(namespace.clone()).await {
                 Ok(master_json) => master_json,
-                Err(cove_device::cloud_storage::CloudStorageError::NotFound(_)) => {
+                Err(CloudStorageError::NotFound(_)) => {
                     info!("Ignoring stale cloud backup namespace with no master key wrapper");
                     continue;
+                }
+                Err(error @ CloudStorageError::AuthorizationRequired(_)) => {
+                    return Err(error.into());
                 }
                 Err(error) => {
                     warn!("Failed to download cloud backup master key: {error}");
@@ -319,7 +325,7 @@ impl NamespacePasskeyMatchSession {
             });
         }
 
-        candidates
+        Ok(candidates)
     }
 }
 
