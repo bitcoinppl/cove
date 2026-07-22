@@ -9,7 +9,7 @@ use crate::{
 #[derive(Debug)]
 pub struct SenderSession {
     receiver_public_key: PublicKey,
-    private_key: Option<EphemeralPrivateKey>,
+    private_key: EphemeralPrivateKey,
     password: TeleportPassword,
 }
 
@@ -17,7 +17,7 @@ impl SenderSession {
     pub fn new(receiver_packet: &ReceiverPacket, code: &NumericCode) -> Result<Self> {
         Ok(Self {
             receiver_public_key: crypto::decrypt_receiver_pubkey(code, receiver_packet.as_bytes())?,
-            private_key: Some(EphemeralPrivateKey::generate()),
+            private_key: EphemeralPrivateKey::generate(),
             password: TeleportPassword::generate(),
         })
     }
@@ -30,24 +30,17 @@ impl SenderSession {
     ) -> Result<Self> {
         Ok(Self {
             receiver_public_key: crypto::decrypt_receiver_pubkey(code, receiver_packet.as_bytes())?,
-            private_key: Some(EphemeralPrivateKey::from_bytes(private_key)?),
+            private_key: EphemeralPrivateKey::from_bytes(private_key)?,
             password,
         })
     }
 
-    pub fn send(mut self, payload: Payload) -> Result<SendResponse> {
-        let private_key = self
-            .private_key
-            .take()
-            .expect("sender private key is present until send consumes the session");
-        let packet = receiver::encode_for_sender(
-            private_key,
-            &self.receiver_public_key,
-            &self.password,
-            payload,
-        )?;
+    pub fn send(self, payload: Payload) -> Result<SendResponse> {
+        let Self { receiver_public_key, private_key, password } = self;
+        let packet =
+            receiver::encode_for_sender(private_key, &receiver_public_key, &password, payload)?;
 
-        Ok(SendResponse { packet, password: self.password })
+        Ok(SendResponse { packet, password })
     }
 }
 

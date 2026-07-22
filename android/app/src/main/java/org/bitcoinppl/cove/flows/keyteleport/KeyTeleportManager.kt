@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
 import org.bitcoinppl.cove_core.KeyTeleportAlert
+import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerReconcileMessage
 import org.bitcoinppl.cove_core.KeyTeleportManagerReconciler
@@ -26,11 +27,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Stable
 class KeyTeleportManager internal constructor(
     private val rust: RustKeyTeleportManager,
-    private val rustDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val rustDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) : KeyTeleportManagerReconciler,
     Closeable {
     private val tag = "KeyTeleportManager"
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val rustScope = CoroutineScope(SupervisorJob() + rustDispatcher)
+    private val acceptingActions = AtomicBoolean(true)
     private val isClosed = AtomicBoolean(false)
     private val rustGuard =
         RustHandleGuard(
@@ -52,9 +55,9 @@ class KeyTeleportManager internal constructor(
     }
 
     fun dispatch(action: KeyTeleportManagerAction) {
-        if (isClosed.get()) return
+        if (!acceptingActions.get()) return
 
-        mainScope.launch(rustDispatcher) {
+        rustScope.launch {
             runCatching {
                 rustGuard.withHandle(rust) {
                     dispatch(action)
@@ -66,15 +69,23 @@ class KeyTeleportManager internal constructor(
     }
 
     fun ingest(input: StringOrData) {
-        dispatch(KeyTeleportManagerAction.Ingest(input))
+        dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.MultiFormat(input)))
+    }
+
+    fun ingest(packet: org.bitcoinppl.cove_core.KeyTeleportReceiverPacket) {
+        dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Receiver(packet)))
+    }
+
+    fun ingest(packet: org.bitcoinppl.cove_core.KeyTeleportSenderPacket) {
+        dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Sender(packet)))
     }
 
     fun clearAlertForDisplay() {
         alert = null
     }
 
-    fun revealMnemonicWords(): List<String> =
-        rustGuard.withHandleOr(rust, emptyList()) {
+    fun revealMnemonicWords(): List<String>? =
+        rustGuard.withHandleOr(rust, null) {
             revealMnemonicWords()
         }
 
@@ -117,14 +128,19 @@ class KeyTeleportManager internal constructor(
     }
 
     override fun close() {
-        rustGuard.closeOnce {
-            runCatching {
-                rust.dispatch(KeyTeleportManagerAction.Clear)
-            }.onFailure {
-                Log.w(tag, "Error clearing Key Teleport manager: ${it.message}")
+        if (!acceptingActions.compareAndSet(true, false)) return
+
+        mainScope.cancel()
+        rustScope.launch {
+            rustGuard.closeOnce {
+                runCatching {
+                    rust.dispatch(KeyTeleportManagerAction.Clear)
+                }.onFailure {
+                    Log.w(tag, "Error clearing Key Teleport manager: ${it.message}")
+                }
+                rust.close()
             }
-            mainScope.cancel()
-            rust.close()
+            rustScope.cancel()
         }
     }
 }

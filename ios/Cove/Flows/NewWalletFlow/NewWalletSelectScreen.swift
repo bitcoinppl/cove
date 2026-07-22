@@ -135,6 +135,10 @@ struct NewWalletSelectScreen: View {
             return
         }
 
+        if ScanManager.shared.handleKeyTeleportText(text) {
+            return
+        }
+
         newWalletFromXpub(text)
     }
 }

@@ -31,7 +31,9 @@ fn start_discovery_scanner(
 ) -> Option<Addr<WalletDiscoveryScanner>> {
     if !matches!(
         &metadata.discovery_state,
-        DiscoveryState::StartedJson(_) | DiscoveryState::StartedMnemonic
+        DiscoveryState::StartedJson(_)
+            | DiscoveryState::StartedMnemonic
+            | DiscoveryState::StartedXprv
     ) {
         return None;
     }

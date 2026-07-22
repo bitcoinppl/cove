@@ -1,7 +1,7 @@
 //! Discovers which imported wallet address types have transaction history
 //!
 //! This scanner runs during import flows when metadata is in a discovery state such as
-//! `StartedJson` or `StartedMnemonic`. It checks legacy and wrapped SegWit candidate wallets
+//! `StartedJson`, `StartedMnemonic`, or `StartedXprv`. It checks legacy and wrapped SegWit candidate wallets
 //! until it finds history or reaches the discovery scan limit, then records the discovered
 //! address types in wallet metadata. It is separate from the selected-wallet progressive
 //! transaction scanner, which syncs transactions for an already selected wallet
@@ -14,7 +14,7 @@ use bdk_wallet::{
     bitcoin::{Address, Network},
     descriptor::ExtendedDescriptor,
 };
-use bip39::Mnemonic;
+use cove_device::keychain::WalletSecret;
 use cove_tokio::task::spawn_actor;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
@@ -32,12 +32,12 @@ use crate::{
     },
     keychain::Keychain,
     manager::wallet_manager::{SingleOrMany, WalletManagerReconcileMessage},
-    mnemonic::MnemonicExt,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     wallet::{
         WalletAddressType, WalletError,
         metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
     },
+    wallet_secret::WalletSecretExt as _,
 };
 
 #[derive(
@@ -84,8 +84,8 @@ pub enum WalletScannerError {
     #[error("Unable to create wallet")]
     WalletCreationError(#[from] crate::wallet::WalletError),
 
-    #[error("No mnemonic available for id {0}")]
-    NoMnemonicAvailable(WalletId),
+    #[error("No wallet secret available for id {0}")]
+    NoWalletSecretAvailable(WalletId),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -109,6 +109,7 @@ pub struct WalletDiscoveryScanner {
 pub enum ScanSource {
     Json(Arc<FoundJson>),
     Mnemonic,
+    Xprv,
 }
 
 #[async_trait::async_trait]
@@ -149,19 +150,31 @@ impl WalletDiscoveryScanner {
                 ScanSource::Json(json),
             ),
             DiscoveryState::StartedMnemonic => {
-                let mnemonic = Keychain::global()
-                    .get_wallet_key(&id)
+                let secret = Keychain::global()
+                    .get_wallet_secret(&id)
                     .ok()
                     .flatten()
-                    .ok_or_else(|| WalletScannerError::NoMnemonicAvailable(id.clone()))?;
+                    .filter(|secret| matches!(secret, WalletSecret::Mnemonic(_)))
+                    .ok_or_else(|| WalletScannerError::NoWalletSecretAvailable(id.clone()))?;
 
-                (Wallets::try_from_mnemonic(&mnemonic, network)?, ScanSource::Mnemonic)
+                (Wallets::try_from_secret(secret, network)?, ScanSource::Mnemonic)
+            }
+            DiscoveryState::StartedXprv => {
+                let secret = Keychain::global()
+                    .get_wallet_secret(&id)
+                    .ok()
+                    .flatten()
+                    .filter(|secret| matches!(secret, WalletSecret::Xpriv(_)))
+                    .ok_or_else(|| WalletScannerError::NoWalletSecretAvailable(id.clone()))?;
+
+                (Wallets::try_from_secret(secret, network)?, ScanSource::Xprv)
             }
             DiscoveryState::Single
             | DiscoveryState::NoneFound
             | DiscoveryState::ChoseAdressType
             | DiscoveryState::FoundAddressesFromJson(_, _)
-            | DiscoveryState::FoundAddressesFromMnemonic(_) => {
+            | DiscoveryState::FoundAddressesFromMnemonic(_)
+            | DiscoveryState::FoundAddressesFromXprv(_) => {
                 return Err(WalletScannerError::NoAddressTypes);
             }
         };
@@ -342,6 +355,10 @@ impl WalletDiscoveryScanner {
                 self.set_metadata(DiscoveryState::FoundAddressesFromMnemonic(
                     self.found_addresses(),
                 ))?;
+            }
+
+            ScanSource::Xprv => {
+                self.set_metadata(DiscoveryState::FoundAddressesFromXprv(self.found_addresses()))?;
             }
         }
 
@@ -575,12 +592,12 @@ impl Wallets {
         Ok(wallets)
     }
 
-    pub fn try_from_mnemonic(mnemonic: &Mnemonic, network: Network) -> Result<Self, WalletError> {
+    pub fn try_from_secret(secret: WalletSecret, network: Network) -> Result<Self, WalletError> {
         let mut wallets = Self::default();
         let cove_network = cove_types::Network::try_from(network).map_err(WalletError::BdkError)?;
 
         for type_ in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
-            let descriptor = mnemonic.clone().into_descriptors(None, cove_network, type_);
+            let descriptor = secret.clone().into_descriptors(cove_network, type_);
             let wallet = BdkWallet::create(
                 descriptor.external.into_tuple(),
                 descriptor.internal.into_tuple(),
@@ -604,6 +621,9 @@ impl From<ScannerResponse> for WalletManagerReconcileMessage {
 
 #[cfg(test)]
 mod tests {
+    use bdk_wallet::bitcoin::bip32::Xpriv;
+    use cove_device::keychain::WalletXprv;
+
     use super::*;
 
     fn pubport_descriptors(descriptor: &str) -> pubport::descriptor::Descriptors {
@@ -666,6 +686,17 @@ mod tests {
                 .unwrap();
 
         assert!(wallets[index(WalletAddressType::WrappedSegwit)].is_none());
+        assert!(wallets[index(WalletAddressType::Legacy)].is_some());
+    }
+
+    #[test]
+    fn xprv_discovery_builds_wrapped_and_legacy_alternates() {
+        let xprv = Xpriv::new_master(Network::Bitcoin, &[23; 32]).unwrap();
+        let secret = WalletSecret::Xpriv(WalletXprv::try_from(xprv).unwrap());
+
+        let wallets = Wallets::try_from_secret(secret, Network::Bitcoin).unwrap();
+
+        assert!(wallets[index(WalletAddressType::WrappedSegwit)].is_some());
         assert!(wallets[index(WalletAddressType::Legacy)].is_some());
     }
 }

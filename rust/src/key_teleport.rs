@@ -1,7 +1,7 @@
 use std::{fmt, sync::Arc};
 
 use bbqr::file_type::FileType;
-use cove_keyteleport::{Packet, ReceiverPacket, SenderPacket};
+use cove_keyteleport::{Error as ProtocolError, Packet, ReceiverPacket, SenderPacket};
 
 use crate::multi_format::StringOrData;
 
@@ -36,12 +36,12 @@ impl fmt::Debug for KeyTeleportReceiverPacket {
 
 #[uniffi::export]
 impl KeyTeleportReceiverPacket {
-    pub fn bbqr_part(&self) -> String {
-        self.0.to_bbqr_part().unwrap_or_default()
+    pub fn bbqr_part(&self) -> Result<String, KeyTeleportPacketEncodingError> {
+        self.0.to_bbqr_part().map_err(Into::into)
     }
 
-    pub fn url(&self) -> String {
-        self.0.to_url().unwrap_or_default()
+    pub fn url(&self) -> Result<String, KeyTeleportPacketEncodingError> {
+        self.0.to_url().map_err(Into::into)
     }
 }
 
@@ -76,12 +76,27 @@ impl fmt::Debug for KeyTeleportSenderPacket {
 
 #[uniffi::export]
 impl KeyTeleportSenderPacket {
-    pub fn bbqr_part(&self) -> String {
-        self.0.to_bbqr_part().unwrap_or_default()
+    pub fn bbqr_part(&self) -> Result<String, KeyTeleportPacketEncodingError> {
+        self.0.to_bbqr_part().map_err(Into::into)
     }
 
-    pub fn url(&self) -> String {
-        self.0.to_url().unwrap_or_default()
+    pub fn url(&self) -> Result<String, KeyTeleportPacketEncodingError> {
+        self.0.to_url().map_err(Into::into)
+    }
+}
+
+/// A failure while rendering a validated Key Teleport packet
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum KeyTeleportPacketEncodingError {
+    /// The packet could not be encoded as a single-part BBQr value
+    #[error("unable to encode Key Teleport packet: {0}")]
+    Encoding(String),
+}
+
+impl From<ProtocolError> for KeyTeleportPacketEncodingError {
+    fn from(error: ProtocolError) -> Self {
+        Self::Encoding(error.to_string())
     }
 }
 
@@ -95,9 +110,6 @@ pub enum ParsedKeyTeleport {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum KeyTeleportParseError {
-    #[error("unsupported Key Teleport PSBT packet")]
-    UnsupportedPsbt,
-
     #[error("unrecognized Key Teleport packet")]
     Unrecognized,
 }
@@ -173,7 +185,7 @@ mod tests {
 
         match parsed {
             ParsedKeyTeleport::Receiver(packet) => {
-                assert!(packet.bbqr_part().starts_with("B$2R0100"));
+                assert!(packet.bbqr_part().unwrap().starts_with("B$2R0100"));
             }
             _ => panic!("expected receiver packet"),
         }
@@ -194,10 +206,10 @@ mod tests {
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
         )
         .unwrap();
-        let response = sender.send(Payload::mnemonic(mnemonic)).unwrap();
+        let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
         let packet = KeyTeleportSenderPacket::new(response.packet);
 
-        let parsed = parse_key_teleport_string(&packet.bbqr_part()).unwrap();
+        let parsed = parse_key_teleport_string(&packet.bbqr_part().unwrap()).unwrap();
 
         assert!(matches!(parsed, ParsedKeyTeleport::Sender(_)));
     }

@@ -132,15 +132,14 @@ fn import_wallet_secret_with_default_name(
     // check if the wallet already exists using the fingerprint
     let existing_wallet = Database::global()
         .wallets
-        .get_all(network, mode)
-        .unwrap_or_default()
+        .get_all(network, mode)?
         .into_iter()
         .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
 
     // new wallet, create it and return
     if existing_wallet.is_none() {
         // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
+        let number_of_wallets = Database::global().wallets.len(network, mode)?;
 
         let name = default_name.resolve(fingerprint, number_of_wallets);
         let mut wallet_metadata = match &secret {
@@ -176,7 +175,6 @@ fn import_wallet_secret_with_default_name(
     if metadata.wallet_type == WalletType::Hot && keychain.get_wallet_secret(&id)?.is_some() {
         warn!("attempted to import a secret for existing hot wallet {id}, showing duplicate alert");
 
-        Database::global().global_config.select_wallet(id.clone())?;
         return Err(ImportWalletError::WalletAlreadyExists(id));
     }
 
@@ -293,7 +291,7 @@ mod tests {
 
         let xpriv = Xpriv::new_master(bdk_wallet::bitcoin::Network::Bitcoin, &[11; 32]).unwrap();
         let metadata = import_wallet_secret_with_target(
-            WalletSecret::Xpriv(WalletXprv::from(xpriv)),
+            WalletSecret::Xpriv(WalletXprv::try_from(xpriv).unwrap()),
             Network::Signet,
             WalletMode::Decoy,
         )
@@ -322,7 +320,7 @@ mod tests {
         init_globals();
 
         let xpriv = Xpriv::new_master(bdk_wallet::bitcoin::Network::Bitcoin, &[12; 32]).unwrap();
-        let secret = WalletSecret::Xpriv(WalletXprv::from(xpriv));
+        let secret = WalletSecret::Xpriv(WalletXprv::try_from(xpriv).unwrap());
         let fingerprint: Fingerprint = secret.xpub(Network::Signet).fingerprint().into();
         let metadata = import_key_teleport_wallet_secret_with_target(
             secret,

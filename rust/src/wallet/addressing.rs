@@ -58,11 +58,11 @@ impl Wallet {
     }
 
     /// The user imported a hot wallet and wants to switch from native segwit to a different address type
-    pub fn switch_mnemonic_to_new_address_type(
+    pub fn switch_private_wallet_to_new_address_type(
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), WalletError> {
-        debug!("switching mnemonic wallet to new address type");
+        debug!("switching private wallet to new address type");
 
         // delete the bdk wallet filestore
         BdkStore::delete_sqlite_store(&self.id).map_err(|error| {

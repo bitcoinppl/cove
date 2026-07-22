@@ -1,6 +1,10 @@
 use std::str::FromStr as _;
 
 use bip39::Mnemonic;
+use bitcoin::{
+    bip32::{ChildNumber, Xpriv},
+    secp256k1::Secp256k1,
+};
 use cove_keyteleport::{
     DecodedPayload, Error, NumericCode, Packet, Payload, ReceiverSession, SenderSession,
     TeleportPassword, XprvPayload,
@@ -15,16 +19,32 @@ const KEYTELEPORT_DOC_EXAMPLE: &str =
     "https://keyteleport.com/#B$2R0100VHT2AGUUH7KUZUUSTOWOIWHJX3XM7GA2N4BHQOXDFHXLVHVA7K6ZO";
 const EXPECTED_RECEIVER_PACKET: &str =
     "c6cc594473287ba6a0af8b6a5f5183cf51cb750d1df10c8a6cc5236fe43fc5e5dc";
-const EXPECTED_SENDER_PACKET: &str = "02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33781594411bb9b79f98984a9407507af99615676fa9bac";
+const EXPECTED_SENDER_PACKET: &str =
+    "02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe3378159627a12c2";
+
+// Fixtures generated from COLDCARD firmware testing/teleport_protocol.py at
+// bcc2c382a324690a2fcf972c0bac3b79bf923f7b
 
 #[test]
 fn mnemonic_payload_roundtrips_for_supported_word_counts() {
     for entropy_len in [16, 24, 32] {
         let entropy = vec![0_u8; entropy_len];
         let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
-        let decoded = roundtrip(Payload::mnemonic(mnemonic.clone())).unwrap();
+        let decoded = roundtrip(Payload::mnemonic(mnemonic.clone()).unwrap()).unwrap();
 
         assert_eq!(decoded, DecodedPayload::Mnemonic(mnemonic));
+    }
+}
+
+#[test]
+fn mnemonic_payload_rejects_word_counts_coldcard_cannot_encode() {
+    for entropy_len in [20, 28] {
+        let mnemonic = Mnemonic::from_entropy(&vec![0_u8; entropy_len]).unwrap();
+
+        assert!(matches!(
+            Payload::mnemonic(mnemonic),
+            Err(Error::UnsupportedMnemonicWordCount(15 | 21))
+        ));
     }
 }
 
@@ -41,6 +61,12 @@ fn xprv_protocol_payload_roundtrips_and_validates_base58check() {
         XprvPayload::parse("xprv9s21ZrQH143K4invalid"),
         Err(Error::InvalidXprvPayload)
     ));
+
+    let child = Xpriv::from_str(XPRV)
+        .unwrap()
+        .derive_priv(&Secp256k1::new(), &[ChildNumber::from_normal_idx(0).unwrap()])
+        .unwrap();
+    assert!(matches!(Payload::xprv(child.to_string()), Err(Error::NonMasterXprvPayload)));
 }
 
 #[test]
@@ -54,7 +80,7 @@ fn wrong_password_fails_inner_checksum_after_outer_decrypt_succeeds() {
         TeleportPassword::from_bytes(PASSWORD_BYTES),
     )
     .unwrap();
-    let response = sender.send(Payload::mnemonic(test_mnemonic_12())).unwrap();
+    let response = sender.send(Payload::mnemonic(test_mnemonic_12()).unwrap()).unwrap();
     let pending = receiver.decode_step1(&response.packet).unwrap();
     let wrong_password = TeleportPassword::from_bytes([9, 9, 9, 9, 9]);
 
@@ -72,10 +98,32 @@ fn wrong_receiver_key_fails_outer_checksum_without_consuming_packet() {
         TeleportPassword::from_bytes(PASSWORD_BYTES),
     )
     .unwrap();
-    let response = sender.send(Payload::mnemonic(test_mnemonic_12())).unwrap();
+    let response = sender.send(Payload::mnemonic(test_mnemonic_12()).unwrap()).unwrap();
     let wrong_receiver = ReceiverSession::from_private_key_bytes(RECEIVER_SECRET_2).unwrap();
 
     assert!(matches!(wrong_receiver.decode_step1(&response.packet), Err(Error::Checksum)));
+}
+
+#[test]
+fn mistyped_but_curve_valid_receiver_code_fails_at_receiver_checksum() {
+    let receiver = ReceiverSession::from_private_key_bytes(RECEIVER_SECRET).unwrap();
+    let request = receiver.request().unwrap();
+    let wrong_code = (0..100_000_000)
+        .map(|value| NumericCode::from_str(&format!("{value:08}")).unwrap())
+        .find(|code| {
+            code != &request.numeric_code && SenderSession::new(&request.packet, code).is_ok()
+        })
+        .expect("a curve-valid mistyped code should be found");
+    let sender = SenderSession::with_private_key_and_password(
+        &request.packet,
+        &wrong_code,
+        SENDER_SECRET,
+        TeleportPassword::from_bytes(PASSWORD_BYTES),
+    )
+    .unwrap();
+    let response = sender.send(Payload::mnemonic(test_mnemonic_12()).unwrap()).unwrap();
+
+    assert!(matches!(receiver.decode_step1(&response.packet), Err(Error::Checksum)));
 }
 
 #[test]
@@ -89,7 +137,7 @@ fn coldcard_protocol_vectors_match() {
         TeleportPassword::from_bytes(PASSWORD_BYTES),
     )
     .unwrap();
-    let response = sender.send(Payload::mnemonic(test_mnemonic_12())).unwrap();
+    let response = sender.send(Payload::mnemonic(test_mnemonic_12()).unwrap()).unwrap();
 
     assert_eq!(request.numeric_code.as_str(), "88805930");
     assert_eq!(hex_string(request.packet.as_bytes()), EXPECTED_RECEIVER_PACKET);

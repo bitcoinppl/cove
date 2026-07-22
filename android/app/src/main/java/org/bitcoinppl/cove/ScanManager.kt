@@ -77,10 +77,33 @@ class ScanManager private constructor() {
 
     fun handleKeyTeleportText(input: String): Boolean {
         val text = input.trim()
-        val multiFormat =
-            runCatching {
-                StringOrData.String(text).tryIntoMultiFormat()
-            }.getOrNull()
+        val multiFormat = try {
+            StringOrData.String(text).tryIntoMultiFormat()
+        } catch (_: MultiFormatException.KeyTeleportPsbtNotSupported) {
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.InvalidFileFormat(
+                        "Key Teleport PSBT packets are not supported yet.",
+                    ),
+                )
+            return true
+        } catch (_: Exception) {
+            val normalized = text.lowercase()
+            val looksLikeKeyTeleport =
+                normalized.contains("keyteleport.com") ||
+                    normalized.startsWith("b\$2r") ||
+                    normalized.startsWith("b\$2s") ||
+                    normalized.startsWith("b\$2p")
+            if (looksLikeKeyTeleport) {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.InvalidFileFormat(
+                            "This Key Teleport packet could not be read.",
+                        ),
+                    )
+            }
+            return looksLikeKeyTeleport
+        }
 
         return when (multiFormat) {
             is MultiFormat.KeyTeleportReceiver -> {
@@ -99,13 +122,13 @@ class ScanManager private constructor() {
 
     private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket) {
         val manager = app.getKeyTeleportManager()
-        manager.ingest(StringOrData.String(packet.bbqrPart()))
+        manager.ingest(packet)
         app.pushRoute(RouteFactory().keyTeleportSend())
     }
 
     private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket) {
         val manager = app.getKeyTeleportManager()
-        manager.ingest(StringOrData.String(packet.bbqrPart()))
+        manager.ingest(packet)
         app.pushRoute(RouteFactory().keyTeleportReceive())
     }
 

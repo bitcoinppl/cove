@@ -6,7 +6,7 @@ use cove_util::ResultExt as _;
 
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use bip39::Mnemonic;
-use bitcoin::bip32::{Xpriv, Xpub};
+use bitcoin::bip32::{ChildNumber, Fingerprint, Xpriv, Xpub};
 use once_cell::sync::OnceCell;
 use tracing::warn;
 use zeroize::{Zeroize as _, Zeroizing};
@@ -28,15 +28,29 @@ const WALLET_SECRET_XPRIV_TAG: &str = "xpriv::";
 #[derive(Clone, PartialEq, Eq)]
 pub struct WalletXprv(String);
 
+/// Validation failures for a wallet extended private key
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum WalletXprvError {
+    /// The value is not a valid encoded extended private key
+    #[error("invalid extended private key: {0}")]
+    Invalid(String),
+
+    /// Cove wallet secrets must represent the BIP32 root
+    #[error("extended private key is not a master key")]
+    NotMaster,
+}
+
 impl WalletXprv {
     /// Validates and wraps an encoded extended private key
     ///
     /// # Errors
     ///
-    /// Returns a BIP32 error when `value` is not a valid extended private key
-    pub fn parse(value: impl Into<String>) -> Result<Self, bitcoin::bip32::Error> {
+    /// Returns an error when `value` is invalid or contains child-key metadata
+    pub fn parse(value: impl Into<String>) -> Result<Self, WalletXprvError> {
         let value = Self(value.into());
-        Xpriv::from_str(&value.0)?;
+        let xprv = Xpriv::from_str(&value.0)
+            .map_err(|error| WalletXprvError::Invalid(error.to_string()))?;
+        validate_master_xprv(&xprv)?;
 
         Ok(value)
     }
@@ -64,10 +78,25 @@ impl Drop for WalletXprv {
     }
 }
 
-impl From<Xpriv> for WalletXprv {
-    fn from(value: Xpriv) -> Self {
-        Self(value.to_string())
+impl TryFrom<Xpriv> for WalletXprv {
+    type Error = WalletXprvError;
+
+    fn try_from(value: Xpriv) -> Result<Self, Self::Error> {
+        validate_master_xprv(&value)?;
+
+        Ok(Self(value.to_string()))
     }
+}
+
+fn validate_master_xprv(value: &Xpriv) -> Result<(), WalletXprvError> {
+    let is_master = value.depth == 0
+        && value.parent_fingerprint == Fingerprint::default()
+        && value.child_number == ChildNumber::Normal { index: 0 };
+    if !is_master {
+        return Err(WalletXprvError::NotMaster);
+    }
+
+    Ok(())
 }
 
 /// A hot wallet's private key material
@@ -149,9 +178,11 @@ impl From<Mnemonic> for WalletSecret {
     }
 }
 
-impl From<Xpriv> for WalletSecret {
-    fn from(value: Xpriv) -> Self {
-        Self::Xpriv(value.into())
+impl TryFrom<Xpriv> for WalletSecret {
+    type Error = WalletXprvError;
+
+    fn try_from(value: Xpriv) -> Result<Self, Self::Error> {
+        WalletXprv::try_from(value).map(Self::Xpriv)
     }
 }
 
@@ -819,17 +850,26 @@ mod tests {
         let id = wallet_id();
         let expected = xpriv();
 
-        keychain.save_wallet_secret(&id, expected.into()).unwrap();
+        keychain.save_wallet_secret(&id, WalletSecret::try_from(expected).unwrap()).unwrap();
 
         let secret = keychain.get_wallet_secret(&id).unwrap().unwrap();
         assert_eq!(secret.as_xprv().unwrap().to_xpriv(), expected);
     }
 
     #[test]
+    fn wallet_xprv_rejects_non_master_keys() {
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let child = xpriv().derive_priv(&secp, &[ChildNumber::Normal { index: 1 }]).unwrap();
+
+        assert_eq!(WalletXprv::try_from(child), Err(WalletXprvError::NotMaster));
+        assert_eq!(WalletXprv::parse(child.to_string()), Err(WalletXprvError::NotMaster));
+    }
+
+    #[test]
     fn mnemonic_getter_reports_xpriv_type_mismatch() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
-        keychain.save_wallet_secret(&id, xpriv().into()).unwrap();
+        keychain.save_wallet_secret(&id, WalletSecret::try_from(xpriv()).unwrap()).unwrap();
 
         assert_eq!(keychain.get_wallet_key(&id), Err(KeychainError::WalletSecretTypeMismatch));
     }
@@ -841,7 +881,7 @@ mod tests {
         keychain.save_wallet_key(&id, mnemonic()).unwrap();
 
         let expected = xpriv();
-        keychain.save_wallet_secret(&id, expected.into()).unwrap();
+        keychain.save_wallet_secret(&id, WalletSecret::try_from(expected).unwrap()).unwrap();
 
         let secret = keychain.get_wallet_secret(&id).unwrap().unwrap();
         assert_eq!(secret.as_xprv().unwrap().to_xpriv(), expected);
@@ -852,7 +892,7 @@ mod tests {
     fn wallet_secret_debug_output_is_redacted() {
         let mnemonic = mnemonic();
         let mnemonic_debug = format!("{:?}", WalletSecret::Mnemonic(mnemonic.clone()));
-        let xpriv = WalletXprv::from(xpriv());
+        let xpriv = WalletXprv::try_from(xpriv()).unwrap();
         let xpriv_debug = format!("{xpriv:?}");
 
         assert_eq!(mnemonic_debug, "WalletSecret::Mnemonic(<redacted>)");
@@ -865,7 +905,7 @@ mod tests {
     fn delete_wallet_items_removes_wallet_secret() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
-        keychain.save_wallet_secret(&id, xpriv().into()).unwrap();
+        keychain.save_wallet_secret(&id, WalletSecret::try_from(xpriv()).unwrap()).unwrap();
 
         assert!(keychain.delete_wallet_items(&id));
         assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);

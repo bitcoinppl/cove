@@ -5666,9 +5666,9 @@ public func FfiConverterTypeKeyTeleportPassword_lower(_ value: KeyTeleportPasswo
 
 public protocol KeyTeleportReceiverPacketProtocol: AnyObject, Sendable {
 
-    func bbqrPart()  -> String
+    func bbqrPart() throws  -> String
 
-    func url()  -> String
+    func url() throws  -> String
 
 }
 open class KeyTeleportReceiverPacket: KeyTeleportReceiverPacketProtocol, @unchecked Sendable {
@@ -5724,8 +5724,8 @@ open class KeyTeleportReceiverPacket: KeyTeleportReceiverPacketProtocol, @unchec
 
 
 
-open func bbqrPart() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+open func bbqrPart()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeKeyTeleportPacketEncodingError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_keyteleportreceiverpacket_bbqr_part(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -5733,8 +5733,8 @@ open func bbqrPart() -> String  {
 })
 }
 
-open func url() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+open func url()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeKeyTeleportPacketEncodingError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_keyteleportreceiverpacket_url(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -5794,9 +5794,9 @@ public func FfiConverterTypeKeyTeleportReceiverPacket_lower(_ value: KeyTeleport
 
 public protocol KeyTeleportSenderPacketProtocol: AnyObject, Sendable {
 
-    func bbqrPart()  -> String
+    func bbqrPart() throws  -> String
 
-    func url()  -> String
+    func url() throws  -> String
 
 }
 open class KeyTeleportSenderPacket: KeyTeleportSenderPacketProtocol, @unchecked Sendable {
@@ -5852,8 +5852,8 @@ open class KeyTeleportSenderPacket: KeyTeleportSenderPacketProtocol, @unchecked 
 
 
 
-open func bbqrPart() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+open func bbqrPart()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeKeyTeleportPacketEncodingError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_keyteleportsenderpacket_bbqr_part(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -5861,8 +5861,8 @@ open func bbqrPart() -> String  {
 })
 }
 
-open func url() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
+open func url()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeKeyTeleportPacketEncodingError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_keyteleportsenderpacket_url(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -26633,9 +26633,18 @@ public enum DiscoveryState: Equatable, Hashable {
     case startedJson(FoundJson
     )
     case startedMnemonic
+    /**
+     * Discover alternate script types for an imported master extended private key
+     */
+    case startedXprv
     case foundAddressesFromJson([FoundAddress],FoundJson
     )
     case foundAddressesFromMnemonic([FoundAddress]
+    )
+    /**
+     * Alternate script types with history derived from an imported master xprv
+     */
+    case foundAddressesFromXprv([FoundAddress]
     )
     case noneFound
     case choseAdressType
@@ -26691,15 +26700,20 @@ public struct FfiConverterTypeDiscoveryState: FfiConverterRustBuffer {
 
         case 3: return .startedMnemonic
 
-        case 4: return .foundAddressesFromJson(try FfiConverterSequenceTypeFoundAddress.read(from: &buf), try FfiConverterTypeFoundJson.read(from: &buf)
+        case 4: return .startedXprv
+
+        case 5: return .foundAddressesFromJson(try FfiConverterSequenceTypeFoundAddress.read(from: &buf), try FfiConverterTypeFoundJson.read(from: &buf)
         )
 
-        case 5: return .foundAddressesFromMnemonic(try FfiConverterSequenceTypeFoundAddress.read(from: &buf)
+        case 6: return .foundAddressesFromMnemonic(try FfiConverterSequenceTypeFoundAddress.read(from: &buf)
         )
 
-        case 6: return .noneFound
+        case 7: return .foundAddressesFromXprv(try FfiConverterSequenceTypeFoundAddress.read(from: &buf)
+        )
 
-        case 7: return .choseAdressType
+        case 8: return .noneFound
+
+        case 9: return .choseAdressType
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26722,23 +26736,32 @@ public struct FfiConverterTypeDiscoveryState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
 
 
-        case let .foundAddressesFromJson(v1,v2):
+        case .startedXprv:
             writeInt(&buf, Int32(4))
+
+
+        case let .foundAddressesFromJson(v1,v2):
+            writeInt(&buf, Int32(5))
             FfiConverterSequenceTypeFoundAddress.write(v1, into: &buf)
             FfiConverterTypeFoundJson.write(v2, into: &buf)
 
 
         case let .foundAddressesFromMnemonic(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
+            FfiConverterSequenceTypeFoundAddress.write(v1, into: &buf)
+
+
+        case let .foundAddressesFromXprv(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterSequenceTypeFoundAddress.write(v1, into: &buf)
 
 
         case .noneFound:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
 
 
         case .choseAdressType:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
 
         }
     }
@@ -28849,6 +28872,7 @@ enum KeyTeleportAlert: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
 
     case NoActiveReceiveSession
     case ReceiveSessionExpired
+    case ReceiveSessionReset
     case ParseFailed
     case UnsupportedPsbt
     /**
@@ -28915,26 +28939,27 @@ public struct FfiConverterTypeKeyTeleportAlert: FfiConverterRustBuffer {
 
         case 1: return .NoActiveReceiveSession
         case 2: return .ReceiveSessionExpired
-        case 3: return .ParseFailed
-        case 4: return .UnsupportedPsbt
-        case 5: return .UnsupportedPayload
-        case 6: return .InvalidPayload
-        case 7: return .WrongReceiverCode
-        case 8: return .WrongTeleportPassword
-        case 9: return .NoEligibleWallets
-        case 10: return .IneligibleWallet
-        case 11: return .NoPendingSend
-        case 12: return .NoPendingReceiveSecret
-        case 13: return .ImportFailed(
+        case 3: return .ReceiveSessionReset
+        case 4: return .ParseFailed
+        case 5: return .UnsupportedPsbt
+        case 6: return .UnsupportedPayload
+        case 7: return .InvalidPayload
+        case 8: return .WrongReceiverCode
+        case 9: return .WrongTeleportPassword
+        case 10: return .NoEligibleWallets
+        case 11: return .IneligibleWallet
+        case 12: return .NoPendingSend
+        case 13: return .NoPendingReceiveSecret
+        case 14: return .ImportFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 14: return .Keychain(
+        case 15: return .Keychain(
             try FfiConverterString.read(from: &buf)
             )
-        case 15: return .Protocol(
+        case 16: return .Protocol(
             try FfiConverterString.read(from: &buf)
             )
-        case 16: return .Database(
+        case 17: return .Database(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -28957,63 +28982,67 @@ public struct FfiConverterTypeKeyTeleportAlert: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
 
 
-        case .ParseFailed:
+        case .ReceiveSessionReset:
             writeInt(&buf, Int32(3))
 
 
-        case .UnsupportedPsbt:
+        case .ParseFailed:
             writeInt(&buf, Int32(4))
 
 
-        case .UnsupportedPayload:
+        case .UnsupportedPsbt:
             writeInt(&buf, Int32(5))
 
 
-        case .InvalidPayload:
+        case .UnsupportedPayload:
             writeInt(&buf, Int32(6))
 
 
-        case .WrongReceiverCode:
+        case .InvalidPayload:
             writeInt(&buf, Int32(7))
 
 
-        case .WrongTeleportPassword:
+        case .WrongReceiverCode:
             writeInt(&buf, Int32(8))
 
 
-        case .NoEligibleWallets:
+        case .WrongTeleportPassword:
             writeInt(&buf, Int32(9))
 
 
-        case .IneligibleWallet:
+        case .NoEligibleWallets:
             writeInt(&buf, Int32(10))
 
 
-        case .NoPendingSend:
+        case .IneligibleWallet:
             writeInt(&buf, Int32(11))
 
 
-        case .NoPendingReceiveSecret:
+        case .NoPendingSend:
             writeInt(&buf, Int32(12))
 
 
-        case let .ImportFailed(v1):
+        case .NoPendingReceiveSecret:
             writeInt(&buf, Int32(13))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Keychain(v1):
+        case let .ImportFailed(v1):
             writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Protocol(v1):
+        case let .Keychain(v1):
             writeInt(&buf, Int32(15))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Database(v1):
+        case let .Protocol(v1):
             writeInt(&buf, Int32(16))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Database(v1):
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -29036,6 +29065,100 @@ public func FfiConverterTypeKeyTeleportAlert_lower(_ value: KeyTeleportAlert) ->
 }
 
 
+/**
+ * Validated or unparsed input for a Key Teleport flow
+ */
+
+public enum KeyTeleportInput {
+
+    /**
+     * Text or bytes that still need protocol parsing
+     */
+    case multiFormat(StringOrData
+    )
+    /**
+     * A receiver request already validated by the shared scanner
+     */
+    case receiver(KeyTeleportReceiverPacket
+    )
+    /**
+     * A sender response already validated by the shared scanner
+     */
+    case sender(KeyTeleportSenderPacket
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportInput: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportInput
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportInput {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .multiFormat(try FfiConverterTypeStringOrData.read(from: &buf)
+        )
+
+        case 2: return .receiver(try FfiConverterTypeKeyTeleportReceiverPacket.read(from: &buf)
+        )
+
+        case 3: return .sender(try FfiConverterTypeKeyTeleportSenderPacket.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportInput, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .multiFormat(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeStringOrData.write(v1, into: &buf)
+
+
+        case let .receiver(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeKeyTeleportReceiverPacket.write(v1, into: &buf)
+
+
+        case let .sender(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeKeyTeleportSenderPacket.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportInput_lift(_ buf: RustBuffer) throws -> KeyTeleportInput {
+    return try FfiConverterTypeKeyTeleportInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportInput_lower(_ value: KeyTeleportInput) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportInput.lower(value)
+}
+
+
+
 
 public enum KeyTeleportManagerAction {
 
@@ -29048,7 +29171,7 @@ public enum KeyTeleportManagerAction {
      * Deletes the active receive request
      */
     case endReceive
-    case ingest(StringOrData
+    case ingest(KeyTeleportInput
     )
     case startSendFromWallet(WalletId
     )
@@ -29097,7 +29220,7 @@ public struct FfiConverterTypeKeyTeleportManagerAction: FfiConverterRustBuffer {
 
         case 3: return .endReceive
 
-        case 4: return .ingest(try FfiConverterTypeStringOrData.read(from: &buf)
+        case 4: return .ingest(try FfiConverterTypeKeyTeleportInput.read(from: &buf)
         )
 
         case 5: return .startSendFromWallet(try FfiConverterTypeWalletId.read(from: &buf)
@@ -29146,7 +29269,7 @@ public struct FfiConverterTypeKeyTeleportManagerAction: FfiConverterRustBuffer {
 
         case let .ingest(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeStringOrData.write(v1, into: &buf)
+            FfiConverterTypeKeyTeleportInput.write(v1, into: &buf)
 
 
         case let .startSendFromWallet(v1):
@@ -29298,6 +29421,10 @@ public enum KeyTeleportManagerState {
     case idle
     case receiveReady(KeyTeleportReceiveState
     )
+    /**
+     * Receive-session setup failed and can be retried
+     */
+    case receiveError
     case receiveEnterPassword
     case receiveMnemonicReview(KeyTeleportMnemonicReview
     )
@@ -29312,6 +29439,11 @@ public enum KeyTeleportManagerState {
      * Reports the wallet created from received private key material
      */
     case receiveImportedWallet(WalletMetadata
+    )
+    /**
+     * Reports that the received wallet already exists on this device
+     */
+    case receiveAlreadyImportedWallet(WalletMetadata
     )
     /**
      * Waits for the receiver request after a sending wallet has been fixed
@@ -29351,32 +29483,37 @@ public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
         case 2: return .receiveReady(try FfiConverterTypeKeyTeleportReceiveState.read(from: &buf)
         )
 
-        case 3: return .receiveEnterPassword
+        case 3: return .receiveError
 
-        case 4: return .receiveMnemonicReview(try FfiConverterTypeKeyTeleportMnemonicReview.read(from: &buf)
+        case 4: return .receiveEnterPassword
+
+        case 5: return .receiveMnemonicReview(try FfiConverterTypeKeyTeleportMnemonicReview.read(from: &buf)
         )
 
-        case 5: return .receiveXprvReview(try FfiConverterTypeKeyTeleportXprvReview.read(from: &buf)
+        case 6: return .receiveXprvReview(try FfiConverterTypeKeyTeleportXprvReview.read(from: &buf)
         )
 
-        case 6: return .receiveMessageReview(try FfiConverterTypeKeyTeleportMessageReview.read(from: &buf)
+        case 7: return .receiveMessageReview(try FfiConverterTypeKeyTeleportMessageReview.read(from: &buf)
         )
 
-        case 7: return .receiveImportedWallet(try FfiConverterTypeWalletMetadata.read(from: &buf)
+        case 8: return .receiveImportedWallet(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
 
-        case 8: return .sendAwaitReceiver
-
-        case 9: return .sendChooseWallet(try FfiConverterTypeKeyTeleportSendChooseWallet.read(from: &buf)
+        case 9: return .receiveAlreadyImportedWallet(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
 
-        case 10: return .sendEnterCode(try FfiConverterTypeKeyTeleportSendEnterCode.read(from: &buf)
+        case 10: return .sendAwaitReceiver
+
+        case 11: return .sendChooseWallet(try FfiConverterTypeKeyTeleportSendChooseWallet.read(from: &buf)
         )
 
-        case 11: return .sendConfirm(try FfiConverterTypeKeyTeleportSendConfirm.read(from: &buf)
+        case 12: return .sendEnterCode(try FfiConverterTypeKeyTeleportSendEnterCode.read(from: &buf)
         )
 
-        case 12: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
+        case 13: return .sendConfirm(try FfiConverterTypeKeyTeleportSendConfirm.read(from: &buf)
+        )
+
+        case 14: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29396,51 +29533,60 @@ public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
             FfiConverterTypeKeyTeleportReceiveState.write(v1, into: &buf)
 
 
-        case .receiveEnterPassword:
+        case .receiveError:
             writeInt(&buf, Int32(3))
 
 
-        case let .receiveMnemonicReview(v1):
+        case .receiveEnterPassword:
             writeInt(&buf, Int32(4))
+
+
+        case let .receiveMnemonicReview(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeKeyTeleportMnemonicReview.write(v1, into: &buf)
 
 
         case let .receiveXprvReview(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeKeyTeleportXprvReview.write(v1, into: &buf)
 
 
         case let .receiveMessageReview(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeKeyTeleportMessageReview.write(v1, into: &buf)
 
 
         case let .receiveImportedWallet(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeWalletMetadata.write(v1, into: &buf)
+
+
+        case let .receiveAlreadyImportedWallet(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
 
 
         case .sendAwaitReceiver:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
 
 
         case let .sendChooseWallet(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeKeyTeleportSendChooseWallet.write(v1, into: &buf)
 
 
         case let .sendEnterCode(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeKeyTeleportSendEnterCode.write(v1, into: &buf)
 
 
         case let .sendConfirm(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeKeyTeleportSendConfirm.write(v1, into: &buf)
 
 
         case let .sendReady(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeKeyTeleportSendReady.write(v1, into: &buf)
 
         }
@@ -29552,12 +29698,103 @@ public func FfiConverterTypeKeyTeleportMessageItem_lower(_ value: KeyTeleportMes
 
 
 
+/**
+ * A failure while rendering a validated Key Teleport packet
+ */
+public
+enum KeyTeleportPacketEncodingError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    /**
+     * The packet could not be encoded as a single-part BBQr value
+     */
+    case Encoding(String
+    )
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_keyteleportpacketencodingerror_uniffi_trait_display(
+            FfiConverterTypeKeyTeleportPacketEncodingError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension KeyTeleportPacketEncodingError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyTeleportPacketEncodingError: FfiConverterRustBuffer {
+    typealias SwiftType = KeyTeleportPacketEncodingError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportPacketEncodingError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .Encoding(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyTeleportPacketEncodingError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case let .Encoding(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportPacketEncodingError_lift(_ buf: RustBuffer) throws -> KeyTeleportPacketEncodingError {
+    return try FfiConverterTypeKeyTeleportPacketEncodingError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyTeleportPacketEncodingError_lower(_ value: KeyTeleportPacketEncodingError) -> RustBuffer {
+    return FfiConverterTypeKeyTeleportPacketEncodingError.lower(value)
+}
+
+
 public
 enum KeyTeleportParseError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
-    case UnsupportedPsbt
     case Unrecognized
 
 
@@ -29599,8 +29836,7 @@ public struct FfiConverterTypeKeyTeleportParseError: FfiConverterRustBuffer {
 
 
 
-        case 1: return .UnsupportedPsbt
-        case 2: return .Unrecognized
+        case 1: return .Unrecognized
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29613,12 +29849,8 @@ public struct FfiConverterTypeKeyTeleportParseError: FfiConverterRustBuffer {
 
 
 
-        case .UnsupportedPsbt:
-            writeInt(&buf, Int32(1))
-
-
         case .Unrecognized:
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(1))
 
         }
     }
@@ -39375,7 +39607,7 @@ enum WalletScannerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     case NoAddressTypes
     case WalletCreationError(WalletError
     )
-    case NoMnemonicAvailable(WalletId
+    case NoWalletSecretAvailable(WalletId
     )
 
 
@@ -39421,7 +39653,7 @@ public struct FfiConverterTypeWalletScannerError: FfiConverterRustBuffer {
         case 2: return .WalletCreationError(
             try FfiConverterTypeWalletError.read(from: &buf)
             )
-        case 3: return .NoMnemonicAvailable(
+        case 3: return .NoWalletSecretAvailable(
             try FfiConverterTypeWalletId.read(from: &buf)
             )
 
@@ -39445,7 +39677,7 @@ public struct FfiConverterTypeWalletScannerError: FfiConverterRustBuffer {
             FfiConverterTypeWalletError.write(v1, into: &buf)
 
 
-        case let .NoMnemonicAvailable(v1):
+        case let .NoWalletSecretAvailable(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
@@ -44699,16 +44931,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_filehandler_read() != 12343) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part() != 31966) {
+    if (uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part() != 45199) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_keyteleportreceiverpacket_url() != 30148) {
+    if (uniffi_cove_checksum_method_keyteleportreceiverpacket_url() != 17039) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part() != 12397) {
+    if (uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part() != 49372) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_keyteleportsenderpacket_url() != 48299) {
+    if (uniffi_cove_checksum_method_keyteleportsenderpacket_url() != 49444) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479) {

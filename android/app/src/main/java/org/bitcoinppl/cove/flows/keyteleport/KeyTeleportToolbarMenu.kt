@@ -20,17 +20,17 @@ import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 
 private sealed interface KeyTeleportToolbarActions {
-    val url: String
+    val url: String?
     val shareTitle: String
 
     data class Receive(
-        override val url: String,
+        override val url: String?,
     ) : KeyTeleportToolbarActions {
         override val shareTitle = "Share Receiver Code"
     }
 
     data class Send(
-        override val url: String,
+        override val url: String?,
     ) : KeyTeleportToolbarActions {
         override val shareTitle = "Share Key Teleport"
     }
@@ -45,6 +45,7 @@ internal fun KeyTeleportToolbarMenu(
     val context = LocalContext.current
     var isExpanded by remember(actions) { mutableStateOf(false) }
     var showEndSessionConfirmation by remember(actions) { mutableStateOf(false) }
+    var showRestartSessionConfirmation by remember(actions) { mutableStateOf(false) }
 
     IconButton(onClick = { isExpanded = true }) {
         Icon(Icons.Default.MoreVert, contentDescription = "Key Teleport options")
@@ -53,14 +54,23 @@ internal fun KeyTeleportToolbarMenu(
         expanded = isExpanded,
         onDismissRequest = { isExpanded = false },
     ) {
-        DropdownMenuItem(
-            text = { Text("Share") },
-            onClick = {
-                isExpanded = false
-                shareText(context, actions.shareTitle, actions.url)
-            },
-        )
+        actions.url?.let { url ->
+            DropdownMenuItem(
+                text = { Text("Share") },
+                onClick = {
+                    isExpanded = false
+                    shareText(context, actions.shareTitle, url)
+                },
+            )
+        }
         if (actions is KeyTeleportToolbarActions.Receive) {
+            DropdownMenuItem(
+                text = { Text("New Receive Request") },
+                onClick = {
+                    isExpanded = false
+                    showRestartSessionConfirmation = true
+                },
+            )
             DropdownMenuItem(
                 text = { Text("End Session", color = MaterialTheme.colorScheme.error) },
                 onClick = {
@@ -81,12 +91,23 @@ internal fun KeyTeleportToolbarMenu(
             onDismiss = { showEndSessionConfirmation = false },
         )
     }
+    if (showRestartSessionConfirmation) {
+        RestartSessionConfirmation(
+            onConfirm = {
+                showRestartSessionConfirmation = false
+                manager.dispatch(KeyTeleportManagerAction.RestartReceive)
+            },
+            onDismiss = { showRestartSessionConfirmation = false },
+        )
+    }
 }
 
 private fun KeyTeleportManagerState.toolbarActions(): KeyTeleportToolbarActions? =
     when (this) {
-        is KeyTeleportManagerState.ReceiveReady -> KeyTeleportToolbarActions.Receive(v1.packet.url())
-        is KeyTeleportManagerState.SendReady -> KeyTeleportToolbarActions.Send(v1.packet.url())
+        is KeyTeleportManagerState.ReceiveReady ->
+            KeyTeleportToolbarActions.Receive(runCatching { v1.packet.url() }.getOrNull())
+        is KeyTeleportManagerState.SendReady ->
+            KeyTeleportToolbarActions.Send(runCatching { v1.packet.url() }.getOrNull())
         else -> null
     }
 
@@ -104,6 +125,28 @@ private fun EndSessionConfirmation(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("End Session")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun RestartSessionConfirmation(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create a new receive request?") },
+        text = { Text("Sender responses made for the current request will no longer work.") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Create New Request")
             }
         },
         dismissButton = {

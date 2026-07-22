@@ -57,7 +57,10 @@ impl WalletSecretExt for WalletSecret {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr as _;
+
     use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv};
+    use bip39::Mnemonic;
     use cove_device::keychain::WalletXprv;
 
     use super::*;
@@ -65,7 +68,7 @@ mod tests {
     #[test]
     fn xpriv_uses_the_target_network_for_public_keys_and_descriptors() {
         let xpriv = Xpriv::new_master(BitcoinNetwork::Bitcoin, &[17; 32]).unwrap();
-        let secret = WalletSecret::Xpriv(WalletXprv::from(xpriv));
+        let secret = WalletSecret::Xpriv(WalletXprv::try_from(xpriv).unwrap());
 
         assert_eq!(secret.xpub(Network::Bitcoin).network, NetworkKind::Main);
         assert_eq!(secret.xpub(Network::Signet).network, NetworkKind::Test);
@@ -74,5 +77,35 @@ mod tests {
         let create_params = descriptors.into_create_params().network(BitcoinNetwork::Signet);
 
         create_params.create_wallet_no_persist().unwrap();
+    }
+
+    #[test]
+    fn mnemonic_and_its_master_xprv_derive_the_same_wallets() {
+        let mnemonic = Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let master = Xpriv::new_master(BitcoinNetwork::Bitcoin, &mnemonic.to_seed("")).unwrap();
+        let xprv = WalletXprv::try_from(master).unwrap();
+
+        for address_type in [
+            WalletAddressType::NativeSegwit,
+            WalletAddressType::WrappedSegwit,
+            WalletAddressType::Legacy,
+        ] {
+            let mnemonic_descriptors = WalletSecret::Mnemonic(mnemonic.clone())
+                .into_descriptors(Network::Bitcoin, address_type);
+            let xprv_descriptors =
+                WalletSecret::Xpriv(xprv.clone()).into_descriptors(Network::Bitcoin, address_type);
+
+            assert_eq!(
+                mnemonic_descriptors.external.extended_descriptor.to_string(),
+                xprv_descriptors.external.extended_descriptor.to_string()
+            );
+            assert_eq!(
+                mnemonic_descriptors.internal.extended_descriptor.to_string(),
+                xprv_descriptors.internal.extended_descriptor.to_string()
+            );
+        }
     }
 }

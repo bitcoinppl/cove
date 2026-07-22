@@ -40,7 +40,9 @@ extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTe
         guard let rust = takeRustForClose() else { return }
 
         logger.debug("Closing KeyTeleportManager")
-        rust.dispatch(action: .clear)
+        rustBridge.async {
+            rust.dispatch(action: .clear)
+        }
     }
 
     private func takeRustForClose() -> RustKeyTeleportManager? {
@@ -87,7 +89,15 @@ extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTe
     }
 
     func ingest(_ input: String) {
-        dispatch(.ingest(StringOrData(input)))
+        dispatch(.ingest(.multiFormat(StringOrData(input))))
+    }
+
+    func ingest(_ packet: KeyTeleportReceiverPacket) {
+        dispatch(.ingest(.receiver(packet)))
+    }
+
+    func ingest(_ packet: KeyTeleportSenderPacket) {
+        dispatch(.ingest(.sender(packet)))
     }
 
     func revealMnemonicWords() -> [String] {

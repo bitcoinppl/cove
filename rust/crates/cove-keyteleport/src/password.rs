@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use data_encoding::BASE32_NOPAD;
 use rand::RngExt as _;
-use zeroize::Zeroize as _;
+use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::{Error, Result};
 
@@ -22,8 +22,8 @@ impl TeleportPassword {
         Self { bytes }
     }
 
-    pub fn expose_bytes(&self) -> [u8; 5] {
-        self.bytes
+    pub fn expose_bytes(&self) -> &[u8; 5] {
+        &self.bytes
     }
 
     pub fn as_display_text(&self) -> String {
@@ -63,15 +63,16 @@ impl FromStr for TeleportPassword {
 
     fn from_str(value: &str) -> Result<Self> {
         let normalized = normalize_password(value)?;
-        let decoded = BASE32_NOPAD.decode(normalized.as_bytes())?;
-        let bytes: [u8; 5] = decoded.try_into().map_err(|_| Error::InvalidTeleportPassword)?;
+        let decoded = Zeroizing::new(BASE32_NOPAD.decode(normalized.as_bytes())?);
+        let bytes: [u8; 5] =
+            decoded.as_slice().try_into().map_err(|_| Error::InvalidTeleportPassword)?;
 
         Ok(Self { bytes })
     }
 }
 
-fn normalize_password(value: &str) -> Result<String> {
-    let mut normalized = String::with_capacity(8);
+fn normalize_password(value: &str) -> Result<Zeroizing<String>> {
+    let mut normalized = Zeroizing::new(String::with_capacity(8));
 
     for ch in value.chars() {
         if ch.is_ascii_whitespace() || ch == '-' {
