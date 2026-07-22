@@ -57,7 +57,7 @@ class HotWalletCreateScreenTest {
 
     @Test
     fun primaryActionFitsCompactViewportWithBottomPadding() {
-        val manager = PendingWalletManager(NumberOfBip39Words.TWELVE)
+        val manager = PendingWalletManager(NumberOfBip39Words.TWENTY_FOUR)
         pendingWalletManager = manager
 
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)

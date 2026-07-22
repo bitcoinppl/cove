@@ -8,9 +8,15 @@ import org.bitcoinppl.cove_core.ConnectivityStatus
 import org.bitcoinppl.cove_core.RustConnectivityManager
 import org.bitcoinppl.cove_core.device.ConnectivityAccess
 
+interface LifecycleConnectivityAccess : ConnectivityAccess {
+    fun start()
+
+    fun stop()
+}
+
 class ConnectivityMonitor(
     context: Context,
-) : ConnectivityAccess {
+) : LifecycleConnectivityAccess {
     private val connectivityManager =
         context.getSystemService(ConnectivityManager::class.java)
             ?: error("ConnectivityManager unavailable")
@@ -43,7 +49,7 @@ class ConnectivityMonitor(
         return isConnected(network)
     }
 
-    fun start() {
+    override fun start() {
         if (started) return
         started = true
 
@@ -51,7 +57,7 @@ class ConnectivityMonitor(
         connectivityManager.registerDefaultNetworkCallback(callback)
     }
 
-    fun stop() {
+    override fun stop() {
         if (!started) return
         started = false
         connectivityManager.unregisterNetworkCallback(callback)

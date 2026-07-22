@@ -4,6 +4,8 @@ import SwiftUI
 
 /// Shown after the cloud backup check finds at least one backup
 struct CloudRestoreOfferView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let onRestore: () -> Void
     let onSkip: () -> Void
     var warningMessage: String? = nil
@@ -69,6 +71,7 @@ struct CloudRestoreOfferView: View {
                             .foregroundStyle(Color.btnGradientLight.opacity(0.95))
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: 44)
                 }
             }
             .padding(.horizontal, 28)
@@ -79,8 +82,8 @@ struct CloudRestoreOfferView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
-        .animation(.easeInOut(duration: 0.3), value: warningMessage)
-        .animation(.easeInOut(duration: 0.3), value: errorMessage)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: warningMessage)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: errorMessage)
     }
 
     private var messageBody: String {

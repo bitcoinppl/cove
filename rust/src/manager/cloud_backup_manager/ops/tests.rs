@@ -30,6 +30,7 @@ use crate::manager::cloud_backup_manager::actors::{
     cleanup::{CleanupExpectedWalletRecord, CleanupSourceNamespace, CloudBackupCleanupJob},
     supervisor::{DeepVerificationContinuation, VerificationAttempt},
 };
+use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim,
@@ -42,13 +43,15 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupDetailResult,
+    CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
     CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
     CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent,
     CloudBackupRootPrompt, CloudBackupVerificationPresentation, CloudBackupVerificationReason,
     CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, PendingEnableSession,
+    DeepVerificationReport, DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
+    PendingEnableNamespaceOwnership, PendingEnablePasskeyMetadata, PendingEnableSession,
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
 };
@@ -59,7 +62,8 @@ use crate::manager::cloud_backup_manager::{
     SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
     cspp_exports::cspp_master_key_record_id,
     keychain::{
-        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
+        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PENDING_ENABLE_JOURNAL_KEY,
+        CSPP_PRF_SALT_KEY, CloudBackupKeychainError,
     },
     master_key_wrapper_revision_hash,
 };
@@ -107,14 +111,17 @@ async fn deep_verify_for_test(
     .unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
         let snapshot = manager.model_snapshot();
-        manager.pending_verification_completion().is_some()
-            || matches!(
-                snapshot.verification,
-                VerificationState::Verified(_)
-                    | VerificationState::PasskeyConfirmed
-                    | VerificationState::Failed(_)
-                    | VerificationState::Cancelled
-            )
+        if manager.pending_verification_completion().is_some() {
+            return snapshot.detail.is_some();
+        }
+
+        matches!(
+            snapshot.verification,
+            VerificationState::Verified(_)
+                | VerificationState::PasskeyConfirmed
+                | VerificationState::Failed(_)
+                | VerificationState::Cancelled
+        )
     })
     .await;
 

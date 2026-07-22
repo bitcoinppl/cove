@@ -1,4 +1,5 @@
 use cove_types::network::Network;
+use serde::{Deserialize, Serialize};
 
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::wallet::metadata::{WalletMode as LocalWalletMode, WalletType};
@@ -22,19 +23,28 @@ pub enum CloudBackupSettingsRowStatus {
     Syncing,
     NoFiles,
     DriveUnavailable,
+    RecoveryRequired,
     Error(String),
     AuthorizationRequired(String),
 }
 
-/// Whether saved passkey confirmation was user-triggered or flow-triggered
+/// Whether onboarding may recover a lost enable-completion event from durable state
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupOnboardingCompletionReadiness {
+    NotReady,
+    PendingEnableRecovery,
+    Ready,
+}
+
+/// Whether saved passkey confirmation was user-triggered or flow-triggered
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize, uniffi::Enum)]
 pub enum SavedPasskeyConfirmationMode {
     Automatic,
     Manual,
 }
 
 /// Context carried through enable so prompts and verification attribution stay stable
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct CloudBackupEnableContext {
     pub saved_passkey_confirmation: SavedPasskeyConfirmationMode,
     pub verification_source: CloudBackupVerificationSource,
@@ -53,6 +63,7 @@ impl CloudBackupEnableContext {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudBackupPasskeyChoiceIntent {
     Enable(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
+    EnableExistingPasskeyOnly(CloudBackupEnableContext, Option<CloudBackupPasskeyHint>),
     RepairPasskey,
 }
 
@@ -81,6 +92,7 @@ pub enum CloudBackupManagerAction {
     EnableCloudBackupNoDiscovery(CloudBackupEnableContext),
     ConfirmSavedPasskey,
     DiscardPendingEnableCloudBackup,
+    ConfirmPendingEnableCleanup,
     DismissPasskeyChoicePrompt,
     DismissMissingPasskeyReminder,
     RestoreFromCloudBackup,
@@ -95,6 +107,9 @@ pub enum CloudBackupManagerAction {
     SyncUnsynced,
     FetchCloudOnly,
     RestoreCloudWallet(RecordId),
+    StartRestoreAll,
+    RetryRestoreAllRemaining,
+    CancelRestoreAll,
     DeleteCloudWallet(RecordId),
     RecoverOtherBackups,
     DeleteOtherBackups,
@@ -102,6 +117,7 @@ pub enum CloudBackupManagerAction {
     KeepCloudBackupEnabled,
     RefreshDetail,
     EnterDetail,
+    CloseDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }
@@ -142,6 +158,12 @@ pub enum CloudBackupWalletStatus {
     RemoteStateUnknown,
 }
 
+/// Privacy-safe restore failure associated with a cloud-only wallet row
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct CloudBackupWalletRestoreFailure {
+    pub message: String,
+}
+
 /// Wallet row in cloud backup detail, combining local wallet metadata and sync state
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct CloudBackupWalletItem {
@@ -153,6 +175,7 @@ pub struct CloudBackupWalletItem {
     pub label_count: Option<u32>,
     pub backup_updated_at: Option<u64>,
     pub sync_status: CloudBackupWalletStatus,
+    pub restore_failure: Option<CloudBackupWalletRestoreFailure>,
     /// Deterministic cloud record ID for the wallet backup represented by this item
     pub record_id: String,
 }

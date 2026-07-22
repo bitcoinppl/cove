@@ -1,6 +1,27 @@
 use super::*;
 
 #[tokio::test(flavor = "current_thread")]
+async fn non_missing_discovery_failure_never_registers_enable_passkey() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+    globals.passkey.set_discover_result(Err(PasskeyError::RequestFailed {
+        operation: PasskeyOperation::DiscoverAssertion,
+        reason: PasskeyFailureReason::InvalidResponse,
+    }));
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+
+    let result = PasskeyMaterialAcquirer::new(PasskeyAccess::global())
+        .discover_or_register_for_enable()
+        .await;
+
+    assert!(matches!(result, Err(CloudBackupError::Passkey(_))));
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.create_count(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn passkey_match_treats_missing_credential_as_no_match() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
@@ -330,6 +351,124 @@ fn clear_passkey_removes_credential_and_salt_only() {
 }
 
 #[test]
+fn pending_enable_journal_roundtrips_without_prf_output() {
+    let _guard = test_lock().lock();
+    let globals = test_globals();
+    globals.reset();
+    globals.keychain.set_entries(vec![
+        (CSPP_CREDENTIAL_ID_KEY, "prior-credential"),
+        (CSPP_PRF_SALT_KEY, "prior-salt"),
+        (CSPP_NAMESPACE_ID_KEY, "prior-namespace"),
+    ]);
+
+    let cloud_keychain = CloudBackupKeychain::global();
+    let mut journal = staged_pending_enable_journal(
+        CloudBackupEnableContext::settings_manual(),
+        "fresh-namespace".into(),
+        PendingEnableNamespaceOwnership::FreshOwned,
+        cloud_keychain.snapshot_passkey_metadata(),
+    );
+    assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+        provider_hint: None,
+    }));
+    assert!(journal.mark_remote_writes_started());
+
+    cloud_keychain.save_pending_enable_journal(&journal).unwrap();
+
+    let encoded = globals.keychain.get_entry(CSPP_PENDING_ENABLE_JOURNAL_KEY).unwrap();
+    assert!(!encoded.contains("prf_key"));
+    assert_eq!(cloud_keychain.load_pending_enable_journal().unwrap(), Some(journal));
+}
+
+#[test]
+fn pending_enable_journal_rejects_unknown_version() {
+    let _guard = test_lock().lock();
+    let globals = test_globals();
+    globals.reset();
+
+    let cloud_keychain = CloudBackupKeychain::global();
+    let journal = staged_pending_enable_journal(
+        CloudBackupEnableContext::settings_manual(),
+        "fresh-namespace".into(),
+        PendingEnableNamespaceOwnership::FreshOwned,
+        cloud_keychain.snapshot_passkey_metadata(),
+    );
+    let mut value = serde_json::to_value(journal).unwrap();
+    value["version"] = serde_json::json!(99);
+    globals.keychain.set_entries(vec![(
+        CSPP_PENDING_ENABLE_JOURNAL_KEY,
+        &serde_json::to_string(&value).unwrap(),
+    )]);
+
+    assert!(matches!(
+        cloud_keychain.load_pending_enable_journal(),
+        Err(CloudBackupKeychainError::UnsupportedPendingEnableVersion(99))
+    ));
+}
+
+#[test]
+fn pending_enable_journal_rejects_out_of_order_or_conflicting_transitions() {
+    let _guard = test_lock().lock();
+    let globals = test_globals();
+    globals.reset();
+
+    let mut journal = staged_pending_enable_journal(
+        CloudBackupEnableContext::settings_manual(),
+        "fresh-namespace".into(),
+        PendingEnableNamespaceOwnership::FreshOwned,
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+    );
+    let passkey = PendingEnablePasskeyMetadata {
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+        provider_hint: None,
+    };
+
+    assert!(!journal.mark_remote_writes_started());
+    assert!(!journal.mark_local_promotion_started());
+    assert!(journal.register_passkey(passkey.clone()));
+    assert!(!journal.register_passkey(PendingEnablePasskeyMetadata {
+        credential_id: vec![4, 5, 6],
+        ..passkey.clone()
+    }));
+    assert!(journal.mark_remote_writes_started());
+    assert!(journal.mark_remote_writes_started());
+    assert!(journal.mark_local_promotion_started());
+    assert!(journal.mark_local_promotion_started());
+    assert!(journal.roll_back_local_promotion());
+    assert!(journal.roll_back_local_promotion());
+}
+
+#[test]
+fn pending_enable_metadata_snapshot_restores_exact_prior_values() {
+    let _guard = test_lock().lock();
+    let globals = test_globals();
+    globals.reset();
+    globals.keychain.set_entries(vec![
+        (CSPP_CREDENTIAL_ID_KEY, "prior-credential"),
+        (CSPP_NAMESPACE_ID_KEY, "prior-namespace"),
+    ]);
+
+    let cloud_keychain = CloudBackupKeychain::global();
+    let snapshot = cloud_keychain.snapshot_passkey_metadata();
+    cloud_keychain.save_passkey_and_namespace(&[1, 2, 3], [9; 32], "fresh-namespace").unwrap();
+
+    cloud_keychain.restore_passkey_metadata(&snapshot).unwrap();
+
+    assert_eq!(
+        globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).as_deref(),
+        Some("prior-credential")
+    );
+    assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
+    assert_eq!(
+        globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(),
+        Some("prior-namespace")
+    );
+}
+
+#[test]
 fn clear_local_state_treats_empty_keychain_as_success() {
     let _guard = test_lock().lock();
     let globals = test_globals();
@@ -351,11 +490,20 @@ fn clear_local_state_removes_master_key_and_passkey_metadata() {
     let master_key = cove_cspp::master_key::MasterKey::generate();
     cspp.save_master_key(&master_key).unwrap();
     cloud_keychain.save_passkey_and_namespace(&[1, 2, 3], [4; 32], "test-namespace").unwrap();
+    cloud_keychain
+        .save_pending_enable_journal(&staged_pending_enable_journal(
+            CloudBackupEnableContext::settings_manual(),
+            "pending-namespace".into(),
+            PendingEnableNamespaceOwnership::FreshOwned,
+            cloud_keychain.snapshot_passkey_metadata(),
+        ))
+        .unwrap();
 
     assert!(cspp.load_master_key_from_store().unwrap().is_some());
     assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_some());
     assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_some());
     assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_some());
+    assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).is_some());
 
     cloud_keychain.clear_local_state().unwrap();
 
@@ -363,6 +511,7 @@ fn clear_local_state_removes_master_key_and_passkey_metadata() {
     assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
     assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
     assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).is_none());
 }
 
 #[test]

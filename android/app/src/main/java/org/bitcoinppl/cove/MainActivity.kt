@@ -11,12 +11,13 @@ import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,6 +89,7 @@ class MainActivity : FragmentActivity() {
     private var isBootstrapped = false
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var isPrivacyCoverVisible by mutableStateOf(false)
+    private val onboardingManagerViewModel by viewModels<OnboardingManagerViewModel>()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -439,7 +441,7 @@ class MainActivity : FragmentActivity() {
             val onboardingManager =
                 remember(startupMode) {
                     if (startupMode == StartupMode.ONBOARDING) {
-                        OnboardingManager(app)
+                        onboardingManagerViewModel.manager(app)
                     } else {
                         null
                     }
@@ -453,6 +455,8 @@ class MainActivity : FragmentActivity() {
                 onboardingManager = onboardingManager,
                 isPrivacyCoverVisible = isPrivacyCoverVisible,
             ) {
+                app.cloudBackupManager.syncPersistedState()
+                onboardingManagerViewModel.release()
                 startupMode = StartupMode.READY
             }
         }
@@ -463,6 +467,8 @@ class MainActivity : FragmentActivity() {
 
     private fun resetLocalDataForUiTestsIfRequested() {
         if (!BuildConfig.DEBUG || !intent.getBooleanExtra(UI_TEST_RESET_DATA_EXTRA, false)) return
+
+        intent.removeExtra(UI_TEST_RESET_DATA_EXTRA)
 
         try {
             resetLocalDataAndDriveBindingForCatastrophicRecovery()

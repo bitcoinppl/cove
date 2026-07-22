@@ -1,19 +1,20 @@
 package org.bitcoinppl.cove.test
 
 import android.os.ParcelFileDescriptor
+import android.view.WindowInsets
 import android.view.WindowManager
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
-import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import java.io.ByteArrayOutputStream
 
 class FullLaunchStartupRobot(
     private val device: UiDevice,
@@ -65,7 +66,7 @@ class FullLaunchOnboardingRobot(
             "abandon",
             "abandon",
             "about",
-    )
+        )
 
     fun tapGetStarted(): FullLaunchOnboardingRobot {
         device.advanceUntilVisible(text("Do you already have Bitcoin?")) {
@@ -242,6 +243,29 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun assertLateCloudRestoreOffer(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Cove backup found"))
+        device.waitUntilVisible(text("Restore from Cove backup"))
+        device.waitUntilVisible(text("Continue setup"))
+
+        return this
+    }
+
+    fun continueAfterLateCloudRestoreOffer(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Continue setup")).click()
+        device.wait(Until.gone(text("Cove backup found").value), 10_000)
+
+        return this
+    }
+
+    fun restoreFromLateCloudRestoreOffer(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Restore from Cove backup")).click()
+        device.waitUntilVisible(text("Google Drive Backup Found"))
+        device.waitUntilVisible(text("Restore with Passkey"))
+
+        return this
+    }
+
     fun openSoftwareQrScanner(): FullLaunchOnboardingRobot {
         device.clickCenter(device.advanceUntilVisible(text("Scan QR code")))
         assertQrScannerVisible()
@@ -351,6 +375,21 @@ class FullLaunchOnboardingRobot(
     }
 
     fun enableCloudBackupFromDetails(): FullLaunchOnboardingRobot {
+        acceptCloudBackupAcknowledgements()
+
+        device.clickObjectUntilGoneOrSystemSheet(tag("onboarding.cloudBackup.enable"))
+
+        return this
+    }
+
+    fun enableCloudBackupFromDetailsOnce(): FullLaunchOnboardingRobot {
+        acceptCloudBackupAcknowledgements()
+        device.clickSafely(tag("onboarding.cloudBackup.enable"))
+
+        return this
+    }
+
+    private fun acceptCloudBackupAcknowledgements() {
         listOf(
             "my passkey is required",
             "access to my Google account",
@@ -358,8 +397,27 @@ class FullLaunchOnboardingRobot(
         ).forEach { label ->
             device.clickCheckboxBesideLabel(label)
         }
+    }
 
-        device.clickObjectUntilGoneOrSystemSheet(tag("onboarding.cloudBackup.enable"))
+    fun assertCloudBackupEnableRemainsPending(): FullLaunchOnboardingRobot {
+        Thread.sleep(1_000)
+        assertNull(device.findObject(text("Cloud Backup enabled").value))
+        device.waitUntilVisible(text("Creating your encrypted backup..."))
+
+        return this
+    }
+
+    fun assertPendingEnableRecovery(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Cloud Backup"), timeoutMillis = 30_000)
+        device.scrollUntilVisible(text("Confirm Passkey"))
+        assertNull(device.findObject(text("Cloud Backup enabled").value))
+
+        return this
+    }
+
+    fun assertCloudBackupSuccess(): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text("Cloud Backup enabled"), timeoutMillis = 30_000)
+        device.waitUntilVisible(text("Cove can finish confirming cloud visibility in the background."))
 
         return this
     }
@@ -432,20 +490,48 @@ fun fullLaunchDevice(): UiDevice =
         ensureManualFullLaunchDeviceReady()
     }
 
-fun launchFullApp() {
+fun launchFullApp(resetData: Boolean = true) {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val packageName = instrumentation.targetContext.packageName
     val device = UiDevice.getInstance(instrumentation)
 
     device.ensureManualFullLaunchDeviceReady()
 
+    val resetArgument =
+        if (resetData) {
+            " --ez org.bitcoinppl.cove.uitest.RESET_DATA true"
+        } else {
+            ""
+        }
     val output =
         instrumentation.uiAutomation.executeShellCommand(
-            "am start -W -n $packageName/org.bitcoinppl.cove.MainActivity --ez org.bitcoinppl.cove.uitest.RESET_DATA true",
+            "am start -W -n $packageName/org.bitcoinppl.cove.MainActivity$resetArgument",
         )
 
     output.drainAndClose()
     device.ensureManualFullLaunchDeviceReady()
+}
+
+fun recreateFullAppActivity() {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    val previous = resumedActivity()
+
+    instrumentation.runOnMainSync {
+        previous.recreate()
+    }
+
+    val deadline = System.currentTimeMillis() + 10_000
+    while (System.currentTimeMillis() < deadline) {
+        val current = resumedActivityOrNull()
+        if (current != null && current !== previous) {
+            UiDevice.getInstance(instrumentation).waitForIdle()
+            return
+        }
+
+        Thread.sleep(100)
+    }
+
+    error("Timed out waiting for MainActivity recreation")
 }
 
 private fun UiDevice.ensureManualFullLaunchDeviceReady(timeoutMillis: Long = 5_000) {
@@ -505,6 +591,10 @@ private fun isFlagSecureSet(): Boolean {
 }
 
 private fun resumedActivity(): android.app.Activity {
+    return resumedActivityOrNull() ?: error("No resumed activity")
+}
+
+private fun resumedActivityOrNull(): android.app.Activity? {
     var activity: android.app.Activity? = null
     InstrumentationRegistry.getInstrumentation().runOnMainSync {
         activity =
@@ -514,7 +604,7 @@ private fun resumedActivity(): android.app.Activity {
                 .firstOrNull()
     }
 
-    return activity ?: error("No resumed activity")
+    return activity
 }
 
 private fun UiDevice.waitUntilVisible(
@@ -648,12 +738,20 @@ private fun UiDevice.clickObjectUntilGoneOrSystemSheet(selector: DescribedSelect
             return
         }
 
-        val button = tryScrollUntilSafelyClickable(selector)
-            ?: if (clicked) {
-                return
-            } else {
-                error("Timed out waiting for ${selector.description}\n${dumpWindowHierarchy()}")
-            }
+        val button =
+            tryScrollUntilSafelyClickable(selector)
+                ?: if (clicked) {
+                    return
+                } else {
+                    error("Timed out waiting for ${selector.description}\n${dumpWindowHierarchy()}")
+                }
+        if (!button.isEnabled) {
+            if (clicked) return
+
+            Thread.sleep(100)
+            continue
+        }
+
         waitForIdle()
         button.click()
         clicked = true
@@ -678,30 +776,40 @@ private fun UiDevice.acceptTerms() {
 }
 
 private fun UiDevice.dismissKeyboardIfShown() {
-    clickKeyboardDoneIfShown()
-    Thread.sleep(250)
-
-    if (!isKeyboardDoneVisible()) {
+    if (!isImeVisible()) {
         return
     }
 
     pressBack()
-    Thread.sleep(250)
+    val deadline = System.currentTimeMillis() + 5_000
+
+    while (System.currentTimeMillis() < deadline) {
+        if (!isImeVisible()) {
+            return
+        }
+
+        Thread.sleep(100)
+    }
+
+    error("Timed out waiting for the keyboard to close\n${dumpWindowHierarchy()}")
 }
 
-private fun UiDevice.clickKeyboardDoneIfShown(): Boolean {
-    val doneKey =
-        findObject(desc("Enter").value)
-            ?: findObject(text("Done").value)
-            ?: return false
+private fun isImeVisible(): Boolean {
+    var visible = false
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        visible =
+            ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .firstOrNull()
+                ?.window
+                ?.decorView
+                ?.rootWindowInsets
+                ?.isVisible(WindowInsets.Type.ime()) == true
+    }
 
-    clickCenter(doneKey)
-
-    return true
+    return visible
 }
-
-private fun UiDevice.isKeyboardDoneVisible(): Boolean =
-    findObject(desc("Enter").value) != null || findObject(text("Done").value) != null
 
 private fun UiDevice.clickLeadingEdge(node: UiObject2) {
     val bounds = node.visibleBounds
@@ -711,8 +819,34 @@ private fun UiDevice.clickLeadingEdge(node: UiObject2) {
 }
 
 private fun UiDevice.clickCheckboxBesideLabel(label: String) {
-    val labelNode = scrollUntilVisible(textContains(label))
-    clickCenter(labelNode)
+    val selector = textContains(label)
+
+    repeat(2) {
+        val checkbox = scrollUntilSafelyClickable(selector).checkableAncestor()
+        if (checkbox.isChecked) return
+
+        waitForIdle()
+        clickCenter(checkbox)
+
+        val deadline = System.currentTimeMillis() + 2_000
+        while (System.currentTimeMillis() < deadline) {
+            if (findObject(selector.value)?.checkableAncestor()?.isChecked == true) return
+
+            Thread.sleep(100)
+        }
+    }
+
+    error("Timed out checking acknowledgement containing $label\n${dumpWindowHierarchy()}")
+}
+
+private fun UiObject2.checkableAncestor(): UiObject2 {
+    var checkable: UiObject2? = this
+
+    while (checkable != null && !checkable.isCheckable) {
+        checkable = checkable.parent
+    }
+
+    return requireNotNull(checkable) { "expected a checkable ancestor for $text" }
 }
 
 private fun UiDevice.clickSafely(selector: DescribedSelector) {

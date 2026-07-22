@@ -20,7 +20,6 @@ internal class ForegroundAuthorizationTimeoutException(
 
 object ForegroundUiBridge {
     private const val FOREGROUND_ACTIVITY_TIMEOUT_MS = 30_000L
-    private const val AUTHORIZATION_RESULT_TIMEOUT_MS = 5 * 60_000L
 
     private val currentActivity = MutableStateFlow<FragmentActivity?>(null)
     private val authorizationLock = Any()
@@ -85,39 +84,28 @@ object ForegroundUiBridge {
             )
         }
 
-    suspend fun launchAuthorization(
-        request: IntentSenderRequest,
-        timeoutMs: Long = AUTHORIZATION_RESULT_TIMEOUT_MS,
-    ): ActivityResult = withContext(Dispatchers.Main.immediate) {
-        val deferred = CompletableDeferred<ActivityResult>()
-        try {
-            synchronized(authorizationLock) {
-                val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
-                check(pendingAuthorizationResult == null) {
-                    "another authorization flow is already in progress"
-                }
-                pendingAuthorizationResult = deferred
-                launcher.launch(request)
-            }
-
+    suspend fun launchAuthorization(request: IntentSenderRequest): ActivityResult =
+        withContext(Dispatchers.Main.immediate) {
+            val deferred = CompletableDeferred<ActivityResult>()
             try {
-                withTimeout(timeoutMs) {
-                    deferred.await()
+                synchronized(authorizationLock) {
+                    val launcher = authorizationLauncher ?: error("authorization launcher is not attached")
+                    check(pendingAuthorizationResult == null) {
+                        "another authorization flow is already in progress"
+                    }
+                    pendingAuthorizationResult = deferred
+                    launcher.launch(request)
                 }
-            } catch (error: TimeoutCancellationException) {
-                throw ForegroundAuthorizationTimeoutException(
-                    "google drive authorization timed out",
-                    error,
-                )
-            }
-        } finally {
-            synchronized(authorizationLock) {
-                if (pendingAuthorizationResult === deferred) {
-                    pendingAuthorizationResult = null
+
+                deferred.await()
+            } finally {
+                synchronized(authorizationLock) {
+                    if (pendingAuthorizationResult === deferred) {
+                        pendingAuthorizationResult = null
+                    }
                 }
             }
         }
-    }
 
     fun handleAuthorizationResult(result: ActivityResult) {
         synchronized(authorizationLock) {

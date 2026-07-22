@@ -21,11 +21,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupDisablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -39,7 +39,7 @@ impl CloudBackupSupervisor {
                 self.fail_disable_operation(
                     &manager,
                     claim,
-                    error.to_string(),
+                    error.reader_message(),
                     manager.disable_can_keep_enabled(),
                 );
                 return Produces::ok(());
@@ -54,10 +54,11 @@ impl CloudBackupSupervisor {
         if let Err(error) =
             call!(self.write.block_until_drained(blocker, self.addr.clone(), claim)).await
         {
+            warn!("Failed to install cloud backup disable fence: {error}");
             self.fail_disable_operation(
                 &manager,
                 claim,
-                format!("install cloud backup disable fence: {error}"),
+                CLOUD_BACKUP_DISABLE_ERROR_MESSAGE.into(),
                 manager.disable_can_keep_enabled(),
             );
             return Produces::ok(());
@@ -74,11 +75,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             self.pending_disable_write_drain = None;
             return Produces::ok(());
         };
@@ -101,12 +102,12 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.to_string(),
+                error.reader_message(),
             );
             return Produces::ok(());
         }
 
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
@@ -124,8 +125,8 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
     ) -> Result<(), CloudBackupError> {
         self.pending_enable_session = None;
-        self.pending_verification_completion = None;
-        self.runtime_passkey_authorization = None;
+        self.detail_workflow.clear_pending_completion();
+        self.detail_workflow.clear_authorization();
         call!(self.sync_health.clear_upload_runtime_state())
             .await
             .map_err(CloudBackupError::internal)?;
@@ -157,11 +158,11 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
         let Some(disabling) = manager.current_disabling_if_current(&disabling) else {
@@ -170,13 +171,13 @@ impl CloudBackupSupervisor {
         };
 
         if let Err(error) = result {
-            let message = error.to_string();
+            let message = error.reader_message();
             if let Err(error) = manager.rollback_disable_before_delete(&disabling, message.clone())
             {
                 self.fail_disable_operation(
                     &manager,
                     claim,
-                    error.to_string(),
+                    error.reader_message(),
                     manager.disable_can_keep_enabled(),
                 );
             } else {
@@ -192,7 +193,7 @@ impl CloudBackupSupervisor {
                 self.fail_disable_operation(
                     &manager,
                     claim,
-                    error.to_string(),
+                    error.reader_message(),
                     manager.disable_can_keep_enabled(),
                 );
             }
@@ -224,11 +225,11 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -239,7 +240,7 @@ impl CloudBackupSupervisor {
             Err(CloudBackupError::CloudStorage(error)) => {
                 let message =
                     CloudBackupError::cloud_storage_context("delete cloud backup namespace", error)
-                        .to_string();
+                        .reader_message();
                 self.fail_disable_after_namespace_delete_started(
                     &manager, claim, disabling, message,
                 );
@@ -249,7 +250,7 @@ impl CloudBackupSupervisor {
                     &manager,
                     claim,
                     disabling,
-                    error.to_string(),
+                    error.reader_message(),
                 );
             }
         }
@@ -275,11 +276,11 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -288,7 +289,7 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.to_string(),
+                error.reader_message(),
             );
             return Produces::ok(());
         }
@@ -298,7 +299,7 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.to_string(),
+                error.reader_message(),
             );
             return Produces::ok(());
         }
@@ -309,7 +310,7 @@ impl CloudBackupSupervisor {
             warn!("Failed to lift cloud backup disable fence: {error}");
         }
 
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
 
@@ -329,7 +330,7 @@ impl CloudBackupSupervisor {
             self.fail_disable_operation(
                 manager,
                 claim,
-                error.to_string(),
+                error.reader_message(),
                 manager.disable_can_keep_enabled(),
             );
         } else {
@@ -346,7 +347,7 @@ impl CloudBackupSupervisor {
     ) {
         let message = match manager.persist_disabling_failure(disabling, message.clone()) {
             Ok(()) => message,
-            Err(error) => error.to_string(),
+            Err(error) => error.reader_message(),
         };
         self.fail_disable_operation(manager, claim, message, manager.disable_can_keep_enabled());
     }
@@ -370,7 +371,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         self.pending_disable_write_drain = None;
-        self.active_operation = None;
+        self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -419,7 +420,9 @@ impl CloudBackupSupervisor {
                     call!(self.uploads.resume_wallet_uploads_from_persisted_state()).await
                 {
                     error!("Failed to resume cloud backup uploads after Keep Enabled: {error}");
-                    manager.apply_sync_state(SyncState::Failed(error.to_string()));
+                    manager.apply_sync_state(SyncState::Failed(
+                        GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
+                    ));
                 }
                 if let Err(error) =
                     call!(self.uploads.ensure_pending_upload_verification_loop()).await
@@ -427,11 +430,13 @@ impl CloudBackupSupervisor {
                     error!(
                         "Failed to resume pending cloud backup verification after Keep Enabled: {error}"
                     );
-                    manager.apply_sync_state(SyncState::Failed(error.to_string()));
+                    manager.apply_sync_state(SyncState::Failed(
+                        GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
+                    ));
                 }
                 manager.refresh_sync_health();
 
-                if let Some(claim) = self.active_operation
+                if let Some(claim) = self.active_operation.claim()
                     && claim.operation() == CloudBackupExclusiveOperation::Disable
                 {
                     self.finish_disable_operation(&manager, claim);
@@ -441,7 +446,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-                    message: error.to_string(),
+                    message: error.reader_message(),
                     can_keep_enabled: false,
                 });
             }
@@ -458,7 +463,7 @@ impl CloudBackupSupervisor {
             Ok(restored) => Some(restored),
             Err(error) => {
                 manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-                    message: error.to_string(),
+                    message: error.reader_message(),
                     can_keep_enabled: false,
                 });
                 None

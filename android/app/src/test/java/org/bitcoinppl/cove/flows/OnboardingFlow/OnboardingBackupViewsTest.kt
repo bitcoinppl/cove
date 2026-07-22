@@ -1,6 +1,13 @@
 package org.bitcoinppl.cove.flows.OnboardingFlow
 
+import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
+import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OnboardingBackupViewsTest {
@@ -27,5 +34,50 @@ class OnboardingBackupViewsTest {
             ),
             orderedWords,
         )
+    }
+
+    @Test
+    fun pendingEnableRecoveryReplacesOnboardingEnablePresentation() {
+        val recovery =
+            CloudBackupPendingEnableRecovery(
+                supportCode = "CB-PE-001",
+                cleanup = CloudBackupPendingEnableCleanupState.AVAILABLE,
+            )
+
+        assertEquals(
+            OnboardingCloudBackupStepPresentation.PendingEnableRecovery(recovery),
+            onboardingCloudBackupStepPresentation(
+                CloudBackupLifecycle.PendingEnableRecovery(recovery),
+            ),
+        )
+        assertEquals(
+            OnboardingCloudBackupStepPresentation.Enable,
+            onboardingCloudBackupStepPresentation(CloudBackupLifecycle.Disabled),
+        )
+    }
+
+    @Test
+    fun pendingEnableRecoveryRoutesCleanupToManagerAndSkipToOnboarding() {
+        var dispatched: CloudBackupManagerAction? = null
+        var didSkip = false
+
+        routeOnboardingCloudBackupRecoveryIntent(
+            OnboardingCloudBackupRecoveryIntent.REMOVE_INCOMPLETE_SETUP,
+            dispatch = { dispatched = it },
+            onSkip = { didSkip = true },
+        )
+
+        assertTrue(dispatched is CloudBackupManagerAction.ConfirmPendingEnableCleanup)
+        assertFalse(didSkip)
+
+        dispatched = null
+        routeOnboardingCloudBackupRecoveryIntent(
+            OnboardingCloudBackupRecoveryIntent.SKIP,
+            dispatch = { dispatched = it },
+            onSkip = { didSkip = true },
+        )
+
+        assertNull(dispatched)
+        assertTrue(didSkip)
     }
 }

@@ -52,7 +52,9 @@ In dev builds, the iCloud daemon can fail to authenticate, producing these error
 
 When this happens, `NSMetadataQuery` returns 0 results but `FileManager` still works (it reads the local filesystem directly). Bumping the build number in Xcode can fix this by regenerating the provisioning profile and clearing stale credentials. Signing out of iCloud and back in on the device also works.
 
-This is a dev-only issue. Release/TestFlight builds with proper provisioning do not have this problem.
+Treat this as a signing, entitlement, or account-state diagnostic rather than as
+proof that the backup is empty. Release and TestFlight builds should still be
+verified with their actual entitlements and iCloud account state.
 
 ### Fresh or restored devices
 
@@ -63,6 +65,10 @@ Apple documents that metadata can arrive before file contents and that downloads
 ### What it can see
 
 Once you have the ubiquity container URL, `FileManager` can enumerate what is visible locally in that container. That makes it a good fast path, but Apple still treats `NSMetadataQuery` as the guaranteed way to discover iCloud documents accurately.
+
+For user-facing backup inventory, a nonempty FileManager result is still only a
+local snapshot. It must not short-circuit the metadata query because evicted or
+late-visible items may be missing locally.
 
 ## NSFileCoordinator
 
@@ -99,19 +105,28 @@ Apple documents placeholder behavior and download-status keys, but not the exact
 
 ### Listing files or directories
 
-Start with `FileManager` if you only need what is already visible in the local container and you want a fast path. Fall back to `NSMetadataQuery` when you need authoritative discovery or when the local container is still empty.
+For user-facing inventory, take a fast FileManager snapshot and always run the
+normalized metadata query. The completed result is the sorted union. If the
+metadata query fails or times out, keep any local rows as retained provisional
+data but report the inventory as incomplete; do not report confirmed zero.
 
 ```swift
 func listItems(parentPath: String) throws -> [String] {
-    // fast path - use what is already visible locally
-    if let names = try? listViaFileManager(parentPath), !names.isEmpty {
-        return names
+    let local = (try? listViaFileManager(parentPath)) ?? []
+    let metadata = try listViaMetadataQuery(parentPath)
+    let normalized = (local + metadata).map { name in
+        guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return name }
+        return String(name.dropFirst().dropLast(".icloud".count))
     }
-
-    // authoritative fallback - ask iCloud metadata directly
-    return try listViaMetadataQuery(parentPath)
+    return Array(Set(normalized)).sorted()
 }
 ```
+
+`ICloudDriveHelper.listSubdirectories` and `listFiles` implement this union for
+complete listings. Their fast local snapshot is best effort, while metadata
+failure makes the union incomplete. `listWalletFilesSnapshot` deliberately
+returns only the fast local result with `isComplete = false`; Rust may publish
+it while the mandatory complete listing continues.
 
 ### Checking whether a file exists
 
@@ -126,9 +141,15 @@ Use `NSMetadataQuery` with a name predicate and leave it running long enough to 
 These numbers are project heuristics, not Apple guidance:
 
 - `60s` for operations that need to find one specific file, like upload or download flows
-- `5s` for listing or discovery, where `FileManager` already gives us the fast path
-- Onboarding cloud check uses 7 attempts with escalating delays (1, 2, 2, 3, 5, 10s) to give the iCloud daemon time to warm up on cold start
-- Short timeouts with more retries work better than one long timeout because the daemon may need a few seconds after launch to initialize
+- `5s` for a normal metadata listing while FileManager supplies the fast local snapshot
+- silent onboarding namespace discovery has one outer `15s` deadline, performs at most four inspections, and uses retry delays of `1s`, `2s`, and `4s`
+- each silent inspection caps its metadata query at `5s` and leaves cleanup time inside the outer deadline
+- cancellation stops queued silent work; an expired deadline is unavailable or incomplete, never confirmed empty
+
+The outer deadline applies to silent discovery, not to interactive passkey or
+provider sheets. Rust does not restart silent discovery after that deadline or
+another storage failure; its bounded retries apply only after namespace
+metadata is visible while recovery files are still pending.
 
 ## Common mistakes
 
@@ -140,3 +161,5 @@ These numbers are project heuristics, not Apple guidance:
 6. Using a broad predicate when you already know the filename or subdirectory you want
 7. Assuming metadata is available immediately at app launch. The daemon needs time to warm up, especially on first launch
 8. Debugging metadata queries on a dev build with stale credentials. Bump the build number or re-sign iCloud on the device if queries return 0 results
+9. Returning a nonempty FileManager snapshot without running the mandatory metadata union
+10. Converting metadata timeout or failure into a confirmed empty inventory

@@ -1,27 +1,20 @@
 package org.bitcoinppl.cove
 
 import org.bitcoinppl.cove.flows.OnboardingFlow.combinedRestoreProgress
-import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackup
+import org.bitcoinppl.cove.flows.OnboardingFlow.isOnboardingCloudBackupEnableCompletion
+import org.bitcoinppl.cove.flows.OnboardingFlow.shouldCompleteOnboardingCloudBackupFromPersistedState
 import org.bitcoinppl.cove_core.AppInitException
-import org.bitcoinppl.cove_core.CloudBackupConfiguredState
-import org.bitcoinppl.cove_core.CloudBackupDetailState
-import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
-import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
-import org.bitcoinppl.cove_core.CloudBackupPasskeyState
+import org.bitcoinppl.cove_core.CloudBackupEnableContext
+import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
 import org.bitcoinppl.cove_core.CloudBackupRestoreFlow
-import org.bitcoinppl.cove_core.CloudBackupRootPrompt
-import org.bitcoinppl.cove_core.CloudBackupSyncState
-import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
-import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.DeepVerificationFailure
-import org.bitcoinppl.cove_core.DeepVerificationReport
+import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OnboardingBranch
 import org.bitcoinppl.cove_core.OnboardingCloudRestoreState
 import org.bitcoinppl.cove_core.OnboardingReconcileMessage
 import org.bitcoinppl.cove_core.OnboardingRestoreState
 import org.bitcoinppl.cove_core.OnboardingState
 import org.bitcoinppl.cove_core.OnboardingStep
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
+import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -122,129 +115,40 @@ class OnboardingHelpersTest {
     }
 
     @Test
-    fun shouldCompleteOnboardingCloudBackupRequiresCompletedVerification() {
+    fun onboardingCloudBackupCompletionUsesEventContextAndPersistedFallback() {
         assertTrue(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState =
-                    configuredState(
-                        verification =
-                            CloudBackupVerificationState.Verified(
-                                report = defaultVerificationReport(),
-                                lastVerifiedAt = null,
-                            ),
-                    ),
-                hasPendingUploadVerification = false,
+            isOnboardingCloudBackupEnableCompletion(
+                CloudBackupEnableContext(
+                    SavedPasskeyConfirmationMode.AUTOMATIC,
+                    CloudBackupVerificationSource.ONBOARDING,
+                ),
             ),
         )
         assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState = null,
-                hasPendingUploadVerification = false,
+            isOnboardingCloudBackupEnableCompletion(
+                CloudBackupEnableContext(
+                    SavedPasskeyConfirmationMode.MANUAL,
+                    CloudBackupVerificationSource.SETTINGS,
+                ),
+            ),
+        )
+
+        assertTrue(
+            shouldCompleteOnboardingCloudBackupFromPersistedState(
+                CloudBackupOnboardingCompletionReadiness.READY,
             ),
         )
         assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState =
-                    configuredState(
-                        verification =
-                            CloudBackupVerificationState.Verified(
-                                report = defaultVerificationReport(),
-                                lastVerifiedAt = null,
-                            ),
-                    ),
-                hasPendingUploadVerification = true,
+            shouldCompleteOnboardingCloudBackupFromPersistedState(
+                CloudBackupOnboardingCompletionReadiness.NOT_READY,
             ),
         )
         assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState =
-                    configuredState(
-                        passkey = CloudBackupPasskeyState.Missing,
-                        verification =
-                            CloudBackupVerificationState.Verified(
-                                report = defaultVerificationReport(),
-                                lastVerifiedAt = null,
-                            ),
-                    ),
-                hasPendingUploadVerification = false,
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState =
-                    configuredState(
-                        passkey =
-                            CloudBackupPasskeyState.NeedsRepair(
-                                CloudBackupPasskeyRepairState.Idle,
-                            ),
-                        verification =
-                            CloudBackupVerificationState.Verified(
-                                report = defaultVerificationReport(),
-                                lastVerifiedAt = null,
-                            ),
-                    ),
-                hasPendingUploadVerification = false,
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState =
-                    configuredState(
-                        verification =
-                            CloudBackupVerificationState.Verified(
-                                report = null,
-                                lastVerifiedAt = null,
-                            ),
-                    ),
-                hasPendingUploadVerification = false,
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState = configuredState(verification = CloudBackupVerificationState.NotVerified),
-                hasPendingUploadVerification = false,
-            ),
-        )
-        assertFalse(
-            shouldCompleteOnboardingCloudBackup(
-                configuredState =
-                    configuredState(
-                        verification =
-                            CloudBackupVerificationState.Failed(
-                                DeepVerificationFailure.Retry("verification failed", null, null),
-                            ),
-                    ),
-                hasPendingUploadVerification = false,
+            shouldCompleteOnboardingCloudBackupFromPersistedState(
+                CloudBackupOnboardingCompletionReadiness.PENDING_ENABLE_RECOVERY,
             ),
         )
     }
-
-    private fun configuredState(
-        passkey: CloudBackupPasskeyState = CloudBackupPasskeyState.Available,
-        verification: CloudBackupVerificationState = CloudBackupVerificationState.NotVerified,
-        sync: CloudBackupSyncState = CloudBackupSyncState.Idle,
-    ): CloudBackupConfiguredState =
-        CloudBackupConfiguredState(
-            passkey = passkey,
-            verification = verification,
-            sync = sync,
-            destructiveOperation = CloudBackupDestructiveOperationState.Idle,
-            detail = CloudBackupDetailState.NotLoaded,
-            rootPrompt = CloudBackupRootPrompt.None,
-            syncHealth = CloudSyncHealth.Unknown,
-            verificationPresentation = CloudBackupVerificationPresentation.Hidden(null),
-        )
-
-    private fun defaultVerificationReport() =
-        DeepVerificationReport(
-            masterKeyWrapperRepaired = false,
-            localMasterKeyRepaired = false,
-            credentialRecovered = false,
-            walletsVerified = 0U,
-            walletsFailed = 0U,
-            walletsUnsupported = 0U,
-            detail = null,
-        )
 
     private fun defaultOnboardingState() =
         OnboardingState(

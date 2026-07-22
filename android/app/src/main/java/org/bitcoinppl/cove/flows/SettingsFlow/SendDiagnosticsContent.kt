@@ -3,6 +3,7 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -25,6 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -97,8 +100,14 @@ internal fun SendDiagnosticsContent(
     actions: SendDiagnosticsContentActions,
     modifier: Modifier = Modifier,
 ) {
+    val focusManager = LocalFocusManager.current
+
     Column(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            modifier
+                .pointerInput(Unit) {
+                    detectTapGestures { focusManager.clearFocus() }
+                }.padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         DiagnosticsDescriptionField(state, actions)
@@ -226,14 +235,20 @@ private fun DiagnosticsSentReport(
                     actions.onSentReportAction(reportId, SentReportAction.CopyReportId)
                 },
             ) {
-                Text("Copy ID")
+                Text(
+                    text = "Copy ID",
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
             FilledTonalButton(
                 onClick = {
                     actions.onSentReportAction(reportId, SentReportAction.Done)
                 },
             ) {
-                Text("Done")
+                Text(
+                    text = "Done",
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
         }
     }
@@ -253,7 +268,10 @@ private fun DiagnosticsActionButtons(
             enabled = !state.submitting,
             modifier = Modifier.weight(1f),
         ) {
-            Text("Share")
+            Text(
+                text = "Share",
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
 
         OutlinedButton(
@@ -267,6 +285,7 @@ private fun DiagnosticsActionButtons(
         ) {
             Text(
                 text = "Clear Stored Logs",
+                style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,
             )
         }

@@ -44,6 +44,13 @@ pub struct Node {
     pub tls: Option<tls::TlsTrust>,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub(crate) struct NodeConnectionIdentity {
+    network: Network,
+    api_type: ApiType,
+    url: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to check node url: {0}")]
@@ -58,6 +65,14 @@ impl Error {
 }
 
 impl Node {
+    pub(crate) fn connection_identity(&self) -> NodeConnectionIdentity {
+        NodeConnectionIdentity {
+            network: self.network,
+            api_type: self.api_type,
+            url: self.url.clone(),
+        }
+    }
+
     pub fn default(network: Network) -> Self {
         match network {
             Network::Bitcoin => {
@@ -157,5 +172,34 @@ mod tests {
 
         let encoded = serde_json::to_string(&node).unwrap();
         assert_eq!(serde_json::from_str::<Node>(&encoded).unwrap(), node);
+    }
+
+    fn node() -> Node {
+        Node::new_esplora(
+            "Primary".to_string(),
+            "https://example.com/api".to_string(),
+            Network::Bitcoin,
+        )
+    }
+
+    #[test]
+    fn display_name_does_not_change_connection_identity() {
+        let node = node();
+        let renamed = Node { name: "Renamed".to_string(), ..node.clone() };
+
+        assert_ne!(node, renamed);
+        assert_eq!(node.connection_identity(), renamed.connection_identity());
+    }
+
+    #[test]
+    fn connection_fields_change_connection_identity() {
+        let node = node();
+        let different_url = Node { url: "https://other.example/api".to_string(), ..node.clone() };
+        let different_api = Node { api_type: ApiType::Electrum, ..node.clone() };
+        let different_network = Node { network: Network::Signet, ..node.clone() };
+
+        assert_ne!(node.connection_identity(), different_url.connection_identity());
+        assert_ne!(node.connection_identity(), different_api.connection_identity());
+        assert_ne!(node.connection_identity(), different_network.connection_identity());
     }
 }

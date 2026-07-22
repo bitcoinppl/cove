@@ -7,7 +7,7 @@ use std::{
 
 use label::LabelsTable;
 use once_cell::sync::Lazy;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -23,6 +23,10 @@ use ahash::AHashMap as HashMap;
 
 pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
+
+/// Per-wallet locks so concurrent opens of the same id serialize without blocking other wallets
+static DATABASE_OPEN_LOCKS: Lazy<Mutex<HashMap<WalletId, Arc<Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn database_location(id: &WalletId, location: &Path) -> Result<PathBuf, std::io::Error> {
     let dir = location.join(id.as_str());
@@ -42,12 +46,14 @@ pub enum WalletData {
     /// number of addresses scanned
     ScanState(ScanState),
     ReceiveAddressCache(ReceiveAddressCache),
+    PayjoinSenderSession(PayjoinSenderSession),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
 pub enum WalletDataKey {
     ScanState(WalletAddressType),
     ReceiveAddressCache,
+    PayjoinSenderSession,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, uniffi::Enum)]
@@ -77,6 +83,41 @@ impl ReceiveAddressCache {
         self.first_shown_at_secs = now_secs;
         self
     }
+}
+
+/// Consensus-encoded bytes of a bitcoin transaction stored in the database.
+///
+/// `bitcoin::Transaction` does not implement serde natively; storing the consensus-encoded
+/// bytes avoids an orphan-impl problem while keeping the format identical to what is broadcast.
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::AsRef,
+)]
+pub struct TransactionBytes(Vec<u8>);
+
+/// Terminal action decided for a payjoin session before the broadcast completes
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub enum PendingAction {
+    BroadcastFallback,
+    BroadcastProposal { transaction: TransactionBytes },
+}
+
+/// Event log for an in-flight payjoin sender session, allowing it to survive app restarts
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct PayjoinSenderSession {
+    pub events: Vec<String>,
+    pub fallback_tx: TransactionBytes,
+    #[serde(default)]
+    pub created_at_secs: Option<u64>,
+    #[serde(default)]
+    pub pending_action: Option<PendingAction>,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -179,6 +220,24 @@ impl WalletDataDb {
         self.delete(WalletDataKey::ReceiveAddressCache)
     }
 
+    pub fn get_payjoin_sender_session(&self) -> Result<Option<PayjoinSenderSession>> {
+        let value = self.get(WalletDataKey::PayjoinSenderSession)?;
+
+        let Some(WalletData::PayjoinSenderSession(session)) = value else {
+            return Ok(None);
+        };
+
+        Ok(Some(session))
+    }
+
+    pub fn set_payjoin_sender_session(&self, session: PayjoinSenderSession) -> Result<()> {
+        self.set(WalletDataKey::PayjoinSenderSession, WalletData::PayjoinSenderSession(session))
+    }
+
+    pub fn delete_payjoin_sender_session(&self) -> Result<()> {
+        self.delete(WalletDataKey::PayjoinSenderSession)
+    }
+
     fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
         let table = self.read_table()?;
 
@@ -256,12 +315,21 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
     let path = database_location(id, location)
         .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
-    // check if we already have a database connection for this id and return it
-    {
-        let db_connections = DATABASE_CONNECTIONS.read();
-        if let Some(db) = db_connections.get(id) {
-            return Ok(db.clone());
-        }
+    // fast path when the connection is already registered
+    if let Some(db) = DATABASE_CONNECTIONS.read().get(id).cloned() {
+        return Ok(db);
+    }
+
+    // only serialize opens for this wallet id; other wallets keep opening in parallel
+    let open_lock = {
+        let mut locks = DATABASE_OPEN_LOCKS.lock();
+        locks.entry(id.clone()).or_insert_with(|| Arc::new(Mutex::new(()))).clone()
+    };
+    let _open_guard = open_lock.lock();
+
+    // another caller may have finished opening while we waited
+    if let Some(db) = DATABASE_CONNECTIONS.read().get(id).cloned() {
+        return Ok(db);
     }
 
     let db = super::encrypted_backend::open_or_create_database(&path).map_err(|e| match e {
@@ -271,9 +339,8 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
         other => WalletDataError::DatabaseAccess { id: id.clone(), error: other.to_string() },
     })?;
 
-    let mut db_connections = DATABASE_CONNECTIONS.write();
     let db = Arc::new(db);
-    db_connections.insert(id.clone(), db.clone());
+    DATABASE_CONNECTIONS.write().insert(id.clone(), db.clone());
 
     Ok(db)
 }
@@ -282,11 +349,15 @@ pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
     delete_database_at_location(id, &WALLET_DATA_DIR)
 }
 
+/// Drop all cached wallet data connections and open locks
+pub fn clear_database_connections() {
+    DATABASE_CONNECTIONS.write().clear();
+    DATABASE_OPEN_LOCKS.lock().clear();
+}
+
 fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std::io::Error> {
-    {
-        let mut db_connections = DATABASE_CONNECTIONS.write();
-        db_connections.remove(id);
-    }
+    DATABASE_CONNECTIONS.write().remove(id);
+    DATABASE_OPEN_LOCKS.lock().remove(id);
 
     std::fs::remove_file(database_location(id, location)?)
 }
@@ -298,6 +369,7 @@ impl WalletDataKey {
             Self::ScanState(WalletAddressType::WrappedSegwit) => "scan_state_wrapped_segwit",
             Self::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
             Self::ReceiveAddressCache => "receive_address_cache",
+            Self::PayjoinSenderSession => "payjoin_sender_session",
         }
     }
 }
@@ -320,17 +392,99 @@ pub(crate) mod test_support {
 
     pub(crate) fn new_test_wallet_data_db(id: WalletId) -> (WalletDataDb, tempfile::TempDir) {
         crate::database::encrypted_backend::tests::set_test_encryption_key();
-        DATABASE_CONNECTIONS.write().remove(&id);
+        clear_wallet_registry_entry(&id);
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
         let db =
             WalletDataDb::new_with_db_location(id, tmp.path()).expect("failed to create test db");
         (db, tmp)
+    }
+
+    pub(crate) fn clear_wallet_registry_entry(id: &WalletId) {
+        DATABASE_CONNECTIONS.write().remove(id);
+        DATABASE_OPEN_LOCKS.lock().remove(id);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Barrier;
+
+    #[test]
+    fn concurrent_new_or_existing_calls_share_one_database_handle() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        let wallet_id = WalletId::preview_new_random();
+        test_support::clear_wallet_registry_entry(&wallet_id);
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let location = Arc::new(tmp.path().to_path_buf());
+        let barrier = Arc::new(Barrier::new(16));
+
+        let handles = (0..16)
+            .map(|_| {
+                let wallet_id = wallet_id.clone();
+                let location = Arc::clone(&location);
+                let barrier = Arc::clone(&barrier);
+
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    WalletDataDb::new_with_db_location(wallet_id, location.as_ref().as_path())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let databases = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("wallet data open thread should not panic"))
+            .collect::<Result<Vec<_>>>()
+            .expect("all concurrent wallet data opens should succeed");
+
+        assert!(databases.windows(2).all(|pair| Arc::ptr_eq(&pair[0].db, &pair[1].db)));
+
+        test_support::clear_wallet_registry_entry(&wallet_id);
+    }
+
+    #[test]
+    fn concurrent_opens_for_different_wallets_succeed_independently() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        let wallet_ids = (0..8).map(|_| WalletId::preview_new_random()).collect::<Vec<_>>();
+        for wallet_id in &wallet_ids {
+            test_support::clear_wallet_registry_entry(wallet_id);
+        }
+
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let location = Arc::new(tmp.path().to_path_buf());
+        let barrier = Arc::new(Barrier::new(wallet_ids.len()));
+
+        let handles = wallet_ids
+            .iter()
+            .cloned()
+            .map(|wallet_id| {
+                let location = Arc::clone(&location);
+                let barrier = Arc::clone(&barrier);
+
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    WalletDataDb::new_with_db_location(wallet_id, location.as_ref().as_path())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let databases = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("wallet data open thread should not panic"))
+            .collect::<Result<Vec<_>>>()
+            .expect("all concurrent independent wallet data opens should succeed");
+
+        for left in 0..databases.len() {
+            for right in (left + 1)..databases.len() {
+                assert!(!Arc::ptr_eq(&databases[left].db, &databases[right].db));
+            }
+        }
+
+        for wallet_id in &wallet_ids {
+            test_support::clear_wallet_registry_entry(wallet_id);
+        }
+    }
 
     #[test]
     fn receive_address_cache_round_trips() {
@@ -395,5 +549,48 @@ mod tests {
         db.delete_receive_address_cache().unwrap();
 
         assert_eq!(db.get_receive_address_cache().unwrap(), None);
+    }
+
+    #[test]
+    fn payjoin_sender_session_round_trips() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+        let session = PayjoinSenderSession {
+            events: vec![r#"{"PostedOriginalPsbt":[]}"#.to_string()],
+            fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
+            created_at_secs: None,
+            pending_action: None,
+        };
+
+        db.set_payjoin_sender_session(session.clone()).unwrap();
+
+        assert_eq!(db.get_payjoin_sender_session().unwrap(), Some(session));
+    }
+
+    #[test]
+    fn delete_payjoin_sender_session_clears_session() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+        let session = PayjoinSenderSession {
+            events: vec![r#"{"Closed":"Failure"}"#.to_string()],
+            fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
+            created_at_secs: None,
+            pending_action: None,
+        };
+
+        db.set_payjoin_sender_session(session).unwrap();
+        db.delete_payjoin_sender_session().unwrap();
+
+        assert_eq!(db.get_payjoin_sender_session().unwrap(), None);
+    }
+
+    #[test]
+    fn delete_missing_payjoin_sender_session_succeeds() {
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+
+        db.delete_payjoin_sender_session().unwrap();
+
+        assert_eq!(db.get_payjoin_sender_session().unwrap(), None);
     }
 }

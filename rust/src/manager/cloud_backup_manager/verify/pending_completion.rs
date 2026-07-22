@@ -5,14 +5,16 @@ use tracing::{error, warn};
 use zeroize::Zeroizing;
 
 use super::{
-    CloudBackupDetailResult, CloudBackupError, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, PendingVerificationCompletion, RustCloudBackupManager,
+    CloudBackupDetailResult, CloudBackupError, CloudBackupKeychain, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, PendingVerificationCompletion,
+    RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, PendingVerificationUpload, master_key_wrapper_revision_hash,
+    CloudBackupDetail, PendingEnableJournalPhase, PendingVerificationUpload,
+    master_key_wrapper_revision_hash,
     wallets::{WalletBackupLookup, WalletBackupReader},
 };
 
@@ -32,6 +34,10 @@ const PENDING_VERIFICATION_COMPLETION_TTL_SECONDS: u64 = 24 * 60 * 60;
 
 impl RustCloudBackupManager {
     pub(crate) async fn finalize_pending_verification_if_ready(&self) {
+        if Self::pending_enable_finalization_owns_completion() {
+            return;
+        }
+
         let Some(completion) = self.pending_verification_completion() else { return };
 
         if completion.is_expired(
@@ -55,6 +61,21 @@ impl RustCloudBackupManager {
         }
 
         self.clear_pending_verification_completion();
+    }
+
+    fn pending_enable_finalization_owns_completion() -> bool {
+        match CloudBackupKeychain::global().load_pending_enable_journal() {
+            Ok(Some(journal)) => {
+                matches!(journal.phase(), PendingEnableJournalPhase::LocalPromotionStarted(_))
+            }
+            Ok(None) => false,
+            Err(error) => {
+                warn!(
+                    "Pending upload verification: could not inspect pending enable state: {error}"
+                );
+                true
+            }
+        }
     }
 
     fn expire_pending_verification_completion(&self, completion: PendingVerificationCompletion) {
@@ -170,7 +191,7 @@ impl RustCloudBackupManager {
             .load_master_key_from_store()
             .map_err(|source| CloudBackupError::internal_context("load local master key", source))
             .map_err(|error| {
-                Box::new(self.pending_verification_failure(&completion, error.to_string()))
+                Box::new(self.pending_verification_failure(&completion, error.reader_message()))
             })?
             .ok_or_else(|| {
                 Box::new(
@@ -245,7 +266,8 @@ impl RustCloudBackupManager {
             .download_master_key_backup(completion.namespace_id().to_string())
             .await
             .map_err(|error| {
-                Box::new(self.pending_verification_failure(completion, error.to_string()))
+                let message = CloudBackupError::from(error).reader_message();
+                Box::new(self.pending_verification_failure(completion, message))
             })?;
         let actual_revision = master_key_wrapper_revision_hash(&bytes);
 

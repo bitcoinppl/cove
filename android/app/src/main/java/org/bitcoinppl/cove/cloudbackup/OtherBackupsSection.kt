@@ -56,10 +56,10 @@ internal fun OtherBackupsLoadFailedSection(error: String) {
 
 @Composable
 internal fun OtherBackupsSection(
-   namespaceCount: Int,
-   walletCount: Int,
-   passkeySuffixes: List<String>,
-   manager: CloudBackupManager,
+    namespaceCount: Int,
+    walletCount: Int,
+    passkeySuffixes: List<String>,
+    manager: CloudBackupManager,
 ) {
     var showRecoverConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -69,6 +69,7 @@ internal fun OtherBackupsSection(
     val isRecovering = operation is OtherBackupsOperation.Recovering
     val isDeleting = operation is OtherBackupsOperation.Deleting
     val isOperating = isRecovering || isDeleting
+    val actionsEnabled = !isOperating && manager.isDetailInventoryComplete
     val blocker = LocalCloudBackupPresentationCoordinator.current
 
     LaunchedEffect(operation) {
@@ -116,9 +117,10 @@ internal fun OtherBackupsSection(
             MaterialSettingsItem(
                 title = if (isRecovering) "Trying Passkey..." else "Try Another Passkey",
                 subtitle = "Decrypt these backups once without changing your current Cloud Backup passkey",
-                onClick = if (isOperating) null else {
+                onClick = if (!actionsEnabled) null else {
                     { showRecoverConfirmation = true }
                 },
+                modifier = Modifier.cloudBackupActionEnabled(actionsEnabled),
                 leadingContent = {
                     if (isRecovering) {
                         CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
@@ -132,10 +134,11 @@ internal fun OtherBackupsSection(
             MaterialSettingsItem(
                 title = if (isDeleting) "Deleting..." else "Delete These Backups",
                 subtitle = "Permanently remove the backups protected by the other passkey",
-                onClick = if (isOperating) null else {
+                onClick = if (!actionsEnabled) null else {
                     { showDeleteConfirmation = true }
                 },
                 titleColor = MaterialTheme.colorScheme.error,
+                modifier = Modifier.cloudBackupActionEnabled(actionsEnabled),
                 leadingContent = {
                     if (isDeleting) {
                         CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
@@ -161,6 +164,7 @@ internal fun OtherBackupsSection(
             },
             confirmButton = {
                 TextButton(
+                    enabled = manager.isDetailInventoryComplete,
                     onClick = {
                         showRecoverConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.RecoverOtherBackups)
@@ -203,6 +207,7 @@ internal fun OtherBackupsSection(
             text = { Text("This will permanently remove these other backups from Google Drive.") },
             confirmButton = {
                 TextButton(
+                    enabled = manager.isDetailInventoryComplete,
                     onClick = {
                         showDeleteConfirmation = false
                         showFinalDeleteConfirmation = true
@@ -222,6 +227,7 @@ internal fun OtherBackupsSection(
             text = { Text("These backups cannot be recovered later, even if you find the passkey that currently protects them.") },
             confirmButton = {
                 TextButton(
+                    enabled = manager.isDetailInventoryComplete,
                     onClick = {
                         showFinalDeleteConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.DeleteOtherBackups)

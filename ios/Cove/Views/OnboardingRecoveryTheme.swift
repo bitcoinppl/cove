@@ -36,6 +36,8 @@ struct OnboardingStepIndicator: View {
 }
 
 struct OnboardingStatusHero: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let systemImage: String
     var tint: Color = .btnGradientLight
     var fillColor: Color = .duskBlue.opacity(0.42)
@@ -45,7 +47,7 @@ struct OnboardingStatusHero: View {
 
     var body: some View {
         Group {
-            if pulse {
+            if pulse, !reduceMotion {
                 TimelineView(.animation) { context in
                     ringStack { index in
                         ringScale(for: index, at: context.date)
@@ -139,6 +141,8 @@ struct OnboardingStatusHero: View {
 }
 
 struct OnboardingThinProgressBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let progress: Double
 
     var body: some View {
@@ -156,7 +160,7 @@ struct OnboardingThinProgressBar: View {
             }
         }
         .frame(width: 164, height: 5)
-        .animation(.easeInOut(duration: 0.25), value: progress)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: progress)
     }
 }
 

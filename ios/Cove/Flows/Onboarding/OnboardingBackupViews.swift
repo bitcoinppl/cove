@@ -208,36 +208,125 @@ private func onboardingWordGridRowCount(_ wordCount: Int) -> Int {
     max((wordCount + 1) / 2, 1)
 }
 
+enum OnboardingCloudBackupStepPresentation: Equatable {
+    case enable
+    case pendingEnableRecovery(CloudBackupPendingEnableRecovery)
+}
+
+enum OnboardingCloudBackupRecoveryIntent {
+    case removeIncompleteSetup
+    case skip
+}
+
+func onboardingCloudBackupStepPresentation(
+    lifecycle: CloudBackupLifecycle
+) -> OnboardingCloudBackupStepPresentation {
+    guard case let .pendingEnableRecovery(recovery) = lifecycle else { return .enable }
+
+    return .pendingEnableRecovery(recovery)
+}
+
+func routeOnboardingCloudBackupRecoveryIntent(
+    _ intent: OnboardingCloudBackupRecoveryIntent,
+    dispatch: (CloudBackupManagerAction) -> Void,
+    onSkip: () -> Void
+) {
+    switch intent {
+    case .removeIncompleteSetup:
+        dispatch(.confirmPendingEnableCleanup)
+    case .skip:
+        onSkip()
+    }
+}
+
 struct OnboardingCloudBackupStepView: View {
+    @State private var backupManager = CloudBackupManager.shared
+    @State private var didReportEnabled = false
+
     let branch: OnboardingBranch?
     let onEnable: () -> Void
     let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
+        Group {
+            switch onboardingCloudBackupStepPresentation(lifecycle: backupManager.lifecycle) {
+            case let .pendingEnableRecovery(recovery):
+                CloudBackupPendingEnableRecoveryView(
+                    recovery: recovery,
+                    onRemoveIncompleteSetup: {
+                        routeRecoveryIntent(.removeIncompleteSetup)
+                    },
+                    onCancel: {
+                        routeRecoveryIntent(.skip)
+                    }
+                )
+
+            case .enable:
+                enableContent
+            }
+        }
+        .task(id: backupManager.enableCompletion?.id) {
+            await completeIfReady()
+        }
+        .task(id: backupManager.lifecycle) {
+            await completeIfReady()
+        }
+    }
+
+    @ViewBuilder
+    private var enableContent: some View {
         switch branch {
         case .softwareImport:
             OnboardingSoftwareImportCloudBackupStepView(
                 onEnable: onEnable,
-                onEnabled: onEnabled,
                 onSkip: onSkip
             )
 
         case .hardware:
             OnboardingHardwareImportCloudBackupStepView(
                 onEnable: onEnable,
-                onEnabled: onEnabled,
                 onSkip: onSkip
             )
 
         case .newUser, .exchange, .softwareCreate, nil:
             OnboardingCloudBackupDetailsStepView(
                 onEnable: onEnable,
-                onEnabled: onEnabled,
                 onSkip: onSkip,
                 context: .standard
             )
         }
+    }
+
+    private func routeRecoveryIntent(_ intent: OnboardingCloudBackupRecoveryIntent) {
+        routeOnboardingCloudBackupRecoveryIntent(
+            intent,
+            dispatch: { backupManager.dispatch(action: $0) },
+            onSkip: onSkip
+        )
+    }
+
+    private func completeIfReady() async {
+        guard !didReportEnabled else { return }
+
+        if let completion = backupManager.enableCompletion,
+           isOnboardingCloudBackupEnableCompletion(completion.item)
+        {
+            backupManager.consumeEnableCompletion(completion)
+            didReportEnabled = true
+            onEnabled()
+            return
+        }
+
+        let readiness = await backupManager.onboardingEnableCompletionReadiness()
+        guard !didReportEnabled,
+              shouldCompleteOnboardingCloudBackupFromPersistedState(readiness)
+        else {
+            return
+        }
+
+        didReportEnabled = true
+        onEnabled()
     }
 }
 
@@ -245,14 +334,12 @@ private struct OnboardingSoftwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
     let onEnable: () -> Void
-    let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
                 onEnable: onEnable,
-                onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
                 context: .standard
             )
@@ -269,14 +356,12 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
     @State private var showingDetails = false
 
     let onEnable: () -> Void
-    let onEnabled: () -> Void
     let onSkip: () -> Void
 
     var body: some View {
         if showingDetails {
             OnboardingCloudBackupDetailsStepView(
                 onEnable: onEnable,
-                onEnabled: onEnabled,
                 onSkip: { showingDetails = false },
                 context: .hardwareImport
             )
@@ -291,10 +376,8 @@ private struct OnboardingHardwareImportCloudBackupStepView: View {
 
 private struct OnboardingCloudBackupDetailsStepView: View {
     @State private var backupManager = CloudBackupManager.shared
-    @State private var didReportEnabled = false
 
     let onEnable: () -> Void
-    let onEnabled: () -> Void
     let onSkip: () -> Void
     let context: CloudBackupEnableOnboardingContext
 
@@ -329,6 +412,9 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
     private var isPromptingForEnableChoice: Bool {
         if case .passkeyChoice(.enable) = backupManager.rootPrompt {
+            return true
+        }
+        if case .passkeyChoice(.enableExistingPasskeyOnly) = backupManager.rootPrompt {
             return true
         }
 
@@ -386,43 +472,22 @@ private struct OnboardingCloudBackupDetailsStepView: View {
 
             if isBusy {
                 CloudBackupEnableBusyOverlay(
-                    enableFlow: backupManager.enableFlow
+                    enableFlow: backupManager.enableFlow,
+                    verificationPresentation: backupManager.verificationPresentation
                 )
             }
         }
-        .task {
-            completeIfEnabled()
-        }
-        .onChange(of: backupManager.lifecycle, initial: true) { _, _ in
-            completeIfEnabled()
-        }
-    }
-
-    private func completeIfEnabled() {
-        guard !didReportEnabled else { return }
-        guard
-            shouldCompleteOnboardingCloudBackup(
-                configuredState: backupManager.configuredState,
-                hasPendingUploadVerification: backupManager.hasPendingUploadVerification
-            )
-        else { return }
-        didReportEnabled = true
-        onEnabled()
     }
 }
 
-private func shouldCompleteOnboardingCloudBackup(
-    configuredState: CloudBackupConfiguredState?,
-    hasPendingUploadVerification: Bool
-) -> Bool {
-    guard let configuredState else { return false }
-    guard case .available = configuredState.passkey else { return false }
-    guard !hasPendingUploadVerification else { return false }
-    guard case let .verified(report: report, lastVerifiedAt: _) = configuredState.verification,
-          report != nil
-    else { return false }
+func isOnboardingCloudBackupEnableCompletion(_ context: CloudBackupEnableContext) -> Bool {
+    context.verificationSource == .onboarding
+}
 
-    return true
+func shouldCompleteOnboardingCloudBackupFromPersistedState(
+    _ readiness: CloudBackupOnboardingCompletionReadiness
+) -> Bool {
+    readiness == .ready
 }
 
 struct OnboardingCloudBackupSuccessView: View {
@@ -442,9 +507,19 @@ struct OnboardingCloudBackupSuccessView: View {
             Spacer()
                 .frame(height: 36)
 
-            Text("Cloud Backup enabled successfully")
+            Text("Cloud Backup enabled")
                 .font(OnboardingRecoveryTypography.compactTitle)
                 .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+
+            Spacer()
+                .frame(height: 12)
+
+            Text("Cove can finish confirming cloud visibility in the background.")
+                .font(OnboardingRecoveryTypography.body)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 24)

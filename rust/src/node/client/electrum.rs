@@ -52,10 +52,6 @@ impl ElectrumClient {
         Self { client, options }
     }
 
-    pub fn new(client: Arc<ElectrumClientInner>) -> Self {
-        Self::new_with_options(client, Self::default_options())
-    }
-
     pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
         Self::new_from_node_and_options(node, Self::default_options()).await
     }
@@ -177,6 +173,23 @@ impl ElectrumClient {
             .map_err(|error| err(format!("failed to decode transaction: {error:?}")))?;
 
         Ok(Some(txn))
+    }
+
+    /// Fetches a transaction from the mempool or chain; returns `None` if not found.
+    pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
+        let client = self.client.clone();
+        cove_tokio::unblock::run_blocking(move || client.inner.transaction_get(&txid))
+            .await
+            .map(Some)
+            .or_else(|e| match e {
+                // Electrum returns a Protocol error when the transaction is not in the
+                // mempool or chain; map to Ok(None) for consistent "not found" semantics
+                // across node backends.  Some server implementations may also return a
+                // null response, so that is handled here too.
+                electrum_client::Error::Protocol(_)
+                | electrum_client::Error::InvalidResponse(Value::Null) => Ok(None),
+                other => Err(Error::ElectrumGetTransaction(other)),
+            })
     }
 
     async fn get_confirmed_transaction_fallback(

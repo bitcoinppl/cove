@@ -43,7 +43,7 @@ use crate::{
     psbt::Psbt,
     router::Route,
     transaction::{
-        Amount, Transaction, TransactionDetails, TxId, Unit, ffi::BitcoinTransaction,
+        Amount, Transaction, TransactionDetailsPresentation, TxId, Unit, ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
@@ -79,8 +79,7 @@ pub enum WalletManagerReconcileMessage {
     ScanComplete(Vec<Transaction>),
     UpdatedTransactions(Vec<Transaction>),
     TransactionUpdated(Transaction),
-    TransactionDetailsUpdated(Arc<TransactionDetails>),
-    TransactionConfirmationsUpdated(TransactionConfirmationUpdate),
+    TransactionDetailsUpdated(Arc<TransactionDetailsPresentation>),
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(Box<WalletMetadata>),
@@ -116,7 +115,6 @@ pub enum WalletManagerAction {
     ToggleShowLabels,
     SelectCurrentWalletAddressType,
     SelectedWalletDisappeared,
-    StartTransactionWatcher(Arc<TxId>),
     OpenReceiveAddress,
     CreateNewReceiveAddress,
     CloseReceiveAddress(u64),
@@ -143,12 +141,6 @@ pub struct WalletScanProgress {
     pub gap: u32,
     pub stop_gap: u32,
     pub progress_basis_points: u32,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct TransactionConfirmationUpdate {
-    pub tx_id: Arc<TxId>,
-    pub confirmations: u32,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -771,11 +763,14 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn transaction_details(&self, tx_id: Arc<TxId>) -> Result<TransactionDetails, Error> {
+    pub async fn transaction_details(
+        &self,
+        tx_id: Arc<TxId>,
+    ) -> Result<Arc<TransactionDetailsPresentation>, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
         let actor = self.actor.clone();
 
-        let details = task::spawn(async move {
+        let presentation = task::spawn(async move {
             call!(actor.transaction_details(tx_id))
                 .await
                 .map_err_str(Error::TransactionDetailsError)
@@ -783,13 +778,10 @@ impl RustWalletManager {
         .await
         .map_err_str(Error::TransactionDetailsError)??;
 
-        // for unconfirmed transactions, trigger a background sync to update status
-        // this uses SyncRequest with just this txid so it's fast
-        if !details.is_confirmed() {
-            send!(self.actor.perform_scan_for_single_tx_id(details.tx_id().0));
-        }
+        let tx_id = presentation.tx_id().0;
+        send!(self.actor.monitor_transaction_confirmation(tx_id));
 
-        Ok(details)
+        Ok(Arc::new(presentation))
     }
 
     /// Get address at the given index
@@ -1112,12 +1104,6 @@ impl RustWalletManager {
 
             Action::SelectedWalletDisappeared => {
                 self.shutdown_actors();
-                return;
-            }
-
-            Action::StartTransactionWatcher(tx_id) => {
-                let tx_id = tx_id.as_ref().0;
-                send!(self.actor.start_transaction_watcher(tx_id));
                 return;
             }
 

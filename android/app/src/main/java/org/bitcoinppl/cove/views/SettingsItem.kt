@@ -57,6 +57,7 @@ fun MaterialSettingsItem(
     isSwitch: Boolean = false,
     switchCheckedState: Boolean = false,
     onCheckChanged: ((Boolean) -> Unit)? = null,
+    iconTint: Color? = null,
     modifier: Modifier = Modifier,
 ) {
     MaterialSettingsItem(
@@ -67,7 +68,7 @@ fun MaterialSettingsItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = iconTint ?: MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp),
             )
         },

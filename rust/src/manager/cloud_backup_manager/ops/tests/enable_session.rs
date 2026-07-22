@@ -202,7 +202,7 @@ async fn confirm_saved_passkey_reuses_original_credential_id() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn automatic_saved_passkey_confirmation_retries_until_available() {
+async fn automatic_saved_passkey_confirmation_exhaustion_preserves_staged_session() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -212,8 +212,6 @@ async fn automatic_saved_passkey_confirmation_retries_until_available() {
     CONNECTIVITY_MANAGER.set_connection_state(true);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
-    globals.passkey.push_authenticate_result(Err(PasskeyError::NoCredentialFound));
-    globals.passkey.push_authenticate_result(Ok(vec![7; 32]));
 
     let context = CloudBackupEnableContext {
         saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
@@ -222,13 +220,48 @@ async fn automatic_saved_passkey_confirmation_retries_until_available() {
     enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
 
     assert_eq!(globals.passkey.create_count(), 1);
-    assert_eq!(globals.passkey.authenticate_count(), 3);
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(globals.passkey.authenticated_credential_ids(), vec![vec![1, 2, 3]]);
     assert_eq!(
-        globals.passkey.authenticated_credential_ids(),
-        vec![vec![1, 2, 3], vec![1, 2, 3], vec![1, 2, 3]]
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        )
     );
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
+    assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn post_presentation_saved_passkey_failure_attempts_confirmation_once() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+        operation: PasskeyOperation::AuthenticateAssertion,
+        reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
+    }));
+
+    let context = CloudBackupEnableContext {
+        saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+        verification_source: CloudBackupVerificationSource::Onboarding,
+    };
+    enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
+
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
+            SavedPasskeyConfirmationMode::Manual,
+        )
+    );
+    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
+    assert!(matches!(pending, PendingEnableSession::AwaitingSavedPasskeyConfirmation(_)));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -241,7 +274,20 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
     reset_cloud_backup_test_state(&manager, globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     let master_key = cove_cspp::master_key::MasterKey::generate();
-    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_staged_master_key(&master_key).unwrap();
+    let mut journal = staged_pending_enable_journal(
+        CloudBackupEnableContext::settings_manual(),
+        master_key.namespace_id(),
+        PendingEnableNamespaceOwnership::FreshOwned,
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+    );
+    assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
+        credential_id: vec![1, 2, 3],
+        prf_salt: [9; 32],
+        provider_hint: None,
+    }));
+    CloudBackupKeychain::global().save_pending_enable_journal(&journal).unwrap();
     replace_pending_enable_session_for_test(
         &manager,
         PendingEnableSession::awaiting_saved_passkey_confirmation(
@@ -279,7 +325,13 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
         manager.model_snapshot().pending_upload_verification,
         PendingUploadVerificationState::Idle
     );
-    assert!(matches!(manager.model_snapshot().verification, VerificationState::Verified(_)));
+    let snapshot = manager.model_snapshot();
+    assert!(
+        matches!(snapshot.verification, VerificationState::Verified(_)),
+        "unexpected final model snapshot: {snapshot:#?}; pending completion: {:#?}; pending journal: {:#?}",
+        manager.pending_verification_completion(),
+        CloudBackupKeychain::global().load_pending_enable_journal()
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -340,150 +392,177 @@ async fn unsupported_provider_saved_passkey_confirmation_fails_without_retry() {
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
 }
 
+struct PendingEnableDiscardFixture {
+    prior_master_key: [u8; 32],
+    staged_master_key: [u8; 32],
+    namespace: String,
+    passkey: UnpersistedPrfKey,
+    previous_metadata: crate::manager::cloud_backup_manager::PendingEnableLocalMetadataSnapshot,
+}
+
+fn prepare_pending_enable_discard_fixture(
+    ownership: PendingEnableNamespaceOwnership,
+    remote_writes_started: bool,
+) -> PendingEnableDiscardFixture {
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let cloud_keychain = CloudBackupKeychain::global();
+    let prior_master_key = cove_cspp::master_key::MasterKey::generate();
+    let prior_master_key_bytes = *prior_master_key.as_bytes();
+    cspp.save_master_key(&prior_master_key).unwrap();
+    cloud_keychain
+        .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
+        .unwrap();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    let staged_master_key_bytes = *staged_master_key.as_bytes();
+    let namespace = staged_master_key.namespace_id();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    let passkey = UnpersistedPrfKey {
+        prf_key: [7; 32],
+        prf_salt: [9; 32],
+        credential_id: vec![1, 2, 3],
+        provider_hint: None,
+    };
+    let mut journal = staged_pending_enable_journal(
+        CloudBackupEnableContext::settings_manual(),
+        namespace.clone(),
+        ownership,
+        previous_metadata.clone(),
+    );
+    if remote_writes_started {
+        assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
+            credential_id: passkey.credential_id.clone(),
+            prf_salt: passkey.prf_salt,
+            provider_hint: passkey.provider_hint.clone(),
+        }));
+        assert!(journal.mark_remote_writes_started());
+    }
+    cloud_keychain.save_pending_enable_journal(&journal).unwrap();
+
+    PendingEnableDiscardFixture {
+        prior_master_key: prior_master_key_bytes,
+        staged_master_key: staged_master_key_bytes,
+        namespace,
+        passkey,
+        previous_metadata,
+    }
+}
+
+async fn install_pending_enable_discard_session(
+    manager: &RustCloudBackupManager,
+    fixture: &PendingEnableDiscardFixture,
+) {
+    replace_pending_enable_session_for_test(
+        manager,
+        PendingEnableSession::retry_upload(
+            cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            fixture.passkey.copy_for_retry(),
+            CloudBackupEnableContext::settings_manual(),
+        ),
+    )
+    .await;
+}
+
+fn assert_active_master_key(expected: &[u8; 32]) {
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    assert_eq!(cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(), expected);
+}
+
 #[tokio::test(flavor = "current_thread")]
-async fn discard_pending_enable_clears_pending_session_and_local_master_key() {
+async fn discard_pending_enable_staged_preserves_prior_master_and_metadata() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, false);
+    install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    cspp.save_master_key(&master_key).unwrap();
-    replace_pending_enable_session_for_test(
-        &manager,
-        pending_enable_awaiting_confirmation(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: vec![1, 2, 3],
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
 
     manager.discard_pending_enable_cloud_backup();
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
-    assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    assert_active_master_key(&fixture.prior_master_key);
+    assert!(cspp.load_staged_master_key().unwrap().is_none());
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        fixture.previous_metadata
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn discard_pending_enable_retry_upload_deletes_remote_master_key() {
+async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespace() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let namespace = master_key.namespace_id();
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.set_wallet_backup(
+        fixture.namespace.clone(),
+        "wallet-record".into(),
+        vec![4, 5, 6],
+    );
+    install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    cspp.save_master_key(&master_key).unwrap();
-    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    replace_pending_enable_session_for_test(
-        &manager,
-        PendingEnableSession::retry_upload(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: vec![1, 2, 3],
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
 
     manager.discard_pending_enable_cloud_backup();
-
-    wait_for_test_condition(
-        Duration::from_secs(1),
-        "remote master key backup should be deleted",
-        || !globals.cloud.has_master_key_backup(&namespace),
-    )
-    .await;
-
-    assert!(cspp.load_master_key_from_store().unwrap().is_none());
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn discard_pending_enable_retry_upload_treats_missing_remote_master_key_as_deleted() {
-    let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    cspp.save_master_key(&master_key).unwrap();
-    globals.cloud.fail_delete_wallet_backup_not_found("already deleted");
-    replace_pending_enable_session_for_test(
-        &manager,
-        PendingEnableSession::retry_upload(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: vec![1, 2, 3],
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
-
-    manager.discard_pending_enable_cloud_backup();
-
-    wait_for_test_condition(
-        Duration::from_secs(1),
-        "pending enable session should be discarded after missing remote cleanup",
-        || cspp.load_master_key_from_store().unwrap().is_none(),
-    )
-    .await;
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
-    assert!(cspp.load_master_key_from_store().unwrap().is_none());
+    assert!(!globals.cloud.has_namespace(&fixture.namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 1);
+    assert_active_master_key(&fixture.prior_master_key);
+    assert!(cspp.load_staged_master_key().unwrap().is_none());
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        fixture.previous_metadata
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn discard_pending_enable_retry_upload_keeps_pending_state_when_remote_cleanup_fails() {
+async fn discard_pending_enable_fresh_owned_treats_missing_namespace_as_deleted() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    globals.cloud.fail_delete_namespace_not_found("already deleted");
+    install_pending_enable_discard_session(&manager, &fixture).await;
 
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let namespace = master_key.namespace_id();
+    manager.discard_pending_enable_cloud_backup();
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 1);
+    assert_active_master_key(&fixture.prior_master_key);
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_remote_cleanup_failure_retains_session_and_journal() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_namespace("delete failed");
+    install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    cspp.save_master_key(&master_key).unwrap();
-    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
-    globals.cloud.fail_delete_wallet_backup("delete failed");
-    replace_pending_enable_session_for_test(
-        &manager,
-        PendingEnableSession::retry_upload(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: vec![1, 2, 3],
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
 
     manager.discard_pending_enable_cloud_backup();
 
@@ -494,7 +573,234 @@ async fn discard_pending_enable_retry_upload_keeps_pending_state_when_remote_cle
     )
     .await;
 
-    assert!(globals.cloud.has_master_key_backup(&namespace));
-    assert!(cspp.load_master_key_from_store().unwrap().is_some());
+    let CloudBackupLifecycle::Failed(failure) = manager.state().lifecycle else {
+        panic!("expected failed lifecycle");
+    };
+    assert_eq!(failure.message, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
+
+    assert!(globals.cloud.has_namespace(&fixture.namespace));
+    assert_active_master_key(&fixture.prior_master_key);
+    assert_eq!(
+        cspp.load_staged_master_key().unwrap().unwrap().as_bytes(),
+        &fixture.staged_master_key
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_some());
+    assert!(take_pending_enable_session_for_test(&manager).await.is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_recovered_existing_never_deletes_remote_namespace() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture = prepare_pending_enable_discard_fixture(
+        PendingEnableNamespaceOwnership::RecoveredExisting,
+        true,
+    );
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    install_pending_enable_discard_session(&manager, &fixture).await;
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+
+    manager.discard_pending_enable_cloud_backup();
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert!(globals.cloud.has_namespace(&fixture.namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_active_master_key(&fixture.prior_master_key);
+    assert!(cspp.load_staged_master_key().unwrap().is_none());
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        fixture.previous_metadata
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_unjournaled_session_never_deletes_or_clears_material() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    CloudBackupKeychain::global().delete_pending_enable_journal().unwrap();
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    install_pending_enable_discard_session(&manager, &fixture).await;
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+
+    manager.discard_pending_enable_cloud_backup();
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert!(globals.cloud.has_namespace(&fixture.namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_active_master_key(&fixture.prior_master_key);
+    assert_eq!(
+        cspp.load_staged_master_key().unwrap().unwrap().as_bytes(),
+        &fixture.staged_master_key
+    );
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        fixture.previous_metadata
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    manager
+        .pending_enable
+        .begin_pending_enable_local_promotion(
+            &cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            &fixture.passkey,
+        )
+        .unwrap();
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    install_pending_enable_discard_session(&manager, &fixture).await;
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+
+    manager.discard_pending_enable_cloud_backup();
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert!(!globals.cloud.has_namespace(&fixture.namespace));
+    assert_active_master_key(&fixture.prior_master_key);
+    assert_eq!(
+        cspp.master_key_promotion_status().unwrap(),
+        cove_cspp::MasterKeyPromotionStatus::None
+    );
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        fixture.previous_metadata
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_durable_completion_commits_without_remote_delete() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    manager
+        .pending_enable
+        .begin_pending_enable_local_promotion(
+            &cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            &fixture.passkey,
+        )
+        .unwrap();
+    let mut persisted_state = persisted_enabled_cloud_backup_state(Some(0));
+    assert!(persisted_state.replace_pending_verification_completion(
+        PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            fixture.namespace.clone(),
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        )
+    ));
+    Database::global().cloud_backup_state.set(&persisted_state).unwrap();
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    install_pending_enable_discard_session(&manager, &fixture).await;
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+
+    manager.discard_pending_enable_cloud_backup();
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert!(globals.cloud.has_namespace(&fixture.namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+    assert_active_master_key(&fixture.staged_master_key);
+    assert_eq!(
+        cspp.master_key_promotion_status().unwrap(),
+        cove_cspp::MasterKeyPromotionStatus::None
+    );
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().as_deref(),
+        Some(fixture.namespace.as_str())
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn committed_pending_enable_journal_cleanup_retries_without_restart() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    manager
+        .pending_enable
+        .begin_pending_enable_local_promotion(
+            &cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            &fixture.passkey,
+        )
+        .unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.commit_master_key_promotion().unwrap();
+
+    assert_eq!(
+        cspp.master_key_promotion_status().unwrap(),
+        cove_cspp::MasterKeyPromotionStatus::None
+    );
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_some());
+
+    manager.pending_enable.commit_pending_enable_local_promotion().unwrap();
+
+    assert_active_master_key(&fixture.staged_master_key);
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discard_pending_enable_local_cleanup_failure_retains_session_and_journal() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, false);
+    install_pending_enable_discard_session(&manager, &fixture).await;
+    globals.keychain.fail_delete_at(1);
+
+    manager.discard_pending_enable_cloud_backup();
+
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "discard pending enable local cleanup failure should surface",
+        || matches!(manager.state().lifecycle, CloudBackupLifecycle::Failed(_)),
+    )
+    .await;
+
+    let CloudBackupLifecycle::Failed(failure) = manager.state().lifecycle else {
+        panic!("expected failed lifecycle");
+    };
+    assert_eq!(failure.message, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
+
+    assert_active_master_key(&fixture.prior_master_key);
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_some());
     assert!(take_pending_enable_session_for_test(&manager).await.is_some());
 }

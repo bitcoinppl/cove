@@ -60,6 +60,13 @@ impl From<String> for RemoteBackupLocation {
     }
 }
 
+/// Fast provider inventory that may still require an authoritative follow-up
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct CloudStorageInventorySnapshot {
+    pub names: Vec<String>,
+    pub is_complete: bool,
+}
+
 #[uniffi::export(callback_interface)]
 #[async_trait::async_trait]
 pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
@@ -121,6 +128,13 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError>;
+
+    /// List wallet backup names without waiting for provider reconciliation
+    async fn list_wallet_files_snapshot(
+        &self,
+        namespace: String,
+        policy: CloudAccessPolicy,
+    ) -> Result<CloudStorageInventorySnapshot, CloudStorageError>;
 
     /// Check whether a blob has been fully uploaded to iCloud
     async fn is_backup_uploaded(
@@ -292,6 +306,22 @@ impl CloudStorageClient {
         validate_cloud_backup_namespace_id(&namespace)?;
 
         self.0.0.list_wallet_files(namespace, self.1).await
+    }
+
+    pub async fn list_wallet_backups_snapshot(
+        &self,
+        namespace: String,
+    ) -> Result<CloudStorageInventorySnapshot, CloudStorageError> {
+        validate_cloud_backup_namespace_id(&namespace)?;
+
+        let snapshot = self.0.0.list_wallet_files_snapshot(namespace, self.1).await?;
+
+        Ok(CloudStorageInventorySnapshot {
+            names: remote_layout::dedupe_wallet_record_ids(
+                snapshot.names.iter().map(String::as_str),
+            ),
+            is_complete: snapshot.is_complete,
+        })
     }
 
     pub async fn is_backup_uploaded(
@@ -535,6 +565,17 @@ mod tests {
             panic!("unused in test")
         }
 
+        async fn list_wallet_files_snapshot(
+            &self,
+            namespace: String,
+            policy: CloudAccessPolicy,
+        ) -> Result<CloudStorageInventorySnapshot, CloudStorageError> {
+            Ok(CloudStorageInventorySnapshot {
+                names: self.list_wallet_files(namespace, policy).await?,
+                is_complete: true,
+            })
+        }
+
         async fn is_backup_uploaded(
             &self,
             _namespace: String,
@@ -652,6 +693,31 @@ mod tests {
         .expect("list wallet backups");
 
         assert_eq!(record_ids, vec!["record-a".to_string(), "record-b".to_string()]);
+    }
+
+    #[test]
+    fn wallet_backup_snapshot_preserves_completeness_and_dedupes_locations() {
+        let cloud = CloudStorage(Arc::new(Box::new(TestCloudStorage {
+            expected_policy: CloudAccessPolicy::Silent,
+            expected_policy_used: Arc::new(AtomicBool::new(false)),
+            namespaces: vec![VALID_NAMESPACE.into()],
+            wallet_files: Some(vec![
+                "wallet-record-a.json".into(),
+                "wallets/wallet-record-a.json".into(),
+                "wallet-record-b.json".into(),
+            ]),
+            master_key_backups: HashMap::new(),
+        })));
+
+        let snapshot = block_on_ready(
+            cloud
+                .client(CloudAccessPolicy::Silent)
+                .list_wallet_backups_snapshot(VALID_NAMESPACE.into()),
+        )
+        .expect("list wallet backup snapshot");
+
+        assert!(snapshot.is_complete);
+        assert_eq!(snapshot.names, vec!["record-a".to_string(), "record-b".to_string()]);
     }
 
     #[test]

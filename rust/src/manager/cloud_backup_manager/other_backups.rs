@@ -18,7 +18,7 @@ impl RustCloudBackupManager {
             Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
             Err(error) => {
                 warn!("Failed to summarize other cloud backups: {error}");
-                CloudBackupOtherBackupsState::LoadFailed { error: error.to_string() }
+                CloudBackupOtherBackupsState::LoadFailed { error: error.reader_message() }
             }
         }
     }

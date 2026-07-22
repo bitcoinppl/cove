@@ -21,7 +21,8 @@ struct SecretWordsScreen: View {
     @State private var showSeedQrSheet = false
 
     let rowHeight = 30.0
-    private let numberOfColumns = 3
+    private let numberOfColumns = 2
+    private let topContentInset = 16.0
 
     var numberOfRows: Int {
         (words?.words().count ?? 24) / numberOfColumns
@@ -46,23 +47,19 @@ struct SecretWordsScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
+            let compactLayout = usesCompactLayout(
                 sizeCategory: sizeCategory,
                 availableHeight: proxy.size.height
             )
+            let contentHeight = max(proxy.size.height - topContentInset, 0)
 
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
+            ScrollView {
+                mainContent(usesFlexibleSpacing: !compactLayout)
+                    .frame(minHeight: contentHeight, alignment: .top)
+                    .safeAreaPadding(.bottom, 24)
             }
+            .padding(.top, topContentInset)
+            .scrollIndicators(.hidden)
         }
         .onAppear {
             auth.lock()
@@ -113,7 +110,7 @@ struct SecretWordsScreen: View {
             Group {
                 if let words {
                     GroupBox {
-                        ColumnMajorGrid(items: words.allWords()) { _, word in
+                        ColumnMajorGrid(items: words.allWords(), numberOfColumns: numberOfColumns) { _, word in
                             HStack {
                                 Text("\(word.number).")
                                     .fontWeight(.medium)
@@ -182,7 +179,8 @@ struct SecretWordsScreen: View {
                 }
             }
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.bottom)
     }
 }
 

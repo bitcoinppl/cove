@@ -2,6 +2,17 @@
 
 Notes on passkey behavior that matters for Cloud Backup flows.
 
+## Interactive request timeout
+
+iOS registration and assertion requests wait at most five minutes for
+Authentication Services to complete. When that bound is reached, Cove cancels
+the authorization controller on the main queue and reports a presented platform
+authorization failure. Delegate completion is terminal and idempotent, so a
+late success, cancellation, or error callback cannot replace the timeout result.
+
+The one-second presence probe is separate and remains intentionally short. A
+presence timeout is indeterminate rather than an interactive request failure.
+
 ## Presence checks
 
 Do not use passkey presence checks for background polling.

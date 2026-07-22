@@ -101,14 +101,14 @@ fun TransactionDetailsContainer(
         }
     }
 
-    val details = manager?.transactionDetailsCache?.get(txId)
+    val presentation = manager?.transactionDetailsPresentations?.get(txId)
 
     // route recovery may still remove this screen, so avoid flashing a retry button mid-transition
     val suppressWalletLoadRetry = recoveringWalletSelection && !app.isNavigationSettled
 
     LaunchedEffect(manager, txId, retryAttempt) {
         val currentManager = manager ?: return@LaunchedEffect
-        if (currentManager.transactionDetailsCache[txId] != null) return@LaunchedEffect
+        if (currentManager.transactionDetailsPresentations[txId] != null) return@LaunchedEffect
 
         detailsError = null
 
@@ -139,11 +139,11 @@ fun TransactionDetailsContainer(
             )
         }
 
-        manager != null && details != null -> {
+        manager != null && presentation != null -> {
             TransactionDetailsScreen(
                 app = app,
                 manager = manager!!,
-                details = details,
+                presentation = presentation,
                 txId = txId,
                 refreshOnAppear = !didLoadInitialDetails,
             )

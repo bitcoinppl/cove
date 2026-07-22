@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
 
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_authenticates_before_loading_wallet_inventory() {
@@ -68,7 +69,7 @@ async fn deep_verify_fails_when_auto_sync_upload_fails() {
         }) => {
             assert_eq!(
                 message,
-                "failed to auto-sync missing wallet backups: cloud storage error: upload failed: upload failed"
+                crate::manager::cloud_backup_manager::error::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
             );
             let detail = detail.expect("expected detail on retry failure");
             assert_eq!(detail.needs_sync.len(), 1);
@@ -104,7 +105,10 @@ async fn deep_verify_persists_partial_auto_sync_upload_before_later_wallet_fails
     let record_id = wallet_record_id(first_wallet.id.as_ref());
     match result {
         DeepVerificationResult::Failed(DeepVerificationFailure::Retry { message, .. }) => {
-            assert!(message.contains("upload failed"), "{message}");
+            assert_eq!(
+                message,
+                crate::manager::cloud_backup_manager::error::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
+            );
         }
         other => panic!("expected retry failure, got {other:?}"),
     }
@@ -163,6 +167,8 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
             let state = manager.model_snapshot();
             manager.pending_verification_completion().is_some()
                 && state.pending_upload_verification == PendingUploadVerificationState::Confirming
+                && matches!(state.verification, VerificationState::Idle)
+                && state.detail.is_some()
         },
     )
     .await;
@@ -243,7 +249,10 @@ async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
 
     match manager.model_snapshot().verification {
         VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
-            assert!(message.contains("failed to list wallet backups"), "{message}");
+            assert_eq!(
+                message,
+                crate::manager::cloud_backup_manager::error::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
+            );
         }
         other => panic!("expected retry failure, got {other:?}"),
     }
@@ -434,7 +443,7 @@ async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
         DeepVerificationResult::Failed(DeepVerificationFailure::Retry {
             message, detail, ..
         }) => {
-            assert_eq!(message, "failed to refresh remote wallet truth for some wallets");
+            assert_eq!(message, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
 
             let detail = detail.expect("expected verification detail");
             assert_eq!(detail.needs_sync.len(), 1);

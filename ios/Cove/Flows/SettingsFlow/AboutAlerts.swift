@@ -4,7 +4,6 @@ struct AboutPresentationContext {
     let alertState: Binding<TaggedItem<AboutAlertState>?>
     let isBetaEnabled: Binding<Bool>
     let dismiss: () -> Void
-    let wipeCloudBackup: @Sendable () -> WipeCloudResult
 
     func dismissAlert() {
         alertState.wrappedValue = nil
@@ -81,54 +80,6 @@ extension AboutAlertState: TaggedAlertPresentable {
             AlertBuilder(
                 title: "Something went wrong!",
                 message: error,
-                actions: { Button("OK") { context.dismissAlert() } }
-            ).eraseToAny()
-
-        case .confirmWipeCloud:
-            AlertBuilder(
-                title: "Wipe Cloud Backup?",
-                message: "Deletes all iCloud backup files and resets local backup state",
-                actions: {
-                    Button("Wipe", role: .destructive) {
-                        Task.detached {
-                            let result = context.wipeCloudBackup()
-                            await MainActor.run {
-                                context.presentAlert(.wipeCloudResult(result))
-                            }
-                        }
-                    }
-                    Button("Cancel", role: .cancel) { context.dismissAlert() }
-                }
-            ).eraseToAny()
-
-        case let .wipeCloudResult(result):
-            AlertBuilder(
-                title: result.succeeded ? "Cloud Backup Wiped" : "Cloud Backup Wipe Failed",
-                message: result.message,
-                actions: { Button("OK") { context.dismissAlert() } }
-            ).eraseToAny()
-
-        case .confirmResetLocalState:
-            AlertBuilder(
-                title: "Reset Local Backup State?",
-                message: "Clears local keychain and DB backup state but keeps iCloud files intact. Use this to test the recovery flow.",
-                actions: {
-                    Button("Reset", role: .destructive) {
-                        RustCloudBackupManager().debugResetCloudBackupState()
-                        context.presentAlert(
-                            .resetLocalStateResult(
-                                "Local backup state reset. iCloud files are untouched."
-                            )
-                        )
-                    }
-                    Button("Cancel", role: .cancel) { context.dismissAlert() }
-                }
-            ).eraseToAny()
-
-        case let .resetLocalStateResult(message):
-            AlertBuilder(
-                title: "Local State Reset",
-                message: message,
                 actions: { Button("OK") { context.dismissAlert() } }
             ).eraseToAny()
         }

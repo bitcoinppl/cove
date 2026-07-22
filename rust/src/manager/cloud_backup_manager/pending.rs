@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use act_zero::send;
 use backon::{BackoffBuilder as _, FibonacciBuilder};
+use tokio::sync::Mutex;
 
 use self::queue_processor::PendingUploadVerifier;
 use super::{CloudBackupError, PendingUploadVerificationState, RustCloudBackupManager};
@@ -19,6 +20,8 @@ pub(crate) use detail::remote_wallet_revision_matches;
 
 pub(crate) const MASTER_KEY_UPLOAD_CONFIRMATION_GRACE: Duration = Duration::from_secs(60);
 pub(crate) const MAX_PENDING_UPLOAD_VERIFICATION_DELAY: Duration = Duration::from_secs(10);
+
+static PENDING_UPLOAD_VERIFIER_LOCK: Mutex<()> = Mutex::const_new(());
 
 pub(crate) fn build_pending_upload_backoff() -> backon::FibonacciBackoff {
     FibonacciBuilder::default()
@@ -178,6 +181,9 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) async fn verify_pending_uploads_once(&self) -> PendingUploadVerificationState {
+        // the persisted queue is process-global, so every manager shares one verifier pass
+        let _guard = PENDING_UPLOAD_VERIFIER_LOCK.lock().await;
+
         PendingUploadVerifier(self.clone()).run_once().await
     }
 

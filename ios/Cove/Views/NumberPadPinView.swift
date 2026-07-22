@@ -128,6 +128,8 @@ struct NumberPadPinView: View {
                 ForEach(1 ... 9, id: \.self) { number in
                     Button(action: {
                         guard pin.count < pinLength else { return }
+
+                        AppHaptics.pinKeyPressed()
                         pin.append(String(number))
                     }, label: {
                         Text(String(number))
@@ -154,6 +156,8 @@ struct NumberPadPinView: View {
 
                 Button(action: {
                     guard pin.count < pinLength else { return }
+
+                    AppHaptics.pinKeyPressed()
                     pin.append("0")
                 }, label: {
                     Text("0")
@@ -166,7 +170,10 @@ struct NumberPadPinView: View {
 
                 // 0 and Back Button
                 Button(action: {
-                    if !pin.isEmpty { pin.removeLast() }
+                    guard !pin.isEmpty else { return }
+
+                    AppHaptics.pinKeyPressed()
+                    pin.removeLast()
                 }, label: {
                     Image(systemName: "delete.backward")
                         .font(.title)

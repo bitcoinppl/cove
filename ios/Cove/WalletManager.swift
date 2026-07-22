@@ -89,9 +89,8 @@ private struct WalletManagerBootstrap {
     /// UUID changes each time so onChange always fires even across multiple sends
     var payjoinTxBroadcast: UUID? = nil
 
-    /// cached transaction details
-    var transactionDetails: [TxId: TransactionDetails] = [:]
-    var transactionConfirmations: [TxId: UInt32] = [:]
+    /// cached transaction detail presentations
+    var transactionDetailsPresentations: [TxId: TransactionDetailsPresentation] = [:]
     var transactionLockStates: [TxId: TransactionLockState] = [:]
 
     var receiveAddressState: ReceiveAddressState?
@@ -313,35 +312,28 @@ private struct WalletManagerBootstrap {
         amountFormatter.amountFmtUnit(amount)
     }
 
-    func transactionDetails(for txId: TxId) async throws -> TransactionDetails {
-        if let details = await MainActor.run(body: { transactionDetails[txId] }) {
-            return details
+    func transactionDetails(for txId: TxId) async throws -> TransactionDetailsPresentation {
+        if let presentation = await MainActor.run(
+            body: { transactionDetailsPresentations[txId] }
+        ) {
+            return presentation
         }
 
-        let details = try await rust.transactionDetails(txId: txId)
+        let presentation = try await rust.transactionDetails(txId: txId)
         await MainActor.run {
-            transactionDetails[txId] = details
+            transactionDetailsPresentations[txId] = presentation
         }
 
-        return details
+        return presentation
     }
 
-    func refreshTransactionDetails(for txId: TxId) async throws -> TransactionDetails {
-        let details = try await rust.transactionDetails(txId: txId)
-        let confirmations: UInt32? = if let blockNumber = details.blockNumber() {
-            try await rust.numberOfConfirmations(blockHeight: blockNumber)
-        } else {
-            nil
-        }
-
+    func refreshTransactionDetails(for txId: TxId) async throws -> TransactionDetailsPresentation {
+        let presentation = try await rust.transactionDetails(txId: txId)
         await MainActor.run {
-            transactionDetails[txId] = details
-            if let confirmations {
-                transactionConfirmations[txId] = confirmations
-            }
+            transactionDetailsPresentations[txId] = presentation
         }
 
-        return details
+        return presentation
     }
 
     func transactionLockState(for txId: TxId) async throws -> TransactionLockState {
@@ -386,7 +378,7 @@ private struct WalletManagerBootstrap {
 
     @MainActor
     func reconcileAfterLabelsChanged() {
-        let cachedTransactionIds = Array(transactionDetails.keys)
+        let cachedTransactionIds = Array(transactionDetailsPresentations.keys)
         let cachedLockStateTransactionIds = Array(transactionLockStates.keys)
 
         Task {
@@ -409,10 +401,6 @@ private struct WalletManagerBootstrap {
 
             await rust.getTransactions()
         }
-    }
-
-    func updateTransactionConfirmations(txId: TxId, confirmations: UInt32) {
-        transactionConfirmations[txId] = confirmations
     }
 
     private func replaceTransactionInLoadState(_ transaction: CoveCore.Transaction) {
@@ -492,11 +480,8 @@ private struct WalletManagerBootstrap {
         case let .transactionUpdated(transaction):
             replaceTransactionInLoadState(transaction)
 
-        case let .transactionDetailsUpdated(details):
-            transactionDetails[details.txId()] = details
-
-        case let .transactionConfirmationsUpdated(update):
-            transactionConfirmations[update.txId] = update.confirmations
+        case let .transactionDetailsUpdated(presentation):
+            transactionDetailsPresentations[presentation.txId()] = presentation
 
         case let .scanComplete(txns):
             self.loadState = loadStateForTransactions(txns)

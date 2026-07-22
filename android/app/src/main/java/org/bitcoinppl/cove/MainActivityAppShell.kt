@@ -11,7 +11,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,12 +44,6 @@ internal fun MainActivityAppShell(
         }
 
     CoveTheme(darkTheme = darkTheme) {
-        DisposableEffect(onboardingManager) {
-            onDispose {
-                onboardingManager?.close()
-            }
-        }
-
         CloudBackupPresentationHost(
             app = app,
             auth = auth,

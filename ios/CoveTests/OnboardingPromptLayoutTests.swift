@@ -6,6 +6,99 @@ import XCTest
 
 @MainActor
 final class OnboardingPromptLayoutTests: XCTestCase {
+    func testCloudDiscoveryDecisionRowsRenderRequiredActions() throws {
+        let checking = try recognizedText(in: render(
+            CloudCheckContent(onContinue: {})
+        ))
+        XCTAssertTrue(checking.contains("Looking for iCloud backup"))
+        XCTAssertTrue(checking.contains("Continue Setup"))
+
+        let unavailable = try recognizedText(in: render(
+            OnboardingRestoreUnavailableScreen(
+                onCheckAgain: {},
+                onContinue: {},
+                onBack: {}
+            )
+        ))
+        XCTAssertTrue(unavailable.contains("Nothing visible yet"))
+        XCTAssertTrue(unavailable.contains("Check Again"))
+        XCTAssertTrue(unavailable.contains("Continue Setup"))
+
+        let bitcoinChoice = try recognizedText(in: render(
+            OnboardingBitcoinChoiceScreen(
+                errorMessage: nil,
+                onRestoreFromCoveBackup: {},
+                onNewHere: {},
+                onHasBitcoin: {}
+            )
+        ))
+        XCTAssertTrue(bitcoinChoice.contains("Restore from Cove backup"))
+
+        let storageChoice = try recognizedText(in: render(
+            OnboardingStorageChoiceScreen(
+                errorMessage: nil,
+                onRestoreFromCoveBackup: {},
+                onSelectStorage: { _ in },
+                onBack: {}
+            )
+        ))
+        XCTAssertTrue(storageChoice.contains("Restore from Cove backup"))
+    }
+
+    func testCloudRestoreOfferProjectsProviderHint() throws {
+        let text = try recognizedText(in: render(
+            CloudRestoreOfferView(
+                onRestore: {},
+                onSkip: {},
+                providerHint: CloudRestoreProviderHint(
+                    providerName: "Apple Passwords",
+                    registeredAt: 1_777_612_800,
+                    nameSuffix: "09IX"
+                )
+            )
+        ))
+
+        let normalizedText = text.replacingOccurrences(of: "\n", with: " ")
+
+        XCTAssertTrue(normalizedText.contains("Cove Cloud Backup (09IX)"), "expected passkey suffix, got:\n\(text)")
+        XCTAssertTrue(normalizedText.contains("Provider Details"), "expected provider details, got:\n\(text)")
+        XCTAssertTrue(normalizedText.contains("Apple Passwords"), "expected provider name, got:\n\(text)")
+        XCTAssertTrue(
+            normalizedText.contains("Your passkey is stored securely by Apple Passwords"),
+            "expected provider-specific storage copy, got:\n\(text)"
+        )
+    }
+
+    func testSoftwareImportProjectsLateCloudRestoreOffer() {
+        let view = OnboardingSoftwareImportFlowView(
+            errorMessage: nil,
+            cloudRestoreAlertVisible: .constant(true),
+            onImported: { _ in },
+            onCreateWallet: {},
+            onRestoreFromCloudBackup: {},
+            onDismissCloudRestoreAlert: {},
+            onBack: {}
+        )
+        let alert = presentedAlert(in: view)
+
+        XCTAssertEqual(alert?.title, "Cove backup found")
+        XCTAssertEqual(alert?.actions.compactMap(\.title), ["Restore from Cove backup", "Continue setup"])
+    }
+
+    func testHardwareImportProjectsLateCloudRestoreOffer() {
+        let view = OnboardingHardwareImportFlowView(
+            cloudRestoreAlertVisible: .constant(true),
+            onImported: { _ in },
+            onRestoreFromCloudBackup: {},
+            onDismissCloudRestoreAlert: {},
+            onBack: {}
+        )
+        let alert = presentedAlert(in: view)
+
+        XCTAssertEqual(alert?.title, "Cove backup found")
+        XCTAssertEqual(alert?.actions.compactMap(\.title), ["Restore from Cove backup", "Continue setup"])
+    }
+
     func testHardwareCloudBackupPromptRendersFullTitle() throws {
         try assertFixtureContainsHardwareExport()
 
@@ -50,12 +143,16 @@ final class OnboardingPromptLayoutTests: XCTestCase {
     }
 
     private func renderHardwareCloudBackupPrompt() throws -> UIImage {
+        try render(OnboardingHardwareImportCloudBackupChoiceView(onEnable: {}, onSkip: {}))
+    }
+
+    private func render(_ content: some View) throws -> UIImage {
         let size = CGSize(width: 393, height: 852)
-        let view = OnboardingHardwareImportCloudBackupChoiceView(onEnable: {}, onSkip: {})
+        let view = content
             .frame(width: size.width, height: size.height)
 
         let hostingController = UIHostingController(rootView: view)
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        let window = testWindow(size: size)
         window.rootViewController = hostingController
         window.makeKeyAndVisible()
 
@@ -63,14 +160,36 @@ final class OnboardingPromptLayoutTests: XCTestCase {
         hostingController.view.backgroundColor = .clear
         hostingController.view.setNeedsLayout()
         hostingController.view.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 3
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
 
         return renderer.image { _ in
-            hostingController.view.drawHierarchy(in: hostingController.view.bounds, afterScreenUpdates: true)
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
+    }
+
+    private func presentedAlert(in content: some View) -> UIAlertController? {
+        let size = CGSize(width: 393, height: 852)
+        let hostingController = UIHostingController(rootView: content)
+        let window = testWindow(size: size)
+        window.rootViewController = hostingController
+        window.makeKeyAndVisible()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+        return hostingController.presentedViewController as? UIAlertController
+    }
+
+    private func testWindow(size: CGSize) -> UIWindow {
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(origin: .zero, size: size)
+            return window
+        }
+
+        return UIWindow(frame: CGRect(origin: .zero, size: size))
     }
 
     private func recognizedText(in image: UIImage) throws -> String {

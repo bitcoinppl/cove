@@ -498,23 +498,13 @@ impl CloudBackupWriteSupervisor {
                 manager.remove_blob_sync_states(std::iter::once(record_id.clone()))?;
 
                 let wallet_count = wallet_record_ids.len() as u32;
-                match Database::global().cloud_backup_state.get() {
-                    Ok(mut current) => {
-                        current.set_wallet_count(Some(wallet_count));
-                        if let Err(error) = manager.persist_cloud_backup_state(
-                            &current,
-                            "persist cloud backup state after deleting cloud wallet",
-                        ) {
-                            warn!(
-                                "Failed to persist cloud backup state after deleting cloud wallet: {error}"
-                            );
-                        }
-                    }
-                    Err(error) => {
-                        warn!(
-                            "Failed to load cloud backup state after deleting cloud wallet, skipping wallet count update: {error}"
-                        );
-                    }
+                if let Err(error) = manager.mutate_persisted_cloud_backup_state(
+                    "persist cloud backup state after deleting cloud wallet",
+                    |state| state.set_wallet_count(Some(wallet_count)),
+                ) {
+                    warn!(
+                        "Failed to persist cloud backup state after deleting cloud wallet: {error}"
+                    );
                 }
 
                 Ok(())
@@ -533,9 +523,14 @@ impl CloudBackupWriteSupervisor {
                     CloudBackupUploadedWalletsStateMode::PreserveVerification => {
                         CloudBackupStore::global().persist_enabled(wallet_count)?;
                     }
-                    CloudBackupUploadedWalletsStateMode::ResetVerification => {
+                    CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
+                        completion,
+                    ) => {
                         CloudBackupStore::global()
-                            .persist_enabled_reset_verification(wallet_count)?;
+                            .persist_enabled_reset_verification_with_pending_completion(
+                                wallet_count,
+                                completion.clone(),
+                            )?;
                     }
                 }
 
@@ -691,22 +686,6 @@ impl CloudBackupWriteSupervisor {
         Produces::ok(receiver)
     }
 
-    pub(crate) async fn delete_wallet_backup(
-        &mut self,
-        cloud: CloudStorageClient,
-        namespace: String,
-        record_id: String,
-    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
-        let command = self.advance_command_id();
-        let receiver = self.submit_write(
-            CloudBackupWriteAdmission::RequiresWritesAllowed,
-            CloudBackupRemoteWriteCommand::DeleteWallet { cloud, namespace, record_id },
-            CloudBackupWriteLocalCompletion::None,
-            command,
-        );
-        Produces::ok(receiver)
-    }
-
     pub(crate) async fn delete_active_wallet_backup_for_operation(
         &mut self,
         cloud: CloudStorageClient,
@@ -834,6 +813,21 @@ impl CloudBackupWriteSupervisor {
         );
         Produces::ok(receiver)
     }
+
+    pub(crate) async fn delete_namespace_background(
+        &mut self,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> ActorResult<CloudBackupWriteResultReceiver<()>> {
+        let command = self.advance_command_id();
+        let receiver = self.submit_write(
+            CloudBackupWriteAdmission::BypassBlocker,
+            CloudBackupRemoteWriteCommand::DeleteNamespace { cloud, namespace },
+            CloudBackupWriteLocalCompletion::None,
+            command,
+        );
+        Produces::ok(receiver)
+    }
 }
 
 fn blocked_writes_error() -> CloudBackupError {
@@ -845,10 +839,13 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::database::cloud_backup::CloudBackupRecordKey;
+    use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedCloudBackupStatus};
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::ops::test_support::{
         async_test_lock, reset_cloud_backup_test_state, test_globals,
+    };
+    use crate::manager::cloud_backup_manager::{
+        DeepVerificationReport, PendingVerificationCompletion, PendingVerificationUpload,
     };
 
     #[tokio::test(flavor = "current_thread")]
@@ -1089,6 +1086,51 @@ mod tests {
             supervisor.apply_local_completion(&in_flight, CloudBackupRemoteWriteResult::None).await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn wallet_finalization_persists_enabled_state_and_pending_completion_together() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+        let supervisor = CloudBackupWriteSupervisor::new(Arc::downgrade(&manager));
+        let completion = PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallets_failed: 0,
+                wallets_unsupported: 0,
+                detail: None,
+            },
+            "namespace".into(),
+            vec![PendingVerificationUpload::master_key_wrapper()],
+        );
+        let (sender, _receiver) = oneshot::channel();
+        let in_flight = CloudBackupInFlightWrite {
+            context: CloudBackupWriteCommandContext::new(0, None),
+            completion: CloudBackupWriteLocalCompletion::FinalizeUploadedWallets {
+                namespace_id: "namespace".into(),
+                uploaded_wallets: Vec::new(),
+                state_mode:
+                    CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
+                        completion.clone(),
+                    ),
+            },
+            sender,
+        };
+
+        supervisor
+            .apply_local_completion(&in_flight, CloudBackupRemoteWriteResult::WalletCount(2))
+            .await
+            .unwrap();
+
+        let state = Database::global().cloud_backup_state.get().unwrap();
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
+        assert_eq!(state.wallet_count(), Some(2));
+        assert_eq!(state.pending_verification_completion(), Some(&completion));
     }
 
     fn in_flight_write(id: u64, _admission: CloudBackupWriteAdmission) -> CloudBackupInFlightWrite {

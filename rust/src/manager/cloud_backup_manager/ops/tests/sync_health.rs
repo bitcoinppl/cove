@@ -23,7 +23,7 @@ async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recover
 
     assert!(matches!(
         manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message) if message.contains("upload failed")
+        CloudSyncHealth::Failed(message) if message == GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
     ));
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&first_record_id).unwrap(),
@@ -41,7 +41,7 @@ async fn failed_blob_states_recover_only_after_last_failed_wallet_upload_recover
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert!(matches!(
         manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message) if message.contains("upload failed")
+        CloudSyncHealth::Failed(message) if message == GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
     ));
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&first_record_id).unwrap(),
@@ -96,8 +96,7 @@ async fn corrupt_blob_sync_state_projects_failed_sync_health() {
 
     assert!(matches!(
         manager.compute_sync_health().await,
-        CloudSyncHealth::Failed(message)
-            if message.contains("failed to decode persisted cloud backup blob sync state")
+        CloudSyncHealth::Failed(message) if message == GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
     ));
 }
 
@@ -120,7 +119,10 @@ async fn sync_health_reports_authorization_required_for_persisted_auth_failures(
 
     assert_eq!(
         manager.compute_sync_health().await,
-        CloudSyncHealth::AuthorizationRequired("failed".into()),
+        CloudSyncHealth::AuthorizationRequired(
+            "Cove couldn't access your cloud backup. Reconnect your cloud account, then try again."
+                .into(),
+        ),
     );
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
@@ -481,6 +483,130 @@ async fn refresh_cloud_backup_detail_returns_access_error_when_wallet_listing_is
     };
 
     assert!(error.to_string().contains("wallet files missing"), "{error}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_incomplete() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata]);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_wallet_files_snapshot(namespace.clone(), Vec::new(), false);
+    let initial_download_attempts = globals.cloud.wallet_backup_download_attempt_count();
+
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
+        manager.load_cloud_backup_detail_inventory_snapshot().await
+    else {
+        panic!("expected incomplete inventory snapshot");
+    };
+
+    assert!(!snapshot.is_complete);
+    let provisional = snapshot.provisional_detail.as_ref().expect("expected provisional detail");
+    let wallet = provisional
+        .up_to_date
+        .iter()
+        .chain(&provisional.needs_sync)
+        .find(|wallet| wallet.record_id == record_id)
+        .expect("expected local wallet in provisional detail");
+    assert_eq!(wallet.sync_status, CloudBackupWalletStatus::RemoteStateUnknown);
+    assert_eq!(globals.cloud.wallet_backup_download_attempt_count(), initial_download_attempts);
+
+    globals.cloud.fail_list_wallet_files("metadata timed out");
+    let Some(CloudBackupDetailResult::AccessError(error)) =
+        manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    else {
+        panic!("expected authoritative inventory failure");
+    };
+
+    assert!(error.to_string().contains("metadata timed out"), "{error}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), true);
+    let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
+    let initial_snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
+
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
+        manager.load_cloud_backup_detail_inventory_snapshot().await
+    else {
+        panic!("expected complete inventory snapshot");
+    };
+    assert!(snapshot.is_complete);
+    assert!(snapshot.provisional_detail.is_none());
+
+    let Some(CloudBackupDetailResult::Success(_)) =
+        manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    else {
+        panic!("expected complete cloud backup detail");
+    };
+
+    assert_eq!(globals.cloud.list_wallet_files_attempt_count(), initial_list_attempts);
+    assert_eq!(
+        globals.cloud.list_wallet_files_snapshot_attempt_count(),
+        initial_snapshot_attempts + 1
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn authoritative_failure_retains_provisional_rows_in_failed_state() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata]);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), false);
+    globals.cloud.fail_list_wallet_files("metadata timed out");
+
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+
+    wait_for_test_condition(Duration::from_secs(1), "expected failed retained inventory", || {
+        matches!(
+            manager.state().lifecycle,
+            CloudBackupLifecycle::Configured(ref configured)
+                if matches!(configured.detail, CloudBackupDetailState::Failed {
+                    retained: Some(_),
+                    ..
+                })
+        )
+    })
+    .await;
+
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup");
+    };
+    let CloudBackupDetailState::Failed { retained: Some(retained), .. } = configured.detail else {
+        panic!("expected failed inventory with provisional rows");
+    };
+    let wallet = retained
+        .detail
+        .up_to_date
+        .iter()
+        .chain(&retained.detail.needs_sync)
+        .find(|wallet| wallet.record_id == record_id)
+        .expect("expected provisional wallet row");
+
+    assert_eq!(wallet.sync_status, CloudBackupWalletStatus::RemoteStateUnknown);
 }
 
 #[tokio::test(flavor = "current_thread")]

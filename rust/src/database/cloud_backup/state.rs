@@ -118,6 +118,16 @@ impl PersistedCloudBackupState {
         }
     }
 
+    pub fn pending_restore_all(&self) -> Option<&PersistedRestoreAllMarker> {
+        match self {
+            Self::Disabled | Self::Corrupted { .. } => None,
+            Self::Configured(configured) => configured.pending_restore_all.as_ref(),
+            Self::Disabling(disabling) => {
+                disabling.previous_configured.pending_restore_all.as_ref()
+            }
+        }
+    }
+
     pub fn should_prompt_verification(&self) -> bool {
         if !self.is_unverified() {
             return false;
@@ -139,12 +149,6 @@ impl PersistedCloudBackupState {
         }
 
         true
-    }
-
-    pub fn with_wallet_count(&self, wallet_count: Option<u32>) -> Self {
-        let mut state = self.clone();
-        state.set_wallet_count(wallet_count);
-        state
     }
 
     pub fn set_wallet_count(&mut self, wallet_count: Option<u32>) {
@@ -175,6 +179,7 @@ impl PersistedCloudBackupState {
                 wallet_count: Some(wallet_count),
             },
             pending_verification_completion: self.pending_verification_completion().cloned(),
+            pending_restore_all: self.pending_restore_all().cloned(),
         })
     }
 
@@ -191,6 +196,7 @@ impl PersistedCloudBackupState {
                 wallet_count: Some(wallet_count),
             },
             pending_verification_completion: None,
+            pending_restore_all: None,
         })
     }
 
@@ -242,12 +248,13 @@ impl PersistedCloudBackupState {
     pub fn replace_pending_verification_completion(
         &mut self,
         completion: PersistedPendingVerificationCompletion,
-    ) {
+    ) -> bool {
         let Self::Configured(configured) = self else {
-            return;
+            return false;
         };
 
         configured.pending_verification_completion = Some(completion);
+        true
     }
 
     pub fn clear_pending_verification_completion(&mut self) -> bool {
@@ -256,6 +263,23 @@ impl PersistedCloudBackupState {
         };
 
         configured.pending_verification_completion.take().is_some()
+    }
+
+    pub fn replace_pending_restore_all(&mut self, marker: PersistedRestoreAllMarker) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+
+        configured.pending_restore_all = Some(marker);
+        true
+    }
+
+    pub fn clear_pending_restore_all(&mut self) -> bool {
+        let Self::Configured(configured) = self else {
+            return false;
+        };
+
+        configured.pending_restore_all.take().is_some()
     }
 }
 
@@ -280,6 +304,8 @@ pub struct PersistedConfiguredCloudBackup {
     pub sync: PersistedBackupSyncState,
     #[serde(default)]
     pub pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_restore_all: Option<PersistedRestoreAllMarker>,
 }
 
 impl PersistedConfiguredCloudBackup {
@@ -289,6 +315,11 @@ impl PersistedConfiguredCloudBackup {
             PersistedPasskeyState::Available => self.verification.status(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedRestoreAllMarker {
+    pub namespace_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

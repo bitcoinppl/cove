@@ -13,6 +13,7 @@ This document covers platform-specific gotchas and patterns for achieving visual
 - [Button Text Centering](#button-text-centering)
 - [NFC Scanning UI](#nfc-scanning-ui)
 - [Slider Step Behavior](#slider-step-behavior)
+- [Cloud Backup Recovery](#cloud-backup-recovery)
 - [Lifecycle and Effect Modifiers](#lifecycle-and-effect-modifiers)
   - [View Lifecycle](#view-lifecycle)
   - [Reactive Value Changes](#reactive-value-changes)
@@ -185,6 +186,87 @@ Since Android has no system NFC UI, `TapSignerScanningOverlay` composable provid
 **Critical**: These are not equivalent! Calculating `steps = (max - min) / stepSize` can create millions of discrete positions, causing severe lag/freeze.
 
 **Guideline**: For continuous sliders matching iOS, omit `steps` entirely on Android. Handle step snapping in `onValueChange` if needed.
+
+---
+
+## Cloud Backup Recovery
+
+Cloud Backup parity is behavioral rather than an attempt to hide provider
+differences. iOS uses iCloud Drive and Android uses Google Drive, while Rust owns
+the shared recovery contract.
+
+### Shared ownership
+
+- Rust owns inventory completeness, retained rows, refresh generations, enable
+  lifecycle, passkey retry policy, Restore All eligibility/order/progress,
+  cancellation, and row outcomes
+- Swift and Kotlin project the exported state and dispatch user intent
+- iOS owns FileManager, `NSMetadataQuery`, file coordination, and Authentication
+  Services outcome classification
+- Android owns Drive token/account binding, Drive API mechanics, and Credential
+  Manager outcome classification; the generated Rust handle remains private to
+  the guarded platform manager
+
+Do not compensate for missing shared state in either UI. Add the state or action
+to Rust and regenerate both platform bindings.
+
+### Inventory parity
+
+Both detail screens project `Checking`, `Complete`, and `Failed` without dropping
+known wallet rows. Only `Complete` enables restore or destructive actions that
+depend on an authoritative set. Retry requests are Rust-coordinated: one refresh
+may run, one trailing request is retained, starts are at least five seconds
+apart, and stale or closed-owner results are ignored.
+
+Provider mechanics differ:
+
+- iOS publishes a fast local snapshot as incomplete, then always completes a
+  normalized FileManager-plus-metadata union
+- Android's first successful Drive listing is an authoritative complete result
+- Android silent startup never launches Drive consent; the explicit Restore from
+  Cove Backup path may do so
+
+Timeout, authorization, offline, and provider failures are incomplete on both
+platforms and must never render as a confirmed empty backup.
+
+### Enable and passkeys
+
+Both platforms project the Rust-owned existing-passkey versus Create New Backup
+decision. Pending namespace metadata is existing-passkey-only. Create New Backup
+stages a fresh master, isolated namespace, and passkey until accepted remote
+writes and durable local promotion are safe; it does not rewrap or overwrite the
+retained active namespace.
+
+Platform code must classify passkey presentation outcomes into typed results.
+Only pre-presentation platform unavailability receives bounded automatic retry.
+Presented failure, cancellation, mismatch, unsupported provider, invalid result,
+and no credential do not retry automatically. Only the typed no-credential
+result may continue into the owning enable or repair flow's explicit
+registration step; every other failure stops. iOS bounds interactive
+Authentication Services registration and assertion requests to five minutes,
+then cancels the controller on the main queue and reports a presented platform
+authorization failure. Its separate non-interactive presence probe keeps the
+one-second indeterminate timeout. Android retains its platform-owned interactive
+request lifetime.
+
+### Restore All parity
+
+iOS and Android show the same Rust-owned inline states: Restore All with a count,
+determinate completed/total progress and current wallet, cooperative Cancel, and
+Retry Remaining. There is no confirmation dialog or terminal summary.
+
+The batch uses the individual restore primitive sequentially with one
+identity-aware session. Successes move immediately to their network sections;
+ordinary row failures remain visible and directly retryable while later wallets
+continue. Cancellation takes effect between wallets, and navigation away from
+the detail screen does not cancel manager-owned work. After process death, a
+namespace marker causes a refresh and Retry Remaining projection without
+auto-resume or unsolicited passkey UI.
+
+Use native controls and semantics on each platform: at least 44-point iOS and
+48-dp Android targets, Dynamic Type/font scaling, non-color-only failures,
+progress semantics/live updates, and combined wallet/action labels for
+VoiceOver or TalkBack.
 
 ---
 

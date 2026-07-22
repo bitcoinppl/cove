@@ -48,10 +48,10 @@ struct TransactionDetailsLabelView: View {
 
         Task {
             do {
-                let details = try await manager.rust.transactionDetails(txId: txId)
+                let presentation = try await manager.refreshTransactionDetails(for: txId)
                 await MainActor.run {
+                    let details = presentation.details()
                     self.details = details
-                    manager.transactionDetails[details.txId()] = details
                 }
             } catch {
                 await manager.rust.getTransactions()

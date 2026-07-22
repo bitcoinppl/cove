@@ -107,9 +107,9 @@ class WalletManager :
     // TaggedItem ensures a new unique key each time so Compose always re-fires the observer
     var payjoinTxBroadcast by mutableStateOf<TaggedItem<Unit>?>(null)
 
-    // cached transaction details (observable for Compose)
-    val transactionDetailsCache: SnapshotStateMap<TxId, TransactionDetails> = mutableStateMapOf()
-    val transactionConfirmations: SnapshotStateMap<TxId, UInt> = mutableStateMapOf()
+    // cached transaction detail presentations (observable for Compose)
+    val transactionDetailsPresentations: SnapshotStateMap<TxId, TransactionDetailsPresentation> =
+        mutableStateMapOf()
     val transactionLockStates: SnapshotStateMap<TxId, TransactionLockState> = mutableStateMapOf()
 
     var receiveAddressState by mutableStateOf<ReceiveAddressState?>(null)
@@ -484,11 +484,6 @@ class WalletManager :
         }
     }
 
-    suspend fun numberOfConfirmations(blockHeight: UInt): UInt =
-        withRustSuspend {
-            numberOfConfirmations(blockHeight)
-        }
-
     fun displayConfirmationCount(confirmations: UInt): String =
         withRustOr("") {
             displayConfirmationCount(confirmations)
@@ -551,35 +546,24 @@ class WalletManager :
             else -> amount.satsStringWithUnit()
         }
 
-    suspend fun transactionDetails(txId: TxId): TransactionDetails {
-        // check cache first
-        transactionDetailsCache[txId]?.let { return it }
+    suspend fun transactionDetails(txId: TxId): TransactionDetailsPresentation {
+        transactionDetailsPresentations[txId]?.let { return it }
 
-        // fetch from rust and cache
-        val details =
+        val presentation =
             withRustSuspend {
                 transactionDetails(txId)
             }
-        transactionDetailsCache[txId] = details
-        return details
+        transactionDetailsPresentations[txId] = presentation
+        return presentation
     }
 
-    suspend fun refreshTransactionDetails(txId: TxId): TransactionDetails {
-        val details =
+    suspend fun refreshTransactionDetails(txId: TxId): TransactionDetailsPresentation {
+        val presentation =
             withRustSuspend {
                 transactionDetails(txId)
             }
-        transactionDetailsCache[txId] = details
-
-        val blockNumber = details.blockNumber()
-        if (blockNumber != null) {
-            transactionConfirmations[txId] =
-                withRustSuspend {
-                    numberOfConfirmations(blockNumber)
-                }
-        }
-
-        return details
+        transactionDetailsPresentations[txId] = presentation
+        return presentation
     }
 
     suspend fun transactionLockState(txId: TxId): TransactionLockState {
@@ -624,7 +608,7 @@ class WalletManager :
     }
 
     suspend fun reconcileAfterLabelImportAndWait(): Boolean {
-        val cachedTransactionIds = transactionDetailsCache.keys.toList()
+        val cachedTransactionIds = transactionDetailsPresentations.keys.toList()
         val cachedLockStateTransactionIds = transactionLockStates.keys.toList()
         var refreshedDetails = true
 
@@ -662,17 +646,6 @@ class WalletManager :
 
     fun clearLabelRefreshFailed() {
         labelRefreshFailed = null
-    }
-
-    fun updateTransactionDetailsCache(txId: TxId, details: TransactionDetails) {
-        transactionDetailsCache[txId] = details
-    }
-
-    fun updateTransactionConfirmations(
-        txId: TxId,
-        confirmations: UInt,
-    ) {
-        transactionConfirmations[txId] = confirmations
     }
 
     private fun replaceTransactionInLoadState(transaction: Transaction) {
@@ -778,11 +751,7 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.TransactionDetailsUpdated -> {
-                transactionDetailsCache[message.v1.txId()] = message.v1
-            }
-
-            is WalletManagerReconcileMessage.TransactionConfirmationsUpdated -> {
-                transactionConfirmations[message.v1.txId] = message.v1.confirmations
+                transactionDetailsPresentations[message.v1.txId()] = message.v1
             }
 
             is WalletManagerReconcileMessage.ScanComplete -> {

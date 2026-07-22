@@ -150,6 +150,11 @@ class AndroidCompactLayoutAuditTest {
         }
 
         saveBeforeScreenshot(screenName)
+
+        compose
+            .onNodeWithTag("hotWalletImport.bottomPadding")
+            .performScrollTo()
+
         assertNodeInsideViewport(screenName, "hotWalletImport.import")
     }
 

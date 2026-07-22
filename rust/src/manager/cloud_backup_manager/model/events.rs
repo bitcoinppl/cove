@@ -8,7 +8,7 @@ use crate::manager::cloud_backup_manager::{
     PendingUploadVerificationState, RecoveryState, SyncState, VerificationState,
 };
 
-use super::{CloudBackupLifecycle, CloudBackupRestoreFlow};
+use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupAcceptedEnablePrompt {
@@ -32,7 +32,22 @@ pub(crate) enum CloudBackupExclusiveOperation {
     RecoverOtherBackups,
     DeleteOtherBackups,
     RestoreCloudWallet,
+    RestoreAllCloudWallets,
     DeleteCloudWallet,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) enum CloudBackupRestoreAllRuntimeState {
+    #[default]
+    Idle,
+    Running {
+        claim: CloudBackupExclusiveOperationClaim,
+        completed: u32,
+        total: u32,
+        current_wallet_name: Option<String>,
+        cancellation_requested: bool,
+    },
+    RetryRemaining,
 }
 
 /// Generation-tagged ownership proof for an exclusive operation
@@ -62,6 +77,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     ExclusiveOperationFinished(CloudBackupExclusiveOperationClaim),
     EnableContextStarted(CloudBackupEnableContext),
     RuntimeStatusReconciled(CloudBackupStatus),
+    PendingEnableRecoveryProjected(CloudBackupPendingEnableRecovery),
     ExistingBackupFoundPromptSet {
         context: CloudBackupEnableContext,
         passkey_hint: Option<CloudBackupPasskeyHint>,
@@ -74,6 +90,22 @@ pub(crate) enum CloudBackupStateReducerEvent {
     PromptStateCleared,
     EnableProgressReported(Option<CloudBackupProgress>),
     RestoreProgressReported(CloudBackupRestoreFlow),
+    RestoreAllStarted {
+        claim: CloudBackupExclusiveOperationClaim,
+        total: u32,
+    },
+    RestoreAllProgressed {
+        claim: CloudBackupExclusiveOperationClaim,
+        completed: u32,
+        current_wallet_name: Option<String>,
+    },
+    RestoreAllCancellationRequested(CloudBackupExclusiveOperationClaim),
+    RestoreAllFinished {
+        claim: CloudBackupExclusiveOperationClaim,
+        retry_remaining: bool,
+    },
+    RestoreAllRetryRequired,
+    RestoreAllReset,
     SyncHealthObserved(CloudSyncHealth),
     EnableFlowAdvanced(CloudBackupEnableState),
     PendingUploadVerificationReconciled(PendingUploadVerificationState),
@@ -91,9 +123,15 @@ pub(crate) enum CloudBackupStateReducerEvent {
     SyncStateResolved(SyncState),
     RecoveryStateResolved(RecoveryState),
     DisableStateResolved(CloudBackupDisableOutcome),
+    DetailRefreshStarted,
+    DetailRefreshProvisional(CloudBackupDetail),
     DetailRefreshApplied {
         detail: Option<CloudBackupDetail>,
         reset_cloud_only: bool,
+    },
+    DetailRefreshFailed {
+        reason: super::CloudBackupInventoryIncompleteReason,
+        error: String,
     },
     CloudOnlyStateResolved(CloudOnlyState),
     CloudOnlyOperationResolved(CloudOnlyOperation),

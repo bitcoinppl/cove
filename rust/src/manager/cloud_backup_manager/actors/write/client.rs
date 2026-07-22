@@ -268,6 +268,26 @@ impl CloudBackupWriteClient {
         self.await_result(receiver).await
     }
 
+    pub(crate) async fn delete_namespace_background(
+        &self,
+        cloud: CloudStorageClient,
+        namespace: String,
+    ) -> Result<(), CloudBackupError> {
+        if self.origin.is_some() {
+            return Err(CloudBackupError::Internal(
+                "background cloud backup namespace delete cannot carry an operation origin".into(),
+            ));
+        }
+
+        let receiver = call!(self.supervisor.delete_namespace_background(cloud, namespace))
+            .await
+            .map_err(|source| {
+            CloudBackupError::internal_context("start cloud backup write supervisor", source)
+        })?;
+
+        self.await_result(receiver).await
+    }
+
     pub(crate) async fn apply_completion(
         &self,
         completion: CloudBackupWriteCompletion,

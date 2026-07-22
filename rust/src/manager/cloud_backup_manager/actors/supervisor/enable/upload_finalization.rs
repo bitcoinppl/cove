@@ -6,11 +6,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -69,11 +69,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -111,11 +111,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupNoDiscoveryEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -135,7 +135,7 @@ impl CloudBackupSupervisor {
             }) => {
                 manager.present_existing_backup_found_prompt(context, passkey_hint);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -170,11 +170,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyRegistration, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -187,7 +187,7 @@ impl CloudBackupSupervisor {
                     context, None,
                 ));
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation = None;
+                self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -237,7 +237,7 @@ impl CloudBackupSupervisor {
             manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                 SavedPasskeyConfirmationMode::Manual,
             ));
-            self.active_operation = None;
+            self.active_operation.clear();
             manager.project_exclusive_operation_finished(claim);
         }
     }
@@ -304,11 +304,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupUploadedEnableBackup, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -330,15 +330,27 @@ impl CloudBackupSupervisor {
         upload: CloudBackupUploadedEnableBackup,
     ) -> Result<(), CloudBackupError> {
         info!("Enable: persisting cloud backup state");
-        CloudBackupKeychain::new(Keychain::global().clone())
-            .save_passkey_and_namespace(
-                &upload.passkey.credential_id,
-                upload.passkey.prf_salt,
-                &upload.namespace_id,
-            )
-            .map_err(|source| {
-                CloudBackupError::internal_context("save cspp credentials", source)
-            })?;
+        let decrypted_master = master_key_crypto::decrypt_master_key(
+            &upload.encrypted_master,
+            &upload.passkey.prf_key,
+        )
+        .map_err(CloudBackupError::crypto)?;
+        if decrypted_master.as_bytes() != upload.master_key.as_bytes() {
+            return Err(CloudBackupError::Crypto(
+                "fresh passkey material decrypted the wrong master key".into(),
+            ));
+        }
+        let manager = self
+            .manager()
+            .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
+        if let Err(error) = manager
+            .pending_enable
+            .begin_pending_enable_local_promotion(&upload.master_key, &upload.passkey)
+        {
+            self.retain_pending_enable_upload(&upload.master_key, &upload.passkey, upload.context);
+
+            return Err(error);
+        }
 
         let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
             upload.namespace_id.clone(),
@@ -358,13 +370,16 @@ impl CloudBackupSupervisor {
                 )
             })
             .collect();
+        let mut pending_uploads = upload.pending_uploads;
+        pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
+        let pending_completion =
+            enable_pending_verification_completion(upload.namespace_id.clone(), pending_uploads);
         let finalization = EnableUploadFinalization {
             master_key: upload.master_key,
             passkey: upload.passkey,
             context: upload.context,
             namespace_id: upload.namespace_id.clone(),
-            encrypted_master: upload.encrypted_master,
-            pending_uploads: upload.pending_uploads,
+            pending_completion: pending_completion.clone(),
         };
         let write = self.write.clone();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
@@ -378,7 +393,9 @@ impl CloudBackupSupervisor {
                         CloudStorage::global_explicit_client(),
                         upload.namespace_id,
                         uploaded_wallets,
-                        CloudBackupUploadedWalletsStateMode::ResetVerification,
+                        CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
+                            pending_completion,
+                        ),
                     )
                     .await
             }
@@ -395,11 +412,11 @@ impl CloudBackupSupervisor {
         finalization: EnableUploadFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation != Some(claim) {
+        if self.active_operation.claim() != Some(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation = None;
+            self.active_operation.clear();
             return Produces::ok(());
         };
 
@@ -408,57 +425,60 @@ impl CloudBackupSupervisor {
             passkey,
             context,
             namespace_id,
-            encrypted_master,
-            mut pending_uploads,
+            pending_completion,
         } = finalization;
 
-        if let Err(error) = result {
+        let activation = manager.activate_persisted_pending_verification_completion_for_source(
+            pending_completion,
+            context.verification_source,
+        );
+        match (result, activation) {
+            (Err(error), Err(_)) => {
+                self.retain_pending_enable_upload(&master_key, &passkey, context);
+                if let Err(rollback) =
+                    manager.pending_enable.restore_pending_enable_local_promotion_for_retry()
+                {
+                    self.fail_enable_operation(
+                        &manager,
+                        claim,
+                        CloudBackupError::Internal(
+                            format!(
+                                "enable finalization failed: {error}; local rollback failed: {rollback}"
+                            )
+                            .into(),
+                        ),
+                    );
+                } else {
+                    self.fail_enable_operation(&manager, claim, error);
+                }
+                return Produces::ok(());
+            }
+            (Ok(()), Err(error)) => {
+                self.retain_pending_enable_upload(&master_key, &passkey, context);
+                self.fail_enable_operation(&manager, claim, error);
+                return Produces::ok(());
+            }
+            (Err(error), Ok(())) => {
+                warn!(
+                    "Enable local blob finalization was incomplete after durable confirmation was persisted: {error}"
+                );
+            }
+            (Ok(()), Ok(())) => {}
+        }
+
+        // reset verification while the pending-enable journal still owns completion
+        manager.apply_verification_state(VerificationState::Idle);
+        if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
+            self.retain_pending_enable_upload(&master_key, &passkey, context);
             self.fail_enable_operation(&manager, claim, error);
             return Produces::ok(());
         }
 
-        let decrypted_master =
-            master_key_crypto::decrypt_master_key(&encrypted_master, &passkey.prf_key)
-                .map_err(CloudBackupError::crypto);
-        let decrypted_master = match decrypted_master {
-            Ok(decrypted_master) => decrypted_master,
-            Err(error) => {
-                self.fail_enable_operation(&manager, claim, error);
-                return Produces::ok(());
-            }
-        };
-        if decrypted_master.as_bytes() != master_key.as_bytes() {
-            self.fail_enable_operation(
-                &manager,
-                claim,
-                CloudBackupError::Crypto(
-                    "fresh passkey material decrypted the wrong master key".into(),
-                ),
-            );
-            return Produces::ok(());
-        }
-
-        self.runtime_passkey_authorization = Some(RuntimePasskeyAuthorization {
+        self.detail_workflow.set_authorization(RuntimePasskeyAuthorization {
             namespace_id: namespace_id.clone(),
             credential_id: passkey.credential_id.clone(),
             prf_salt: passkey.prf_salt,
         });
-
-        pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
-        let report = DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
-            detail: None,
-        };
-        manager.replace_pending_verification_completion_for_source(
-            PendingVerificationCompletion::new(report, namespace_id, pending_uploads),
-            context.verification_source,
-        );
-        manager.apply_verification_state(VerificationState::Idle);
         self.pending_enable_session = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();
@@ -466,5 +486,18 @@ impl CloudBackupSupervisor {
         self.finish_enable_operation(manager, claim);
 
         Produces::ok(())
+    }
+
+    fn retain_pending_enable_upload(
+        &mut self,
+        master_key: &cove_cspp::master_key::MasterKey,
+        passkey: &UnpersistedPrfKey,
+        context: CloudBackupEnableContext,
+    ) {
+        self.pending_enable_session = Some(PendingEnableSession::retry_upload(
+            cove_cspp::master_key::MasterKey::from_bytes(*master_key.as_bytes()),
+            passkey.copy_for_retry(),
+            context,
+        ));
     }
 }

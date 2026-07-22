@@ -1,4 +1,4 @@
-use crate::android_device::AndroidDevice;
+use crate::android_device::{adb_stdout, command_error, AndroidDevice};
 use crate::common::{
     command_exists, print_error, print_info, print_success, print_warning,
     trim_generated_trailing_whitespace,
@@ -20,6 +20,7 @@ use xshell::{cmd, Shell};
 // Android build constants
 const ANDROID_TARGETS: &[&str] =
     &["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"];
+const ARM64_ANDROID_TARGET: &str = "aarch64-linux-android";
 const JNI_LIBS_DIR: &str = "../android/app/src/main/jniLibs";
 const ANDROID_KOTLIN_DIR: &str = "../android/app/src/main/java";
 const BINDINGS_DIR: &str = "./bindings/kotlin";
@@ -42,6 +43,12 @@ const SCREEN_OFF_TIMEOUT_SETTING: &str = "screen_off_timeout";
 const STAY_AWAKE_SCREEN_OFF_TIMEOUT_MS: &str = "1800000";
 const UI_TEST_PACKAGE_NAME: &str = "org.bitcoinppl.cove.uitest";
 const UI_TEST_RUNNER_PACKAGE_NAME: &str = "org.bitcoinppl.cove.uitest.test";
+const UI_TEST_RUNNER_COMPONENT: &str =
+    "org.bitcoinppl.cove.uitest.test/androidx.test.runner.AndroidJUnitRunner";
+const DURABLE_RELAUNCH_TEST_CLASS: &str =
+    "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupDurableCompletionFullLaunchTest";
+const RESTORE_ALL_RELAUNCH_TEST_CLASS: &str =
+    "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRestoreAllProcessDeathFullLaunchTest";
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
@@ -58,6 +65,7 @@ pub enum BuildProfile {
 #[derive(Debug, Clone, Copy)]
 pub enum AndroidBuildTargets {
     All,
+    Arm64,
     ConnectedDevice,
 }
 
@@ -136,6 +144,7 @@ fn connected_device_target(sh: &Shell) -> Result<&'static str> {
 fn resolve_targets(sh: &Shell, build_targets: AndroidBuildTargets) -> Result<Vec<&'static str>> {
     match build_targets {
         AndroidBuildTargets::All => Ok(ANDROID_TARGETS.to_vec()),
+        AndroidBuildTargets::Arm64 => Ok(vec![ARM64_ANDROID_TARGET]),
         AndroidBuildTargets::ConnectedDevice => Ok(vec![connected_device_target(sh)?]),
     }
 }
@@ -175,8 +184,14 @@ pub fn build_android(
         }
     }
 
-    if matches!(build_targets, AndroidBuildTargets::ConnectedDevice) {
-        print_warning("Only building native Rust library for the connected Android device ABI");
+    match build_targets {
+        AndroidBuildTargets::All => {}
+        AndroidBuildTargets::Arm64 => {
+            print_warning("Only building native Rust library for ARM64 Android devices");
+        }
+        AndroidBuildTargets::ConnectedDevice => {
+            print_warning("Only building native Rust library for the connected Android device ABI");
+        }
     }
 
     // build for each target
@@ -541,9 +556,167 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
         bail!("adb command not found");
     }
 
+    let mut guard = enable_android_stay_awake()?;
+
+    print_info(&format!("Running Android command: {}", command.join(" ")));
+    let status = Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(ANDROID_PROJECT_DIR)
+        .status()
+        .wrap_err_with(|| format!("Failed to run Android command {}", command[0]))?;
+
+    if !status.success() {
+        bail!("Android command failed with status {status}");
+    }
+
+    guard.restore()?;
+
+    Ok(())
+}
+
+pub fn run_manual_ui_tests() -> Result<()> {
+    run_independent_manual_ui_tests()?;
+    run_durable_relaunch_ui_test()?;
+    run_restore_all_relaunch_ui_test()
+}
+
+fn run_independent_manual_ui_tests() -> Result<()> {
+    let _cleanup = AndroidUiPackageCleanupGuard;
+    let command = [
+        "./gradlew",
+        ":app:connectedUiTestDebugAndroidTest",
+        "-Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest",
+    ]
+    .map(String::from);
+
+    run_with_stay_awake(&command)
+}
+
+pub fn run_durable_relaunch_ui_test() -> Result<()> {
+    run_staged_process_ui_test(
+        "durable-relaunch",
+        DURABLE_RELAUNCH_TEST_CLASS,
+        &[
+            "processStage1InterruptAfterProviderAcceptsWrite",
+            "processStage2RelaunchFailsClosedThenCompletesAcceptedWrites",
+            "processStage3RelaunchConfirmsPersistedWritesInBackground",
+        ],
+    )
+}
+
+pub fn run_restore_all_relaunch_ui_test() -> Result<()> {
+    run_staged_process_ui_test(
+        "Restore All relaunch",
+        RESTORE_ALL_RELAUNCH_TEST_CLASS,
+        &[
+            "scU09ProcessStage1NavigationKeepsSameRunningBatchAndLeavesDurableMarker",
+            "scU09ProcessStage2FreshProcessShowsAuthoritativeRetryWithoutAutomaticWork",
+        ],
+    )
+}
+
+fn run_staged_process_ui_test(scenario: &str, test_class: &str, methods: &[&str]) -> Result<()> {
+    if !command_exists("adb") {
+        print_error("adb not found. Please install Android SDK platform-tools");
+        bail!("adb command not found");
+    }
+
+    let _cleanup = AndroidUiPackageCleanupGuard;
+    let mut stay_awake = enable_android_stay_awake()?;
+    let result = run_staged_process_ui_test_stages(scenario, test_class, methods);
+    let restore_result = stay_awake.restore();
+
+    result?;
+    restore_result
+}
+
+fn run_staged_process_ui_test_stages(
+    scenario: &str,
+    test_class: &str,
+    methods: &[&str],
+) -> Result<()> {
+    uninstall_android_package(UI_TEST_RUNNER_PACKAGE_NAME);
+    uninstall_android_package(UI_TEST_PACKAGE_NAME);
+
+    print_info(&format!("Installing Android {scenario} UI test APKs"));
+    let status = Command::new("./gradlew")
+        .args([":app:installUiTestDebug", ":app:installUiTestDebugAndroidTest"])
+        .current_dir(ANDROID_PROJECT_DIR)
+        .status()
+        .wrap_err_with(|| format!("Failed to install Android {scenario} UI test APKs"))?;
+    if !status.success() {
+        bail!("Android {scenario} UI test install failed with status {status}");
+    }
+
+    adb_status(
+        &["shell", "pm", "clear", UI_TEST_PACKAGE_NAME],
+        &format!("Failed to clear Android {scenario} UI test data"),
+    )?;
+
+    for method in methods {
+        run_staged_process_ui_test_stage(scenario, test_class, method)?;
+        adb_status(
+            &["shell", "am", "force-stop", UI_TEST_PACKAGE_NAME],
+            &format!("Failed to terminate Android UI test process between {scenario} stages"),
+        )?;
+        assert_android_package_stopped()?;
+    }
+
+    print_success(&format!(
+        "Android {scenario} UI test passed all {} process stages",
+        methods.len()
+    ));
+    Ok(())
+}
+
+fn run_staged_process_ui_test_stage(scenario: &str, test_class: &str, method: &str) -> Result<()> {
+    let test = format!("{test_class}#{method}");
+    print_info(&format!("Running Android {scenario} stage {method}"));
+    let output = Command::new("adb")
+        .args([
+            "shell",
+            "am",
+            "instrument",
+            "-w",
+            "-r",
+            "-e",
+            "class",
+            &test,
+            UI_TEST_RUNNER_COMPONENT,
+        ])
+        .output()
+        .wrap_err_with(|| format!("Failed to run Android {scenario} stage {method}"))?;
+    let stdout = adb_stdout(&output);
+    print!("{stdout}");
+
+    if !output.status.success()
+        || !stdout.contains("OK (1 test)")
+        || stdout.contains("FAILURES!!!")
+        || stdout.contains("INSTRUMENTATION_FAILED")
+    {
+        bail!("Android {scenario} stage {method} failed: {}", command_error(&output));
+    }
+
+    Ok(())
+}
+
+fn assert_android_package_stopped() -> Result<()> {
+    let output = Command::new("adb")
+        .args(["shell", "pidof", UI_TEST_PACKAGE_NAME])
+        .output()
+        .wrap_err("Failed to inspect Android UI test process after force-stop")?;
+    let process_ids = adb_stdout(&output);
+    if !process_ids.trim().is_empty() {
+        bail!("Android UI test process survived force-stop: {}", process_ids.trim());
+    }
+
+    Ok(())
+}
+
+fn enable_android_stay_awake() -> Result<AndroidStayAwakeGuard> {
     let previous_stay_awake_setting = read_stay_awake_setting()?;
     let previous_screen_off_timeout = read_screen_off_timeout_setting()?;
-    let mut guard =
+    let guard =
         AndroidStayAwakeGuard::new(previous_stay_awake_setting, previous_screen_off_timeout);
 
     adb_status(
@@ -573,32 +746,7 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
         print_warning(&format!("{error}"));
     }
 
-    print_info(&format!("Running Android command: {}", command.join(" ")));
-    let status = Command::new(&command[0])
-        .args(&command[1..])
-        .current_dir(ANDROID_PROJECT_DIR)
-        .status()
-        .wrap_err_with(|| format!("Failed to run Android command {}", command[0]))?;
-
-    if !status.success() {
-        bail!("Android command failed with status {status}");
-    }
-
-    guard.restore()?;
-
-    Ok(())
-}
-
-pub fn run_manual_ui_tests() -> Result<()> {
-    let _guard = AndroidUiPackageCleanupGuard;
-    let command = [
-        "./gradlew",
-        ":app:connectedUiTestDebugAndroidTest",
-        "-Pandroid.testInstrumentationRunnerArguments.annotation=org.bitcoinppl.cove.test.ManualFullLaunchTest",
-    ]
-    .map(String::from);
-
-    run_with_stay_awake(&command)
+    Ok(guard)
 }
 
 struct AndroidStayAwakeGuard {

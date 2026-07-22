@@ -174,7 +174,7 @@ fn clear_in_process_cloud_backup_state_for_catastrophic_recovery() {
 }
 
 fn reinit_database_after_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
-    crate::database::wallet_data::DATABASE_CONNECTIONS.write().clear();
+    crate::database::wallet_data::clear_database_connections();
     Database::try_reinit()
         .map_err_prefix("reinitialize database", CatastrophicRecoveryError::Failure)
 }

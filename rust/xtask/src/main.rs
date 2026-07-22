@@ -44,8 +44,12 @@ enum Commands {
         profile: String,
 
         /// Build only the native library ABI used by the connected Android device
-        #[arg(long)]
+        #[arg(long, conflicts_with = "arm64")]
         connected_device: bool,
+
+        /// Build only the native library ABI used by ARM64 Android devices
+        #[arg(long)]
+        arm64: bool,
     },
 
     /// Build and run Android app on device/emulator
@@ -72,9 +76,17 @@ enum Commands {
         command: Vec<String>,
     },
 
-    /// Run manual Android full-launch onboarding UI tests
+    /// Run all manual Android UI tests, including staged process-death scenarios
     #[command(name = "android-ui-manual")]
     AndroidUiManual,
+
+    /// Run the staged Android Cloud Backup process-death scenario
+    #[command(name = "android-ui-durable-relaunch")]
+    AndroidUiDurableRelaunch,
+
+    /// Run the staged Android Restore All process-death scenario
+    #[command(name = "android-ui-restore-all-relaunch")]
+    AndroidUiRestoreAllRelaunch,
 
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
@@ -263,10 +275,12 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::BumpVersion { bump_type, targets } => version::bump_version(bump_type, targets),
 
-        Commands::BuildAndroid { profile, connected_device } => {
+        Commands::BuildAndroid { profile, connected_device, arm64 } => {
             let build_profile = android::BuildProfile::from_str(&profile);
             let build_targets = if connected_device {
                 android::AndroidBuildTargets::ConnectedDevice
+            } else if arm64 {
+                android::AndroidBuildTargets::Arm64
             } else {
                 android::AndroidBuildTargets::All
             };
@@ -286,6 +300,10 @@ fn main() -> Result<()> {
         Commands::AndroidStayAwake { command } => android::run_with_stay_awake(&command),
 
         Commands::AndroidUiManual => android::run_manual_ui_tests(),
+
+        Commands::AndroidUiDurableRelaunch => android::run_durable_relaunch_ui_test(),
+
+        Commands::AndroidUiRestoreAllRelaunch => android::run_restore_all_relaunch_ui_test(),
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);
