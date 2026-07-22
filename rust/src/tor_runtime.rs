@@ -1,7 +1,10 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
-    sync::LazyLock,
+    sync::{
+        LazyLock,
+        atomic::{AtomicU64, Ordering},
+    },
     thread,
 };
 
@@ -148,6 +151,10 @@ struct PendingRuntime {
 
 static BUILT_IN_TOR: LazyLock<RuntimeController> = LazyLock::new(RuntimeController::new);
 
+// bumped on every successful runtime start so client identities tied to a
+// previous runtime's ephemeral endpoint stop comparing equal after a restart
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
 impl RuntimeController {
     fn new() -> Self {
         let (status_tx, _) = watch::channel(Status::Stopped);
@@ -207,6 +214,7 @@ impl RuntimeController {
             stopped_rx,
             shutdown_requested: false,
         });
+        GENERATION.fetch_add(1, Ordering::AcqRel);
 
         Ok(())
     }
@@ -280,6 +288,11 @@ pub async fn built_in_socks_endpoint() -> Result<SocketAddr, Error> {
 /// Subscribes to typed lifecycle and bootstrap status updates
 pub fn subscribe_status() -> watch::Receiver<Status> {
     BUILT_IN_TOR.status_tx.subscribe()
+}
+
+/// Returns the current runtime generation, incremented on every successful start
+pub fn generation() -> u64 {
+    GENERATION.load(Ordering::Acquire)
 }
 
 fn spawn_runtime_thread(status_tx: watch::Sender<Status>) -> Result<PendingRuntime, Error> {

@@ -198,6 +198,9 @@ pub enum TorError {
     /// The built-in Tor runtime failed
     #[error("{0}")]
     Runtime(#[from] TorRuntimeError),
+    /// The external proxy host or port is invalid
+    #[error("Enter a valid SOCKS5 proxy host and port")]
+    InvalidExternalProxy,
     /// A Tor configuration change could not be persisted
     #[error("Unable to save Tor settings")]
     Persistence,
@@ -255,6 +258,12 @@ impl RustTorManager {
     }
 
     async fn apply_config(&self, config: TorConfig) -> Result<()> {
+        if let TorConfig::External { host, port } = &config
+            && (host.trim().is_empty() || host.contains(char::is_whitespace) || *port == 0)
+        {
+            return Err(TorError::InvalidExternalProxy);
+        }
+
         let current = Database::global().global_config.tor_config();
         let prepared_http_client = match config {
             TorConfig::BuiltIn => None,

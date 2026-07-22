@@ -42,7 +42,25 @@ pub(crate) struct NodeConnectionIdentity {
     network: Network,
     api_type: ApiType,
     url: String,
-    tor: Option<TorProxy>,
+    tor: Option<TorRouteIdentity>,
+}
+
+/// Tor route as it affects client identity. BuiltIn carries the runtime
+/// generation so cached clients are invalidated when the runtime restarts
+/// on a new ephemeral port
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub(crate) enum TorRouteIdentity {
+    BuiltIn { generation: u64 },
+    Socks5 { host: String, port: u16 },
+}
+
+impl From<TorProxy> for TorRouteIdentity {
+    fn from(proxy: TorProxy) -> Self {
+        match proxy {
+            TorProxy::BuiltIn => Self::BuiltIn { generation: crate::tor_runtime::generation() },
+            TorProxy::Socks5 { host, port } => Self::Socks5 { host, port },
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,7 +81,7 @@ impl Node {
             network: self.network,
             api_type: self.api_type,
             url: self.url.clone(),
-            tor,
+            tor: tor.map(TorRouteIdentity::from),
         }
     }
 

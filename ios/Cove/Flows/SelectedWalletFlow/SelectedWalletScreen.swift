@@ -378,8 +378,17 @@ struct SelectedWalletScreen: View {
         }
     }
 
+    private var walletNodeConnectionFailed: Bool {
+        if case .nodeConnectionFailed = manager.errorAlert?.item { return true }
+        return false
+    }
+
     private var torStatusTitle: String {
-        switch tor.status {
+        if walletNodeConnectionFailed, tor.status == .ready {
+            return "Node Unreachable"
+        }
+
+        return switch tor.status {
         case .off:
             "Tor Off"
         case let .bootstrapping(percent, _):
@@ -394,7 +403,11 @@ struct SelectedWalletScreen: View {
     }
 
     private var torStatusDetail: String? {
-        switch tor.status {
+        if walletNodeConnectionFailed, tor.status == .ready {
+            return "Tor is ready but the selected node is not reachable through it."
+        }
+
+        return switch tor.status {
         case let .bootstrapping(_, message), let .failed(message):
             message
         case .stopped:
@@ -405,7 +418,9 @@ struct SelectedWalletScreen: View {
     }
 
     private var torStatusColor: Color {
-        switch tor.status {
+        if walletNodeConnectionFailed { return .statusError }
+
+        return switch tor.status {
         case .off, .stopped:
             .secondary
         case .bootstrapping:

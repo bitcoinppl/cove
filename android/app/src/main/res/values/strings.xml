@@ -278,6 +278,7 @@
     <string name="selected_wallet_tor_settings">Tor Settings</string>
     <string name="selected_wallet_tor_bootstrapping">Built-in Tor is connecting (%1$d%%). %2$s</string>
     <string name="selected_wallet_tor_ready">Tor is ready.</string>
+    <string name="selected_wallet_tor_node_unreachable">Tor is ready but the selected node is not reachable through it.</string>
     <string name="selected_wallet_tor_external_configured">External SOCKS5 proxy configured at %1$s:%2$d.</string>
 
     <!-- More Options Menu -->

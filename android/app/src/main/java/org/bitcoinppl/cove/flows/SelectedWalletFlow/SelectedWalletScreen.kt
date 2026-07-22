@@ -82,6 +82,7 @@ import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TorConfig
+import org.bitcoinppl.cove_core.WalletErrorAlert
 import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -300,6 +301,7 @@ fun SelectedWalletScreen(
                         if (torManager.isEnabled) {
                             TorToolbarIndicator(
                                 status = torManager.status,
+                                nodeConnectionFailed = manager.errorAlert is WalletErrorAlert.NodeConnectionFailed,
                                 onClick = { showTorStatusDialog = true },
                             )
                         }
@@ -526,7 +528,15 @@ fun SelectedWalletScreen(
         AlertDialog(
             onDismissRequest = { showTorStatusDialog = false },
             title = { Text(stringResource(R.string.selected_wallet_tor_network_status)) },
-            text = { Text(torWalletStatusText(torManager.config, torManager.status)) },
+            text = {
+                Text(
+                    torWalletStatusText(
+                        torManager.config,
+                        torManager.status,
+                        nodeConnectionFailed = manager.errorAlert is WalletErrorAlert.NodeConnectionFailed,
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -549,14 +559,16 @@ fun SelectedWalletScreen(
 @Composable
 private fun TorToolbarIndicator(
     status: TorStatus,
+    nodeConnectionFailed: Boolean,
     onClick: () -> Unit,
 ) {
     val statusColor =
-        when (status) {
-            is TorStatus.Ready -> MaterialTheme.coveColors.systemGreen
-            is TorStatus.Bootstrapping -> CoveColor.WarningOrange
-            is TorStatus.Failed -> MaterialTheme.colorScheme.error
-            is TorStatus.Off, is TorStatus.Stopped -> MaterialTheme.colorScheme.outline
+        when {
+            nodeConnectionFailed -> MaterialTheme.colorScheme.error
+            status is TorStatus.Ready -> MaterialTheme.coveColors.systemGreen
+            status is TorStatus.Bootstrapping -> CoveColor.WarningOrange
+            status is TorStatus.Failed -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.outline
         }
 
     IconButton(
@@ -583,6 +595,20 @@ private fun TorToolbarIndicator(
 
 @Composable
 private fun torWalletStatusText(
+    config: TorConfig,
+    status: TorStatus,
+    nodeConnectionFailed: Boolean,
+): String =
+    when {
+        nodeConnectionFailed && status is TorStatus.Ready -> {
+            stringResource(R.string.selected_wallet_tor_node_unreachable)
+        }
+
+        else -> torStatusOnlyText(config, status)
+    }
+
+@Composable
+private fun torStatusOnlyText(
     config: TorConfig,
     status: TorStatus,
 ): String =

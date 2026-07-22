@@ -300,19 +300,6 @@ impl GlobalConfigTable {
         Ok(())
     }
 
-    pub fn tor_config(&self) -> TorConfig {
-        let config_json = self.get(GlobalConfigKey::TorConfig).unwrap_or(None).unwrap_or_default();
-
-        serde_json::from_str(&config_json).unwrap_or_default()
-    }
-
-    pub fn set_tor_config(&self, config: TorConfig) -> Result<()> {
-        let config_json =
-            serde_json::to_string(&config).map_err_str(SerdeError::SerializationError)?;
-
-        self.set(GlobalConfigKey::TorConfig, config_json)
-    }
-
     pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
         self.get(GlobalConfigKey::CustomBlockExplorer(network)).unwrap_or(None).and_then(
             |template| {
@@ -492,6 +479,23 @@ impl GlobalConfigTable {
         Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
+    }
+}
+
+// not FFI-exported: platforms must change Tor settings through TorManager,
+// never by writing the persisted config directly
+impl GlobalConfigTable {
+    pub fn tor_config(&self) -> TorConfig {
+        let config_json = self.get(GlobalConfigKey::TorConfig).unwrap_or(None).unwrap_or_default();
+
+        serde_json::from_str(&config_json).unwrap_or_default()
+    }
+
+    pub fn set_tor_config(&self, config: TorConfig) -> Result<()> {
+        let config_json =
+            serde_json::to_string(&config).map_err_str(SerdeError::SerializationError)?;
+
+        self.set(GlobalConfigKey::TorConfig, config_json)
     }
 }
 
