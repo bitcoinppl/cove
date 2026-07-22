@@ -44,7 +44,11 @@ impl CloudBackupStore {
             .0
             .cloud_backup_state
             .mutate(|state| {
-                if matches!(state, PersistedCloudBackupState::Disabled) {
+                if matches!(
+                    state,
+                    PersistedCloudBackupState::Disabled
+                        | PersistedCloudBackupState::Corrupted { .. }
+                ) {
                     *state = PersistedCloudBackupState::mark_enabled_reset_verification(
                         now,
                         wallet_count,
