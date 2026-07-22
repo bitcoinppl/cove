@@ -365,14 +365,7 @@ async fn do_poll(
     polling_sender: V2Sender<PollingForProposal>,
     persister: PayjoinSessionPersister,
 ) {
-    let client = match cove_http::new_client() {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("payjoin poll: failed to create HTTP client: {e:?}");
-            send!(addr.complete_with_fallback_msg());
-            return;
-        }
-    };
+    let client = crate::manager::tor_manager::http_client();
 
     // polls are long-polling: the directory holds the connection open until a
     // proposal arrives or its own timeout fires, so allow slightly more than
@@ -523,14 +516,7 @@ impl PayjoinActor {
         let persister = self.persister.clone();
 
         self.addr.send_fut_with(|addr| async move {
-            let client = match cove_http::new_client() {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!("payjoin POST: failed to create HTTP client: {e:?}");
-                    send!(addr.complete_with_fallback_msg());
-                    return;
-                }
-            };
+            let client = crate::manager::tor_manager::http_client();
 
             let (post_response, post_ctx) =
                 match try_ohttp_relays(&client, Duration::from_secs(30), |relay| {

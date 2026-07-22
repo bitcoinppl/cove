@@ -9,7 +9,6 @@ use std::{
 use arc_swap::ArcSwap;
 use backon::{ExponentialBuilder, Retryable as _};
 use eyre::{Context as _, Result};
-use once_cell::sync::OnceCell;
 use tracing::{debug, error, warn};
 
 /// Guard to prevent multiple concurrent background refresh tasks
@@ -18,6 +17,7 @@ static REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 use crate::{
     app::reconcile::{AppStateReconcileMessage as AppMessage, Updater},
     database::Database,
+    manager::tor_manager::http_client,
 };
 use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed};
 
@@ -37,7 +37,6 @@ pub static FEES: LazyLock<ArcSwap<Option<CachedFeeResponse>>> =
 
 pub struct FeeClient {
     url: String,
-    client: OnceCell<reqwest::Client>,
 }
 
 impl FeeClient {
@@ -46,7 +45,7 @@ impl FeeClient {
     }
 
     pub fn new_with_url(url: String) -> Self {
-        Self { url, client: OnceCell::new() }
+        Self { url }
     }
 
     /// Get cached fees, will trigger background refresh if stale
@@ -111,13 +110,9 @@ impl FeeClient {
 
     /// Always gets new fees from the server
     async fn get_new_fees(&self) -> Result<FeeResponse, reqwest::Error> {
-        let response = self.client()?.get(&self.url).send().await?;
+        let response = http_client().get(&self.url).send().await?;
         let fees: FeeResponse = response.json().await?;
         Ok(fees)
-    }
-
-    fn client(&self) -> Result<&reqwest::Client, reqwest::Error> {
-        self.client.get_or_try_init(cove_http::new_client)
     }
 }
 

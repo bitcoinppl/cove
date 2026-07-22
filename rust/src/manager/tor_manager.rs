@@ -5,6 +5,8 @@ use std::{
     time::Duration,
 };
 
+use arc_swap::ArcSwap;
+use cove_http::Socks5Proxy;
 use parking_lot::Mutex;
 use tokio::{sync::Mutex as AsyncMutex, task::AbortHandle};
 
@@ -21,6 +23,25 @@ type Message = TorManagerReconcileMessage;
 type Result<T, E = TorError> = std::result::Result<T, E>;
 
 const PROXY_TEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HttpProxyRoute {
+    Direct,
+    BuiltIn,
+    Socks5(Socks5Proxy),
+}
+
+impl From<&TorConfig> for HttpProxyRoute {
+    fn from(config: &TorConfig) -> Self {
+        match config {
+            TorConfig::Off => Self::Direct,
+            TorConfig::BuiltIn => Self::BuiltIn,
+            TorConfig::External { host, port } => {
+                Self::Socks5(Socks5Proxy::new(host.clone(), *port))
+            }
+        }
+    }
+}
 
 /// Global owner of Tor configuration, runtime lifecycle, and status reconciliation
 pub static TOR_MANAGER: LazyLock<Arc<RustTorManager>> = LazyLock::new(RustTorManager::init);
@@ -197,14 +218,19 @@ pub struct RustTorManager {
     reconciler: ReconcileChannel<Message>,
     operations: AsyncMutex<()>,
     status_forwarder: Mutex<Option<AbortHandle>>,
+    http_client: ArcSwap<reqwest::Client>,
 }
 
 impl RustTorManager {
     fn init() -> Arc<Self> {
+        let config = Database::global().global_config.tor_config();
+        let http_client = initial_http_client(&config);
+
         Arc::new(Self {
             reconciler: ReconcileChannel::new(1000),
             operations: AsyncMutex::new(()),
             status_forwarder: Mutex::new(None),
+            http_client: ArcSwap::from_pointee(http_client),
         })
     }
 
@@ -214,15 +240,31 @@ impl RustTorManager {
         let config = Database::global().global_config.tor_config();
 
         self.send(Message::ConfigChanged(config.clone()));
-        if config == TorConfig::BuiltIn {
-            let _ = self.start_built_in().await;
+        match config {
+            TorConfig::BuiltIn => {
+                self.block_http_requests();
+                if let Err(error) = self.start_built_in().await {
+                    self.send(Message::Failed(error));
+                }
+            }
+            TorConfig::Off | TorConfig::External { .. } => match http_client_for_config(&config) {
+                Ok(client) => self.set_http_client(client),
+                Err(_) => self.send(Message::Failed(http_client_error())),
+            },
         }
     }
 
     async fn apply_config(&self, config: TorConfig) -> Result<()> {
         let current = Database::global().global_config.tor_config();
+        let prepared_http_client = match config {
+            TorConfig::BuiltIn => None,
+            TorConfig::Off | TorConfig::External { .. } => {
+                Some(http_client_for_config(&config).map_err(|_| http_client_error())?)
+            }
+        };
 
         if current != config {
+            self.block_http_requests();
             self.stop_status_forwarder();
             if let Err(error) = tor_runtime::stop().await {
                 let error = TorError::from(error);
@@ -239,9 +281,14 @@ impl RustTorManager {
 
         self.send(Message::ConfigChanged(config.clone()));
         if config == TorConfig::BuiltIn {
+            self.block_http_requests();
             self.start_built_in().await?;
-        } else if current != config {
-            self.send(Message::Stopped);
+        } else {
+            self.set_http_client(prepared_http_client.expect("non-built-in client is prepared"));
+
+            if current != config {
+                self.send(Message::Stopped);
+            }
         }
 
         Ok(())
@@ -249,7 +296,22 @@ impl RustTorManager {
 
     async fn start_built_in(&self) -> Result<()> {
         self.start_status_forwarder();
-        tor_runtime::start().await.map_err(TorError::from)
+        tor_runtime::start().await.map_err(TorError::from)?;
+        spawn_built_in_http_client_swap();
+
+        Ok(())
+    }
+
+    fn block_http_requests(&self) {
+        self.set_http_client(fail_closed_http_client());
+    }
+
+    fn set_http_client(&self, client: reqwest::Client) {
+        self.http_client.store(Arc::new(client));
+    }
+
+    fn http_client(&self) -> reqwest::Client {
+        self.http_client.load().as_ref().clone()
     }
 
     fn start_status_forwarder(&self) {
@@ -371,6 +433,68 @@ impl RustTorManager {
             ),
         }
     }
+}
+
+/// Returns the currently configured shared HTTP client
+pub(crate) fn http_client() -> reqwest::Client {
+    TOR_MANAGER.http_client()
+}
+
+/// Swaps the shared HTTP client to the built-in endpoint once bootstrap
+/// finishes, keeping requests fail-closed in the meantime so enabling Tor
+/// never blocks on bootstrap
+fn spawn_built_in_http_client_swap() {
+    cove_tokio::task::spawn(async move {
+        let endpoint = match tor_runtime::built_in_socks_endpoint().await {
+            Ok(endpoint) => endpoint,
+            Err(error) => {
+                TOR_MANAGER.send(Message::Failed(error.into()));
+                return;
+            }
+        };
+
+        // config may have changed while bootstrap was in flight
+        let manager = TOR_MANAGER.clone();
+        let _operation = manager.operations.lock().await;
+        if Database::global().global_config.tor_config() != TorConfig::BuiltIn {
+            return;
+        }
+
+        let proxy = Socks5Proxy::new(endpoint.ip().to_string(), endpoint.port());
+        match cove_http::new_client_with_socks_proxy(Some(&proxy)) {
+            Ok(client) => manager.set_http_client(client),
+            Err(_) => manager.send(Message::Failed(http_client_error())),
+        }
+    });
+}
+
+fn initial_http_client(config: &TorConfig) -> reqwest::Client {
+    match HttpProxyRoute::from(config) {
+        HttpProxyRoute::BuiltIn => fail_closed_http_client(),
+        HttpProxyRoute::Direct | HttpProxyRoute::Socks5(_) => {
+            http_client_for_config(config).unwrap_or_else(|_| fail_closed_http_client())
+        }
+    }
+}
+
+fn http_client_for_config(config: &TorConfig) -> Result<reqwest::Client, reqwest::Error> {
+    match HttpProxyRoute::from(config) {
+        HttpProxyRoute::Direct => cove_http::new_client_with_socks_proxy(None),
+        HttpProxyRoute::BuiltIn => Ok(fail_closed_http_client()),
+        HttpProxyRoute::Socks5(proxy) => cove_http::new_client_with_socks_proxy(Some(&proxy)),
+    }
+}
+
+fn fail_closed_http_client() -> reqwest::Client {
+    // route requests to an invalid local SOCKS endpoint so initialization cannot use clearnet
+    let proxy = Socks5Proxy::new("127.0.0.1", 0);
+
+    cove_http::new_client_with_socks_proxy(Some(&proxy))
+        .expect("the fail-closed HTTP proxy endpoint is valid")
+}
+
+const fn http_client_error() -> TorError {
+    TorError::Runtime(TorRuntimeError::Configure)
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -525,6 +649,19 @@ mod tests {
     use cove_types::Network;
 
     use super::*;
+
+    #[test]
+    fn tor_config_maps_to_the_expected_http_route() {
+        assert_eq!(HttpProxyRoute::from(&TorConfig::Off), HttpProxyRoute::Direct);
+        assert_eq!(HttpProxyRoute::from(&TorConfig::BuiltIn), HttpProxyRoute::BuiltIn);
+        assert_eq!(
+            HttpProxyRoute::from(&TorConfig::External {
+                host: "proxy.example".to_string(),
+                port: 9050,
+            }),
+            HttpProxyRoute::Socks5(Socks5Proxy::new("proxy.example", 9050))
+        );
+    }
 
     #[test]
     fn disabling_with_an_onion_node_requires_confirmation() {
