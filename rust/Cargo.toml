@@ -116,6 +116,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 # built-in tor runtime
 arti = { version = "=2.5.0", default-features = false, features = ["tokio", "rustls", "compression", "experimental-api", "onion-service-client"] }
 arti-client = { version = "=0.44.0", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client"] }
+tor-rtcompat = { version = "=0.44.0", default-features = false, features = ["tokio", "rustls"] }
 
 # extensions
 tap = "1.0.1"
@@ -155,6 +156,7 @@ bdk_electrum = { version = "0.24.0", features = ["use-rustls-ring"], default-fea
 # built-in tor runtime
 arti = { workspace = true }
 arti-client = { workspace = true }
+tor-rtcompat = { workspace = true }
 
 # import / export hardware wallet public keys
 pubport = { workspace = true }

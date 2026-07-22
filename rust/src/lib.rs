@@ -70,6 +70,7 @@ mod send_flow;
 mod signed_import;
 mod tap_card;
 mod tor;
+pub mod tor_runtime;
 mod transaction;
 mod transaction_watcher;
 mod ur;

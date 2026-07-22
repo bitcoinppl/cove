@@ -72,6 +72,9 @@ pub enum Error {
     #[error("built-in Tor proxy is not available")]
     BuiltInTorProxyUnavailable,
 
+    #[error("failed to start built-in Tor runtime: {0}")]
+    BuiltInTorRuntime(#[from] crate::tor_runtime::Error),
+
     #[error("failed to connect to node: {0}")]
     EsploraConnect(esplora_client::Error),
 
@@ -136,6 +139,19 @@ impl NodeClientOptions {
 
         Self { batch_size, tor }
     }
+
+    async fn resolve_built_in_tor(self) -> Result<Self, crate::tor_runtime::Error> {
+        let tor = match self.tor {
+            Some(TorProxy::BuiltIn) => {
+                let endpoint = crate::tor_runtime::built_in_socks_endpoint().await?;
+
+                Some(TorProxy::Socks5 { host: endpoint.ip().to_string(), port: endpoint.port() })
+            }
+            tor => tor,
+        };
+
+        Ok(Self { batch_size: self.batch_size, tor })
+    }
 }
 
 impl NodeClient {
@@ -155,11 +171,11 @@ impl NodeClient {
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
-        if matches!(options.tor, Some(TorProxy::BuiltIn)) {
-            return Err(Error::BuiltInTorProxyUnavailable);
-        }
-
+        // identity keeps the unresolved route so it compares equal to identities
+        // computed fresh from the persisted config; only backend construction
+        // sees the resolved built-in endpoint, which changes on runtime restart
         let connection_identity = node.connection_identity_with_tor(options.tor.clone());
+        let options = options.resolve_built_in_tor().await?;
         let backend = match node.api_type {
             ApiType::Esplora => {
                 let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;

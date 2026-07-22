@@ -1739,6 +1739,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tor-rtcompat",
  "tracing",
  "tracing-log",
  "tracing-subscriber",
