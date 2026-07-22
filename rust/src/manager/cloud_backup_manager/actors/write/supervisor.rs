@@ -263,12 +263,8 @@ impl CloudBackupWriteSupervisor {
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<oneshot::Receiver<()>> {
         let (sender, receiver) = oneshot::channel();
-        self.active_blocker = Some(blocker);
-        self.reject_blocked_pending_writes();
-        self.start_next_pending_write();
 
-        if let Some(in_flight) = &mut self.in_flight_write {
-            in_flight.completion_admitted_before_blocker = true;
+        if self.begin_block_until_drained(blocker) {
             self.drain_receivers.push(sender);
         } else {
             let _ = sender.send(());
@@ -283,18 +279,24 @@ impl CloudBackupWriteSupervisor {
         supervisor: WeakAddr<CloudBackupSupervisor>,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        self.active_blocker = Some(blocker);
-        self.reject_blocked_pending_writes();
-        self.start_next_pending_write();
-
         // wait for the active write to finish before disable deletes the namespace
-        if self.in_flight_write.is_some() {
+        if self.begin_block_until_drained(blocker) {
             self.drain_waiters.push(CloudBackupWriteDrainWaiter { supervisor, claim, blocker });
         } else {
             send!(supervisor.complete_disable_write_drain(claim, blocker));
         }
 
         Produces::ok(())
+    }
+
+    fn begin_block_until_drained(&mut self, blocker: CloudBackupWriteBlocker) -> bool {
+        self.active_blocker = Some(blocker);
+        self.reject_blocked_pending_writes();
+        self.start_next_pending_write();
+
+        let Some(in_flight) = &mut self.in_flight_write else { return false };
+        in_flight.completion_admitted_before_blocker = true;
+        true
     }
 
     pub(crate) async fn unblock(&mut self, blocker: CloudBackupWriteBlocker) -> ActorResult<()> {
