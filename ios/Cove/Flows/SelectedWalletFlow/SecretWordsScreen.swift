@@ -22,6 +22,7 @@ struct SecretWordsScreen: View {
 
     let rowHeight = 30.0
     private let numberOfColumns = 2
+    private let topContentInset = 16.0
 
     var numberOfRows: Int {
         (words?.words().count ?? 24) / numberOfColumns
@@ -50,12 +51,14 @@ struct SecretWordsScreen: View {
                 sizeCategory: sizeCategory,
                 availableHeight: proxy.size.height
             )
+            let contentHeight = max(proxy.size.height - topContentInset, 0)
 
             ScrollView {
                 mainContent(usesFlexibleSpacing: !compactLayout)
-                    .frame(minHeight: proxy.size.height, alignment: .top)
+                    .frame(minHeight: contentHeight, alignment: .top)
                     .safeAreaPadding(.bottom, 24)
             }
+            .padding(.top, topContentInset)
             .scrollIndicators(.hidden)
         }
         .onAppear {
@@ -176,7 +179,8 @@ struct SecretWordsScreen: View {
                 }
             }
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.bottom)
     }
 }
 
