@@ -12,6 +12,11 @@ enum AppHaptics {
         let generator = UISelectionFeedbackGenerator()
         generator.selectionChanged()
     }
+
+    static func pinKeyPressed() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
 }
 
 extension HapticFeedback {

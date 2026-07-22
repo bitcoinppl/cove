@@ -6,3 +6,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 fun ComposeHapticFeedback.performWalletReorderHaptic() {
     performHapticFeedback(HapticFeedbackType.Confirm)
 }
+
+fun ComposeHapticFeedback.performPinKeyPressHaptic() {
+    performHapticFeedback(HapticFeedbackType.KeyboardTap)
+}
