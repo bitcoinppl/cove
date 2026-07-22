@@ -15,8 +15,9 @@ use tokio::sync::oneshot;
 use tracing::{error, warn};
 
 use crate::database::Database;
-use crate::database::cloud_backup::DriveAccountSwitchId;
-use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::database::cloud_backup::{
+    DriveAccountSwitchId, PersistedCloudBackupState, PersistedCloudBackupTransition,
+};
 use crate::manager::cloud_backup_manager::CloudBackupError;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::{CloudBackupStore, RustCloudBackupManager};
@@ -128,12 +129,6 @@ enum CloudBackupWriteLocalCompletion {
     },
 }
 
-impl CloudBackupWriteLocalCompletion {
-    fn requires_writes_allowed(&self) -> bool {
-        !matches!(self, Self::None)
-    }
-}
-
 #[derive(Debug)]
 struct CloudBackupPendingWrite {
     context: CloudBackupWriteCommandContext,
@@ -149,7 +144,6 @@ impl CloudBackupPendingWrite {
             CloudBackupInFlightWrite {
                 context: self.context,
                 completion: self.completion,
-                completion_admitted_before_blocker: false,
                 sender: self.sender,
             },
             self.remote,
@@ -165,7 +159,6 @@ impl CloudBackupPendingWrite {
 struct CloudBackupInFlightWrite {
     context: CloudBackupWriteCommandContext,
     completion: CloudBackupWriteLocalCompletion,
-    completion_admitted_before_blocker: bool,
     sender: oneshot::Sender<CloudBackupWriteCommandResult<()>>,
 }
 
@@ -294,9 +287,7 @@ impl CloudBackupWriteSupervisor {
         self.reject_blocked_pending_writes();
         self.start_next_pending_write();
 
-        let Some(in_flight) = &mut self.in_flight_write else { return false };
-        in_flight.completion_admitted_before_blocker = true;
-        true
+        self.in_flight_write.is_some()
     }
 
     pub(crate) async fn unblock(&mut self, blocker: CloudBackupWriteBlocker) -> ActorResult<()> {
@@ -313,17 +304,19 @@ impl CloudBackupWriteSupervisor {
             error!("Failed to load cloud backup state for write supervisor: {error}");
             PersistedCloudBackupState::default()
         });
-        if let Some(disabling) = state.disabling() {
-            return Some(CloudBackupWriteBlocker::Disabling {
-                operation_id: disabling.disable_generation,
-            });
-        }
-
-        state.drive_account_switch().map(|account_switch| {
-            CloudBackupWriteBlocker::DriveAccountSwitch {
-                transition_id: account_switch.transition_id,
+        match state.exclusive_transition() {
+            Some(PersistedCloudBackupTransition::Disabling(disabling)) => {
+                Some(CloudBackupWriteBlocker::Disabling {
+                    operation_id: disabling.disable_generation,
+                })
             }
-        })
+            Some(PersistedCloudBackupTransition::DriveAccountSwitch(account_switch)) => {
+                Some(CloudBackupWriteBlocker::DriveAccountSwitch {
+                    transition_id: account_switch.transition.transition_id,
+                })
+            }
+            None => None,
+        }
     }
 
     fn next_command(
@@ -379,14 +372,6 @@ impl CloudBackupWriteSupervisor {
 
     fn write_admission_check(&self) -> CloudBackupWriteAdmissionCheck {
         CloudBackupWriteAdmissionCheck::new(self.active_blocker)
-    }
-
-    fn writes_allowed(
-        &self,
-        context: CloudBackupWriteCommandContext,
-    ) -> Result<(), CloudBackupError> {
-        let mut admission_check = self.write_admission_check();
-        admission_check.writes_allowed(context)
     }
 
     fn submit_write(
@@ -522,11 +507,6 @@ impl CloudBackupWriteSupervisor {
         active: &CloudBackupInFlightWrite,
         output: CloudBackupRemoteWriteResult,
     ) -> Result<(), CloudBackupError> {
-        if active.completion.requires_writes_allowed() && !active.completion_admitted_before_blocker
-        {
-            self.writes_allowed(active.context)?;
-        }
-
         // local state changes must still belong to the active operation
         self.ensure_pending_write_origin_current(active.context)?;
 
@@ -896,7 +876,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::database::cloud_backup::{CloudBackupRecordKey, PersistedCloudBackupStatus};
+    use crate::database::cloud_backup::PersistedCloudBackupStatus;
     use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperation;
     use crate::manager::cloud_backup_manager::ops::test_support::{
         async_test_lock, reset_cloud_backup_test_state, test_globals,
@@ -1008,12 +988,7 @@ mod tests {
 
         assert_eq!(supervisor.active_blocker, Some(blocker));
         assert_eq!(supervisor.drain_waiters.len(), 1);
-        assert!(
-            supervisor
-                .in_flight_write
-                .as_ref()
-                .is_some_and(|write| write.completion_admitted_before_blocker)
-        );
+        assert!(supervisor.in_flight_write.is_some());
 
         supervisor
             .complete_remote_write(
@@ -1135,7 +1110,6 @@ mod tests {
         supervisor.in_flight_write = Some(CloudBackupInFlightWrite {
             context: command,
             completion: CloudBackupWriteLocalCompletion::None,
-            completion_admitted_before_blocker: false,
             sender,
         });
 
@@ -1147,20 +1121,6 @@ mod tests {
         let result = receiver.await.unwrap().into_result();
         assert!(matches!(result, Err(CloudBackupError::Cancelled)));
         assert!(supervisor.in_flight_write.is_none());
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn local_completion_rechecks_write_blocker() {
-        let supervisor = CloudBackupWriteSupervisor {
-            active_blocker: Some(CloudBackupWriteBlocker::Disabling { operation_id: 7 }),
-            ..Default::default()
-        };
-        let in_flight = in_flight_completion_write(0);
-
-        let result =
-            supervisor.apply_local_completion(&in_flight, CloudBackupRemoteWriteResult::None).await;
-
-        assert!(matches!(result, Err(CloudBackupError::Deferred(_))));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1208,7 +1168,6 @@ mod tests {
                         completion.clone(),
                     ),
             },
-            completion_admitted_before_blocker: false,
             sender,
         };
 
@@ -1228,24 +1187,6 @@ mod tests {
         CloudBackupInFlightWrite {
             context: CloudBackupWriteCommandContext::new(id, None),
             completion: CloudBackupWriteLocalCompletion::None,
-            completion_admitted_before_blocker: false,
-            sender,
-        }
-    }
-
-    fn in_flight_completion_write(id: u64) -> CloudBackupInFlightWrite {
-        let (sender, _receiver) = oneshot::channel();
-        CloudBackupInFlightWrite {
-            context: CloudBackupWriteCommandContext::new(id, None),
-            completion: CloudBackupWriteLocalCompletion::Apply(
-                CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
-                    "namespace".into(),
-                    CloudBackupRecordKey::MasterKeyWrapper,
-                    "revision".into(),
-                    0,
-                ),
-            ),
-            completion_admitted_before_blocker: false,
             sender,
         }
     }

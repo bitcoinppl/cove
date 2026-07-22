@@ -685,7 +685,7 @@ internal interface UniffiCallbackInterfaceCloudStorageAccessMethod8 : com.sun.jn
     fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod9 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceCloudStorageAccessMethod10 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
@@ -1207,7 +1207,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files_snapshot() != 37594.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 49275.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34381.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 41055.toShort()) {
@@ -3236,6 +3236,53 @@ public object FfiConverterTypeCloudAccessPolicy: FfiConverterRustBuffer<CloudAcc
 
 
 
+/**
+ * Provider state for one cloud backup blob
+ */
+
+enum class CloudBackupUploadStatus {
+
+    /**
+     * The blob exists and the provider reports it fully uploaded
+     */
+    UPLOADED,
+    /**
+     * The blob exists but has not reached the provider's uploaded state
+     */
+    PENDING,
+    /**
+     * No blob exists at any supported location
+     */
+    NOT_FOUND;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupUploadStatus: FfiConverterRustBuffer<CloudBackupUploadStatus> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupUploadStatus.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupUploadStatus) = 4UL
+
+    override fun write(value: CloudBackupUploadStatus, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 
 sealed class CloudStorageException: kotlin.Exception() {
@@ -4276,9 +4323,9 @@ public interface CloudStorageAccess {
     suspend fun `listWalletFilesSnapshot`(`namespace`: kotlin.String, `policy`: CloudAccessPolicy): CloudStorageInventorySnapshot
 
     /**
-     * Check whether a blob has been fully uploaded to iCloud
+     * Return the provider state for a cloud backup blob
      */
-    suspend fun `isBackupUploaded`(`namespace`: kotlin.String, `recordId`: kotlin.String, `locations`: List<RemoteBackupLocation>, `policy`: CloudAccessPolicy): kotlin.Boolean
+    suspend fun `isBackupUploaded`(`namespace`: kotlin.String, `recordId`: kotlin.String, `locations`: List<RemoteBackupLocation>, `policy`: CloudAccessPolicy): CloudBackupUploadStatus
 
     suspend fun `overallSyncHealth`(`policy`: CloudAccessPolicy): CloudSyncHealth
 
@@ -4606,7 +4653,7 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
         }
     }
     internal object `isBackupUploaded`: UniffiCallbackInterfaceCloudStorageAccessMethod9 {
-        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteI8,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+        override fun callback(`uniffiHandle`: Long,`namespace`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,`locations`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeCloudStorageAccess.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
                 uniffiObj.`isBackupUploaded`(
@@ -4616,9 +4663,9 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
                     FfiConverterTypeCloudAccessPolicy.lift(`policy`),
                 )
             }
-            val uniffiHandleSuccess = { returnValue: kotlin.Boolean ->
-                val uniffiResult = UniffiForeignFutureResultI8.UniffiByValue(
-                    FfiConverterBoolean.lower(returnValue),
+            val uniffiHandleSuccess = { returnValue: CloudBackupUploadStatus ->
+                val uniffiResult = UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                    FfiConverterTypeCloudBackupUploadStatus.lower(returnValue),
                     UniffiRustCallStatus.ByValue()
                 )
                 uniffiResult.write()
@@ -4627,8 +4674,8 @@ internal object uniffiCallbackInterfaceCloudStorageAccess {
             val uniffiHandleError = { callStatus: UniffiRustCallStatus.ByValue ->
                 uniffiFutureCallback.callback(
                     uniffiCallbackData,
-                    UniffiForeignFutureResultI8.UniffiByValue(
-                        0.toByte(),
+                    UniffiForeignFutureResultRustBuffer.UniffiByValue(
+                        RustBuffer.ByValue(),
                         callStatus,
                     ),
                 )

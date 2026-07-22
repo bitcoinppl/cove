@@ -8,8 +8,7 @@ use super::wallets::wallet_metadata_change_requires_upload;
 use super::{CloudBackupError, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, PersistedCloudBackupState, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState,
+    CloudBlobDirtyState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::{WalletId, WalletMetadata};
 
@@ -28,10 +27,7 @@ pub(crate) fn live_upload_retry_delay_for_attempt(retry_count: u32) -> Duration 
 impl RustCloudBackupManager {
     pub(crate) fn mark_wallet_blob_dirty(&self, wallet_id: WalletId) {
         // disabling can be canceled, so wallet changes still need queued uploads
-        if !matches!(
-            Self::load_persisted_state(),
-            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
-        ) {
+        if !Self::load_persisted_state().has_configured_backup() {
             return;
         }
 

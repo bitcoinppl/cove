@@ -50,11 +50,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
 
     assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
     assert!(!globals.cloud.has_namespace(&namespace));
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_some());
     assert!(disabling.last_error.as_deref() == Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
@@ -87,11 +83,7 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
 
     assert!(error.contains("cloud-only wallets"), "{error}");
     assert!(globals.cloud.has_namespace(&namespace));
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_none());
     assert!(current_disable_generation().is_some());
 }
@@ -137,11 +129,7 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
     run_disable_cloud_backup(&manager).await;
 
     assert!(globals.cloud.has_namespace(&namespace));
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_none());
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
@@ -181,7 +169,7 @@ async fn keep_cloud_backup_enabled_resumes_dirty_wallet_marked_during_disable_fe
     };
     Database::global()
         .cloud_backup_state
-        .set(&PersistedCloudBackupState::Disabling(PersistedDisablingCloudBackup {
+        .set(&PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
             previous_configured,
             namespace_id: namespace.clone(),
             disable_generation: 42,
@@ -282,17 +270,13 @@ async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
     let current = PersistedDisablingCloudBackup { disable_generation: 11, ..stale.clone() };
     Database::global()
         .cloud_backup_state
-        .set(&PersistedCloudBackupState::Disabling(current))
+        .set(&PersistedCloudBackupState::disabling_transition(current))
         .unwrap();
 
     let restored = manager.restore_configured_cloud_backup_after_disable(&stale).unwrap();
 
     assert!(!restored);
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected disabling state");
-    };
+    let disabling = persisted_disabling();
     assert_eq!(disabling.disable_generation, 11);
 }
 
@@ -317,11 +301,7 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
     assert!(globals.cloud.has_namespace(&namespace));
     assert!(globals.cloud.has_namespace(&other_namespace));
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), delete_attempt_count);
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_none());
 }
 
@@ -404,11 +384,7 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
     let error = disable_failure_message(&manager);
 
     assert_eq!(error, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_some());
     assert_eq!(disabling.last_error.as_deref(), Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
     assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
@@ -441,11 +417,7 @@ async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
     assert!(globals.cloud.has_namespace(&namespace));
     assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_none());
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 }
@@ -489,7 +461,7 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
 
     Database::global()
         .cloud_backup_state
-        .set(&PersistedCloudBackupState::Disabling(PersistedDisablingCloudBackup {
+        .set(&PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
             previous_configured,
             namespace_id: namespace.clone(),
             disable_generation: 42,

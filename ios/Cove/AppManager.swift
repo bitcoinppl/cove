@@ -523,6 +523,7 @@ struct WalletTransitionRecoveryPlan {
                 throw CancellationError()
             } catch {
                 handleWalletPreparationError(error, walletId: candidateId)
+                guard walletPreparationFailureAllowsFallback(error) else { throw error }
             }
 
             guard let nextId = recoveryPlan.candidates(
@@ -548,6 +549,16 @@ struct WalletTransitionRecoveryPlan {
         }
 
         logger.error("Unable to prepare wallet \(walletId): \(error)")
+    }
+
+    private func walletPreparationFailureAllowsFallback(_ error: Error) -> Bool {
+        switch error {
+        case WalletManagerError.WalletDoesNotExist,
+             WalletManagerError.DatabaseCorruption:
+            true
+        default:
+            false
+        }
     }
 
     @MainActor

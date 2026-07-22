@@ -35,7 +35,13 @@ class AndroidCloudStorageAccessTest {
                 DriveAccountSwitchPlatformState.Staged(1UL),
                 storage.driveAccountSwitchPlatformState(),
             )
-            assertEquals(DriveAccountTransitionResult.Applied, storage.commitAccountSwitch(1UL))
+            assertEquals(
+                DriveAccountTransitionReceipt(
+                    DriveAccountTransitionResult.Applied,
+                    DriveAccountBindingState.Committed(1UL, replacement),
+                ),
+                storage.commitAccountSwitch(1UL),
+            )
             assertEquals(replacement, store.committedIdentity())
             assertEquals(
                 DriveAccountBindingState.Committed(1UL, replacement),
@@ -80,7 +86,13 @@ class AndroidCloudStorageAccessTest {
 
             storage.selectAccountForCloudBackup(7UL)
 
-            assertEquals(DriveAccountTransitionResult.Applied, storage.rollbackAccountSwitch(7UL))
+            assertEquals(
+                DriveAccountTransitionReceipt(
+                    DriveAccountTransitionResult.Applied,
+                    DriveAccountBindingState.Bound(original),
+                ),
+                storage.rollbackAccountSwitch(7UL),
+            )
             assertEquals(original, store.selectedIdentity())
             assertEquals(original, store.committedIdentity())
             assertEquals(DriveAccountBindingState.Bound(original), store.state())

@@ -878,10 +878,12 @@ impl RustCloudBackupManager {
     pub async fn begin_drive_account_switch(
         &self,
     ) -> Result<u64, CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.begin_drive_account_switch())
+        let (transition_id, ready) = call!(self.supervisor.begin_drive_account_switch())
             .await
-            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
-            .map(crate::database::cloud_backup::DriveAccountSwitchId::value)
+            .map_err_str(CloudBackupDriveAccountSwitchError::Internal)??;
+        ready.await.map_err_str(CloudBackupDriveAccountSwitchError::Internal)??;
+
+        Ok(transition_id.value())
     }
 
     /// Continue the claimed transition after Android durably stages the selected account
@@ -1019,10 +1021,7 @@ impl RustCloudBackupManager {
     /// Returns immediately unless cloud backup is configured or disabling
     pub fn backup_new_wallet(&self, metadata: crate::wallet::metadata::WalletMetadata) {
         // disabling can be canceled, so new wallets still need queued uploads
-        if !matches!(
-            Self::load_persisted_state(),
-            PersistedCloudBackupState::Configured(_) | PersistedCloudBackupState::Disabling(_)
-        ) {
+        if !Self::load_persisted_state().has_configured_backup() {
             return;
         }
 
@@ -1141,7 +1140,6 @@ mod tests {
             sync: PersistedBackupSyncState { last_sync: None, wallet_count: None },
             pending_verification_completion: None,
             pending_restore_all: None,
-            drive_account_switch: None,
         })
     }
 

@@ -5,7 +5,7 @@
 //! verifier without rewriting the persisted blob state
 
 use cove_cspp::backup_data::EncryptedWalletBackup;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
@@ -210,11 +210,15 @@ impl PendingUploadVerifier {
             )
             .await
         {
-            Ok(true) => {
+            Ok(CloudBackupUploadStatus::Uploaded) => {
                 info!("Pending upload verification: master key wrapper upload_state=uploaded")
             }
-            Ok(false) => {
+            Ok(CloudBackupUploadStatus::Pending) => {
                 info!("Pending upload verification: master key wrapper upload_state=pending");
+                return BlobCheckResult::NotYetUploaded;
+            }
+            Ok(CloudBackupUploadStatus::NotFound) => {
+                info!("Pending upload verification: master key wrapper upload_state=not_found");
                 return BlobCheckResult::NotYetUploaded;
             }
             Err(error) => return BlobCheckResult::cloud_storage_failure(error),
@@ -248,13 +252,20 @@ impl PendingUploadVerifier {
             .is_backup_uploaded(sync_state.namespace_id.clone(), sync_state.record_id().to_string())
             .await
         {
-            Ok(true) => info!(
+            Ok(CloudBackupUploadStatus::Uploaded) => info!(
                 "Pending upload verification: wallet upload_state=uploaded record_id={}",
                 sync_state.record_id()
             ),
-            Ok(false) => {
+            Ok(CloudBackupUploadStatus::Pending) => {
                 info!(
                     "Pending upload verification: wallet upload_state=pending record_id={}",
+                    sync_state.record_id()
+                );
+                return BlobCheckResult::NotYetUploaded;
+            }
+            Ok(CloudBackupUploadStatus::NotFound) => {
+                info!(
+                    "Pending upload verification: wallet upload_state=not_found record_id={}",
                     sync_state.record_id()
                 );
                 return BlobCheckResult::NotYetUploaded;

@@ -189,6 +189,49 @@ async fn passkey_match_keeps_transient_master_wrapper_failure_inconclusive() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn passkey_match_conclusive_mismatch_is_not_masked_by_another_namespace_failure() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let unavailable_master_key = cove_cspp::master_key::MasterKey::generate();
+    let unavailable_namespace = unavailable_master_key.namespace_id();
+    globals.cloud.fail_backup_upload_state(
+        unavailable_namespace.clone(),
+        cove_cspp::backup_data::MASTER_KEY_RECORD_ID.into(),
+        CloudStorageError::Offline("cloud temporarily offline".into()),
+    );
+
+    let mismatched_master_key = cove_cspp::master_key::MasterKey::generate();
+    let mismatched_namespace = mismatched_master_key.namespace_id();
+    let encrypted_master = cove_cspp::master_key_crypto::encrypt_master_key(
+        &mismatched_master_key,
+        &[7; 32],
+        &[9; 32],
+    )
+    .unwrap();
+    globals.cloud.set_master_key_backup(
+        mismatched_namespace.clone(),
+        serde_json::to_vec(&encrypted_master).unwrap(),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![8; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let outcome = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&[unavailable_namespace, mismatched_namespace])
+    .await
+    .unwrap();
+
+    assert!(matches!(outcome, NamespaceMatchOutcome::NoMatch));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

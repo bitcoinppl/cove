@@ -91,7 +91,7 @@ async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn backup_wallets_defers_local_completion_when_disable_starts_after_upload() {
+async fn backup_wallets_defers_remaining_writes_when_disable_starts_after_upload() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -122,10 +122,7 @@ async fn backup_wallets_defers_local_completion_when_disable_starts_after_upload
 
     assert!(matches!(error, CloudBackupError::Deferred(_)));
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(matches!(
-        Database::global().cloud_backup_state.get().unwrap(),
-        PersistedCloudBackupState::Disabling(_)
-    ));
+    assert!(Database::global().cloud_backup_state.get().unwrap().is_disabling());
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(3));
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
     manager.debug_reset_cloud_backup_state();
@@ -428,7 +425,7 @@ async fn upload_wallet_if_dirty_preserves_newer_dirty_state() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn upload_wallet_if_dirty_recovers_deferred_write_to_dirty() {
+async fn upload_wallet_if_dirty_completes_inside_disable_transition_when_already_started() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -456,17 +453,17 @@ async fn upload_wallet_if_dirty_recovers_deferred_write_to_dirty() {
         retry_after: None,
     });
 
-    let error = manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap_err();
+    manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap();
 
-    assert!(matches!(error, CloudBackupError::Deferred(_)));
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(matches!(
-        Database::global().cloud_backup_state.get().unwrap(),
-        PersistedCloudBackupState::Disabling(_)
-    ));
+    assert!(Database::global().cloud_backup_state.get().unwrap().is_disabling());
     assert!(matches!(
         Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
-        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+        Some(PersistedCloudBlobSyncState {
+            state: PersistedCloudBlobState::UploadedPendingConfirmation(_)
+                | PersistedCloudBlobState::Confirmed(_),
+            ..
+        })
     ));
     manager.debug_reset_cloud_backup_state();
 }

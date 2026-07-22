@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
+import org.bitcoinppl.cove_core.device.CloudBackupUploadStatus
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.CloudStorageInventorySnapshot
@@ -63,7 +64,12 @@ class AndroidCloudStorageAccess internal constructor(
         val stageResult = withContext(Dispatchers.IO) {
             accountBindingStore.stageIdentity(transitionId, identity)
         }
-        if (stageResult != DriveAccountTransitionResult.Applied) {
+        val stagedState = accountBindingStore.state()
+        val stagedIdentityMatches =
+            stagedState is DriveAccountBindingState.Staged &&
+                stagedState.transitionId == transitionId &&
+                stagedState.identity.matches(identity)
+        if (stageResult != DriveAccountTransitionResult.Applied || !stagedIdentityMatches) {
             if (
                 stageResult == DriveAccountTransitionResult.WriteFailed &&
                 withContext(Dispatchers.IO) {
@@ -96,19 +102,30 @@ class AndroidCloudStorageAccess internal constructor(
                 DriveAccountSwitchPlatformState.Committed(state.transitionId)
         }
 
-    internal suspend fun commitAccountSwitch(transitionId: ULong): DriveAccountTransitionResult =
+    internal suspend fun commitAccountSwitch(transitionId: ULong): DriveAccountTransitionReceipt =
         withContext(Dispatchers.IO) {
-            accountBindingStore.commitStagedIdentity(transitionId)
+            DriveAccountTransitionReceipt(
+                result = accountBindingStore.commitStagedIdentity(transitionId),
+                state = accountBindingStore.state(),
+            )
         }
 
-    internal suspend fun finalizeAccountSwitchCommit(transitionId: ULong): DriveAccountTransitionResult =
+    internal suspend fun finalizeAccountSwitchCommit(
+        transitionId: ULong,
+    ): DriveAccountTransitionReceipt =
         withContext(Dispatchers.IO) {
-            accountBindingStore.finalizeCommittedIdentity(transitionId)
+            DriveAccountTransitionReceipt(
+                result = accountBindingStore.finalizeCommittedIdentity(transitionId),
+                state = accountBindingStore.state(),
+            )
         }
 
-    internal suspend fun rollbackAccountSwitch(transitionId: ULong): DriveAccountTransitionResult =
+    internal suspend fun rollbackAccountSwitch(transitionId: ULong): DriveAccountTransitionReceipt =
         withContext(Dispatchers.IO) {
-            accountBindingStore.rollbackStagedIdentity(transitionId)
+            DriveAccountTransitionReceipt(
+                result = accountBindingStore.rollbackStagedIdentity(transitionId),
+                state = accountBindingStore.state(),
+            )
         }
 
     private fun CloudAccessPolicy.allowsConsent(): Boolean =
@@ -289,15 +306,19 @@ class AndroidCloudStorageAccess internal constructor(
         recordId: String,
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
-    ): Boolean =
+    ): CloudBackupUploadStatus =
         tokenProvider.runDriveOperation(
             interactive = policy.allowsConsent(),
             onError = { error -> mapDriveListError(error) },
-            bindAccountOnSuccess = { uploaded -> uploaded },
+            bindAccountOnSuccess = { status -> status == CloudBackupUploadStatus.UPLOADED },
         ) { token ->
             val namespaceFolderId = folderResolver.findNamespaceFolderId(token, namespace)
-                ?: return@runDriveOperation false
-            folderResolver.findFileAtLocations(token, namespaceFolderId, locations) != null
+                ?: return@runDriveOperation CloudBackupUploadStatus.NOT_FOUND
+            if (folderResolver.findFileAtLocations(token, namespaceFolderId, locations) == null) {
+                CloudBackupUploadStatus.NOT_FOUND
+            } else {
+                CloudBackupUploadStatus.UPLOADED
+            }
         }
 
     override suspend fun overallSyncHealth(policy: CloudAccessPolicy): CloudSyncHealth =

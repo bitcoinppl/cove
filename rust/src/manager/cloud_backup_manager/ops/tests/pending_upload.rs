@@ -737,7 +737,7 @@ async fn pending_upload_verification_marks_terminal_live_upload_failures_failed(
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn failed_pending_upload_without_remote_backup_remains_pending() {
+async fn terminally_failed_pending_upload_finishes_verification_without_waiting_for_ttl() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -773,7 +773,13 @@ async fn failed_pending_upload_without_remote_backup_remains_pending() {
 
     let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
-    assert!(has_more_pending);
-    assert!(manager.pending_verification_completion().is_some());
-    assert!(manager.has_pending_cloud_upload_verification());
+    assert!(!has_more_pending);
+    assert!(manager.pending_verification_completion().is_none());
+    assert!(!manager.has_pending_cloud_upload_verification());
+    match manager.model_snapshot().verification {
+        VerificationState::Failed(DeepVerificationFailure::Retry { message, .. }) => {
+            assert!(message.contains("terminal upload failure"), "{message}");
+        }
+        other => panic!("expected terminal upload verification failure, got {other:?}"),
+    }
 }

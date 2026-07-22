@@ -431,11 +431,10 @@ impl RestoreOperation {
 
         self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
 
-        let enabled_state = RustCloudBackupManager::load_persisted_state()
-            .mark_enabled_preserving_verification(
-                crate::manager::cloud_backup_manager::current_timestamp(),
-                wallet_count,
-            );
+        let enabled_state = PersistedCloudBackupState::configured_after_restore(
+            crate::manager::cloud_backup_manager::current_timestamp(),
+            wallet_count,
+        );
         self.persist_cloud_backup_state(
             enabled_state,
             "persist restored cloud backup state".into(),

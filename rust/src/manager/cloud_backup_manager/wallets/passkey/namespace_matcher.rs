@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use cove_cspp::backup_data::{
     EncryptedMasterKeyBackup, MASTER_KEY_RECORD_ID, MasterKeyBackupVersion,
 };
-use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorageClient, CloudStorageError};
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use sha2::{Digest as _, Sha256};
 use tracing::{info, warn};
@@ -58,6 +58,15 @@ enum CredentialSelection {
     Selected(Vec<u8>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NamespaceCandidateOutcome {
+    Missing,
+    PendingUpload,
+    PasskeyMismatch,
+    UnsupportedVersion,
+    Inconclusive,
+}
+
 impl NamespacePasskeyCandidate {
     fn registration_timestamp(&self) -> u64 {
         self.encrypted
@@ -75,9 +84,8 @@ pub(crate) struct NamespacePasskeyMatchSession {
     authorization_retrier: PlatformAuthorizationRetrier,
     credential_selection: CredentialSelection,
     attempted_candidates: HashSet<CandidateRevisionIdentity>,
-    had_inconclusive_cloud_failure: bool,
-    had_unsupported_versions: bool,
-    saw_supported_candidate: bool,
+    supported_candidates: HashSet<CandidateRevisionIdentity>,
+    candidate_outcomes: Vec<NamespaceCandidateOutcome>,
 }
 
 impl NamespacePasskeyMatcher {
@@ -93,9 +101,8 @@ impl NamespacePasskeyMatcher {
             authorization_retrier: PlatformAuthorizationRetrier::new(),
             credential_selection: CredentialSelection::NotAttempted,
             attempted_candidates: HashSet::new(),
-            had_inconclusive_cloud_failure: false,
-            had_unsupported_versions: false,
-            saw_supported_candidate: false,
+            supported_candidates: HashSet::new(),
+            candidate_outcomes: Vec::new(),
         }
     }
 
@@ -117,11 +124,11 @@ impl NamespacePasskeyMatcher {
 
 impl NamespacePasskeyMatchSession {
     pub(crate) fn note_namespace_discovery_failure(&mut self) {
-        self.had_inconclusive_cloud_failure = true;
+        self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
     }
 
     pub(crate) fn saw_supported_candidate(&self) -> bool {
-        self.saw_supported_candidate
+        !self.supported_candidates.is_empty()
     }
 
     pub(crate) async fn match_snapshot(
@@ -176,7 +183,7 @@ impl NamespacePasskeyMatchSession {
                             warn!(
                                 "Failed targeted passkey auth for new or changed cloud backup wrapper: {error}"
                             );
-                            self.had_inconclusive_cloud_failure = true;
+                            self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                             continue;
                         }
                     };
@@ -195,6 +202,8 @@ impl NamespacePasskeyMatchSession {
                         }
                         Err(PasskeyError::NoCredentialFound) => {
                             self.credential_selection = CredentialSelection::NoCredentialFound;
+                            self.candidate_outcomes
+                                .push(NamespaceCandidateOutcome::PasskeyMismatch);
                             continue;
                         }
                         Err(PasskeyError::PrfUnsupportedProvider) => {
@@ -225,6 +234,8 @@ impl NamespacePasskeyMatchSession {
                     prf_salt: candidate.encrypted.prf_salt,
                     credential_id,
                 });
+            } else {
+                self.candidate_outcomes.push(NamespaceCandidateOutcome::PasskeyMismatch);
             }
         }
 
@@ -236,11 +247,20 @@ impl NamespacePasskeyMatchSession {
     }
 
     pub(crate) fn finish(self) -> NamespaceMatchOutcome {
-        if self.had_inconclusive_cloud_failure {
+        if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PasskeyMismatch) {
+            return NamespaceMatchOutcome::NoMatch;
+        }
+        if self.candidate_outcomes.iter().any(|outcome| {
+            matches!(
+                outcome,
+                NamespaceCandidateOutcome::PendingUpload | NamespaceCandidateOutcome::Inconclusive
+            )
+        }) {
             return NamespaceMatchOutcome::Inconclusive;
         }
-
-        if !self.saw_supported_candidate && self.had_unsupported_versions {
+        if self.supported_candidates.is_empty()
+            && self.candidate_outcomes.contains(&NamespaceCandidateOutcome::UnsupportedVersion)
+        {
             return NamespaceMatchOutcome::UnsupportedVersions;
         }
 
@@ -264,12 +284,17 @@ impl NamespacePasskeyMatchSession {
                 .is_backup_uploaded(namespace.clone(), MASTER_KEY_RECORD_ID.to_string())
                 .await
             {
-                Ok(true) => {
+                Ok(CloudBackupUploadStatus::Uploaded) => {
                     info!("Passkey candidate wrapper upload_state=uploaded")
                 }
-                Ok(false) => {
+                Ok(CloudBackupUploadStatus::Pending) => {
                     info!("Passkey candidate wrapper upload_state=pending");
-                    self.had_inconclusive_cloud_failure = true;
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::PendingUpload);
+                    continue;
+                }
+                Ok(CloudBackupUploadStatus::NotFound) => {
+                    info!("Ignoring stale cloud backup namespace with no master key wrapper");
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::Missing);
                     continue;
                 }
                 Err(error @ CloudStorageError::AuthorizationRequired(_)) => {
@@ -277,7 +302,7 @@ impl NamespacePasskeyMatchSession {
                 }
                 Err(error) => {
                     warn!("Failed to read passkey candidate upload state: {error}");
-                    self.had_inconclusive_cloud_failure = true;
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                     continue;
                 }
             }
@@ -286,6 +311,7 @@ impl NamespacePasskeyMatchSession {
                 Ok(master_json) => master_json,
                 Err(CloudStorageError::NotFound(_)) => {
                     info!("Ignoring stale cloud backup namespace with no master key wrapper");
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::Missing);
                     continue;
                 }
                 Err(error @ CloudStorageError::AuthorizationRequired(_)) => {
@@ -293,7 +319,7 @@ impl NamespacePasskeyMatchSession {
                 }
                 Err(error) => {
                     warn!("Failed to download cloud backup master key: {error}");
-                    self.had_inconclusive_cloud_failure = true;
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                     continue;
                 }
             };
@@ -302,7 +328,7 @@ impl NamespacePasskeyMatchSession {
                 Ok(encrypted) => encrypted,
                 Err(error) => {
                     warn!("Failed to deserialize cloud backup master key: {error}");
-                    self.had_inconclusive_cloud_failure = true;
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                     continue;
                 }
             };
@@ -310,25 +336,23 @@ impl NamespacePasskeyMatchSession {
             match encrypted.backup_version() {
                 Ok(MasterKeyBackupVersion::V1) => {}
                 Err(_) => {
-                    self.had_unsupported_versions = true;
+                    self.candidate_outcomes.push(NamespaceCandidateOutcome::UnsupportedVersion);
                     continue;
                 }
             }
             if encrypted.remote_metadata.normalized_master_key(namespace).is_err() {
-                self.had_inconclusive_cloud_failure = true;
+                self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                 continue;
             }
 
-            self.saw_supported_candidate = true;
-            candidates.push(NamespacePasskeyCandidate {
-                identity: CandidateRevisionIdentity {
-                    namespace_id: namespace.clone(),
-                    wrapper_revision: WrapperRevisionDigest(master_key_wrapper_revision_hash(
-                        &master_json,
-                    )),
-                },
-                encrypted,
-            });
+            let identity = CandidateRevisionIdentity {
+                namespace_id: namespace.clone(),
+                wrapper_revision: WrapperRevisionDigest(master_key_wrapper_revision_hash(
+                    &master_json,
+                )),
+            };
+            self.supported_candidates.insert(identity.clone());
+            candidates.push(NamespacePasskeyCandidate { identity, encrypted });
         }
 
         Ok(candidates)

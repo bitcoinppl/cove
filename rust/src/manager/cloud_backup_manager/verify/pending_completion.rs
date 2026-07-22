@@ -30,6 +30,12 @@ enum FinalizePendingVerificationResult {
     Completed(DeepVerificationReport),
 }
 
+enum PendingVerificationUploadsReadiness {
+    Pending,
+    Confirmed,
+    TerminalFailure(String),
+}
+
 const PENDING_VERIFICATION_COMPLETION_TTL_SECONDS: u64 = 24 * 60 * 60;
 
 impl RustCloudBackupManager {
@@ -48,8 +54,18 @@ impl RustCloudBackupManager {
             return;
         }
 
-        if !self.pending_verification_uploads_confirmed(&completion).await {
-            return;
+        match self.pending_verification_uploads_readiness(&completion) {
+            PendingVerificationUploadsReadiness::Pending => return,
+            PendingVerificationUploadsReadiness::Confirmed => {}
+            PendingVerificationUploadsReadiness::TerminalFailure(error) => {
+                self.apply_failed_verification(DeepVerificationFailure::retry(
+                    error,
+                    completion.report().detail.clone(),
+                    None,
+                ));
+                self.clear_pending_verification_completion();
+                return;
+            }
         }
 
         match self.finalize_pending_verification(completion.clone()).await {
@@ -87,10 +103,10 @@ impl RustCloudBackupManager {
         self.clear_pending_verification_completion();
     }
 
-    async fn pending_verification_uploads_confirmed(
+    fn pending_verification_uploads_readiness(
         &self,
         completion: &PendingVerificationCompletion,
-    ) -> bool {
+    ) -> PendingVerificationUploadsReadiness {
         let sync_states_by_record_id: HashMap<_, _> = Database::global()
             .cloud_blob_sync_states
             .list()
@@ -103,16 +119,23 @@ impl RustCloudBackupManager {
 
         for upload in completion.uploads() {
             let sync_state = sync_states_by_record_id.get(upload.record_id());
-            if !self.is_pending_upload_confirmed(upload, sync_state).await {
-                return false;
+            if let Some(PersistedCloudBlobState::Failed(failure)) = sync_state
+                && !failure.retryable
+            {
+                return PendingVerificationUploadsReadiness::TerminalFailure(format!(
+                    "cloud backup upload could not be confirmed: {}",
+                    failure.error
+                ));
+            }
+            if !Self::is_pending_upload_confirmed(upload, sync_state) {
+                return PendingVerificationUploadsReadiness::Pending;
             }
         }
 
-        true
+        PendingVerificationUploadsReadiness::Confirmed
     }
 
-    async fn is_pending_upload_confirmed(
-        &self,
+    fn is_pending_upload_confirmed(
         upload: &PendingVerificationUpload,
         sync_state: Option<&PersistedCloudBlobState>,
     ) -> bool {

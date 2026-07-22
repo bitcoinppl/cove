@@ -593,7 +593,7 @@ impl CloudStorageAccess for MockCloudStorage {
         if let Some(disabling) = disabling {
             Database::global()
                 .cloud_backup_state
-                .set(&PersistedCloudBackupState::Disabling(disabling))
+                .set(&PersistedCloudBackupState::disabling_transition(disabling))
                 .unwrap();
         }
         Ok(())
@@ -824,7 +824,7 @@ impl CloudStorageAccess for MockCloudStorage {
         record_id: String,
         _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
-    ) -> Result<bool, CloudStorageError> {
+    ) -> Result<cove_device::cloud_storage::CloudBackupUploadStatus, CloudStorageError> {
         let state = self.state.lock();
         if let Some(error) =
             state.backup_upload_state_errors.get(&(namespace.clone(), record_id.clone())).cloned()
@@ -836,19 +836,27 @@ impl CloudStorageAccess for MockCloudStorage {
             if state.uploaded_master_key_pending_confirmation
                 && state.master_key_backups.contains_key(&namespace)
             {
-                return Ok(false);
+                return Ok(cove_device::cloud_storage::CloudBackupUploadStatus::Pending);
             }
 
-            return Ok(state.master_key_backups.contains_key(&namespace));
+            return Ok(if state.master_key_backups.contains_key(&namespace) {
+                cove_device::cloud_storage::CloudBackupUploadStatus::Uploaded
+            } else {
+                cove_device::cloud_storage::CloudBackupUploadStatus::NotFound
+            });
         }
 
         if state.uploaded_wallets_pending_confirmation
             && state.uploaded_wallet_backups.contains(&(namespace.clone(), record_id.clone()))
         {
-            return Ok(false);
+            return Ok(cove_device::cloud_storage::CloudBackupUploadStatus::Pending);
         }
 
-        Ok(state.wallet_backups.contains_key(&(namespace, record_id)))
+        Ok(if state.wallet_backups.contains_key(&(namespace, record_id)) {
+            cove_device::cloud_storage::CloudBackupUploadStatus::Uploaded
+        } else {
+            cove_device::cloud_storage::CloudBackupUploadStatus::NotFound
+        })
     }
 
     async fn overall_sync_health(&self, _policy: CloudAccessPolicy) -> CloudSyncHealth {
@@ -1309,7 +1317,6 @@ pub(crate) fn persisted_enabled_cloud_backup_state(
         sync: PersistedBackupSyncState { last_sync: None, wallet_count },
         pending_verification_completion: None,
         pending_restore_all: None,
-        drive_account_switch: None,
     })
 }
 
@@ -1325,7 +1332,6 @@ pub(crate) fn persisted_passkey_missing_cloud_backup_state(
         sync: PersistedBackupSyncState { last_sync: None, wallet_count },
         pending_verification_completion: None,
         pending_restore_all: None,
-        drive_account_switch: None,
     })
 }
 

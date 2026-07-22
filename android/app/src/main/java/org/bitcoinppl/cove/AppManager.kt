@@ -428,12 +428,10 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun scanQr() {
-        router.advanceNavigationGeneration()
         sheetState = TaggedItem(AppSheetState.Qr)
     }
 
     fun scanNfc() {
-        router.advanceNavigationGeneration()
         scanNfcWithoutNavigationGeneration()
     }
 
@@ -516,7 +514,7 @@ class AppManager private constructor() : FfiReconcile {
             withContext(Dispatchers.IO) {
                 runCatchingCancellable(tag, "Unable to read wallets for wallet route recovery") {
                     database.wallets().all()
-                }.getOrThrow()
+                }.getOrElse { emptyList() }
                     .map(WalletMetadata::id)
             }
 

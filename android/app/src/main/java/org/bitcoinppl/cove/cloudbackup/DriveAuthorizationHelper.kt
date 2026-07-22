@@ -184,6 +184,21 @@ internal enum class DriveAccountTransitionResult {
     WriteFailed,
 }
 
+internal data class DriveAccountTransitionReceipt(
+    val result: DriveAccountTransitionResult,
+    val state: DriveAccountBindingState,
+) {
+    fun confirmsCommitted(transitionId: ULong): Boolean =
+        result == DriveAccountTransitionResult.Applied &&
+            state is DriveAccountBindingState.Committed &&
+            state.transitionId == transitionId
+
+    fun confirmsNoTransition(): Boolean =
+        result == DriveAccountTransitionResult.Applied &&
+            state !is DriveAccountBindingState.Staged &&
+            state !is DriveAccountBindingState.Committed
+}
+
 internal sealed interface DriveAccountBindingUpdate {
     data class Apply(
         val state: DriveAccountBindingState,

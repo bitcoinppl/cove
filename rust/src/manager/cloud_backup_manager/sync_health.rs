@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError, CloudSyncHealth};
+use cove_device::cloud_storage::{
+    CloudBackupUploadStatus, CloudStorage, CloudStorageError, CloudSyncHealth,
+};
 use futures::TryStreamExt as _;
 use futures::stream::{self, StreamExt as _};
 
@@ -76,7 +78,8 @@ impl RustCloudBackupManager {
             .is_backup_uploaded(namespace.clone(), MASTER_KEY_RECORD_ID.to_string())
             .await
         {
-            Ok(is_uploaded) => is_uploaded,
+            Ok(CloudBackupUploadStatus::Uploaded) => true,
+            Ok(CloudBackupUploadStatus::Pending | CloudBackupUploadStatus::NotFound) => false,
             Err(CloudStorageError::NotFound(_)) => false,
             Err(error) => return Self::sync_health_from_cloud_error(error),
         };

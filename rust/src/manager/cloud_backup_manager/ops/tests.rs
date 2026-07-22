@@ -22,8 +22,7 @@ use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState,
     CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
-    PersistedDriveAccountSwitchPhase,
+    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitchPhase,
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
@@ -88,12 +87,16 @@ fn pending_enable_awaiting_confirmation(
 }
 
 fn current_disable_generation() -> Option<u64> {
-    match RustCloudBackupManager::load_persisted_state() {
-        PersistedCloudBackupState::Disabling(disabling) => Some(disabling.disable_generation),
-        PersistedCloudBackupState::Configured(_)
-        | PersistedCloudBackupState::Disabled
-        | PersistedCloudBackupState::Corrupted { .. } => None,
-    }
+    RustCloudBackupManager::load_persisted_state()
+        .disabling()
+        .map(|disabling| disabling.disable_generation)
+}
+
+fn persisted_disabling() -> PersistedDisablingCloudBackup {
+    RustCloudBackupManager::load_persisted_state()
+        .disabling()
+        .cloned()
+        .expect("expected persisted disabling state")
 }
 
 async fn deep_verify_for_test(

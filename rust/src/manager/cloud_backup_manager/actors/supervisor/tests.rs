@@ -39,8 +39,15 @@ fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     manager
 }
 
+fn persist_enabled_for_supervisor_test() {
+    Database::global()
+        .cloud_backup_state
+        .set(&PersistedCloudBackupState::mark_enabled_reset_verification(0, 0))
+        .unwrap();
+}
+
 fn test_disabling_state() -> PersistedDisablingCloudBackup {
-    CloudBackupStore::global().persist_enabled(0).unwrap();
+    persist_enabled_for_supervisor_test();
     let PersistedCloudBackupState::Configured(previous_configured) =
         Database::global().cloud_backup_state.get().unwrap()
     else {
@@ -405,13 +412,13 @@ async fn supervisor_rejects_second_exclusive_operation_while_active() {
 async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    CloudBackupStore::global().persist_enabled(0).unwrap();
+    persist_enabled_for_supervisor_test();
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let transition_id = supervisor
+    let (transition_id, _ready) = supervisor
         .begin_drive_account_switch()
         .await
         .unwrap()
@@ -462,7 +469,7 @@ async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
 async fn drive_account_switch_restart_without_staged_account_requests_rollback() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    CloudBackupStore::global().persist_enabled(0).unwrap();
+    persist_enabled_for_supervisor_test();
     let transition = PersistedDriveAccountSwitch {
         transition_id: 7.into(),
         phase: PersistedDriveAccountSwitchPhase::AwaitingAccountSelection,
@@ -502,13 +509,13 @@ async fn drive_account_switch_restart_without_staged_account_requests_rollback()
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn drive_account_switch_restart_replays_required_commit() {
+async fn drive_account_switch_restart_preserves_failed_reinitialization_for_retry() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    CloudBackupStore::global().persist_enabled(0).unwrap();
+    persist_enabled_for_supervisor_test();
     let transition = PersistedDriveAccountSwitch {
         transition_id: 7.into(),
-        phase: PersistedDriveAccountSwitchPhase::AwaitingAccountCommitFailed,
+        phase: PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry,
     };
     let mut persisted = RustCloudBackupManager::load_persisted_state();
     assert!(persisted.set_drive_account_switch(transition));
@@ -526,7 +533,53 @@ async fn drive_account_switch_restart_replays_required_commit() {
         .unwrap()
         .unwrap();
 
-    assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
+    assert!(!manager.reconciler.receiver().try_iter().any(|messages| match messages {
+        SingleOrMany::Single(message) => matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(7)
+        ),
+        SingleOrMany::Many(messages) => messages.into_iter().any(|message| matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(7)
+        )),
+    }));
+    assert_eq!(
+        RustCloudBackupManager::load_persisted_state().drive_account_switch(),
+        Some(&transition)
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn failed_drive_account_reinitialization_does_not_request_account_commit() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    persist_enabled_for_supervisor_test();
+    let transition = PersistedDriveAccountSwitch {
+        transition_id: 7.into(),
+        phase: PersistedDriveAccountSwitchPhase::Reinitializing,
+    };
+    let mut persisted = RustCloudBackupManager::load_persisted_state();
+    assert!(persisted.set_drive_account_switch(transition));
+    Database::global().cloud_backup_state.set(&persisted).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
+    );
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition.transition_id);
+    supervisor.active_operation.start_standard(claim);
+    manager.project_exclusive_operation_started(claim);
+
+    assert!(supervisor.drive_account_switch_reinitialization_finished(&manager, claim, false));
+
+    assert_eq!(
+        RustCloudBackupManager::load_persisted_state()
+            .drive_account_switch()
+            .map(|account_switch| account_switch.phase),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry)
+    );
+    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    assert!(!manager.reconciler.receiver().try_iter().any(|messages| match messages {
         SingleOrMany::Single(message) => matches!(
             message,
             CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(7)
@@ -542,7 +595,7 @@ async fn drive_account_switch_restart_replays_required_commit() {
 async fn drive_account_switch_restart_finalizes_platform_only_commit() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    CloudBackupStore::global().persist_enabled(0).unwrap();
+    persist_enabled_for_supervisor_test();
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
@@ -572,7 +625,7 @@ async fn drive_account_switch_restart_finalizes_platform_only_commit() {
 async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transition() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    CloudBackupStore::global().persist_enabled(0).unwrap();
+    persist_enabled_for_supervisor_test();
     let transition = PersistedDriveAccountSwitch {
         transition_id: 7.into(),
         phase: PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded,
@@ -599,7 +652,7 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
     );
     assert_eq!(
         supervisor.active_operation.claim().and_then(|claim| claim.drive_account_switch_id()),
-        Some(transition.transition_id)
+        None
     );
     assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
         SingleOrMany::Single(message) => matches!(
@@ -2968,7 +3021,7 @@ async fn supervisor_ignores_disable_blocker_completion_after_keep_enabled_restor
     disabling.delete_started_at = None;
     Database::global()
         .cloud_backup_state
-        .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
+        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
         .unwrap();
 
     assert!(manager.restore_configured_cloud_backup_after_disable(&disabling).unwrap());
@@ -3000,7 +3053,7 @@ async fn keep_enabled_finishes_active_disable_operation() {
     disabling.delete_started_at = None;
     Database::global()
         .cloud_backup_state
-        .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
+        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
         .unwrap();
     supervisor.pending_disable_write_drain = Some(PendingDisableWriteDrain {
         claim,
@@ -3041,7 +3094,7 @@ async fn disable_runtime_drain_failure_remains_pre_delete() {
     disabling.delete_started_at = None;
     Database::global()
         .cloud_backup_state
-        .set(&PersistedCloudBackupState::Disabling(disabling.clone()))
+        .set(&PersistedCloudBackupState::disabling_transition(disabling.clone()))
         .unwrap();
     let blocker =
         CloudBackupWriteBlocker::Disabling { operation_id: disabling.disable_generation };
@@ -3052,11 +3105,8 @@ async fn disable_runtime_drain_failure_remains_pre_delete() {
 
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
-    let PersistedCloudBackupState::Disabling(disabling) =
-        Database::global().cloud_backup_state.get().unwrap()
-    else {
-        panic!("expected persisted disabling state");
-    };
+    let state = Database::global().cloud_backup_state.get().unwrap();
+    let disabling = state.disabling().expect("expected persisted disabling state");
     assert!(disabling.delete_started_at.is_none());
     assert!(disabling.last_error.is_some());
     assert!(manager.disable_can_keep_enabled());

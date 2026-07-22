@@ -38,6 +38,17 @@ pub enum CloudAccessPolicy {
     Silent,
 }
 
+/// Provider state for one cloud backup blob
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CloudBackupUploadStatus {
+    /// The blob exists and the provider reports it fully uploaded
+    Uploaded,
+    /// The blob exists but has not reached the provider's uploaded state
+    Pending,
+    /// No blob exists at any supported location
+    NotFound,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CloudSyncHealth {
     Unknown,
@@ -136,14 +147,14 @@ pub trait CloudStorageAccess: Send + Sync + std::fmt::Debug + 'static {
         policy: CloudAccessPolicy,
     ) -> Result<CloudStorageInventorySnapshot, CloudStorageError>;
 
-    /// Check whether a blob has been fully uploaded to iCloud
+    /// Return the provider state for a cloud backup blob
     async fn is_backup_uploaded(
         &self,
         namespace: String,
         record_id: String,
         locations: Vec<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
-    ) -> Result<bool, CloudStorageError>;
+    ) -> Result<CloudBackupUploadStatus, CloudStorageError>;
 
     async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth;
 }
@@ -328,7 +339,7 @@ impl CloudStorageClient {
         &self,
         namespace: String,
         record_id: String,
-    ) -> Result<bool, CloudStorageError> {
+    ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
         validate_cloud_backup_namespace_id(&namespace)?;
 
         let upload_locations = locations(remote_layout::locations_for_record_id(&record_id));
@@ -582,7 +593,7 @@ mod tests {
             _record_id: String,
             _locations: Vec<RemoteBackupLocation>,
             _policy: CloudAccessPolicy,
-        ) -> Result<bool, CloudStorageError> {
+        ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
             panic!("unused in test")
         }
 

@@ -13,6 +13,11 @@ final class ICloudDriveHelper: @unchecked Sendable {
     let metadataSettleInterval: TimeInterval = 0.5
     let metadataListingTimeout: TimeInterval = 5
     private let progressLogInterval: TimeInterval = 1
+    private let coordinatedReadQueue = DispatchQueue(
+        label: "cove.ICloudDriveHelper.coordinatedRead",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
     private static let legacyFileReadNoSuchFileError = 4
 
     struct ResolvedMetadataItem {
@@ -417,6 +422,12 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
     }
 
+    private func coordinatedReadAsync(from url: URL) async throws -> Data {
+        try await CancellableDispatchOperation.run(on: coordinatedReadQueue) {
+            try self.coordinatedRead(from: url)
+        }
+    }
+
     /// Downloads a file from iCloud via coordinated read
     ///
     /// Tries startDownloadingUbiquitousItem as a hint, then uses NSFileCoordinator
@@ -432,7 +443,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         if FileManager.default.fileExists(atPath: url.path), case .current = downloadState(for: url) {
             Log.info("downloadFile: \(filename) already current on local URL")
-            return try coordinatedRead(from: url)
+            return try await coordinatedReadAsync(from: url)
         }
 
         let deadline = Date().addingTimeInterval(defaultTimeout)
@@ -467,7 +478,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         )
 
         do {
-            let data = try coordinatedRead(from: resolvedItem.url)
+            let data = try await coordinatedReadAsync(from: resolvedItem.url)
             Log.info("downloadFile: coordinated read succeeded for \(filename)")
             return data
         } catch {
@@ -498,7 +509,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 )
 
                 do {
-                    let data = try coordinatedRead(from: resolvedItem.url)
+                    let data = try await coordinatedReadAsync(from: resolvedItem.url)
                     Log.info("downloadFile: coordinated read succeeded for \(filename)")
                     return data
                 } catch {
@@ -518,7 +529,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
             if case .current = state {
                 Log.info("downloadFile: poll path won for \(filename)")
-                return try coordinatedRead(from: resolvedItem.url)
+                return try await coordinatedReadAsync(from: resolvedItem.url)
             }
 
             if case let .failed(error) = state {
@@ -530,7 +541,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         Log.info("downloadFile: polling timed out, trying final coordinated read for \(filename)")
         do {
-            return try coordinatedRead(from: resolvedItem.url)
+            return try await coordinatedReadAsync(from: resolvedItem.url)
         } catch {
             let diagnosticError = lastCoordinatedReadError?.localizedDescription ?? "none"
             throw CloudStorageError.Offline(
@@ -715,17 +726,20 @@ final class ICloudDriveHelper: @unchecked Sendable {
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation]
-    ) async throws -> Bool {
+    ) async throws -> CloudBackupUploadStatus {
         let urls = try locations.map { location in
             try backupFileReadURL(namespace: namespace, location: location)
         }
+        var foundPendingItem = false
 
         for url in urls {
-            let resolvedURL =
-                try await resolvedMetadataItemIfPresent(
-                    named: url.lastPathComponent,
-                    parentDirectoryURL: url.deletingLastPathComponent()
-                )?.url ?? url
+            let metadataItem = try await resolvedMetadataItemIfPresent(
+                named: url.lastPathComponent,
+                parentDirectoryURL: url.deletingLastPathComponent()
+            )
+            let resolvedURL = metadataItem?.url ?? url
+            let exists = FileManager.default.fileExists(atPath: resolvedURL.path)
+            guard metadataItem != nil || exists else { continue }
 
             let state = uploadState(for: resolvedURL)
             let usedMetadata = resolvedURL != url
@@ -734,11 +748,13 @@ final class ICloudDriveHelper: @unchecked Sendable {
             )
 
             if case .uploaded = state {
-                return true
+                return .uploaded
             }
+
+            foundPendingItem = true
         }
 
-        return false
+        return foundPendingItem ? .pending : .notFound
     }
 
     func deleteExistingBackupFile(

@@ -1565,6 +1565,91 @@ public func FfiConverterTypeCloudAccessPolicy_lower(_ value: CloudAccessPolicy) 
 
 
 
+/**
+ * Provider state for one cloud backup blob
+ */
+
+public enum CloudBackupUploadStatus: Equatable, Hashable {
+
+    /**
+     * The blob exists and the provider reports it fully uploaded
+     */
+    case uploaded
+    /**
+     * The blob exists but has not reached the provider's uploaded state
+     */
+    case pending
+    /**
+     * No blob exists at any supported location
+     */
+    case notFound
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupUploadStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupUploadStatus: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupUploadStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupUploadStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .uploaded
+
+        case 2: return .pending
+
+        case 3: return .notFound
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupUploadStatus, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .uploaded:
+            writeInt(&buf, Int32(1))
+
+
+        case .pending:
+            writeInt(&buf, Int32(2))
+
+
+        case .notFound:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupUploadStatus_lift(_ buf: RustBuffer) throws -> CloudBackupUploadStatus {
+    return try FfiConverterTypeCloudBackupUploadStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupUploadStatus_lower(_ value: CloudBackupUploadStatus) -> RustBuffer {
+    return FfiConverterTypeCloudBackupUploadStatus.lower(value)
+}
+
+
+
 public
 enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -2470,9 +2555,9 @@ public protocol CloudStorageAccess: AnyObject, Sendable {
     func listWalletFilesSnapshot(namespace: String, policy: CloudAccessPolicy) async throws  -> CloudStorageInventorySnapshot
 
     /**
-     * Check whether a blob has been fully uploaded to iCloud
+     * Return the provider state for a cloud backup blob
      */
-    func isBackupUploaded(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> Bool
+    func isBackupUploaded(namespace: String, recordId: String, locations: [RemoteBackupLocation], policy: CloudAccessPolicy) async throws  -> CloudBackupUploadStatus
 
     func overallSyncHealth(policy: CloudAccessPolicy) async  -> CloudSyncHealth
 
@@ -2922,12 +3007,12 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             recordId: RustBuffer,
             locations: RustBuffer,
             policy: RustBuffer,
-            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteI8,
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
             uniffiCallbackData: UInt64,
             uniffiOutDroppedCallback: UnsafeMutablePointer<UniffiForeignFutureDroppedCallbackStruct>
         ) in
             let makeCall = {
-                () async throws -> Bool in
+                () async throws -> CloudBackupUploadStatus in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceCloudStorageAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
@@ -2939,11 +3024,11 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
                 )
             }
 
-            let uniffiHandleSuccess = { (returnValue: Bool) in
+            let uniffiHandleSuccess = { (returnValue: CloudBackupUploadStatus) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
-                    UniffiForeignFutureResultI8(
-                        returnValue: FfiConverterBool.lower(returnValue),
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: FfiConverterTypeCloudBackupUploadStatus_lower(returnValue),
                         callStatus: RustCallStatus()
                     )
                 )
@@ -2951,8 +3036,8 @@ fileprivate struct UniffiCallbackInterfaceCloudStorageAccess {
             let uniffiHandleError = { (statusCode, errorBuf) in
                 uniffiFutureCallback(
                     uniffiCallbackData,
-                    UniffiForeignFutureResultI8(
-                        returnValue: 0,
+                    UniffiForeignFutureResultRustBuffer(
+                        returnValue: RustBuffer.empty(),
                         callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
                     )
                 )
@@ -4130,7 +4215,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_list_wallet_files_snapshot() != 37594) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 49275) {
+    if (uniffi_cove_device_checksum_method_cloudstorageaccess_is_backup_uploaded() != 34381) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_cloudstorageaccess_overall_sync_health() != 41055) {

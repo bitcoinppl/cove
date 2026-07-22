@@ -450,8 +450,8 @@ class CloudBackupManager private constructor(
 
         val rolledBack =
             runCatching {
-                driveAccountSwitchCallbacks?.rollback?.invoke(transitionId) ==
-                    DriveAccountTransitionResult.Applied
+                driveAccountSwitchCallbacks?.rollback?.invoke(transitionId)
+                    ?.confirmsNoTransition() == true
             }
                 .onFailure { error -> Log.e(TAG, "failed to roll back staged drive account", error) }
                 .getOrDefault(false)
@@ -532,8 +532,8 @@ class CloudBackupManager private constructor(
     }
 
     private suspend fun commitDriveAccountSwitch(transitionId: ULong) {
-        val callbacks = driveAccountSwitchCallbacks
-        if (callbacks?.commit?.invoke(transitionId) != DriveAccountTransitionResult.Applied) {
+        val receipt = driveAccountSwitchCallbacks?.commit?.invoke(transitionId)
+        if (receipt?.confirmsCommitted(transitionId) != true) {
             reportDriveAccountSwitchRecovery(
                 transitionId,
                 "Cove couldn't save the selected Google Drive account; try again",
@@ -559,8 +559,8 @@ class CloudBackupManager private constructor(
 
     private suspend fun finalizeDriveAccountSwitch(transitionId: ULong) {
         if (
-            driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId) !=
-            DriveAccountTransitionResult.Applied
+            driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId)
+                ?.confirmsNoTransition() != true
         ) {
             reportDriveAccountSwitchRecovery(
                 transitionId,
@@ -574,8 +574,8 @@ class CloudBackupManager private constructor(
 
     private suspend fun rollBackReconciledDriveAccountSwitch(transitionId: ULong) {
         if (
-            driveAccountSwitchCallbacks?.rollback?.invoke(transitionId) !=
-            DriveAccountTransitionResult.Applied
+            driveAccountSwitchCallbacks?.rollback?.invoke(transitionId)
+                ?.confirmsNoTransition() != true
         ) {
             reportDriveAccountSwitchRecovery(
                 transitionId,
@@ -681,9 +681,9 @@ class CloudBackupManager private constructor(
         internal fun setDriveAccountSwitchCallbacks(
             platformState: () -> DriveAccountSwitchPlatformState,
             selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
-            commit: suspend (ULong) -> DriveAccountTransitionResult,
-            finalizeCommit: suspend (ULong) -> DriveAccountTransitionResult,
-            rollback: suspend (ULong) -> DriveAccountTransitionResult,
+            commit: suspend (ULong) -> DriveAccountTransitionReceipt,
+            finalizeCommit: suspend (ULong) -> DriveAccountTransitionReceipt,
+            rollback: suspend (ULong) -> DriveAccountTransitionReceipt,
         ) {
             driveAccountSwitchCallbacks = DriveAccountSwitchCallbacks(
                 platformState = platformState,
@@ -697,9 +697,9 @@ class CloudBackupManager private constructor(
         private data class DriveAccountSwitchCallbacks(
             val platformState: () -> DriveAccountSwitchPlatformState,
             val selectAccount: suspend (ULong) -> DriveAccountSelectionOutcome,
-            val commit: suspend (ULong) -> DriveAccountTransitionResult,
-            val finalizeCommit: suspend (ULong) -> DriveAccountTransitionResult,
-            val rollback: suspend (ULong) -> DriveAccountTransitionResult,
+            val commit: suspend (ULong) -> DriveAccountTransitionReceipt,
+            val finalizeCommit: suspend (ULong) -> DriveAccountTransitionReceipt,
+            val rollback: suspend (ULong) -> DriveAccountTransitionReceipt,
         )
 
         private fun liveManager(): CloudBackupManager {

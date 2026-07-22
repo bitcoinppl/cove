@@ -448,7 +448,7 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         recordId: String,
         locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
-    ) async throws -> Bool {
+    ) async throws -> CloudBackupUploadStatus {
         try await helper.isBackupUploaded(
             namespace: namespace,
             recordId: recordId,
