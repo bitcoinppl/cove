@@ -67,8 +67,6 @@ pub enum KeyTeleportManagerAction {
     StartSendFromWallet(WalletId),
     SelectSendWallet(WalletId),
     EnterReceiverCode(String),
-    /// Confirms sending the selected wallet's private key material
-    ConfirmSendWallet,
     EnterSenderPassword(String),
     /// Imports the received mnemonic or extended private key as a hot wallet
     ImportReceivedWallet,
@@ -108,7 +106,6 @@ pub enum KeyTeleportManagerState {
     SendAwaitReceiver,
     SendChooseWallet(KeyTeleportSendChooseWallet),
     SendEnterCode(KeyTeleportSendEnterCode),
-    SendConfirm(KeyTeleportSendConfirm),
     SendReady(KeyTeleportSendReady),
 }
 
@@ -142,11 +139,6 @@ impl fmt::Debug for KeyTeleportManagerState {
             Self::SendEnterCode(state) => f
                 .debug_struct("SendEnterCode")
                 .field("selected_wallet", &state.selected_wallet)
-                .finish(),
-            Self::SendConfirm(state) => f
-                .debug_struct("SendConfirm")
-                .field("selected_wallet", &state.selected_wallet)
-                .field("warns_passphrase_not_included", &state.warns_passphrase_not_included)
                 .finish(),
             Self::SendReady(_) => f.write_str("SendReady(****)"),
         }
@@ -260,21 +252,21 @@ pub struct KeyTeleportSendEnterCode {
     pub selected_wallet: WalletMetadata,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct KeyTeleportSendConfirm {
-    pub selected_wallet: WalletMetadata,
-    pub warns_passphrase_not_included: bool,
-}
-
+/// An encrypted sender response ready to share with the receiver
 #[derive(Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyTeleportSendReady {
+    /// The wallet whose private key material is in the encrypted response
+    pub selected_wallet: WalletMetadata,
+    /// The encoded sender response
     pub packet: Arc<KeyTeleportSenderPacket>,
+    /// The password needed to decrypt the sender response
     pub password: Arc<KeyTeleportPassword>,
 }
 
 impl fmt::Debug for KeyTeleportSendReady {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("KeyTeleportSendReady")
+            .field("selected_wallet", &self.selected_wallet)
             .field("packet", &self.packet)
             .field("password", &"****")
             .finish()
@@ -426,12 +418,6 @@ enum Phase {
         packet: Arc<KeyTeleportReceiverPacket>,
         wallet: WalletMetadata,
     },
-    SendConfirm {
-        packet: Arc<KeyTeleportReceiverPacket>,
-        wallet: WalletMetadata,
-        code: NumericCode,
-        warns_passphrase_not_included: bool,
-    },
     SendReady(KeyTeleportSendReady),
 }
 
@@ -472,12 +458,6 @@ impl Phase {
             Self::SendEnterCode { wallet, .. } => {
                 KeyTeleportManagerState::SendEnterCode(KeyTeleportSendEnterCode {
                     selected_wallet: wallet.clone(),
-                })
-            }
-            Self::SendConfirm { wallet, warns_passphrase_not_included, .. } => {
-                KeyTeleportManagerState::SendConfirm(KeyTeleportSendConfirm {
-                    selected_wallet: wallet.clone(),
-                    warns_passphrase_not_included: *warns_passphrase_not_included,
                 })
             }
             Self::SendReady(state) => KeyTeleportManagerState::SendReady(state.clone()),
@@ -605,7 +585,6 @@ impl RustKeyTeleportManager {
             Action::StartSendFromWallet(wallet_id) => self.start_send_from_wallet(wallet_id),
             Action::SelectSendWallet(wallet_id) => self.select_send_wallet(wallet_id),
             Action::EnterReceiverCode(code) => self.enter_receiver_code(&code),
-            Action::ConfirmSendWallet => self.confirm_send_wallet(),
             Action::EnterSenderPassword(password) => self.enter_sender_password(&password),
             Action::ImportReceivedWallet => self.import_received_wallet(),
             Action::RevealXprv => {
@@ -787,32 +766,11 @@ impl RustKeyTeleportManager {
             (packet.clone(), wallet.clone())
         };
 
-        SenderSession::new(packet.inner(), &code)
+        let sender = SenderSession::new(packet.inner(), &code)
             .map_err(|_| KeyTeleportAlert::WrongReceiverCode)?;
-        let warns_passphrase_not_included = Keychain::global()
-            .get_wallet_secret(&wallet.id)?
-            .is_some_and(|secret| matches!(secret, WalletSecret::Mnemonic(_)));
-
-        self.set_phase(Phase::SendConfirm { packet, wallet, code, warns_passphrase_not_included });
-
-        Ok(())
-    }
-
-    fn confirm_send_wallet(&self) -> Result<(), KeyTeleportAlert> {
-        let (packet, wallet, code) = {
-            let model = self.model.lock();
-            let Phase::SendConfirm { packet, wallet, code, .. } = &model.phase else {
-                return Err(KeyTeleportAlert::NoPendingSend);
-            };
-
-            (packet.clone(), wallet.clone(), code.clone())
-        };
-
         let secret = Keychain::global()
             .get_wallet_secret(&wallet.id)?
             .ok_or(KeyTeleportAlert::IneligibleWallet)?;
-        let sender = SenderSession::new(packet.inner(), &code)
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
         let payload = match secret {
             WalletSecret::Mnemonic(mnemonic) => Payload::mnemonic(mnemonic),
             WalletSecret::Xpriv(xpriv) => Payload::xprv(xpriv.expose()),
@@ -821,6 +779,7 @@ impl RustKeyTeleportManager {
         let response =
             sender.send(payload).map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
         let state = KeyTeleportSendReady {
+            selected_wallet: wallet,
             packet: Arc::new(KeyTeleportSenderPacket::new(response.packet)),
             password: Arc::new(KeyTeleportPassword::new(response.password)),
         };
@@ -1525,7 +1484,7 @@ mod tests {
     }
 
     #[test]
-    fn confirm_send_wallet_reaches_send_ready_for_mnemonic() {
+    fn receiver_code_reaches_send_ready_for_mnemonic() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         init_globals();
         let fixture = SendWalletFixture::new();
@@ -1540,10 +1499,10 @@ mod tests {
             )))
             .unwrap();
         manager.enter_receiver_code(request.numeric_code.as_str()).unwrap();
-        manager.confirm_send_wallet().unwrap();
 
         let model = manager.model.lock();
         let Phase::SendReady(ready) = &model.phase else { panic!("expected send ready") };
+        assert_eq!(ready.selected_wallet, fixture.wallet);
         assert!(matches!(
             receiver.decode(ready.packet.inner(), &ready.password.0).unwrap(),
             DecodedPayload::Mnemonic(_)
@@ -1551,7 +1510,7 @@ mod tests {
     }
 
     #[test]
-    fn confirm_send_wallet_reaches_send_ready_for_xprv_stash() {
+    fn receiver_code_reaches_send_ready_for_xprv_stash() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         init_globals();
         let xprv = bdk_wallet::bitcoin::bip32::Xpriv::new_master(
@@ -1571,10 +1530,10 @@ mod tests {
             )))
             .unwrap();
         manager.enter_receiver_code(request.numeric_code.as_str()).unwrap();
-        manager.confirm_send_wallet().unwrap();
 
         let model = manager.model.lock();
         let Phase::SendReady(ready) = &model.phase else { panic!("expected send ready") };
+        assert_eq!(ready.selected_wallet, fixture.wallet);
         let DecodedPayload::Xprv(decoded) =
             receiver.decode(ready.packet.inner(), &ready.password.0).unwrap()
         else {

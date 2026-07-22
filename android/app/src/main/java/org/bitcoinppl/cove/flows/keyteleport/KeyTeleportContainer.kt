@@ -282,10 +282,6 @@ private fun KeyTeleportSendContent(
             SendEnterCodeView(manager, state.v1)
         }
 
-        is KeyTeleportManagerState.SendConfirm -> {
-            SendConfirmView(manager, state.v1)
-        }
-
         is KeyTeleportManagerState.SendReady -> {
             SendReadyView(state.v1) {
                 manager.dispatch(KeyTeleportManagerAction.Clear)

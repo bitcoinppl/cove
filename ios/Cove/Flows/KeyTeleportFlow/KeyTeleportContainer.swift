@@ -193,10 +193,6 @@ private struct KeyTeleportLoadedView: View {
                 KeyTeleportReceiverCodeView(state: state, code: $receiverCode) {
                     manager.dispatch(.enterReceiverCode(receiverCode))
                 }
-            case let .sendConfirm(state):
-                KeyTeleportSendConfirmView(state: state) {
-                    manager.dispatch(.confirmSendWallet)
-                }
             case let .sendReady(state):
                 KeyTeleportSendReadyView(state: state) {
                     manager.dispatch(.clear)
@@ -1020,30 +1016,16 @@ private struct KeyTeleportReceiverCodeView: View {
     }
 }
 
-private struct KeyTeleportSendConfirmView: View {
-    let state: KeyTeleportSendConfirm
-    let confirm: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Send \(state.selectedWallet.name)")
-                .font(.headline)
-
-            Button(action: confirm) {
-                Text("Create Sender Response")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(OnboardingPrimaryButtonStyle())
-        }
-    }
-}
-
 private struct KeyTeleportSendReadyView: View {
     let state: KeyTeleportSendReady
     let finish: () -> Void
 
     var body: some View {
         VStack(spacing: 18) {
+            Text("Sending \(state.selectedWallet.name)")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             if let packet = try? state.packet.bbqrPart() {
                 QrCodeView(text: packet)
                     .frame(maxWidth: 280)

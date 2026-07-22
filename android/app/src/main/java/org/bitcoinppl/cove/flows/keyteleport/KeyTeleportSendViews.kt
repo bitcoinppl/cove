@@ -17,7 +17,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportSendChooseWallet
-import org.bitcoinppl.cove_core.KeyTeleportSendConfirm
 import org.bitcoinppl.cove_core.KeyTeleportSendEnterCode
 import org.bitcoinppl.cove_core.KeyTeleportSendReady
 
@@ -102,23 +101,6 @@ internal fun SendEnterCodeView(
 }
 
 @Composable
-internal fun SendConfirmView(
-    manager: KeyTeleportManager,
-    confirm: KeyTeleportSendConfirm,
-) {
-    TextBlock(
-        title = "Confirm send",
-        body = "Key Teleport will create an encrypted transfer for ${confirm.selectedWallet.name}.",
-    )
-    Button(
-        onClick = { manager.dispatch(KeyTeleportManagerAction.ConfirmSendWallet) },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text("Create Sender Code")
-    }
-}
-
-@Composable
 internal fun SendReadyView(
     ready: KeyTeleportSendReady,
     onDone: () -> Unit,
@@ -128,7 +110,7 @@ internal fun SendReadyView(
 
     SecureScreenEffect()
     TextBlock(
-        title = "Sender code ready",
+        title = "Sending ${ready.selectedWallet.name}",
         body = "Show this QR to the receiver, then read the password to complete the transfer.",
     )
     if (packetText == null) {
