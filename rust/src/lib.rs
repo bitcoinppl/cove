@@ -69,6 +69,7 @@ mod seed_qr;
 mod send_flow;
 mod signed_import;
 mod tap_card;
+mod tor;
 mod transaction;
 mod transaction_watcher;
 mod ur;

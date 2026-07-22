@@ -99,7 +99,7 @@ impl TransactionWatcher {
             .client
             .take()
             .filter(|client| client.connection_identity() == &connection_identity);
-        let builder = NodeClientBuilder { node: selected_node, options: self.options };
+        let builder = NodeClientBuilder { node: selected_node, options: self.options.clone() };
         let tx_id = self.tx_id;
 
         trace!("checking txn: {tx_id}");

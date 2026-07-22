@@ -23,7 +23,11 @@ use cove_bdk_progressive_scan::ScanEvent;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::node::{Node, NodeConnectionIdentity};
+use crate::{
+    database::Database,
+    node::{Node, NodeConnectionIdentity},
+    tor::TorConfig,
+};
 
 use super::{ApiType, client_builder::NodeClientBuilder};
 
@@ -65,6 +69,9 @@ pub enum Error {
     #[error("failed to create node client: {0}")]
     CreateElectrumClient(electrum_client::Error),
 
+    #[error("built-in Tor proxy is not available")]
+    BuiltInTorProxyUnavailable,
+
     #[error("failed to connect to node: {0}")]
     EsploraConnect(esplora_client::Error),
 
@@ -99,39 +106,60 @@ pub enum Error {
     ElectrumGetTransaction(electrum_client::Error),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Tor route a node client uses
+///
+/// The absence of a route is represented by `Option::None`, so this type has no off variant
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TorProxy {
+    /// Resolve the built-in Tor runtime's SOCKS5 endpoint during client construction
+    BuiltIn,
+    /// Route through an external SOCKS5 proxy
+    Socks5 { host: String, port: u16 },
+}
+
+/// Options controlling node client construction and scanning
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeClientOptions {
     pub batch_size: usize,
+    pub tor: Option<TorProxy>,
+}
+
+impl NodeClientOptions {
+    /// Loads the persisted Tor route from the database
+    pub fn from_db(batch_size: usize) -> Self {
+        let config = Database::global().global_config.tor_config();
+        let tor = match config {
+            TorConfig::Off => None,
+            TorConfig::BuiltIn => Some(TorProxy::BuiltIn),
+            TorConfig::External { host, port } => Some(TorProxy::Socks5 { host, port }),
+        };
+
+        Self { batch_size, tor }
+    }
 }
 
 impl NodeClient {
     pub async fn new(node: &Node) -> Result<Self, Error> {
-        let backend = match node.api_type {
-            ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node(node)?;
-                NodeClientBackend::Esplora(client)
-            }
-
-            ApiType::Electrum => {
-                let client = electrum::ElectrumClient::new_from_node(node).await?;
-                NodeClientBackend::Electrum(client)
-            }
-
-            ApiType::Rpc => {
-                // TODO: implement rpc check, with auth
-                todo!()
-            }
+        let batch_size = match node.api_type {
+            ApiType::Electrum => ELECTRUM_BATCH_SIZE,
+            ApiType::Esplora | ApiType::Rpc => ESPLORA_BATCH_SIZE,
         };
+        let options = NodeClientOptions::from_db(batch_size);
 
-        Ok(Self { connection_identity: node.connection_identity(), backend })
+        Self::new_with_options(node, options).await
     }
 
     pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
-        let node_client = Self::new_with_options(&builder.node, builder.options).await?;
+        let node_client = Self::new_with_options(&builder.node, builder.options.clone()).await?;
         Ok(node_client)
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
+        if matches!(options.tor, Some(TorProxy::BuiltIn)) {
+            return Err(Error::BuiltInTorProxyUnavailable);
+        }
+
+        let connection_identity = node.connection_identity_with_tor(options.tor.clone());
         let backend = match node.api_type {
             ApiType::Esplora => {
                 let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
@@ -150,7 +178,7 @@ impl NodeClient {
             }
         };
 
-        Ok(Self { connection_identity: node.connection_identity(), backend })
+        Ok(Self { connection_identity, backend })
     }
 
     pub(crate) fn connection_identity(&self) -> &NodeConnectionIdentity {

@@ -471,7 +471,7 @@ impl WalletActor {
         self.stop_receive_address_watcher();
 
         let node = Database::global().global_config.selected_node();
-        let options = NodeClientOptions { batch_size: 1 };
+        let options = NodeClientOptions::from_db(1);
         let client_builder = NodeClientBuilder { node, options };
 
         let address =

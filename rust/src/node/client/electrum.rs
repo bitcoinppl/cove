@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use bdk_electrum::{
     BdkElectrumClient,
-    electrum_client::{self, Client, ElectrumApi as _, Param},
+    electrum_client::{self, Client, Config, ConfigBuilder, ElectrumApi as _, Param, Socks5Config},
 };
 use bdk_wallet::chain::{
     BlockId, ConfirmationBlockTime, TxGraph,
@@ -21,7 +21,9 @@ use tap::TapFallible as _;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
-use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
+#[cfg(test)]
+use super::ELECTRUM_BATCH_SIZE;
+use super::{Error, NodeClientOptions, TorProxy};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
@@ -46,7 +48,8 @@ impl ElectrumClient {
         Self { client, options }
     }
 
-    pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
+    #[cfg(test)]
+    async fn new_from_node(node: &Node) -> Result<Self, Error> {
         Self::new_from_node_and_options(node, Self::default_options()).await
     }
 
@@ -55,11 +58,13 @@ impl ElectrumClient {
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
+        let config = Self::connection_config(&options)?;
 
         // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
-        let inner_client = cove_tokio::unblock::run_blocking(move || Client::new(&url))
-            .await
-            .map_err(Error::CreateElectrumClient)?;
+        let inner_client =
+            cove_tokio::unblock::run_blocking(move || Client::from_config(&url, config))
+                .await
+                .map_err(Error::CreateElectrumClient)?;
 
         let bdk_client = BdkElectrumClient::new(inner_client);
         let client = Arc::new(bdk_client);
@@ -328,8 +333,21 @@ impl ElectrumClient {
         Ok(tx_id)
     }
 
-    const fn default_options() -> NodeClientOptions {
-        NodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE }
+    #[cfg(test)]
+    fn default_options() -> NodeClientOptions {
+        NodeClientOptions::from_db(ELECTRUM_BATCH_SIZE)
+    }
+
+    fn connection_config(options: &NodeClientOptions) -> Result<Config, Error> {
+        let socks5 = match &options.tor {
+            None => None,
+            Some(TorProxy::Socks5 { host, port }) => {
+                Some(Socks5Config::new(format!("{host}:{port}")))
+            }
+            Some(TorProxy::BuiltIn) => return Err(Error::BuiltInTorProxyUnavailable),
+        };
+
+        Ok(ConfigBuilder::new().socks5(socks5).build())
     }
 }
 

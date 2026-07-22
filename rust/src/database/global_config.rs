@@ -4,6 +4,8 @@ use redb::TableDefinition;
 use tap::TapFallible as _;
 use tracing::{error, warn};
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::{
     app::reconcile::{Update, Updater},
     auth::AuthType,
@@ -15,6 +17,7 @@ use crate::{
     fiat::FiatCurrency,
     network::Network,
     node::Node,
+    tor::TorConfig,
     wallet::metadata::{WalletId, WalletMode},
 };
 
@@ -42,6 +45,7 @@ pub enum GlobalConfigKey {
     LockedAt,
     OnboardingProgress,
     CustomBlockExplorer(Network),
+    TorConfig,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -74,6 +78,7 @@ impl From<GlobalConfigKey> for &'static str {
                 "custom_block_explorer_testnet4"
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
+            GlobalConfigKey::TorConfig => "tor_config",
         }
     }
 }
@@ -295,6 +300,19 @@ impl GlobalConfigTable {
         Ok(())
     }
 
+    pub fn tor_config(&self) -> TorConfig {
+        let config_json = self.get(GlobalConfigKey::TorConfig).unwrap_or(None).unwrap_or_default();
+
+        serde_json::from_str(&config_json).unwrap_or_default()
+    }
+
+    pub fn set_tor_config(&self, config: TorConfig) -> Result<()> {
+        let config_json =
+            serde_json::to_string(&config).map_err_str(SerdeError::SerializationError)?;
+
+        self.set(GlobalConfigKey::TorConfig, config_json)
+    }
+
     pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
         self.get(GlobalConfigKey::CustomBlockExplorer(network)).unwrap_or(None).and_then(
             |template| {
@@ -479,7 +497,7 @@ impl GlobalConfigTable {
 
 #[cfg(test)]
 mod tests {
-    use crate::custom_block_explorer::BlockExplorerOption;
+    use crate::{custom_block_explorer::BlockExplorerOption, tor::TorConfig};
     use cove_types::Network;
 
     #[test]
@@ -508,6 +526,25 @@ mod tests {
 
         let key: &str = GlobalConfigKey::CustomBlockExplorer(Network::Signet).into();
         assert_eq!(key, "custom_block_explorer_signet");
+    }
+
+    #[test]
+    fn tor_config_roundtrips_as_one_typed_value() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(table.tor_config(), TorConfig::Off);
+
+        for config in [
+            TorConfig::Off,
+            TorConfig::BuiltIn,
+            TorConfig::External { host: "127.0.0.1".to_string(), port: 9050 },
+        ] {
+            table.set_tor_config(config.clone()).unwrap();
+
+            assert_eq!(table.tor_config(), config);
+            assert!(table.get(super::GlobalConfigKey::TorConfig).unwrap().is_some());
+        }
     }
 
     #[test]

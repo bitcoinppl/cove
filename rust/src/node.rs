@@ -5,7 +5,7 @@ use crate::node_connect::{
     BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA, TESTNET4_ESPLORA,
 };
 
-use client::NodeClient;
+use client::{NodeClient, NodeClientOptions, TorProxy};
 use cove_types::network::Network;
 
 #[derive(
@@ -42,6 +42,7 @@ pub(crate) struct NodeConnectionIdentity {
     network: Network,
     api_type: ApiType,
     url: String,
+    tor: Option<TorProxy>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,10 +53,17 @@ pub enum Error {
 
 impl Node {
     pub(crate) fn connection_identity(&self) -> NodeConnectionIdentity {
+        let tor = NodeClientOptions::from_db(1).tor;
+
+        self.connection_identity_with_tor(tor)
+    }
+
+    fn connection_identity_with_tor(&self, tor: Option<TorProxy>) -> NodeConnectionIdentity {
         NodeConnectionIdentity {
             network: self.network,
             api_type: self.api_type,
             url: self.url.clone(),
+            tor,
         }
     }
 
@@ -146,7 +154,10 @@ mod tests {
         let renamed = Node { name: "Renamed".to_string(), ..node.clone() };
 
         assert_ne!(node, renamed);
-        assert_eq!(node.connection_identity(), renamed.connection_identity());
+        assert_eq!(
+            node.connection_identity_with_tor(None),
+            renamed.connection_identity_with_tor(None)
+        );
     }
 
     #[test]
@@ -156,8 +167,29 @@ mod tests {
         let different_api = Node { api_type: ApiType::Electrum, ..node.clone() };
         let different_network = Node { network: Network::Signet, ..node.clone() };
 
-        assert_ne!(node.connection_identity(), different_url.connection_identity());
-        assert_ne!(node.connection_identity(), different_api.connection_identity());
-        assert_ne!(node.connection_identity(), different_network.connection_identity());
+        assert_ne!(
+            node.connection_identity_with_tor(None),
+            different_url.connection_identity_with_tor(None)
+        );
+        assert_ne!(
+            node.connection_identity_with_tor(None),
+            different_api.connection_identity_with_tor(None)
+        );
+        assert_ne!(
+            node.connection_identity_with_tor(None),
+            different_network.connection_identity_with_tor(None)
+        );
+    }
+
+    #[test]
+    fn tor_route_changes_connection_identity() {
+        let node = node();
+        let direct = node.connection_identity_with_tor(None);
+        let proxied = node.connection_identity_with_tor(Some(TorProxy::Socks5 {
+            host: "127.0.0.1".to_string(),
+            port: 9050,
+        }));
+
+        assert_ne!(direct, proxied);
     }
 }

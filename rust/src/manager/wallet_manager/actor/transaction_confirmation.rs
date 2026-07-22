@@ -127,7 +127,7 @@ impl WalletActor {
         }
 
         let network = self.wallet.network;
-        let options = NodeClientOptions { batch_size: 1 };
+        let options = NodeClientOptions::from_db(1);
 
         let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, options, network);
         let addr = spawn_actor(watcher);

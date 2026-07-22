@@ -17,7 +17,7 @@ use tracing::debug;
 
 use crate::node::Node;
 
-use super::{ESPLORA_BATCH_SIZE, Error, NodeClientOptions};
+use super::{Error, NodeClientOptions, TorProxy};
 
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
@@ -26,27 +26,20 @@ pub struct EsploraClient {
 }
 
 impl EsploraClient {
-    pub const fn new(client: Arc<AsyncClient>) -> Self {
-        Self { client, options: NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE } }
-    }
-
-    pub fn new_from_node(node: &Node) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(Error::CreateEsploraClient)?
-            .into();
-
-        Ok(Self::new(client))
-    }
-
     pub fn new_from_node_and_options(
         node: &Node,
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(Error::CreateEsploraClient)?
-            .into();
+        let mut builder = esplora_client::Builder::new(&node.url);
+        match &options.tor {
+            None => {}
+            Some(TorProxy::Socks5 { host, port }) => {
+                builder = builder.proxy(&format!("socks5h://{host}:{port}"));
+            }
+            Some(TorProxy::BuiltIn) => return Err(Error::BuiltInTorProxyUnavailable),
+        }
+
+        let client = builder.build_async().map_err(Error::CreateEsploraClient)?.into();
 
         Ok(Self::new_with_options(client, options))
     }
