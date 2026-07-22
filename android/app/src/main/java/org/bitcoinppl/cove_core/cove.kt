@@ -1373,10 +1373,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_node(
     ): Short
-    external fun uniffi_cove_checksum_method_globalconfigtable_set_tor_config(
-    ): Short
-    external fun uniffi_cove_checksum_method_globalconfigtable_tor_config(
-    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_wallet_mode(
     ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_get(
@@ -2407,10 +2403,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_globalconfigtable_set_tor_config(`ptr`: Long,`config`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_globalconfigtable_tor_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_wallet_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_globalflagtable(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4254,12 +4246,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 4222.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_tor_config() != 36361.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_tor_config() != 37041.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720.toShort()) {
@@ -13215,10 +13201,6 @@ public interface GlobalConfigTableInterface {
 
     fun `setSelectedNode`(`node`: Node)
 
-    fun `setTorConfig`(`config`: TorConfig)
-
-    fun `torConfig`(): TorConfig
-
     fun `walletMode`(): WalletMode
 
     companion object
@@ -13685,33 +13667,6 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 }
     }
 
-
-
-
-    @Throws(DatabaseException::class)override fun `setTorConfig`(`config`: TorConfig)
-        =
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_tor_config(
-        it,
-
-        FfiConverterTypeTorConfig.lower(`config`),_status)
-}
-    }
-
-
-
-    override fun `torConfig`(): TorConfig {
-            return FfiConverterTypeTorConfig.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalconfigtable_tor_config(
-        it,
-        _status)
-}
-    }
-    )
-    }
 
 
     override fun `walletMode`(): WalletMode {
@@ -53986,6 +53941,15 @@ sealed class TorException: kotlin.Exception() {
     }
 
     /**
+     * The external proxy host or port is invalid
+     */
+    class InvalidExternalProxy(
+        ) : TorException() {
+        override val message
+            get() = ""
+    }
+
+    /**
      * A Tor configuration change could not be persisted
      */
     class Persistence(
@@ -54034,8 +53998,9 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
             1 -> TorException.Runtime(
                 FfiConverterTypeTorRuntimeError.read(buf),
                 )
-            2 -> TorException.Persistence()
-            3 -> TorException.ClearnetFallback()
+            2 -> TorException.InvalidExternalProxy()
+            3 -> TorException.Persistence()
+            4 -> TorException.ClearnetFallback()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -54046,6 +54011,10 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeTorRuntimeError.allocationSize(value.v1)
+            )
+            is TorException.InvalidExternalProxy -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
             is TorException.Persistence -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -54065,12 +54034,16 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
                 FfiConverterTypeTorRuntimeError.write(value.v1, buf)
                 Unit
             }
-            is TorException.Persistence -> {
+            is TorException.InvalidExternalProxy -> {
                 buf.putInt(2)
                 Unit
             }
-            is TorException.ClearnetFallback -> {
+            is TorException.Persistence -> {
                 buf.putInt(3)
+                Unit
+            }
+            is TorException.ClearnetFallback -> {
+                buf.putInt(4)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

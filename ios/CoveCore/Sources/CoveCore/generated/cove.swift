@@ -4512,10 +4512,6 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func setSelectedNode(node: Node) throws
 
-    func setTorConfig(config: TorConfig) throws
-
-    func torConfig()  -> TorConfig
-
     func walletMode()  -> WalletMode
 
 }
@@ -4813,24 +4809,6 @@ open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverte
         FfiConverterTypeNode_lower(node),uniffiCallStatus
     )
 }
-}
-
-open func setTorConfig(config: TorConfig)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_set_tor_config(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeTorConfig_lower(config),uniffiCallStatus
-    )
-}
-}
-
-open func torConfig() -> TorConfig  {
-    return try!  FfiConverterTypeTorConfig_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_tor_config(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
 }
 
 open func walletMode() -> WalletMode  {
@@ -34353,6 +34331,10 @@ enum TorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     case Runtime(TorRuntimeError
     )
     /**
+     * The external proxy host or port is invalid
+     */
+    case InvalidExternalProxy
+    /**
      * A Tor configuration change could not be persisted
      */
     case Persistence
@@ -34403,8 +34385,9 @@ public struct FfiConverterTypeTorError: FfiConverterRustBuffer {
         case 1: return .Runtime(
             try FfiConverterTypeTorRuntimeError.read(from: &buf)
             )
-        case 2: return .Persistence
-        case 3: return .ClearnetFallback
+        case 2: return .InvalidExternalProxy
+        case 3: return .Persistence
+        case 4: return .ClearnetFallback
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -34422,12 +34405,16 @@ public struct FfiConverterTypeTorError: FfiConverterRustBuffer {
             FfiConverterTypeTorRuntimeError.write(v1, into: &buf)
 
 
-        case .Persistence:
+        case .InvalidExternalProxy:
             writeInt(&buf, Int32(2))
 
 
-        case .ClearnetFallback:
+        case .Persistence:
             writeInt(&buf, Int32(3))
+
+
+        case .ClearnetFallback:
+            writeInt(&buf, Int32(4))
 
         }
     }
@@ -43292,12 +43279,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 4222) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_globalconfigtable_set_tor_config() != 36361) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_globalconfigtable_tor_config() != 37041) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720) {
