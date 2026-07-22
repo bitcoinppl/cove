@@ -215,8 +215,9 @@ internal object DriveAccountBindingTransitions {
         when (state) {
             DriveAccountBindingState.Unbound -> DriveAccountBindingState.Bound(identity)
             is DriveAccountBindingState.Bound -> DriveAccountBindingState.Bound(identity)
-            is DriveAccountBindingState.Staged -> state.copy(identity = identity)
-            is DriveAccountBindingState.Committed -> state.copy(identity = identity)
+            is DriveAccountBindingState.Staged,
+            is DriveAccountBindingState.Committed,
+            -> state
         }
 
     fun stage(
@@ -334,23 +335,36 @@ internal class SharedPreferencesDriveAccountBindingStore(
     override fun state(): DriveAccountBindingState = persistence.readState()
 
     override fun bindIdentity(identity: DriveAccountIdentity) {
-        persistence.applyState(DriveAccountBindingTransitions.bind(state(), identity))
+        synchronized(mutationLock) {
+            val currentState = persistence.readState()
+            val nextState = DriveAccountBindingTransitions.bind(currentState, identity)
+            if (nextState != currentState) {
+                persistence.applyState(nextState)
+            }
+        }
     }
 
     override fun stageIdentity(
         transitionId: ULong,
         identity: DriveAccountIdentity,
     ): DriveAccountTransitionResult =
-        persist(DriveAccountBindingTransitions.stage(state(), transitionId, identity))
+        mutate { state -> DriveAccountBindingTransitions.stage(state, transitionId, identity) }
 
     override fun commitStagedIdentity(transitionId: ULong): DriveAccountTransitionResult =
-        persist(DriveAccountBindingTransitions.commit(state(), transitionId))
+        mutate { state -> DriveAccountBindingTransitions.commit(state, transitionId) }
 
     override fun finalizeCommittedIdentity(transitionId: ULong): DriveAccountTransitionResult =
-        persist(DriveAccountBindingTransitions.finalize(state(), transitionId))
+        mutate { state -> DriveAccountBindingTransitions.finalize(state, transitionId) }
 
     override fun rollbackStagedIdentity(transitionId: ULong): DriveAccountTransitionResult =
-        persist(DriveAccountBindingTransitions.rollback(state(), transitionId))
+        mutate { state -> DriveAccountBindingTransitions.rollback(state, transitionId) }
+
+    private fun mutate(
+        transition: (DriveAccountBindingState) -> DriveAccountBindingUpdate,
+    ): DriveAccountTransitionResult =
+        synchronized(mutationLock) {
+            persist(transition(persistence.readState()))
+        }
 
     private fun persist(update: DriveAccountBindingUpdate): DriveAccountTransitionResult =
         when (update) {
@@ -365,7 +379,13 @@ internal class SharedPreferencesDriveAccountBindingStore(
         }
 
     override fun clearIdentity() {
-        persistence.applyState(DriveAccountBindingState.Unbound)
+        synchronized(mutationLock) {
+            persistence.applyState(DriveAccountBindingState.Unbound)
+        }
+    }
+
+    companion object {
+        private val mutationLock = Any()
     }
 }
 
