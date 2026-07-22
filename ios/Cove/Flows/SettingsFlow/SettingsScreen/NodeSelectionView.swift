@@ -24,7 +24,13 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
+    /// A certificate accepted in this session, which belongs to the url it was
+    /// accepted for. A saved node's settings are not held here: `parseCustomNode`
+    /// carries those forward, so an edited url cannot inherit the old pin.
     @State private var customTls: TlsTrust?
+    /// The url `customTls` was accepted for, so editing the url does not check
+    /// a different server against it.
+    @State private var customTlsUrl: String?
     @State private var certificateAlert: CertificateDecision?
     @State private var showCertificateAlert = false
 
@@ -34,14 +40,11 @@ struct NodeSelectionView: View {
         selectedNodeName = selectedNode.name
         nodeList = nodeSelector.nodeList()
 
-        // Carry the saved node's certificate settings, so saving it again does
-        // not fall back to default trust and ask about the certificate afresh.
         // These have defaults, so they must be set through their storage rather
         // than assigned, or SwiftUI discards the value when it installs them.
         if case let .custom(node) = selectedNode {
             _customUrl = State(initialValue: node.url)
             _customNodeName = State(initialValue: node.name)
-            _customTls = State(initialValue: node.tls)
         }
     }
 
@@ -65,6 +68,7 @@ struct NodeSelectionView: View {
             Button("Trust this certificate") {
                 certificateAlert = nil
                 customTls = .pinnedFingerprint(sha256: certificate.sha256)
+                customTlsUrl = customUrl
                 checkAndSaveNode()
             }
             Button("Cancel", role: .cancel) {
@@ -169,10 +173,14 @@ struct NodeSelectionView: View {
                 url: customUrl,
                 name: selectedNodeName,
                 enteredName: customNodeName,
-                tls: customTls
+                tls: customTlsUrl == customUrl ? customTls : nil
             )
             customUrl = node.url
             customNodeName = node.name
+
+            // The url has just been normalized, so follow it, otherwise a retry
+            // after a failed save would ask about the same certificate again.
+            if node.tls != nil { customTlsUrl = node.url }
         } catch let NodeSelectorError.ParseNodeUrlError(errorString) {
             showParseUrlAlert = true
             parseUrlMessage = errorString
@@ -287,13 +295,11 @@ struct NodeSelectionView: View {
                     if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
-                        customTls = savedSelectedNode.tls
                     }
 
                     if savedSelectedNode.apiType == .esplora, selectedNodeName.contains("Esplora") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
-                        customTls = savedSelectedNode.tls
                     }
                 }
 
