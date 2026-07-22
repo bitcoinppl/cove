@@ -167,6 +167,7 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
             let state = manager.model_snapshot();
             manager.pending_verification_completion().is_some()
                 && state.pending_upload_verification == PendingUploadVerificationState::Confirming
+                && matches!(state.verification, VerificationState::Idle)
         },
     )
     .await;
