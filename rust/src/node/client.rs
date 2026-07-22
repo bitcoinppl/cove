@@ -24,7 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::{
-    database::Database,
+    database::{Database, global_config::GlobalConfigTable},
     node::{Node, NodeConnectionIdentity},
     tor::TorConfig,
 };
@@ -139,8 +139,13 @@ struct Socks5Endpoint {
 impl NodeClientOptions {
     /// Loads the persisted Tor route from the database
     pub fn from_db(batch_size: usize) -> Self {
-        let config = Database::global().global_config.tor_config();
-        let tor = match config {
+        let database = Database::global();
+
+        Self::from_global_config(batch_size, &database.global_config)
+    }
+
+    fn from_global_config(batch_size: usize, config: &GlobalConfigTable) -> Self {
+        let tor = match config.tor_config() {
             TorConfig::Off => None,
             TorConfig::BuiltIn => Some(TorProxy::BuiltIn),
             TorConfig::External { host, port } => Some(TorProxy::Socks5 { host, port }),
@@ -363,5 +368,42 @@ impl NodeClient {
             NodeClientBackend::Esplora(client) => client.broadcast_transaction(txn).await,
             NodeClientBackend::Electrum(client) => client.broadcast_transaction(txn).await,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn persisted_tor_config_maps_to_node_client_options() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_temp_dir, config) = test_global_config();
+
+        for (persisted, expected) in [
+            (TorConfig::Off, None),
+            (TorConfig::BuiltIn, Some(TorProxy::BuiltIn)),
+            (
+                TorConfig::External { host: "127.0.0.1".to_string(), port: 9050 },
+                Some(TorProxy::Socks5 { host: "127.0.0.1".to_string(), port: 9050 }),
+            ),
+        ] {
+            config.set_tor_config(persisted).unwrap();
+
+            assert_eq!(
+                NodeClientOptions::from_global_config(42, &config),
+                NodeClientOptions { batch_size: 42, tor: expected }
+            );
+        }
+    }
+
+    fn test_global_config() -> (tempfile::TempDir, GlobalConfigTable) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let database = Arc::new(redb::Database::create(temp_dir.path().join("test.redb")).unwrap());
+        let write_transaction = database.begin_write().unwrap();
+        let config = GlobalConfigTable::new(database, &write_transaction);
+        write_transaction.commit().unwrap();
+
+        (temp_dir, config)
     }
 }

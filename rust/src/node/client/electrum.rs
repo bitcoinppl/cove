@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 #[cfg(test)]
-use super::{ELECTRUM_BATCH_SIZE, NodeClientOptions};
+use super::{ELECTRUM_BATCH_SIZE, NodeClientOptions, TorProxy};
 use super::{Error, ResolvedNodeClientOptions};
 use crate::node::Node;
 
@@ -46,11 +46,6 @@ impl ElectrumClient {
         options: ResolvedNodeClientOptions,
     ) -> Self {
         Self { client, options }
-    }
-
-    #[cfg(test)]
-    async fn new_from_node(node: &Node) -> Result<Self, Error> {
-        Self::new_from_node_and_options(node, Self::default_options().await).await
     }
 
     pub(crate) async fn new_from_node_and_options(
@@ -333,11 +328,6 @@ impl ElectrumClient {
         Ok(tx_id)
     }
 
-    #[cfg(test)]
-    async fn default_options() -> ResolvedNodeClientOptions {
-        NodeClientOptions::from_db(ELECTRUM_BATCH_SIZE).resolve_tor().await.unwrap()
-    }
-
     fn connection_config(options: &ResolvedNodeClientOptions) -> Config {
         let socks5 = match &options.tor {
             None => None,
@@ -361,32 +351,101 @@ impl std::fmt::Debug for ElectrumClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bdk_electrum::electrum_client::Param;
     use std::str::FromStr;
+    use std::time::Duration;
+    use tokio::time::timeout;
 
     #[tokio::test]
-    #[ignore] // requires external network connection to blockstream electrum server
+    #[ignore] // requires a local Tor SOCKS proxy on 127.0.0.1:9050
     async fn test_get_confirmed_transaction_fallback() {
         crate::test_support::ensure_tokio_runtime();
 
         // blockstream.info does not support verbose transactions
-        let client = ElectrumClient::new_from_node(&crate::node::Node {
+        let node = crate::node::Node {
             url: "ssl://electrum.blockstream.info:50002".to_string(),
             name: "blockstream".to_string(),
             api_type: crate::node::ApiType::Electrum,
             network: cove_types::network::Network::Bitcoin,
-        })
+        };
+        let options = NodeClientOptions {
+            batch_size: ELECTRUM_BATCH_SIZE,
+            tor: Some(TorProxy::Socks5 { host: "127.0.0.1".to_string(), port: 9050 }),
+        }
+        .resolve_tor()
         .await
         .unwrap();
+        let client = timeout(
+            Duration::from_secs(20),
+            ElectrumClient::new_from_node_and_options(&node, options),
+        )
+        .await
+        .expect("timed out creating electrum client")
+        .expect("failed to create electrum client through Tor proxy");
 
         // test with a known confirmed transaction
         let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
         let txid = Arc::new(Txid::from_str(id).unwrap());
-        let result = client.get_confirmed_transaction(txid.clone()).await;
+        let result =
+            timeout(Duration::from_secs(20), client.get_confirmed_transaction(txid.clone()))
+                .await
+                .expect("timed out fetching confirmed transaction through Tor proxy");
 
         match result {
             Ok(Some(txn)) => assert_eq!(txn.compute_txid().to_string(), txid.to_string()),
             Ok(None) => panic!("Expected confirmed transaction but got None"),
             Err(e) => panic!("Fallback method failed: {e:?}"),
         }
+    }
+
+    #[tokio::test]
+    #[ignore] // requires a local Tor SOCKS proxy on 127.0.0.1:9050
+    async fn test_onion_electrum_via_tor_proxy() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let node = crate::node::Node {
+            url: "tcp://xotqmhnei2wy7fk423tekp62ilcxpawnf4aiqmnkfhuutfkimgpqk5qd.onion:50001"
+                .to_string(),
+            name: "onion-electrum".to_string(),
+            api_type: crate::node::ApiType::Electrum,
+            network: cove_types::network::Network::Bitcoin,
+        };
+        let options = NodeClientOptions {
+            batch_size: ELECTRUM_BATCH_SIZE,
+            tor: Some(TorProxy::Socks5 { host: "127.0.0.1".to_string(), port: 9050 }),
+        }
+        .resolve_tor()
+        .await
+        .unwrap();
+        let client = timeout(
+            Duration::from_secs(20),
+            ElectrumClient::new_from_node_and_options(&node, options),
+        )
+        .await
+        .expect("timed out creating electrum client")
+        .expect("failed to create electrum client through Tor proxy");
+
+        let raw_version = timeout(Duration::from_secs(20), async {
+            cove_tokio::unblock::run_blocking({
+                let inner = client.client.clone();
+
+                move || {
+                    inner.inner.raw_call(
+                        "server.version",
+                        [Param::String("cove-test".to_string()), Param::String("1.4".to_string())],
+                    )
+                }
+            })
+            .await
+        })
+        .await
+        .expect("timed out waiting for server.version response")
+        .expect("server.version call failed via onion Electrum through Tor proxy");
+
+        let response =
+            raw_version.as_array().expect("server.version response should be a JSON array");
+        assert!(response.len() >= 2, "server.version response array too short");
+        assert!(response[0].is_string(), "server software field must be a string");
+        assert!(response[1].is_string(), "protocol version field must be a string");
     }
 }
