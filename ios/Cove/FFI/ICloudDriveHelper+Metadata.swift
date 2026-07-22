@@ -12,6 +12,23 @@ struct ICloudMetadataRecord: Equatable, Sendable {
     }
 }
 
+struct ICloudMetadataCandidate: Equatable, Sendable {
+    let name: String
+    let parentPath: String
+}
+
+struct ICloudMetadataMatch: Equatable, Sendable {
+    let preferred: ICloudMetadataRecord
+    let records: [ICloudMetadataRecord]
+
+    fileprivate init?(_ records: [ICloudMetadataRecord]) {
+        guard let preferred = records.first else { return nil }
+
+        self.preferred = preferred
+        self.records = records
+    }
+}
+
 enum ICloudMetadataProjection {
     static func subdirectoryNames(
         in records: [ICloudMetadataRecord],
@@ -162,9 +179,8 @@ final class ICloudMetadataIndex {
     }
 
     private struct ItemWaiter {
-        let name: String
-        let parentPath: String
-        let continuation: CheckedContinuation<ICloudMetadataRecord, Error>
+        let candidates: [ICloudMetadataCandidate]
+        let continuation: CheckedContinuation<ICloudMetadataMatch, Error>
         let timeoutTask: Task<Void, Never>
     }
 
@@ -217,8 +233,22 @@ final class ICloudMetadataIndex {
         parentPath: String,
         timeout: TimeInterval
     ) async throws -> ICloudMetadataRecord? {
+        try await itemsIfPresent(
+            matching: [ICloudMetadataCandidate(name: name, parentPath: parentPath)],
+            timeout: timeout
+        ).first
+    }
+
+    func itemsIfPresent(
+        matching candidates: [ICloudMetadataCandidate],
+        timeout: TimeInterval
+    ) async throws -> [ICloudMetadataRecord] {
         let records = try await currentOrInitialRecords(timeout: timeout)
-        return Self.item(named: name, parentPath: parentPath, in: records)
+        return Self.items(matching: candidates, in: records)
+    }
+
+    func visibleItems(matching candidates: [ICloudMetadataCandidate]) -> [ICloudMetadataRecord] {
+        Self.items(matching: candidates, in: records)
     }
 
     func waitForItem(
@@ -226,15 +256,26 @@ final class ICloudMetadataIndex {
         parentPath: String,
         timeout: TimeInterval
     ) async throws -> ICloudMetadataRecord {
+        try await waitForItems(
+            matching: [ICloudMetadataCandidate(name: name, parentPath: parentPath)],
+            timeout: timeout
+        ).preferred
+    }
+
+    func waitForItems(
+        matching candidates: [ICloudMetadataCandidate],
+        timeout: TimeInterval
+    ) async throws -> ICloudMetadataMatch {
         try Task.checkCancellation()
         try startIfNeeded()
 
-        if let item = Self.item(named: name, parentPath: parentPath, in: records) {
-            return item
+        let items = Self.items(matching: candidates, in: records)
+        if let match = ICloudMetadataMatch(items) {
+            return match
         }
 
         let id = UUID()
-        return try await withTaskCancellationHandler {
+        let match = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let timeoutTask = Task { @MainActor [weak self] in
                     do {
@@ -245,8 +286,7 @@ final class ICloudMetadataIndex {
                     self?.timeoutItemWaiter(id)
                 }
                 itemWaiters[id] = ItemWaiter(
-                    name: name,
-                    parentPath: parentPath,
+                    candidates: candidates,
                     continuation: continuation,
                     timeoutTask: timeoutTask
                 )
@@ -256,6 +296,9 @@ final class ICloudMetadataIndex {
                 self?.cancelItemWaiter(id)
             }
         }
+
+        try Task.checkCancellation()
+        return match
     }
 
     func addObserver(_ observer: @escaping @MainActor @Sendable () -> Void) -> UUID {
@@ -339,21 +382,17 @@ final class ICloudMetadataIndex {
     }
 
     private func resumeMatchingItemWaiters() {
-        let matches = itemWaiters.compactMap { id, waiter -> (UUID, ItemWaiter, ICloudMetadataRecord)? in
-            guard let item = Self.item(
-                named: waiter.name,
-                parentPath: waiter.parentPath,
-                in: records
-            ) else {
-                return nil
-            }
-            return (id, waiter, item)
+        let matches = itemWaiters.compactMap { id, waiter -> (UUID, ItemWaiter, ICloudMetadataMatch)? in
+            let items = Self.items(matching: waiter.candidates, in: records)
+            guard let match = ICloudMetadataMatch(items) else { return nil }
+
+            return (id, waiter, match)
         }
 
-        for (id, waiter, item) in matches {
+        for (id, waiter, match) in matches {
             itemWaiters.removeValue(forKey: id)
             waiter.timeoutTask.cancel()
-            waiter.continuation.resume(returning: item)
+            waiter.continuation.resume(returning: match)
         }
     }
 
@@ -379,12 +418,15 @@ final class ICloudMetadataIndex {
         waiter.continuation.resume(throwing: CancellationError())
     }
 
-    private static func item(
-        named name: String,
-        parentPath: String,
+    private static func items(
+        matching candidates: [ICloudMetadataCandidate],
         in records: [ICloudMetadataRecord]
-    ) -> ICloudMetadataRecord? {
-        records.first { $0.matches(name: name, parentPath: parentPath) }
+    ) -> [ICloudMetadataRecord] {
+        candidates.compactMap { candidate in
+            records.first {
+                $0.matches(name: candidate.name, parentPath: candidate.parentPath)
+            }
+        }
     }
 }
 
@@ -471,7 +513,7 @@ extension ICloudDriveHelper {
     ) async throws -> ResolvedMetadataItem {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
         do {
-            let record = try await ICloudMetadataIndex.shared.waitForItem(
+            let record = try await metadataIndexProvider().waitForItem(
                 named: name,
                 parentPath: resolvedParent,
                 timeout: max(0, deadline.timeIntervalSinceNow)
@@ -481,9 +523,11 @@ extension ICloudDriveHelper {
             )
             return ResolvedMetadataItem(url: record.url, metadataPath: record.resolvedPath)
         } catch ICloudMetadataIndexError.startFailed {
-            throw MetadataLookupError.startFailed("failed to start iCloud metadata query for \(name)")
+            throw CloudStorageError.NotAvailable(
+                "failed to start iCloud metadata query for \(name)"
+            )
         } catch ICloudMetadataIndexError.timedOut {
-            throw MetadataLookupError.timedOut("iCloud metadata query timed out for \(name)")
+            throw CloudStorageError.Offline("iCloud metadata query timed out for \(name)")
         }
     }
 
@@ -512,7 +556,7 @@ extension ICloudDriveHelper {
     ) async throws -> ResolvedMetadataItem? {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
         do {
-            guard let record = try await ICloudMetadataIndex.shared.itemIfPresent(
+            guard let record = try await metadataIndexProvider().itemIfPresent(
                 named: name,
                 parentPath: resolvedParent,
                 timeout: metadataListingTimeout
@@ -521,9 +565,58 @@ extension ICloudDriveHelper {
             }
             return ResolvedMetadataItem(url: record.url, metadataPath: record.resolvedPath)
         } catch ICloudMetadataIndexError.startFailed {
-            throw MetadataLookupError.startFailed("failed to start iCloud metadata query for \(name)")
+            throw CloudStorageError.NotAvailable(
+                "failed to start iCloud metadata query for \(name)"
+            )
         } catch ICloudMetadataIndexError.timedOut {
-            throw MetadataLookupError.timedOut("iCloud metadata query timed out for \(name)")
+            throw CloudStorageError.Offline("iCloud metadata query timed out for \(name)")
+        }
+    }
+
+    func metadataItemsIfPresent(matching urls: [URL]) async throws -> [ResolvedMetadataItem] {
+        let candidates = metadataCandidates(for: urls)
+
+        do {
+            let records = try await metadataIndexProvider().itemsIfPresent(
+                matching: candidates,
+                timeout: metadataListingTimeout
+            )
+            return records.map(Self.resolvedMetadataItem)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch ICloudMetadataIndexError.startFailed {
+            throw CloudStorageError.NotAvailable("failed to start iCloud metadata query")
+        } catch ICloudMetadataIndexError.timedOut {
+            throw CloudStorageError.Offline("iCloud metadata query timed out")
+        }
+    }
+
+    func visibleMetadataItems(matching urls: [URL]) async -> [ResolvedMetadataItem] {
+        let candidates = metadataCandidates(for: urls)
+        let records = await metadataIndexProvider().visibleItems(matching: candidates)
+        return records.map(Self.resolvedMetadataItem)
+    }
+
+    func waitForMetadataItems(
+        matching urls: [URL],
+        timeout: TimeInterval,
+        operation: String
+    ) async throws -> ICloudMetadataMatch {
+        let candidates = metadataCandidates(for: urls)
+
+        do {
+            return try await metadataIndexProvider().waitForItems(
+                matching: candidates,
+                timeout: timeout
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch ICloudMetadataIndexError.startFailed {
+            throw CloudStorageError.NotAvailable(
+                "failed to start iCloud metadata query to \(operation)"
+            )
+        } catch ICloudMetadataIndexError.timedOut {
+            throw CloudStorageError.Offline("iCloud metadata query timed out while trying to \(operation)")
         }
     }
 
@@ -551,7 +644,7 @@ extension ICloudDriveHelper {
 
     private func metadataRecords(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
         do {
-            return try await ICloudMetadataIndex.shared.settledRecords(
+            return try await metadataIndexProvider().settledRecords(
                 timeout: timeout,
                 settleInterval: metadataSettleInterval
             )
@@ -564,5 +657,18 @@ extension ICloudDriveHelper {
 
     private static func resolvedPath(_ path: String) -> String {
         URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+    }
+
+    private func metadataCandidates(for urls: [URL]) -> [ICloudMetadataCandidate] {
+        urls.map { url in
+            ICloudMetadataCandidate(
+                name: url.lastPathComponent,
+                parentPath: Self.resolvedPath(url.deletingLastPathComponent().path)
+            )
+        }
+    }
+
+    private static func resolvedMetadataItem(_ record: ICloudMetadataRecord) -> ResolvedMetadataItem {
+        ResolvedMetadataItem(url: record.url, metadataPath: record.resolvedPath)
     }
 }

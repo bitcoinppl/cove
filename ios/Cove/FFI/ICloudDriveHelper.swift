@@ -4,11 +4,13 @@ import Foundation
 final class ICloudDriveHelper: @unchecked Sendable {
     static let shared = ICloudDriveHelper()
 
-    private let containerIdentifier = "iCloud.com.covebitcoinwallet"
+    private static let containerIdentifier = "iCloud.com.covebitcoinwallet"
     private let dataSubdirectory = "Data"
     private let namespacesSubdirectory = csppNamespacesSubdirectory()
     private let walletsSubdirectory = csppWalletsDirectory()
-    let defaultTimeout: TimeInterval = 60
+    private let containerURLProvider: @Sendable () -> URL?
+    let metadataIndexProvider: @MainActor @Sendable () -> ICloudMetadataIndex
+    let defaultTimeout: TimeInterval
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
     let metadataListingTimeout: TimeInterval = 5
@@ -19,6 +21,22 @@ final class ICloudDriveHelper: @unchecked Sendable {
         attributes: .concurrent
     )
     private static let legacyFileReadNoSuchFileError = 4
+
+    init(
+        containerURLProvider: @escaping @Sendable () -> URL? = {
+            FileManager.default.url(
+                forUbiquityContainerIdentifier: ICloudDriveHelper.containerIdentifier
+            )
+        },
+        metadataIndexProvider: @escaping @MainActor @Sendable () -> ICloudMetadataIndex = {
+            ICloudMetadataIndex.shared
+        },
+        defaultTimeout: TimeInterval = 60
+    ) {
+        self.containerURLProvider = containerURLProvider
+        self.metadataIndexProvider = metadataIndexProvider
+        self.defaultTimeout = defaultTimeout
+    }
 
     struct ResolvedMetadataItem {
         let url: URL
@@ -59,21 +77,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
             case .notUbiquitous: "not ubiquitous"
             case .notDownloaded: "not downloaded"
             case .unknown: "unknown"
-            }
-        }
-    }
-
-    enum MetadataLookupError: LocalizedError {
-        case startFailed(String)
-        case timedOut(String)
-        case missingURL(String)
-
-        var errorDescription: String? {
-            switch self {
-            case let .startFailed(message),
-                 let .timedOut(message),
-                 let .missingURL(message):
-                message
             }
         }
     }
@@ -128,11 +131,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     // MARK: - Path mapping
 
     func containerURL() throws -> URL {
-        guard
-            let url = FileManager.default.url(
-                forUbiquityContainerIdentifier: containerIdentifier
-            )
-        else {
+        guard let url = containerURLProvider() else {
             throw CloudStorageError.NotAvailable("iCloud Drive is not available")
         }
         return url
@@ -208,30 +207,33 @@ final class ICloudDriveHelper: @unchecked Sendable {
         recordId: String,
         locations: [RemoteBackupLocation]
     ) async throws -> URL {
-        var lastError: Error?
-        for location in locations {
-            do {
-                let url = try backupFileReadURL(namespace: namespace, location: location)
-                if FileManager.default.fileExists(atPath: url.path) {
-                    return url
-                }
+        let urls = try backupCandidateURLs(namespace: namespace, locations: locations)
 
-                let item = try await metadataItemIfPresent(
-                    named: url.lastPathComponent,
-                    parentDirectoryURL: url.deletingLastPathComponent()
-                )
-                if let item {
-                    return item.url
-                }
-            } catch {
-                lastError = error
-            }
+        if let localURL = urls.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            return localURL
         }
 
-        if let lastError {
-            throw lastError
+        guard !urls.isEmpty else { throw CloudStorageError.NotFound(recordId) }
+
+        let match = try await waitForMetadataItems(
+            matching: urls,
+            timeout: defaultTimeout,
+            operation: "find backup \(recordId)"
+        )
+        return match.preferred.url
+    }
+
+    private func backupCandidateURLs(
+        namespace: String,
+        locations: [RemoteBackupLocation]
+    ) throws -> [URL] {
+        var paths = Set<String>()
+
+        return try locations.compactMap { location in
+            let url = try backupFileReadURL(namespace: namespace, location: location)
+            guard paths.insert(url.standardizedFileURL.path).inserted else { return nil }
+            return url
         }
-        throw CloudStorageError.NotFound(recordId)
     }
 
     private func appendBackupLocation(
@@ -455,6 +457,10 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 parentDirectoryURL: url.deletingLastPathComponent(),
                 deadline: deadline
             )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as CloudStorageError {
+            throw error
         } catch {
             throw Self.downloadError("iCloud metadata lookup failed for \(filename)", error: error)
         }
@@ -762,28 +768,34 @@ final class ICloudDriveHelper: @unchecked Sendable {
         recordId: String,
         locations: [RemoteBackupLocation]
     ) async throws {
+        let candidateURLs = try backupCandidateURLs(namespace: namespace, locations: locations)
+        guard !candidateURLs.isEmpty else { throw CloudStorageError.NotFound(recordId) }
+
+        let localURLs = candidateURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let metadataURLs: [URL] = if localURLs.isEmpty {
+            let lateMatch = try await waitForMetadataItems(
+                matching: candidateURLs,
+                timeout: defaultTimeout,
+                operation: "delete backup \(recordId)"
+            )
+            let cleanupItems = await visibleMetadataItems(matching: candidateURLs)
+            lateMatch.records.map(\.url) + cleanupItems.map(\.url)
+        } else {
+            try await metadataItemsIfPresent(matching: candidateURLs).map(\.url)
+        }
+
+        var seenPaths = Set<String>()
+        let urlsToDelete = (localURLs + metadataURLs).filter { url in
+            seenPaths.insert(url.standardizedFileURL.path).inserted
+        }
         var deletedAny = false
         var lastError: Error?
 
-        let urls = try locations.map { location in
-            try backupFileReadURL(namespace: namespace, location: location)
-        }
+        for url in urlsToDelete {
+            try Task.checkCancellation()
 
-        for url in urls {
             do {
-                if FileManager.default.fileExists(atPath: url.path) {
-                    try coordinatedDelete(at: url, missingItemID: recordId)
-                    deletedAny = true
-                    continue
-                }
-
-                let resolvedURL = try await metadataItemIfPresent(
-                    named: url.lastPathComponent,
-                    parentDirectoryURL: url.deletingLastPathComponent()
-                )?.url
-                guard let resolvedURL else { continue }
-
-                try coordinatedDelete(at: resolvedURL, missingItemID: recordId)
+                try coordinatedDelete(at: url, missingItemID: recordId)
                 deletedAny = true
             } catch CloudStorageError.NotFound {
                 continue
@@ -795,9 +807,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         if let lastError {
             throw lastError
         }
-        if !deletedAny {
-            throw CloudStorageError.NotFound(recordId)
-        }
+        guard deletedAny else { throw CloudStorageError.NotFound(recordId) }
     }
 
     private func allBackupFiles(in namespaceDirectory: URL) -> [URL] {
