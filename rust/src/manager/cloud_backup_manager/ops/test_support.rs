@@ -178,6 +178,7 @@ struct MockCloudState {
     delete_namespace_error: Option<CloudStorageError>,
     list_namespaces_error: Option<CloudStorageError>,
     list_namespaces_attempts: usize,
+    next_list_namespaces_gate: Option<Arc<MockCloudDownloadGate>>,
     wallet_file_snapshots: HashMap<String, CloudStorageInventorySnapshot>,
     reflect_uploaded_wallets_in_listing: bool,
     uploaded_wallets_pending_confirmation: bool,
@@ -349,6 +350,12 @@ impl MockCloudStorage {
 
     pub(crate) fn list_namespaces_attempt_count(&self) -> usize {
         self.state.lock().list_namespaces_attempts
+    }
+
+    pub(crate) fn gate_next_list_namespaces(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().next_list_namespaces_gate = Some(gate.clone());
+        gate
     }
 
     pub(crate) fn clear_list_wallet_files_non_interactive_failure(&self) {
@@ -730,16 +737,23 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<String>, CloudStorageError> {
-        let mut state = self.state.lock();
-        state.list_namespaces_attempts += 1;
-        if let Some(error) = state.list_namespaces_error.clone() {
-            return Err(error);
-        }
+        let (namespaces, gate) = {
+            let mut state = self.state.lock();
+            state.list_namespaces_attempts += 1;
+            if let Some(error) = state.list_namespaces_error.clone() {
+                return Err(error);
+            }
 
-        let mut namespaces: std::collections::HashSet<String> =
-            state.wallet_files.keys().cloned().collect();
-        namespaces.extend(state.master_key_backups.keys().cloned());
-        namespaces.extend(state.wallet_backups.keys().map(|(namespace, _)| namespace.clone()));
+            let mut namespaces: std::collections::HashSet<String> =
+                state.wallet_files.keys().cloned().collect();
+            namespaces.extend(state.master_key_backups.keys().cloned());
+            namespaces.extend(state.wallet_backups.keys().map(|(namespace, _)| namespace.clone()));
+            (namespaces, state.next_list_namespaces_gate.take())
+        };
+
+        if let Some(gate) = gate {
+            gate.block().await;
+        }
 
         Ok(namespaces.into_iter().collect())
     }

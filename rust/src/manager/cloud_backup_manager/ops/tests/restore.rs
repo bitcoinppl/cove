@@ -681,11 +681,12 @@ async fn restore_refresh_finds_namespace_that_appears_late() {
         credential_id: vec![1, 2, 3],
     }));
 
+    let first_list = globals.cloud.gate_next_list_namespaces();
     let cloud = globals.cloud.clone();
     let delayed_namespace = namespace.clone();
     let delayed_record_id = record_id.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        first_list.wait_until_blocked().await;
         cloud.set_master_key_backup(
             delayed_namespace.clone(),
             serde_json::to_vec(&encrypted_master).unwrap(),
@@ -699,6 +700,7 @@ async fn restore_refresh_finds_namespace_that_appears_late() {
             delayed_namespace,
             vec![wallet_filename_from_record_id(&delayed_record_id)],
         );
+        first_list.release();
     });
 
     let operation = new_restore_operation_for_test(&manager).await;
