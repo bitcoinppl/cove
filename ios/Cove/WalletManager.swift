@@ -78,6 +78,10 @@ private struct WalletManagerBootstrap {
         rust.hasRecoveryWords()
     }
 
+    func hasXprvSecret() -> Bool {
+        rust.hasXprvSecret()
+    }
+
     var activeIncompleteInitialScan: Bool {
         // ledger activity and scan status arrive as separate reconcile messages
         ledgerState.initialScanActive || (ledgerState.initialScanIncomplete && scanStatus.isActive)

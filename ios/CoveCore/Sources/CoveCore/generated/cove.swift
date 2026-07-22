@@ -10158,6 +10158,14 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func dispatch(action: WalletManagerAction)
 
+    /**
+     * Returns the wallet's master extended private key string for export
+     *
+     * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+     * zeroized; same limitation as displaying the mnemonic words
+     */
+    func exposeXprv() throws  -> String
+
     func feeRateOptions() async throws  -> FeeRateOptions
 
     func fees()  -> FeeResponse?
@@ -10183,6 +10191,11 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      * Returns whether this hot wallet is backed by BIP39 recovery words
      */
     func hasRecoveryWords()  -> Bool
+
+    /**
+     * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+     */
+    func hasXprvSecret()  -> Bool
 
     /**
      * Returns the bootstrap wallet snapshot used before reconcile messages arrive
@@ -10588,6 +10601,21 @@ open func dispatch(action: WalletManagerAction)  {try! rustCall() {
 }
 }
 
+    /**
+     * Returns the wallet's master extended private key string for export
+     *
+     * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+     * zeroized; same limitation as displaying the mnemonic words
+     */
+open func exposeXprv()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_expose_xprv(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func feeRateOptions()async throws  -> FeeRateOptions  {
     return
         try  await uniffiRustCallAsync(
@@ -10737,6 +10765,18 @@ open func hasRecoveryWords() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustwalletmanager_has_recovery_words(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+     */
+open func hasXprvSecret() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustwalletmanager_has_xprv_secret(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -45300,6 +45340,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 57298) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 36145) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -45328,6 +45371,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words() != 23756) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret() != 29721) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436) {

@@ -1,7 +1,13 @@
 import SwiftUI
 
+private enum XprvExportAction {
+    case share
+    case keyTeleport
+}
+
 struct WalletSettingsView: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
 
@@ -12,6 +18,9 @@ struct WalletSettingsView: View {
     @State private var showingSecretWordsConfirmation = false
     @State private var showingSecondDeleteConfirmation = false
     @State private var showingFinalDeleteConfirmation = false
+    @State private var showingXprvExportWarning = false
+    @State private var showingXprvExportOptions = false
+    @State private var pendingXprvExportAction: XprvExportAction?
     @State private var requiredConfirmations: UInt8 = 1
     @State private var accountNumber: UInt32? = nil
 
@@ -74,6 +83,31 @@ struct WalletSettingsView: View {
         showingDeleteConfirmation = true
     }
 
+    private func startXprvExport(_ action: XprvExportAction) {
+        if auth.isAuthEnabled {
+            pendingXprvExportAction = action
+            auth.lock()
+        } else {
+            performXprvExport(action)
+        }
+    }
+
+    private func performXprvExport(_ action: XprvExportAction) {
+        switch action {
+        case .share:
+            do {
+                let xprv = try manager.rust.exposeXprv()
+                ShareSheet.presentFromMenu(text: xprv)
+            } catch {
+                Log.error("Unable to export private key: \(error)")
+            }
+        case .keyTeleport:
+            let keyTeleportManager = app.ensureKeyTeleportManager()
+            keyTeleportManager.dispatch(.startSendFromWallet(metadata.id))
+            app.pushRoute(RouteFactory().keyTeleportSend())
+        }
+    }
+
     var body: some View {
         List {
             WalletSettingsInformationSection(
@@ -92,15 +126,19 @@ struct WalletSettingsView: View {
                 walletName: metadata.name,
                 isHotWallet: metadata.walletType == .hot,
                 hasRecoveryWords: manager.hasRecoveryWords(),
+                hasXprvSecret: manager.hasXprvSecret(),
                 deleteConfirmationMessage: deleteConfirmationMessage,
                 finalDeleteConfirmationMessage: finalDeleteConfirmationMessage,
                 finalDeleteButtonTitle: finalDeleteButtonTitle,
                 requiredConfirmations: $requiredConfirmations,
                 showingSecretWordsConfirmation: $showingSecretWordsConfirmation,
+                showingXprvExportWarning: $showingXprvExportWarning,
+                showingXprvExportOptions: $showingXprvExportOptions,
                 showingDeleteConfirmation: $showingDeleteConfirmation,
                 showingSecondDeleteConfirmation: $showingSecondDeleteConfirmation,
                 showingFinalDeleteConfirmation: $showingFinalDeleteConfirmation,
                 showSecretWords: showSecretWords,
+                startXprvExport: startXprvExport,
                 prepareDelete: prepareDelete,
                 deleteWallet: deleteWallet
             )
@@ -112,6 +150,12 @@ struct WalletSettingsView: View {
         .onAppear { manager.validateMetadata() }
         .task {
             accountNumber = manager.rust.nonDefaultAccountNumber()
+        }
+        .onChange(of: auth.lockState) { _, new in
+            guard new == .unlocked, let action = pendingXprvExportAction else { return }
+
+            pendingXprvExportAction = nil
+            performXprvExport(action)
         }
         .scrollContentBackground(.hidden)
     }
@@ -273,15 +317,19 @@ private struct WalletSettingsDangerSection: View {
     let walletName: String
     let isHotWallet: Bool
     let hasRecoveryWords: Bool
+    let hasXprvSecret: Bool
     let deleteConfirmationMessage: String
     let finalDeleteConfirmationMessage: String
     let finalDeleteButtonTitle: String
     @Binding var requiredConfirmations: UInt8
     @Binding var showingSecretWordsConfirmation: Bool
+    @Binding var showingXprvExportWarning: Bool
+    @Binding var showingXprvExportOptions: Bool
     @Binding var showingDeleteConfirmation: Bool
     @Binding var showingSecondDeleteConfirmation: Bool
     @Binding var showingFinalDeleteConfirmation: Bool
     let showSecretWords: () -> Void
+    let startXprvExport: (XprvExportAction) -> Void
     let prepareDelete: () -> Void
     let deleteWallet: () -> Void
 
@@ -291,6 +339,14 @@ private struct WalletSettingsDangerSection: View {
                 WalletSecretWordsButton(
                     isPresented: $showingSecretWordsConfirmation,
                     showSecretWords: showSecretWords
+                )
+            }
+
+            if isHotWallet, hasXprvSecret {
+                WalletXprvExportButton(
+                    showingWarning: $showingXprvExportWarning,
+                    showingOptions: $showingXprvExportOptions,
+                    export: startXprvExport
                 )
             }
 
@@ -318,6 +374,36 @@ private struct WalletSettingsDangerSection: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct WalletXprvExportButton: View {
+    @Binding var showingWarning: Bool
+    @Binding var showingOptions: Bool
+    let export: (XprvExportAction) -> Void
+
+    var body: some View {
+        Button("Export Private Key") {
+            showingWarning = true
+        }
+        .font(.subheadline)
+        .confirmationDialog("Are you sure?", isPresented: $showingWarning) {
+            Button("Continue") { showingOptions = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Whoever has access to your extended private key, has access to your bitcoin. Please keep it safe, don't show it to anyone."
+            )
+        }
+        .confirmationDialog(
+            "Export Private Key",
+            isPresented: $showingOptions,
+            titleVisibility: .visible
+        ) {
+            Button("Share…") { export(.share) }
+            Button("Key Teleport") { export(.keyTeleport) }
+            Button("Cancel", role: .cancel) {}
         }
     }
 }
@@ -444,6 +530,7 @@ private extension WalletBirthday {
     AsyncPreview {
         WalletSettingsView(manager: WalletManager(preview: "preview_only"))
             .environment(AppManager.shared)
+            .environment(AuthManager.shared)
             .environment(\.navigate) { _ in
                 ()
             }

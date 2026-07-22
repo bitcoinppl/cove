@@ -95,6 +95,16 @@ class WalletManager :
 
     fun hasRecoveryWords(): Boolean = rust.hasRecoveryWords()
 
+    fun hasXprvSecret(): Boolean =
+        withRustOr(false) {
+            hasXprvSecret()
+        }
+
+    fun exposeXprv(): String =
+        withRust {
+            exposeXprv()
+        }
+
     // errors
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)

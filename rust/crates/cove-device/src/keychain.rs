@@ -204,7 +204,7 @@ pub enum KeychainError {
     #[error("unable to decrypt: {0}")]
     Decrypt(String),
 
-    #[error("saved wallet secret is not a mnemonic")]
+    #[error("saved wallet secret is a different type")]
     WalletSecretTypeMismatch,
 }
 
