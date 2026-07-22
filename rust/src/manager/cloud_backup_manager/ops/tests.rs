@@ -111,14 +111,17 @@ async fn deep_verify_for_test(
     .unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
         let snapshot = manager.model_snapshot();
-        manager.pending_verification_completion().is_some()
-            || matches!(
-                snapshot.verification,
-                VerificationState::Verified(_)
-                    | VerificationState::PasskeyConfirmed
-                    | VerificationState::Failed(_)
-                    | VerificationState::Cancelled
-            )
+        if manager.pending_verification_completion().is_some() {
+            return snapshot.detail.is_some();
+        }
+
+        matches!(
+            snapshot.verification,
+            VerificationState::Verified(_)
+                | VerificationState::PasskeyConfirmed
+                | VerificationState::Failed(_)
+                | VerificationState::Cancelled
+        )
     })
     .await;
 
