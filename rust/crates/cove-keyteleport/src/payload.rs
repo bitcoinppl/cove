@@ -1,9 +1,12 @@
 use std::{fmt, str::FromStr};
 
 use bip39::Mnemonic;
-use bitcoin::{base58, bip32::Xpriv, secp256k1::SecretKey};
+use bitcoin::{
+    bip32::{ChildNumber, Fingerprint, Xpriv},
+    secp256k1::SecretKey,
+};
 use serde::{Deserialize, Deserializer};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{Error, Result};
 
@@ -29,49 +32,70 @@ impl fmt::Display for UnsupportedPayloadKind {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub enum Payload {
+enum PayloadKind {
     Mnemonic(Mnemonic),
     Xprv(XprvPayload),
 }
 
+/// A secret payload that can be transferred by COLDCARD Key Teleport
+#[derive(Clone, PartialEq, Eq)]
+pub struct Payload(PayloadKind);
+
 impl Payload {
-    pub fn mnemonic(mnemonic: Mnemonic) -> Self {
-        Self::Mnemonic(mnemonic)
+    /// Creates a mnemonic payload when its word count is supported by COLDCARD
+    pub fn mnemonic(mnemonic: Mnemonic) -> Result<Self> {
+        let word_count = mnemonic.word_count();
+        if !matches!(word_count, 12 | 18 | 24) {
+            return Err(Error::UnsupportedMnemonicWordCount(word_count));
+        }
+
+        Ok(Self(PayloadKind::Mnemonic(mnemonic)))
     }
 
+    /// Creates an xprv payload
     pub fn xprv(value: impl AsRef<str>) -> Result<Self> {
-        Ok(Self::Xprv(XprvPayload::parse(value.as_ref())?))
+        Ok(Self(PayloadKind::Xprv(XprvPayload::parse(value.as_ref())?)))
     }
 
-    pub(crate) fn encode(&self) -> Result<Vec<u8>> {
-        match self {
-            Self::Mnemonic(mnemonic) => encode_mnemonic_payload(mnemonic),
-            Self::Xprv(xprv) => encode_xprv_payload(xprv),
+    pub(crate) fn encode(&self) -> Result<Zeroizing<Vec<u8>>> {
+        match &self.0 {
+            PayloadKind::Mnemonic(mnemonic) => encode_mnemonic_payload(mnemonic),
+            PayloadKind::Xprv(xprv) => encode_xprv_payload(xprv),
         }
     }
 }
 
 impl fmt::Debug for Payload {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Mnemonic(_) => f.write_str("Payload::Mnemonic(****)"),
-            Self::Xprv(_) => f.write_str("Payload::Xprv(****)"),
+        match self.0 {
+            PayloadKind::Mnemonic(_) => f.write_str("Payload::Mnemonic(****)"),
+            PayloadKind::Xprv(_) => f.write_str("Payload::Xprv(****)"),
         }
     }
 }
 
+/// A validated master extended private key transferred by Key Teleport
 #[derive(Clone, PartialEq, Eq)]
 pub struct XprvPayload {
     value: String,
 }
 
 impl XprvPayload {
+    /// Parses and validates a master extended private key
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the value is invalid or represents a derived child key
     pub fn parse(value: &str) -> Result<Self> {
         let xprv = Xpriv::from_str(value).map_err(|_| Error::InvalidXprvPayload)?;
+        if !is_master_xprv(&xprv) {
+            return Err(Error::NonMasterXprvPayload);
+        }
 
         Ok(Self { value: xprv.to_string() })
     }
 
+    /// Exposes the encoded extended private key
     pub fn expose_string(&self) -> &str {
         &self.value
     }
@@ -287,30 +311,52 @@ impl fmt::Debug for DecodedPayload {
     }
 }
 
-fn encode_mnemonic_payload(mnemonic: &Mnemonic) -> Result<Vec<u8>> {
-    let entropy = mnemonic.to_entropy();
+fn encode_mnemonic_payload(mnemonic: &Mnemonic) -> Result<Zeroizing<Vec<u8>>> {
+    let entropy = Zeroizing::new(mnemonic.to_entropy());
+    if !matches!(entropy.len(), 16 | 24 | 32) {
+        return Err(Error::UnsupportedMnemonicWordCount(mnemonic.word_count()));
+    }
+
     let marker = 0x80 | ((entropy.len() / 8) - 2) as u8;
-    let mut encoded = Vec::with_capacity(1 + 1 + entropy.len());
+    let mut encoded = Zeroizing::new(Vec::with_capacity(1 + 1 + entropy.len()));
     encoded.push(b's');
     encoded.push(marker);
     encoded.extend_from_slice(&entropy);
+    trim_stash_padding(&mut encoded);
 
     Ok(encoded)
 }
 
-fn encode_xprv_payload(xprv: &XprvPayload) -> Result<Vec<u8>> {
-    let decoded = base58::decode_check(&xprv.value)?;
-    Xpriv::decode(&decoded)?;
+fn encode_xprv_payload(xprv: &XprvPayload) -> Result<Zeroizing<Vec<u8>>> {
+    let xprv = Xpriv::from_str(&xprv.value).map_err(|_| Error::InvalidXprvPayload)?;
+    let private_key = Zeroizing::new(xprv.private_key.secret_bytes());
 
-    let mut encoded = Vec::with_capacity(1 + decoded.len());
-    encoded.push(b'x');
-    encoded.extend_from_slice(&decoded);
+    let mut encoded = Zeroizing::new(Vec::with_capacity(66));
+    encoded.push(b's');
+    encoded.push(0x01);
+    encoded.extend_from_slice(xprv.chain_code.as_bytes());
+    encoded.extend_from_slice(private_key.as_ref());
+    trim_stash_padding(&mut encoded);
 
     Ok(encoded)
+}
+
+fn is_master_xprv(xprv: &Xpriv) -> bool {
+    xprv.depth == 0
+        && xprv.parent_fingerprint == Fingerprint::default()
+        && xprv.child_number == ChildNumber::Normal { index: 0 }
 }
 
 fn decode_stash_payload(body: &[u8]) -> Result<DecodedPayload> {
-    let (&marker, rest) = body.split_first().ok_or(Error::InvalidMnemonicPayload)?;
+    if body.is_empty() || body.len() > 72 {
+        return Err(Error::InvalidMnemonicPayload);
+    }
+
+    // COLDCARD strips trailing zeroes from its 72-byte stash before transport
+    let mut stash = Zeroizing::new([0_u8; 72]);
+    stash[..body.len()].copy_from_slice(body);
+    let marker = stash[0];
+    let rest = &stash[1..];
 
     if marker == 0x01 {
         return decode_stash_xprv(rest);
@@ -331,26 +377,43 @@ fn decode_stash_payload(body: &[u8]) -> Result<DecodedPayload> {
 }
 
 fn decode_stash_xprv(body: &[u8]) -> Result<DecodedPayload> {
-    if body.len() < 64 {
+    if body.len() != 71 {
         return Err(Error::InvalidXprvPayload);
     }
 
-    let mut encoded = [0_u8; 78];
-    encoded[0..4].copy_from_slice(&MAINNET_XPRV_VERSION);
-    encoded[13..45].copy_from_slice(&body[0..32]);
-    encoded[45] = 0;
-    encoded[46..78].copy_from_slice(&body[32..64]);
+    let chain_code = &body[..32];
+    let private_key = &body[32..64];
+    SecretKey::from_slice(private_key).map_err(|_| Error::InvalidXprvPayload)?;
 
-    let xprv = Xpriv::decode(&encoded)?;
-    SecretKey::from_slice(&body[32..64]).map_err(|_| Error::InvalidXprvPayload)?;
+    let mut encoded = Zeroizing::new([0_u8; 78]);
+    encoded[0..4].copy_from_slice(&MAINNET_XPRV_VERSION);
+    encoded[13..45].copy_from_slice(chain_code);
+    encoded[45] = 0;
+    encoded[46..78].copy_from_slice(private_key);
+
+    let xprv = Xpriv::decode(&encoded[..])?;
 
     Ok(DecodedPayload::Xprv(XprvPayload { value: xprv.to_string() }))
 }
 
+fn trim_stash_padding(encoded: &mut Vec<u8>) {
+    while encoded.last() == Some(&0) {
+        encoded.pop();
+    }
+}
+
 fn decode_xprv_body(body: &[u8]) -> Result<DecodedPayload> {
     let xprv = Xpriv::decode(body).map_err(|_| Error::InvalidXprvPayload)?;
+    let master = Xpriv {
+        network: xprv.network,
+        depth: 0,
+        parent_fingerprint: Fingerprint::default(),
+        child_number: ChildNumber::Normal { index: 0 },
+        private_key: xprv.private_key,
+        chain_code: xprv.chain_code,
+    };
 
-    Ok(DecodedPayload::Xprv(XprvPayload { value: xprv.to_string() }))
+    Ok(DecodedPayload::Xprv(XprvPayload { value: master.to_string() }))
 }
 
 fn decode_notes_body(body: &[u8]) -> Result<DecodedPayload> {
@@ -410,6 +473,67 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const XPRV: &str = "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa";
+
+    #[test]
+    fn mnemonic_stash_roundtrips_coldcard_trailing_zero_trimming() {
+        let mnemonic = Mnemonic::from_entropy(&[0_u8; 16]).unwrap();
+        let encoded = Payload::mnemonic(mnemonic.clone()).unwrap().encode().unwrap();
+
+        assert_eq!(encoded.as_slice(), &[b's', 0x80]);
+        assert_eq!(DecodedPayload::decode(&encoded).unwrap(), DecodedPayload::Mnemonic(mnemonic));
+    }
+
+    #[test]
+    fn xprv_encoder_uses_coldcard_stash_layout() {
+        let xprv = Xpriv::from_str(XPRV).unwrap();
+        let encoded = Payload::xprv(XPRV).unwrap().encode().unwrap();
+
+        assert_eq!(&encoded[..2], &[b's', 0x01]);
+        assert_eq!(&encoded[2..34], xprv.chain_code.as_bytes());
+        assert_eq!(&encoded[34..66], &xprv.private_key.secret_bytes());
+    }
+
+    #[test]
+    fn xprv_stash_decodes_after_coldcard_trims_private_key_zero() {
+        let chain_code = [2_u8; 32];
+        let mut private_key = [1_u8; 32];
+        private_key[31] = 0;
+        SecretKey::from_slice(&private_key).unwrap();
+        let mut encoded = vec![b's', 0x01];
+        encoded.extend_from_slice(&chain_code);
+        encoded.extend_from_slice(&private_key);
+        trim_stash_padding(&mut encoded);
+
+        let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&encoded).unwrap() else {
+            panic!("expected xprv")
+        };
+        let decoded = Xpriv::from_str(decoded.expose_string()).unwrap();
+
+        assert_eq!(decoded.chain_code.as_bytes(), &chain_code);
+        assert_eq!(decoded.private_key.secret_bytes(), private_key);
+    }
+
+    #[test]
+    fn full_xprv_payload_discards_child_metadata_like_coldcard() {
+        let master = Xpriv::from_str(XPRV).unwrap();
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let child = master.derive_priv(&secp, &[ChildNumber::Hardened { index: 7 }]).unwrap();
+        let mut payload = vec![b'x'];
+        payload.extend_from_slice(&child.encode());
+
+        let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&payload).unwrap() else {
+            panic!("expected xprv")
+        };
+        let decoded = Xpriv::from_str(decoded.expose_string()).unwrap();
+
+        assert_eq!(decoded.depth, 0);
+        assert_eq!(decoded.parent_fingerprint, Fingerprint::default());
+        assert_eq!(decoded.child_number, ChildNumber::Normal { index: 0 });
+        assert_eq!(decoded.chain_code, child.chain_code);
+        assert_eq!(decoded.private_key, child.private_key);
+    }
 
     #[test]
     fn decodes_quick_text_note() {

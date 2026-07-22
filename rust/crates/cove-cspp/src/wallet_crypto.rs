@@ -114,6 +114,19 @@ mod tests {
     }
 
     #[test]
+    fn xprv_wallet_encrypt_decrypt_roundtrip() {
+        let mut entry = test_entry();
+        let xprv = "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa";
+        entry.secret = WalletSecret::Xprv(xprv.to_string());
+        let critical_key = [42u8; 32];
+
+        let encrypted = encrypt_wallet_entry(&entry, &critical_key).unwrap();
+        let decrypted = decrypt_wallet_backup(&encrypted, &critical_key).unwrap();
+
+        assert!(matches!(decrypted.secret, WalletSecret::Xprv(ref value) if value == xprv));
+    }
+
+    #[test]
     fn different_wallet_salts_produce_different_ciphertext() {
         let entry = test_entry();
         let critical_key = [42u8; 32];

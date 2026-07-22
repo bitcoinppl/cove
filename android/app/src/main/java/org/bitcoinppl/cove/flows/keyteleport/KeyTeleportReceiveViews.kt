@@ -66,9 +66,13 @@ internal fun ReceiveReadyView(
     receive: KeyTeleportReceiveState,
     onScan: () -> Unit,
 ) {
-    val packetText = remember(receive.packet) { receive.packet.bbqrPart() }
+    val packetText = remember(receive.packet) { runCatching { receive.packet.bbqrPart() }.getOrNull() }
 
-    PacketQr(packetText)
+    if (packetText == null) {
+        Text("Unable to render this receive request.", color = MaterialTheme.colorScheme.error)
+    } else {
+        PacketQr(packetText)
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -136,25 +140,37 @@ internal fun ReceiveMnemonicReviewView(
     wordCount: Int,
     onDone: () -> Unit,
 ) {
-    var words by remember { mutableStateOf(emptyList<String>()) }
+    var words by remember { mutableStateOf<List<String>?>(null) }
 
     LaunchedEffect(wordCount) { words = manager.revealMnemonicWords() }
+    DisposableEffect(Unit) {
+        onDispose { words = emptyList() }
+    }
     SecureScreenEffect()
 
     TextBlock(
         title = "Recovery words received",
         body = "Cove found a $wordCount-word wallet. Review it below or import it directly.",
     )
-    if (words.isEmpty()) LoadingText("Loading recovery words") else RecoveryWordsGrid(words)
+    val revealedWords = words
+    if (revealedWords == null || revealedWords.isEmpty()) {
+        Text("Unable to reveal recovery words.", color = MaterialTheme.colorScheme.error)
+    } else {
+        RecoveryWordsGrid(revealedWords)
+    }
     Button(
-        enabled = words.isNotEmpty(),
-        onClick = { manager.dispatch(KeyTeleportManagerAction.ImportReceivedWallet) },
+        enabled = !revealedWords.isNullOrEmpty(),
+        onClick = {
+            words = emptyList()
+            manager.dispatch(KeyTeleportManagerAction.ImportReceivedWallet)
+        },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text("Import Wallet")
     }
     TextButton(
         onClick = {
+            words = emptyList()
             manager.dispatch(KeyTeleportManagerAction.FinishReview)
             onDone()
         },
@@ -175,7 +191,10 @@ internal fun ReceiveXprvReviewView(
 
     SecureScreenEffect()
     DisposableEffect(Unit) {
-        onDispose { manager.dispatch(KeyTeleportManagerAction.HideXprv) }
+        onDispose {
+            xprv = null
+            manager.dispatch(KeyTeleportManagerAction.HideXprv)
+        }
     }
     LaunchedEffect(review.revealed) {
         xprv = if (review.revealed) manager.revealXprv() else null
@@ -187,13 +206,17 @@ internal fun ReceiveXprvReviewView(
     )
     XprvRevealContent(manager, review.revealed, xprv)
     Button(
-        onClick = { manager.dispatch(KeyTeleportManagerAction.ImportReceivedWallet) },
+        onClick = {
+            xprv = null
+            manager.dispatch(KeyTeleportManagerAction.ImportReceivedWallet)
+        },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text("Import Wallet")
     }
     TextButton(
         onClick = {
+            xprv = null
             manager.dispatch(KeyTeleportManagerAction.FinishReview)
             onDone()
         },
@@ -210,7 +233,7 @@ private fun XprvRevealContent(
     xprv: String?,
 ) {
     val context = LocalContext.current
-    if (!revealed || xprv == null) {
+    if (!revealed) {
         Button(
             onClick = { manager.dispatch(KeyTeleportManagerAction.RevealXprv) },
             modifier = Modifier.fillMaxWidth(),
@@ -219,6 +242,11 @@ private fun XprvRevealContent(
             Spacer(Modifier.size(8.dp))
             Text("Reveal")
         }
+        return
+    }
+
+    if (xprv == null) {
+        Text("Unable to reveal this extended private key.", color = MaterialTheme.colorScheme.error)
         return
     }
 
@@ -344,6 +372,9 @@ private fun MessageField(
 internal fun ReceiveImportedWalletView(
     manager: KeyTeleportManager,
     wallet: WalletMetadata,
+    title: String = "Wallet imported",
+    message: String = "${wallet.name} is ready to use in Cove.",
+    buttonTitle: String = "Done",
     onDone: () -> Unit,
 ) {
     Column(
@@ -356,8 +387,8 @@ internal fun ReceiveImportedWalletView(
             tint = ImportedWalletSuccessTint,
             fillColor = ImportedWalletSuccessFill,
         )
-        Text("Wallet imported", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-        Text("${wallet.name} is ready to use in Cove.", color = OnboardingTextSecondary)
+        Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+        Text(message, color = OnboardingTextSecondary)
         Button(
             onClick = {
                 manager.dispatch(KeyTeleportManagerAction.Clear)
@@ -365,7 +396,7 @@ internal fun ReceiveImportedWalletView(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Done")
+            Text(buttonTitle)
         }
     }
 }

@@ -6,7 +6,7 @@ use ctr::cipher::{KeyIvInit as _, StreamCipher as _};
 use pbkdf2::pbkdf2_hmac;
 use rand::RngExt as _;
 use sha2::{Digest as _, Sha256, Sha512};
-use zeroize::Zeroize as _;
+use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::{Error, NumericCode, Result};
 
@@ -16,7 +16,7 @@ const RECEIVER_CODE_DOMAIN: &[u8] = b"COLCARD4EVER";
 pub(crate) const RECEIVER_PACKET_LEN: usize = 33;
 const PBKDF2_ITERATIONS: u32 = 5000;
 
-pub(crate) struct EphemeralPrivateKey([u8; 32]);
+pub(crate) struct EphemeralPrivateKey(SecretKey);
 
 impl EphemeralPrivateKey {
     pub(crate) fn generate() -> Self {
@@ -25,45 +25,34 @@ impl EphemeralPrivateKey {
         loop {
             let bytes = rng.random::<[u8; 32]>();
 
-            if SecretKey::from_slice(&bytes).is_ok() {
-                return Self(bytes);
+            if let Ok(secret_key) = SecretKey::from_slice(&bytes) {
+                return Self(secret_key);
             }
         }
     }
 
     pub(crate) fn from_bytes(bytes: [u8; 32]) -> Result<Self> {
-        SecretKey::from_slice(&bytes)?;
-
-        Ok(Self(bytes))
+        Ok(Self(SecretKey::from_slice(&bytes)?))
     }
 
     pub(crate) fn expose_bytes(&self) -> [u8; 32] {
-        self.0
+        self.0.secret_bytes()
     }
 
-    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-
-    pub(crate) fn public_key(&self) -> Result<PublicKey> {
+    pub(crate) fn public_key(&self) -> PublicKey {
         let secp = Secp256k1::new();
-        let secret_key = self.secret_key()?;
 
-        Ok(secret_key.public_key(&secp))
+        self.0.public_key(&secp)
     }
 
-    pub(crate) fn session_key(&self, public_key: &PublicKey) -> Result<SessionKey> {
-        let secret_key = self.secret_key()?;
-        let point = shared_secret_point(public_key, &secret_key);
+    pub(crate) fn session_key(&self, public_key: &PublicKey) -> SessionKey {
+        let mut point = shared_secret_point(public_key, &self.0);
         let digest = Sha256::digest(point);
+        point.zeroize();
         let mut bytes = [0_u8; 32];
         bytes.copy_from_slice(&digest);
 
-        Ok(SessionKey(bytes))
-    }
-
-    fn secret_key(&self) -> Result<SecretKey> {
-        SecretKey::from_slice(&self.0).map_err(Into::into)
+        SessionKey(bytes)
     }
 }
 
@@ -75,7 +64,7 @@ impl fmt::Debug for EphemeralPrivateKey {
 
 impl Drop for EphemeralPrivateKey {
     fn drop(&mut self) {
-        self.0.zeroize();
+        self.0.non_secure_erase();
     }
 }
 
@@ -90,9 +79,9 @@ impl SessionKey {
         encrypt_checked(&self.0, body)
     }
 
-    pub(crate) fn paranoid_key(&self, noid_key: &[u8; 5]) -> [u8; 32] {
-        let mut key = [0_u8; 32];
-        pbkdf2_hmac::<Sha512>(&self.0, noid_key, PBKDF2_ITERATIONS, &mut key);
+    pub(crate) fn paranoid_key(&self, noid_key: &[u8; 5]) -> Zeroizing<[u8; 32]> {
+        let mut key = Zeroizing::new([0_u8; 32]);
+        pbkdf2_hmac::<Sha512>(&self.0, noid_key, PBKDF2_ITERATIONS, &mut key[..]);
 
         key
     }
@@ -113,7 +102,7 @@ impl Drop for SessionKey {
 pub(crate) fn generate_receiver_packet(
     private_key: &EphemeralPrivateKey,
 ) -> Result<(NumericCode, [u8; RECEIVER_PACKET_LEN])> {
-    let public_key = private_key.public_key()?;
+    let public_key = private_key.public_key();
     let mut public_key_bytes = public_key.serialize();
     let hash = receiver_code_hash(private_key);
 
@@ -155,12 +144,12 @@ pub(crate) fn decrypt_inner(paranoid_key: &[u8; 32], body: &[u8]) -> Result<Vec<
 }
 
 fn receiver_code_hash(private_key: &EphemeralPrivateKey) -> [u8; 32] {
-    let mut material = Vec::with_capacity(32 + RECEIVER_CODE_DOMAIN.len());
-    material.extend_from_slice(private_key.as_bytes());
+    let private_key_bytes = Zeroizing::new(private_key.expose_bytes());
+    let mut material = Zeroizing::new(Vec::with_capacity(32 + RECEIVER_CODE_DOMAIN.len()));
+    material.extend_from_slice(private_key_bytes.as_ref());
     material.extend_from_slice(RECEIVER_CODE_DOMAIN);
 
     let first = Sha256::digest(&material);
-    material.zeroize();
 
     let second = Sha256::digest(first);
     let mut bytes = [0_u8; 32];
@@ -169,9 +158,9 @@ fn receiver_code_hash(private_key: &EphemeralPrivateKey) -> [u8; 32] {
     bytes
 }
 
-fn receiver_code_aes_key(code: &NumericCode) -> [u8; 32] {
+fn receiver_code_aes_key(code: &NumericCode) -> Zeroizing<[u8; 32]> {
     let digest = Sha256::digest(code.as_str().as_bytes());
-    let mut key = [0_u8; 32];
+    let mut key = Zeroizing::new([0_u8; 32]);
     key.copy_from_slice(&digest);
 
     key
@@ -191,14 +180,14 @@ fn decrypt_checked(key: &[u8; 32], body: &[u8]) -> Result<Vec<u8>> {
     }
 
     let (ciphertext, expected_checksum) = body.split_at(body.len() - 2);
-    let mut plaintext = ciphertext.to_vec();
+    let mut plaintext = Zeroizing::new(ciphertext.to_vec());
     apply_aes256_ctr(key, &mut plaintext);
 
     if checksum(&plaintext) != expected_checksum {
         return Err(Error::Checksum);
     }
 
-    Ok(plaintext)
+    Ok(std::mem::take(&mut *plaintext))
 }
 
 fn checksum(body: &[u8]) -> [u8; 2] {

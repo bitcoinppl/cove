@@ -1,5 +1,5 @@
 use bitcoin::secp256k1::PublicKey;
-use zeroize::Zeroize as _;
+use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::{
     DecodedPayload, Error, NumericCode, ReceiverPacket, Result, SenderPacket, TeleportPassword,
@@ -33,7 +33,7 @@ impl ReceiverSession {
 
     pub fn decode_step1(&self, packet: &SenderPacket) -> Result<PendingPayload> {
         let sender_pubkey = PublicKey::from_slice(packet.sender_pubkey_bytes())?;
-        let session_key = self.private_key.session_key(&sender_pubkey)?;
+        let session_key = self.private_key.session_key(&sender_pubkey);
         let inner = session_key.decrypt_outer(packet.encrypted_body())?;
 
         Ok(PendingPayload { session_key, inner })
@@ -69,11 +69,10 @@ pub struct PendingPayload {
 impl PendingPayload {
     pub fn complete(mut self, password: &TeleportPassword) -> Result<DecodedPayload> {
         let noid_key = password.expose_bytes();
-        let paranoid_key = self.session_key.paranoid_key(&noid_key);
-        let mut plaintext = crypto::decrypt_inner(&paranoid_key, &self.inner)?;
+        let paranoid_key = self.session_key.paranoid_key(noid_key);
+        let plaintext = Zeroizing::new(crypto::decrypt_inner(&paranoid_key, &self.inner)?);
         let decoded = DecodedPayload::decode(&plaintext);
 
-        plaintext.zeroize();
         self.inner.zeroize();
 
         decoded
@@ -92,10 +91,10 @@ pub(crate) fn encode_for_sender(
     password: &TeleportPassword,
     payload: Payload,
 ) -> Result<SenderPacket> {
-    let sender_public_key = sender_private_key.public_key()?;
-    let session_key = sender_private_key.session_key(receiver_public_key)?;
+    let sender_public_key = sender_private_key.public_key();
+    let session_key = sender_private_key.session_key(receiver_public_key);
     let noid_key = password.expose_bytes();
-    let paranoid_key = session_key.paranoid_key(&noid_key);
+    let paranoid_key = session_key.paranoid_key(noid_key);
     let plaintext = payload.encode()?;
     let inner = crypto::encrypt_inner(&paranoid_key, &plaintext);
     let outer = session_key.encrypt_outer(&inner);

@@ -126,8 +126,7 @@ impl MultiFormat {
             Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
                 return Ok(Self::KeyTeleportSender(packet));
             }
-            Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt)
-            | Err(crate::key_teleport::KeyTeleportParseError::UnsupportedPsbt) => {
+            Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt) => {
                 return Err(MultiFormatError::KeyTeleportPsbtNotSupported);
             }
             Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {}

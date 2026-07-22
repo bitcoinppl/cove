@@ -60,6 +60,42 @@ import SwiftUI
     }
 
     @MainActor
+    func handleKeyTeleportText(_ text: String) -> Bool {
+        do {
+            let multiFormat = try StringOrData(text).toMultiFormat()
+            switch multiFormat {
+            case .keyTeleportReceiver, .keyTeleportSender:
+                handleMultiFormat(multiFormat)
+                return true
+            default:
+                return false
+            }
+        } catch let error as MultiFormatError {
+            if case .KeyTeleportPsbtNotSupported = error {
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: "Key Teleport PSBT packets are not supported yet.")
+                )
+                return true
+            }
+
+            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let looksLikeKeyTeleport = normalized.contains("keyteleport.com")
+                || normalized.hasPrefix("b$2r")
+                || normalized.hasPrefix("b$2s")
+                || normalized.hasPrefix("b$2p")
+            if looksLikeKeyTeleport {
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: "This Key Teleport packet could not be read.")
+                )
+            }
+
+            return looksLikeKeyTeleport
+        } catch {
+            return false
+        }
+    }
+
+    @MainActor
     func handleNfcScan(_ nfcMessage: NfcMessage) {
         do {
             let multiFormat = try nfcMessage.tryIntoMultiFormat()
@@ -175,14 +211,14 @@ extension ScanManager {
     @MainActor
     private func handleKeyTeleportReceiver(_ packet: KeyTeleportReceiverPacket) {
         let manager = app.ensureKeyTeleportManager()
-        manager.ingest(packet.bbqrPart())
+        manager.ingest(packet)
         app.pushRoute(RouteFactory().keyTeleportSend())
     }
 
     @MainActor
     private func handleKeyTeleportSender(_ packet: KeyTeleportSenderPacket) {
         let manager = app.ensureKeyTeleportManager()
-        manager.ingest(packet.bbqrPart())
+        manager.ingest(packet)
         app.pushRoute(RouteFactory().keyTeleportReceive())
     }
 

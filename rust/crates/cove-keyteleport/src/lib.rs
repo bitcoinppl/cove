@@ -44,8 +44,14 @@ pub enum Error {
     #[error("invalid mnemonic payload")]
     InvalidMnemonicPayload,
 
+    #[error("unsupported Key Teleport mnemonic word count {0}; expected 12, 18, or 24 words")]
+    UnsupportedMnemonicWordCount(usize),
+
     #[error("invalid xprv payload")]
     InvalidXprvPayload,
+
+    #[error("xprv payload is not a master key")]
+    NonMasterXprvPayload,
 
     #[error("invalid secure notes payload")]
     InvalidNotesPayload,

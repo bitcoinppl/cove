@@ -279,8 +279,7 @@ fn parse_bbqr_data(
                 Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
                     Ok(MultiFormat::KeyTeleportSender(packet))
                 }
-                Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt)
-                | Err(crate::key_teleport::KeyTeleportParseError::UnsupportedPsbt) => {
+                Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt) => {
                     Err(MultiQrError::ParseError(
                         "Key Teleport PSBT packets are not supported yet".into(),
                     ))
@@ -1253,7 +1252,7 @@ mod tests {
         let packet = crate::key_teleport::KeyTeleportReceiverPacket::new(request.packet);
         let scanner = QrScannerFFI::new();
 
-        let result = scanner.scan(StringOrData::String(packet.bbqr_part())).unwrap();
+        let result = scanner.scan(StringOrData::String(packet.bbqr_part().unwrap())).unwrap();
 
         match result {
             ScanResult::Complete {

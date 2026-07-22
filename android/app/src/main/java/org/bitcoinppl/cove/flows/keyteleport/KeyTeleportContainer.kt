@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -170,11 +171,13 @@ private fun KeyTeleportStateContent(
         }
 
         is KeyTeleportManagerState.ReceiveReady,
+        is KeyTeleportManagerState.ReceiveError,
         is KeyTeleportManagerState.ReceiveEnterPassword,
         is KeyTeleportManagerState.ReceiveMnemonicReview,
         is KeyTeleportManagerState.ReceiveXprvReview,
         is KeyTeleportManagerState.ReceiveMessageReview,
         is KeyTeleportManagerState.ReceiveImportedWallet,
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet,
         -> {
             KeyTeleportReceiveContent(app, manager, state, onScan)
         }
@@ -208,6 +211,16 @@ private fun KeyTeleportReceiveContent(
     onScan: () -> Unit,
 ) {
     when (state) {
+        is KeyTeleportManagerState.ReceiveError -> {
+            Text("Cove couldn’t prepare a receive request.", color = Color.White)
+            Button(
+                onClick = { manager.dispatch(KeyTeleportManagerAction.StartReceive) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Try Again")
+            }
+        }
+
         is KeyTeleportManagerState.ReceiveReady -> {
             ReceiveReadyView(state.v1, onScan)
         }
@@ -230,6 +243,16 @@ private fun KeyTeleportReceiveContent(
 
         is KeyTeleportManagerState.ReceiveImportedWallet -> {
             ReceiveImportedWalletView(manager, state.v1) { app.selectWallet(state.v1.id) }
+        }
+
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
+            ReceiveImportedWalletView(
+                manager = manager,
+                wallet = state.v1,
+                title = "Wallet already imported",
+                message = "${state.v1.name} is already available in Cove.",
+                buttonTitle = "Open Wallet",
+            ) { app.selectWallet(state.v1.id) }
         }
 
         else -> {

@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.flows.keyteleport
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -122,7 +123,7 @@ internal fun SendReadyView(
     ready: KeyTeleportSendReady,
     onDone: () -> Unit,
 ) {
-    val packetText = remember(ready.packet) { ready.packet.bbqrPart() }
+    val packetText = remember(ready.packet) { runCatching { ready.packet.bbqrPart() }.getOrNull() }
     val password = remember(ready.password) { ready.password.groupedText() }
 
     SecureScreenEffect()
@@ -130,7 +131,11 @@ internal fun SendReadyView(
         title = "Sender code ready",
         body = "Show this QR to the receiver, then read the password to complete the transfer.",
     )
-    PacketQr(packetText)
+    if (packetText == null) {
+        Text("Unable to render this sender response.", color = MaterialTheme.colorScheme.error)
+    } else {
+        PacketQr(packetText)
+    }
     SecretCode(password)
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
         Text("Done")

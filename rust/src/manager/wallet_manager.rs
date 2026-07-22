@@ -1033,10 +1033,11 @@ impl RustWalletManager {
                 FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
             }
 
-            DiscoveryState::FoundAddressesFromMnemonic(_) => {
+            DiscoveryState::FoundAddressesFromMnemonic(_)
+            | DiscoveryState::FoundAddressesFromXprv(_) => {
                 let id = self.id.clone();
                 let actor = self.actor.clone();
-                call!(actor.switch_mnemonic_to_new_address_type(wallet_address_type))
+                call!(actor.switch_private_wallet_to_new_address_type(wallet_address_type))
                     .await
                     .map_err(|source| {
                         WalletManagerUnableToSwitchError::new(wallet_address_type, source)
@@ -1052,6 +1053,7 @@ impl RustWalletManager {
 
             DiscoveryState::Single
             | DiscoveryState::StartedMnemonic
+            | DiscoveryState::StartedXprv
             | DiscoveryState::NoneFound
             | DiscoveryState::ChoseAdressType
             | DiscoveryState::StartedJson(_) => {

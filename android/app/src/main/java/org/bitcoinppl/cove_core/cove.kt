@@ -3527,6 +3527,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_filehandlererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportpacketencodingerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_keyteleportparseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4446,16 +4448,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_filehandler_read() != 12343.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part() != 31966.toShort()) {
+    if (lib.uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part() != 45199.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_keyteleportreceiverpacket_url() != 30148.toShort()) {
+    if (lib.uniffi_cove_checksum_method_keyteleportreceiverpacket_url() != 17039.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part() != 12397.toShort()) {
+    if (lib.uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part() != 49372.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_keyteleportsenderpacket_url() != 48299.toShort()) {
+    if (lib.uniffi_cove_checksum_method_keyteleportsenderpacket_url() != 49444.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479.toShort()) {
@@ -15750,10 +15752,11 @@ open class KeyTeleportReceiverPacket: Disposable, AutoCloseable, KeyTeleportRece
         }
     }
 
-    override fun `bbqrPart`(): kotlin.String {
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `bbqrPart`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
     UniffiLib.uniffi_cove_fn_method_keyteleportreceiverpacket_bbqr_part(
         it,
         _status)
@@ -15763,10 +15766,11 @@ open class KeyTeleportReceiverPacket: Disposable, AutoCloseable, KeyTeleportRece
     }
 
 
-    override fun `url`(): kotlin.String {
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `url`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
     UniffiLib.uniffi_cove_fn_method_keyteleportreceiverpacket_url(
         it,
         _status)
@@ -16020,10 +16024,11 @@ open class KeyTeleportSenderPacket: Disposable, AutoCloseable, KeyTeleportSender
         }
     }
 
-    override fun `bbqrPart`(): kotlin.String {
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `bbqrPart`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
     UniffiLib.uniffi_cove_fn_method_keyteleportsenderpacket_bbqr_part(
         it,
         _status)
@@ -16033,10 +16038,11 @@ open class KeyTeleportSenderPacket: Disposable, AutoCloseable, KeyTeleportSender
     }
 
 
-    override fun `url`(): kotlin.String {
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `url`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
     UniffiLib.uniffi_cove_fn_method_keyteleportsenderpacket_url(
         it,
         _status)
@@ -44649,6 +44655,12 @@ sealed class DiscoveryState: Disposable  {
     object StartedMnemonic : DiscoveryState()
 
 
+    /**
+     * Discover alternate script types for an imported master extended private key
+     */
+    object StartedXprv : DiscoveryState()
+
+
     data class FoundAddressesFromJson(
         val v1: List<org.bitcoinppl.cove_core.FoundAddress>,
         val v2: org.bitcoinppl.cove_core.FoundJson) : DiscoveryState()
@@ -44708,6 +44720,38 @@ sealed class DiscoveryState: Disposable  {
         companion object
     }
 
+    /**
+     * Alternate script types with history derived from an imported master xprv
+     */
+    data class FoundAddressesFromXprv(
+        val v1: List<org.bitcoinppl.cove_core.FoundAddress>) : DiscoveryState()
+
+    {
+
+
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is DiscoveryState) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+
+        FfiConverterTypeDiscoveryState.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(FfiConverterTypeDiscoveryState.lower(this),
+        _status)
+}
+    ).toInt()
+    }
+        companion object
+    }
+
     object NoneFound : DiscoveryState()
 
 
@@ -44730,6 +44774,8 @@ sealed class DiscoveryState: Disposable  {
             }
             is DiscoveryState.StartedMnemonic -> {// Nothing to destroy
             }
+            is DiscoveryState.StartedXprv -> {// Nothing to destroy
+            }
             is DiscoveryState.FoundAddressesFromJson -> {
 
     Disposable.destroy(
@@ -44739,6 +44785,13 @@ sealed class DiscoveryState: Disposable  {
 
             }
             is DiscoveryState.FoundAddressesFromMnemonic -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is DiscoveryState.FoundAddressesFromXprv -> {
 
     Disposable.destroy(
         this.v1
@@ -44791,15 +44844,19 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
                 FfiConverterTypeFoundJson.read(buf),
                 )
             3 -> DiscoveryState.StartedMnemonic
-            4 -> DiscoveryState.FoundAddressesFromJson(
+            4 -> DiscoveryState.StartedXprv
+            5 -> DiscoveryState.FoundAddressesFromJson(
                 FfiConverterSequenceTypeFoundAddress.read(buf),
                 FfiConverterTypeFoundJson.read(buf),
                 )
-            5 -> DiscoveryState.FoundAddressesFromMnemonic(
+            6 -> DiscoveryState.FoundAddressesFromMnemonic(
                 FfiConverterSequenceTypeFoundAddress.read(buf),
                 )
-            6 -> DiscoveryState.NoneFound
-            7 -> DiscoveryState.ChoseAdressType
+            7 -> DiscoveryState.FoundAddressesFromXprv(
+                FfiConverterSequenceTypeFoundAddress.read(buf),
+                )
+            8 -> DiscoveryState.NoneFound
+            9 -> DiscoveryState.ChoseAdressType
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -44824,6 +44881,12 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
                 4UL
             )
         }
+        is DiscoveryState.StartedXprv -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is DiscoveryState.FoundAddressesFromJson -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -44833,6 +44896,13 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
             )
         }
         is DiscoveryState.FoundAddressesFromMnemonic -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeFoundAddress.allocationSize(value.v1)
+            )
+        }
+        is DiscoveryState.FoundAddressesFromXprv -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -44868,23 +44938,32 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
                 buf.putInt(3)
                 Unit
             }
-            is DiscoveryState.FoundAddressesFromJson -> {
+            is DiscoveryState.StartedXprv -> {
                 buf.putInt(4)
+                Unit
+            }
+            is DiscoveryState.FoundAddressesFromJson -> {
+                buf.putInt(5)
                 FfiConverterSequenceTypeFoundAddress.write(value.v1, buf)
                 FfiConverterTypeFoundJson.write(value.v2, buf)
                 Unit
             }
             is DiscoveryState.FoundAddressesFromMnemonic -> {
-                buf.putInt(5)
+                buf.putInt(6)
+                FfiConverterSequenceTypeFoundAddress.write(value.v1, buf)
+                Unit
+            }
+            is DiscoveryState.FoundAddressesFromXprv -> {
+                buf.putInt(7)
                 FfiConverterSequenceTypeFoundAddress.write(value.v1, buf)
                 Unit
             }
             is DiscoveryState.NoneFound -> {
-                buf.putInt(6)
+                buf.putInt(8)
                 Unit
             }
             is DiscoveryState.ChoseAdressType -> {
-                buf.putInt(7)
+                buf.putInt(9)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -46964,6 +47043,12 @@ sealed class KeyTeleportAlert: kotlin.Exception() {
             get() = ""
     }
 
+    class ReceiveSessionReset(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
     class ParseFailed(
         ) : KeyTeleportAlert() {
         override val message
@@ -47092,26 +47177,27 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
         return when(buf.getInt()) {
             1 -> KeyTeleportAlert.NoActiveReceiveSession()
             2 -> KeyTeleportAlert.ReceiveSessionExpired()
-            3 -> KeyTeleportAlert.ParseFailed()
-            4 -> KeyTeleportAlert.UnsupportedPsbt()
-            5 -> KeyTeleportAlert.UnsupportedPayload()
-            6 -> KeyTeleportAlert.InvalidPayload()
-            7 -> KeyTeleportAlert.WrongReceiverCode()
-            8 -> KeyTeleportAlert.WrongTeleportPassword()
-            9 -> KeyTeleportAlert.NoEligibleWallets()
-            10 -> KeyTeleportAlert.IneligibleWallet()
-            11 -> KeyTeleportAlert.NoPendingSend()
-            12 -> KeyTeleportAlert.NoPendingReceiveSecret()
-            13 -> KeyTeleportAlert.ImportFailed(
+            3 -> KeyTeleportAlert.ReceiveSessionReset()
+            4 -> KeyTeleportAlert.ParseFailed()
+            5 -> KeyTeleportAlert.UnsupportedPsbt()
+            6 -> KeyTeleportAlert.UnsupportedPayload()
+            7 -> KeyTeleportAlert.InvalidPayload()
+            8 -> KeyTeleportAlert.WrongReceiverCode()
+            9 -> KeyTeleportAlert.WrongTeleportPassword()
+            10 -> KeyTeleportAlert.NoEligibleWallets()
+            11 -> KeyTeleportAlert.IneligibleWallet()
+            12 -> KeyTeleportAlert.NoPendingSend()
+            13 -> KeyTeleportAlert.NoPendingReceiveSecret()
+            14 -> KeyTeleportAlert.ImportFailed(
                 FfiConverterString.read(buf),
                 )
-            14 -> KeyTeleportAlert.Keychain(
+            15 -> KeyTeleportAlert.Keychain(
                 FfiConverterString.read(buf),
                 )
-            15 -> KeyTeleportAlert.Protocol(
+            16 -> KeyTeleportAlert.Protocol(
                 FfiConverterString.read(buf),
                 )
-            16 -> KeyTeleportAlert.Database(
+            17 -> KeyTeleportAlert.Database(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -47125,6 +47211,10 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
                 4UL
             )
             is KeyTeleportAlert.ReceiveSessionExpired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ReceiveSessionReset -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -47201,63 +47291,67 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
                 buf.putInt(2)
                 Unit
             }
-            is KeyTeleportAlert.ParseFailed -> {
+            is KeyTeleportAlert.ReceiveSessionReset -> {
                 buf.putInt(3)
                 Unit
             }
-            is KeyTeleportAlert.UnsupportedPsbt -> {
+            is KeyTeleportAlert.ParseFailed -> {
                 buf.putInt(4)
                 Unit
             }
-            is KeyTeleportAlert.UnsupportedPayload -> {
+            is KeyTeleportAlert.UnsupportedPsbt -> {
                 buf.putInt(5)
                 Unit
             }
-            is KeyTeleportAlert.InvalidPayload -> {
+            is KeyTeleportAlert.UnsupportedPayload -> {
                 buf.putInt(6)
                 Unit
             }
-            is KeyTeleportAlert.WrongReceiverCode -> {
+            is KeyTeleportAlert.InvalidPayload -> {
                 buf.putInt(7)
                 Unit
             }
-            is KeyTeleportAlert.WrongTeleportPassword -> {
+            is KeyTeleportAlert.WrongReceiverCode -> {
                 buf.putInt(8)
                 Unit
             }
-            is KeyTeleportAlert.NoEligibleWallets -> {
+            is KeyTeleportAlert.WrongTeleportPassword -> {
                 buf.putInt(9)
                 Unit
             }
-            is KeyTeleportAlert.IneligibleWallet -> {
+            is KeyTeleportAlert.NoEligibleWallets -> {
                 buf.putInt(10)
                 Unit
             }
-            is KeyTeleportAlert.NoPendingSend -> {
+            is KeyTeleportAlert.IneligibleWallet -> {
                 buf.putInt(11)
                 Unit
             }
-            is KeyTeleportAlert.NoPendingReceiveSecret -> {
+            is KeyTeleportAlert.NoPendingSend -> {
                 buf.putInt(12)
                 Unit
             }
-            is KeyTeleportAlert.ImportFailed -> {
+            is KeyTeleportAlert.NoPendingReceiveSecret -> {
                 buf.putInt(13)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportAlert.Keychain -> {
+            is KeyTeleportAlert.ImportFailed -> {
                 buf.putInt(14)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportAlert.Protocol -> {
+            is KeyTeleportAlert.Keychain -> {
                 buf.putInt(15)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportAlert.Database -> {
+            is KeyTeleportAlert.Protocol -> {
                 buf.putInt(16)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportAlert.Database -> {
+                buf.putInt(17)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -47265,6 +47359,152 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
     }
 
 }
+
+
+
+/**
+ * Validated or unparsed input for a Key Teleport flow
+ */
+sealed class KeyTeleportInput: Disposable  {
+
+    /**
+     * Text or bytes that still need protocol parsing
+     */
+    data class MultiFormat(
+        val v1: org.bitcoinppl.cove_core.StringOrData) : KeyTeleportInput()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A receiver request already validated by the shared scanner
+     */
+    data class Receiver(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportReceiverPacket) : KeyTeleportInput()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A sender response already validated by the shared scanner
+     */
+    data class Sender(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportSenderPacket) : KeyTeleportInput()
+
+    {
+
+
+        companion object
+    }
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is KeyTeleportInput.MultiFormat -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportInput.Receiver -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportInput.Sender -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportInput : FfiConverterRustBuffer<KeyTeleportInput>{
+    override fun read(buf: ByteBuffer): KeyTeleportInput {
+        return when(buf.getInt()) {
+            1 -> KeyTeleportInput.MultiFormat(
+                FfiConverterTypeStringOrData.read(buf),
+                )
+            2 -> KeyTeleportInput.Receiver(
+                FfiConverterTypeKeyTeleportReceiverPacket.read(buf),
+                )
+            3 -> KeyTeleportInput.Sender(
+                FfiConverterTypeKeyTeleportSenderPacket.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportInput): ULong = when(value) {
+        is KeyTeleportInput.MultiFormat -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeStringOrData.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportInput.Receiver -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportReceiverPacket.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportInput.Sender -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportSenderPacket.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportInput, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportInput.MultiFormat -> {
+                buf.putInt(1)
+                FfiConverterTypeStringOrData.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportInput.Receiver -> {
+                buf.putInt(2)
+                FfiConverterTypeKeyTeleportReceiverPacket.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportInput.Sender -> {
+                buf.putInt(3)
+                FfiConverterTypeKeyTeleportSenderPacket.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -47286,7 +47526,7 @@ sealed class KeyTeleportManagerAction: Disposable  {
 
 
     data class Ingest(
-        val v1: org.bitcoinppl.cove_core.StringOrData) : KeyTeleportManagerAction()
+        val v1: org.bitcoinppl.cove_core.KeyTeleportInput) : KeyTeleportManagerAction()
 
     {
 
@@ -47433,7 +47673,7 @@ public object FfiConverterTypeKeyTeleportManagerAction : FfiConverterRustBuffer<
             2 -> KeyTeleportManagerAction.RestartReceive
             3 -> KeyTeleportManagerAction.EndReceive
             4 -> KeyTeleportManagerAction.Ingest(
-                FfiConverterTypeStringOrData.read(buf),
+                FfiConverterTypeKeyTeleportInput.read(buf),
                 )
             5 -> KeyTeleportManagerAction.StartSendFromWallet(
                 FfiConverterTypeWalletId.read(buf),
@@ -47480,7 +47720,7 @@ public object FfiConverterTypeKeyTeleportManagerAction : FfiConverterRustBuffer<
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeStringOrData.allocationSize(value.v1)
+                + FfiConverterTypeKeyTeleportInput.allocationSize(value.v1)
             )
         }
         is KeyTeleportManagerAction.StartSendFromWallet -> {
@@ -47565,7 +47805,7 @@ public object FfiConverterTypeKeyTeleportManagerAction : FfiConverterRustBuffer<
             }
             is KeyTeleportManagerAction.Ingest -> {
                 buf.putInt(4)
-                FfiConverterTypeStringOrData.write(value.v1, buf)
+                FfiConverterTypeKeyTeleportInput.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerAction.StartSendFromWallet -> {
@@ -47753,6 +47993,12 @@ sealed class KeyTeleportManagerState: Disposable  {
         companion object
     }
 
+    /**
+     * Receive-session setup failed and can be retried
+     */
+    object ReceiveError : KeyTeleportManagerState()
+
+
     object ReceiveEnterPassword : KeyTeleportManagerState()
 
 
@@ -47790,6 +48036,18 @@ sealed class KeyTeleportManagerState: Disposable  {
      * Reports the wallet created from received private key material
      */
     data class ReceiveImportedWallet(
+        val v1: org.bitcoinppl.cove_core.WalletMetadata) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Reports that the received wallet already exists on this device
+     */
+    data class ReceiveAlreadyImportedWallet(
         val v1: org.bitcoinppl.cove_core.WalletMetadata) : KeyTeleportManagerState()
 
     {
@@ -47854,6 +48112,8 @@ sealed class KeyTeleportManagerState: Disposable  {
     )
 
             }
+            is KeyTeleportManagerState.ReceiveError -> {// Nothing to destroy
+            }
             is KeyTeleportManagerState.ReceiveEnterPassword -> {// Nothing to destroy
             }
             is KeyTeleportManagerState.ReceiveMnemonicReview -> {
@@ -47878,6 +48138,13 @@ sealed class KeyTeleportManagerState: Disposable  {
 
             }
             is KeyTeleportManagerState.ReceiveImportedWallet -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
 
     Disposable.destroy(
         this.v1
@@ -47935,30 +48202,34 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
             2 -> KeyTeleportManagerState.ReceiveReady(
                 FfiConverterTypeKeyTeleportReceiveState.read(buf),
                 )
-            3 -> KeyTeleportManagerState.ReceiveEnterPassword
-            4 -> KeyTeleportManagerState.ReceiveMnemonicReview(
+            3 -> KeyTeleportManagerState.ReceiveError
+            4 -> KeyTeleportManagerState.ReceiveEnterPassword
+            5 -> KeyTeleportManagerState.ReceiveMnemonicReview(
                 FfiConverterTypeKeyTeleportMnemonicReview.read(buf),
                 )
-            5 -> KeyTeleportManagerState.ReceiveXprvReview(
+            6 -> KeyTeleportManagerState.ReceiveXprvReview(
                 FfiConverterTypeKeyTeleportXprvReview.read(buf),
                 )
-            6 -> KeyTeleportManagerState.ReceiveMessageReview(
+            7 -> KeyTeleportManagerState.ReceiveMessageReview(
                 FfiConverterTypeKeyTeleportMessageReview.read(buf),
                 )
-            7 -> KeyTeleportManagerState.ReceiveImportedWallet(
+            8 -> KeyTeleportManagerState.ReceiveImportedWallet(
                 FfiConverterTypeWalletMetadata.read(buf),
                 )
-            8 -> KeyTeleportManagerState.SendAwaitReceiver
-            9 -> KeyTeleportManagerState.SendChooseWallet(
+            9 -> KeyTeleportManagerState.ReceiveAlreadyImportedWallet(
+                FfiConverterTypeWalletMetadata.read(buf),
+                )
+            10 -> KeyTeleportManagerState.SendAwaitReceiver
+            11 -> KeyTeleportManagerState.SendChooseWallet(
                 FfiConverterTypeKeyTeleportSendChooseWallet.read(buf),
                 )
-            10 -> KeyTeleportManagerState.SendEnterCode(
+            12 -> KeyTeleportManagerState.SendEnterCode(
                 FfiConverterTypeKeyTeleportSendEnterCode.read(buf),
                 )
-            11 -> KeyTeleportManagerState.SendConfirm(
+            13 -> KeyTeleportManagerState.SendConfirm(
                 FfiConverterTypeKeyTeleportSendConfirm.read(buf),
                 )
-            12 -> KeyTeleportManagerState.SendReady(
+            14 -> KeyTeleportManagerState.SendReady(
                 FfiConverterTypeKeyTeleportSendReady.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -47977,6 +48248,12 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
             (
                 4UL
                 + FfiConverterTypeKeyTeleportReceiveState.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveError -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is KeyTeleportManagerState.ReceiveEnterPassword -> {
@@ -48007,6 +48284,13 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
             )
         }
         is KeyTeleportManagerState.ReceiveImportedWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletMetadata.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -48060,51 +48344,60 @@ public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<K
                 FfiConverterTypeKeyTeleportReceiveState.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportManagerState.ReceiveEnterPassword -> {
+            is KeyTeleportManagerState.ReceiveError -> {
                 buf.putInt(3)
                 Unit
             }
-            is KeyTeleportManagerState.ReceiveMnemonicReview -> {
+            is KeyTeleportManagerState.ReceiveEnterPassword -> {
                 buf.putInt(4)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveMnemonicReview -> {
+                buf.putInt(5)
                 FfiConverterTypeKeyTeleportMnemonicReview.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.ReceiveXprvReview -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeKeyTeleportXprvReview.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.ReceiveMessageReview -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterTypeKeyTeleportMessageReview.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.ReceiveImportedWallet -> {
-                buf.putInt(7)
+                buf.putInt(8)
+                FfiConverterTypeWalletMetadata.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
+                buf.putInt(9)
                 FfiConverterTypeWalletMetadata.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendAwaitReceiver -> {
-                buf.putInt(8)
+                buf.putInt(10)
                 Unit
             }
             is KeyTeleportManagerState.SendChooseWallet -> {
-                buf.putInt(9)
+                buf.putInt(11)
                 FfiConverterTypeKeyTeleportSendChooseWallet.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendEnterCode -> {
-                buf.putInt(10)
+                buf.putInt(12)
                 FfiConverterTypeKeyTeleportSendEnterCode.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendConfirm -> {
-                buf.putInt(11)
+                buf.putInt(13)
                 FfiConverterTypeKeyTeleportSendConfirm.write(value.v1, buf)
                 Unit
             }
             is KeyTeleportManagerState.SendReady -> {
-                buf.putInt(12)
+                buf.putInt(14)
                 FfiConverterTypeKeyTeleportSendReady.write(value.v1, buf)
                 Unit
             }
@@ -48238,13 +48531,84 @@ public object FfiConverterTypeKeyTeleportMessageItem : FfiConverterRustBuffer<Ke
 
 
 
-sealed class KeyTeleportParseException: kotlin.Exception() {
+/**
+ * A failure while rendering a validated Key Teleport packet
+ */
+sealed class KeyTeleportPacketEncodingException: kotlin.Exception() {
 
-    class UnsupportedPsbt(
-        ) : KeyTeleportParseException() {
+    /**
+     * The packet could not be encoded as a single-part BBQr value
+     */
+    class Encoding(
+
+        val v1: kotlin.String
+        ) : KeyTeleportPacketEncodingException() {
         override val message
-            get() = ""
+            get() = "v1=${ v1 }"
     }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportpacketencodingerror_uniffi_trait_display(FfiConverterTypeKeyTeleportPacketEncodingError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<KeyTeleportPacketEncodingException> {
+        override fun lift(error_buf: RustBuffer.ByValue): KeyTeleportPacketEncodingException = FfiConverterTypeKeyTeleportPacketEncodingError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportPacketEncodingError : FfiConverterRustBuffer<KeyTeleportPacketEncodingException> {
+    override fun read(buf: ByteBuffer): KeyTeleportPacketEncodingException {
+
+
+        return when(buf.getInt()) {
+            1 -> KeyTeleportPacketEncodingException.Encoding(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportPacketEncodingException): ULong {
+        return when(value) {
+            is KeyTeleportPacketEncodingException.Encoding -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportPacketEncodingException, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportPacketEncodingException.Encoding -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+
+
+sealed class KeyTeleportParseException: kotlin.Exception() {
 
     class Unrecognized(
         ) : KeyTeleportParseException() {
@@ -48280,18 +48644,13 @@ public object FfiConverterTypeKeyTeleportParseError : FfiConverterRustBuffer<Key
 
 
         return when(buf.getInt()) {
-            1 -> KeyTeleportParseException.UnsupportedPsbt()
-            2 -> KeyTeleportParseException.Unrecognized()
+            1 -> KeyTeleportParseException.Unrecognized()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: KeyTeleportParseException): ULong {
         return when(value) {
-            is KeyTeleportParseException.UnsupportedPsbt -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
             is KeyTeleportParseException.Unrecognized -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -48301,12 +48660,8 @@ public object FfiConverterTypeKeyTeleportParseError : FfiConverterRustBuffer<Key
 
     override fun write(value: KeyTeleportParseException, buf: ByteBuffer) {
         when(value) {
-            is KeyTeleportParseException.UnsupportedPsbt -> {
-                buf.putInt(1)
-                Unit
-            }
             is KeyTeleportParseException.Unrecognized -> {
-                buf.putInt(2)
+                buf.putInt(1)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -61612,7 +61967,7 @@ sealed class WalletScannerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
-    class NoMnemonicAvailable(
+    class NoWalletSecretAvailable(
 
         val v1: WalletId
         ) : WalletScannerException() {
@@ -61652,7 +62007,7 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
             2 -> WalletScannerException.WalletCreationException(
                 FfiConverterTypeWalletError.read(buf),
                 )
-            3 -> WalletScannerException.NoMnemonicAvailable(
+            3 -> WalletScannerException.NoWalletSecretAvailable(
                 FfiConverterTypeWalletId.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -61670,7 +62025,7 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterTypeWalletError.allocationSize(value.v1)
             )
-            is WalletScannerException.NoMnemonicAvailable -> (
+            is WalletScannerException.NoWalletSecretAvailable -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
@@ -61689,7 +62044,7 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
                 FfiConverterTypeWalletError.write(value.v1, buf)
                 Unit
             }
-            is WalletScannerException.NoMnemonicAvailable -> {
+            is WalletScannerException.NoWalletSecretAvailable -> {
                 buf.putInt(3)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
