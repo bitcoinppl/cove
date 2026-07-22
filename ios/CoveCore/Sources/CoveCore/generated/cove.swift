@@ -17185,60 +17185,6 @@ public func FfiConverterTypeKeyTeleportSendChooseWallet_lower(_ value: KeyTelepo
 }
 
 
-public struct KeyTeleportSendConfirm {
-    public var selectedWallet: WalletMetadata
-    public var warnsPassphraseNotIncluded: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(selectedWallet: WalletMetadata, warnsPassphraseNotIncluded: Bool) {
-        self.selectedWallet = selectedWallet
-        self.warnsPassphraseNotIncluded = warnsPassphraseNotIncluded
-    }
-
-
-
-
-}
-
-#if compiler(>=6)
-extension KeyTeleportSendConfirm: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeKeyTeleportSendConfirm: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendConfirm {
-        return
-            try KeyTeleportSendConfirm(
-                selectedWallet: FfiConverterTypeWalletMetadata.read(from: &buf),
-                warnsPassphraseNotIncluded: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: KeyTeleportSendConfirm, into buf: inout [UInt8]) {
-        FfiConverterTypeWalletMetadata.write(value.selectedWallet, into: &buf)
-        FfiConverterBool.write(value.warnsPassphraseNotIncluded, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeKeyTeleportSendConfirm_lift(_ buf: RustBuffer) throws -> KeyTeleportSendConfirm {
-    return try FfiConverterTypeKeyTeleportSendConfirm.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeKeyTeleportSendConfirm_lower(_ value: KeyTeleportSendConfirm) -> RustBuffer {
-    return FfiConverterTypeKeyTeleportSendConfirm.lower(value)
-}
-
-
 public struct KeyTeleportSendEnterCode {
     public var selectedWallet: WalletMetadata
 
@@ -17289,13 +17235,36 @@ public func FfiConverterTypeKeyTeleportSendEnterCode_lower(_ value: KeyTeleportS
 }
 
 
+/**
+ * An encrypted sender response ready to share with the receiver
+ */
 public struct KeyTeleportSendReady {
+    /**
+     * The wallet whose private key material is in the encrypted response
+     */
+    public var selectedWallet: WalletMetadata
+    /**
+     * The encoded sender response
+     */
     public var packet: KeyTeleportSenderPacket
+    /**
+     * The password needed to decrypt the sender response
+     */
     public var password: KeyTeleportPassword
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(packet: KeyTeleportSenderPacket, password: KeyTeleportPassword) {
+    public init(
+        /**
+         * The wallet whose private key material is in the encrypted response
+         */selectedWallet: WalletMetadata,
+        /**
+         * The encoded sender response
+         */packet: KeyTeleportSenderPacket,
+        /**
+         * The password needed to decrypt the sender response
+         */password: KeyTeleportPassword) {
+        self.selectedWallet = selectedWallet
         self.packet = packet
         self.password = password
     }
@@ -17316,12 +17285,14 @@ public struct FfiConverterTypeKeyTeleportSendReady: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyTeleportSendReady {
         return
             try KeyTeleportSendReady(
+                selectedWallet: FfiConverterTypeWalletMetadata.read(from: &buf),
                 packet: FfiConverterTypeKeyTeleportSenderPacket.read(from: &buf),
                 password: FfiConverterTypeKeyTeleportPassword.read(from: &buf)
         )
     }
 
     public static func write(_ value: KeyTeleportSendReady, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletMetadata.write(value.selectedWallet, into: &buf)
         FfiConverterTypeKeyTeleportSenderPacket.write(value.packet, into: &buf)
         FfiConverterTypeKeyTeleportPassword.write(value.password, into: &buf)
     }
@@ -29219,10 +29190,6 @@ public enum KeyTeleportManagerAction {
     )
     case enterReceiverCode(String
     )
-    /**
-     * Confirms sending the selected wallet's private key material
-     */
-    case confirmSendWallet
     case enterSenderPassword(String
     )
     /**
@@ -29272,20 +29239,18 @@ public struct FfiConverterTypeKeyTeleportManagerAction: FfiConverterRustBuffer {
         case 7: return .enterReceiverCode(try FfiConverterString.read(from: &buf)
         )
 
-        case 8: return .confirmSendWallet
-
-        case 9: return .enterSenderPassword(try FfiConverterString.read(from: &buf)
+        case 8: return .enterSenderPassword(try FfiConverterString.read(from: &buf)
         )
 
-        case 10: return .importReceivedWallet
+        case 9: return .importReceivedWallet
 
-        case 11: return .revealXprv
+        case 10: return .revealXprv
 
-        case 12: return .hideXprv
+        case 11: return .hideXprv
 
-        case 13: return .finishReview
+        case 12: return .finishReview
 
-        case 14: return .clear
+        case 13: return .clear
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29327,33 +29292,29 @@ public struct FfiConverterTypeKeyTeleportManagerAction: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .confirmSendWallet:
-            writeInt(&buf, Int32(8))
-
-
         case let .enterSenderPassword(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
 
 
         case .importReceivedWallet:
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
 
 
         case .revealXprv:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(10))
 
 
         case .hideXprv:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
 
 
         case .finishReview:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
 
 
         case .clear:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
 
         }
     }
@@ -29493,8 +29454,6 @@ public enum KeyTeleportManagerState {
     )
     case sendEnterCode(KeyTeleportSendEnterCode
     )
-    case sendConfirm(KeyTeleportSendConfirm
-    )
     case sendReady(KeyTeleportSendReady
     )
 
@@ -29550,10 +29509,7 @@ public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
         case 12: return .sendEnterCode(try FfiConverterTypeKeyTeleportSendEnterCode.read(from: &buf)
         )
 
-        case 13: return .sendConfirm(try FfiConverterTypeKeyTeleportSendConfirm.read(from: &buf)
-        )
-
-        case 14: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
+        case 13: return .sendReady(try FfiConverterTypeKeyTeleportSendReady.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29620,13 +29576,8 @@ public struct FfiConverterTypeKeyTeleportManagerState: FfiConverterRustBuffer {
             FfiConverterTypeKeyTeleportSendEnterCode.write(v1, into: &buf)
 
 
-        case let .sendConfirm(v1):
-            writeInt(&buf, Int32(13))
-            FfiConverterTypeKeyTeleportSendConfirm.write(v1, into: &buf)
-
-
         case let .sendReady(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeKeyTeleportSendReady.write(v1, into: &buf)
 
         }
