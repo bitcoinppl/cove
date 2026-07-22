@@ -3,12 +3,16 @@ use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use bdk_electrum::electrum_client::raw_client::{ElectrumSslStream, RawClient};
+use bdk_electrum::electrum_client::raw_client::{
+    CLIENT_NAME, ElectrumSslStream, PROTOCOL_VERSION_MAX, PROTOCOL_VERSION_MIN, RawClient,
+};
 use bdk_electrum::electrum_client::{
     Batch, BroadcastPackageRes, Client, ElectrumApi, Error, EstimationMode, GetBalanceRes,
     GetHeadersRes, GetHistoryRes, GetMerkleRes, ListUnspentRes, MempoolInfoRes, Param,
-    RawHeaderNotification, ScriptStatus, ServerFeaturesRes, TxidFromPosRes,
+    RawHeaderNotification, ScriptStatus, ServerFeaturesRes, ServerVersionRes, TxidFromPosRes,
 };
+use bitcoin::consensus::deserialize;
+use bitcoin::hex::FromHex as _;
 use bitcoin::{Script, Txid};
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{CertificateError, ClientConnection, StreamOwned};
@@ -56,19 +60,29 @@ pub struct Pinned {
 
 struct Connection {
     client: RawClient<ElectrumSslStream>,
+    /// What `server.version` settled on for this socket. Renegotiated on every
+    /// reconnect, since the server may not be the one answering next time.
+    protocol_version: String,
     /// Bumped on every reconnect, so callers that failed on an older connection
     /// can tell it has already been replaced.
     generation: u64,
 }
 
+/// 1.6 changed the shape of `blockchain.block.headers`.
+fn is_at_least_1_6(version: &str) -> bool {
+    let mut parts = version.split('.');
+    let major = parts.next().and_then(|part| part.parse::<u32>().ok()).unwrap_or(0);
+    let minor = parts.next().and_then(|part| part.parse::<u32>().ok()).unwrap_or(0);
+
+    (major, minor) >= (1, 6)
+}
+
 impl Pinned {
     fn connect(url: &str, trust: &TlsTrust) -> Result<Self, ConnectError> {
-        let client = connect(url, trust)?;
-
         Ok(Self {
             url: url.to_string(),
             trust: trust.clone(),
-            connection: RwLock::new(Connection { client, generation: 0 }),
+            connection: RwLock::new(connect(url, trust)?),
         })
     }
 
@@ -76,15 +90,12 @@ impl Pinned {
     ///
     /// Mirrors electrum-client's retry policy: a protocol error came from the
     /// server and will repeat, anything else may be a broken socket.
-    fn call<T>(
-        &self,
-        call: impl Fn(&RawClient<ElectrumSslStream>) -> Result<T, Error>,
-    ) -> Result<T, Error> {
+    fn call<T>(&self, call: impl Fn(&Connection) -> Result<T, Error>) -> Result<T, Error> {
         // Scoped so the read guard is released before the write below.
         let (error, generation) = {
             let connection = self.read();
 
-            match call(&connection.client) {
+            match call(&connection) {
                 Ok(value) => return Ok(value),
                 Err(error @ (Error::Protocol(_) | Error::AlreadySubscribed(_))) => {
                     return Err(error);
@@ -100,13 +111,14 @@ impl Pinned {
 
             // Another caller may already have replaced the dead connection.
             if connection.generation == generation {
-                connection.client = connect(&self.url, &self.trust)
+                let replacement = connect(&self.url, &self.trust)
                     .map_err(|error| Error::Message(error.to_string()))?;
-                connection.generation += 1;
+
+                *connection = Connection { generation: generation + 1, ..replacement };
             }
         }
 
-        call(&self.read().client)
+        call(&self.read())
     }
 
     /// A panic in one call must not wedge the node for the rest of the session,
@@ -145,9 +157,12 @@ pub enum ConnectError {
 
     #[error("failed to connect: {0}")]
     Connect(std::io::Error),
+
+    #[error("failed to negotiate a protocol version: {0}")]
+    Negotiate(Error),
 }
 
-fn connect(url: &str, trust: &TlsTrust) -> Result<RawClient<ElectrumSslStream>, ConnectError> {
+fn connect(url: &str, trust: &TlsTrust) -> Result<Connection, ConnectError> {
     let (host, port) = target(url)?;
 
     // A pinned fingerprint ignores this name, but rustls still requires a
@@ -156,7 +171,71 @@ fn connect(url: &str, trust: &TlsTrust) -> Result<RawClient<ElectrumSslStream>, 
         .map_err(|_| ConnectError::InvalidHost(host.clone()))?
         .to_owned();
 
-    handshake(server_name, tls::client_config(trust)?, &host, port).map(RawClient::from)
+    let stream = handshake(server_name, tls::client_config(trust)?, &host, port)?;
+    let client = RawClient::from(stream);
+    let protocol_version = negotiate(&client).map_err(ConnectError::Negotiate)?;
+
+    Ok(Connection { client, protocol_version, generation: 0 })
+}
+
+/// Send `server.version`, which protocol 1.6 requires before anything else.
+///
+/// [`RawClient::from`] only wraps a stream, and the negotiation
+/// electrum-client does in its own constructors is private, so it is repeated
+/// here. The version it settles on is kept because electrum-client cannot tell
+/// us the one it recorded, and `blockchain.block.headers` is decoded from it.
+fn negotiate(client: &RawClient<ElectrumSslStream>) -> Result<String, Error> {
+    let versions = vec![PROTOCOL_VERSION_MIN.to_string(), PROTOCOL_VERSION_MAX.to_string()];
+
+    let response = client.raw_call(
+        "server.version",
+        vec![Param::String(CLIENT_NAME.to_string()), Param::StringVec(versions)],
+    )?;
+
+    let response: ServerVersionRes = serde_json::from_value(response)?;
+
+    Ok(response.protocol_version)
+}
+
+/// Decode `blockchain.block.headers` for this connection's protocol version.
+///
+/// electrum-client only decodes the 1.6 shape when it negotiated the version
+/// itself, which it cannot do for a caller supplied session, so it would read a
+/// 1.6 response as a 1.4 one and fail the wallet scan.
+fn block_headers(
+    connection: &Connection,
+    start_height: usize,
+    count: usize,
+) -> Result<GetHeadersRes, Error> {
+    // Before 1.6 electrum-client's own decoding is already correct.
+    if !is_at_least_1_6(&connection.protocol_version) {
+        return connection.client.block_headers(start_height, count);
+    }
+
+    let response = connection.client.raw_call(
+        "blockchain.block.headers",
+        vec![Param::Usize(start_height), Param::Usize(count)],
+    )?;
+
+    // `GetHeadersRes` keeps the hex strings in a private field, so they are
+    // read back out of the response rather than from the decoded value.
+    let hexes = response
+        .get("headers")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| Error::InvalidResponse(response.clone()))?;
+
+    let headers = hexes
+        .iter()
+        .map(|hex| {
+            let hex = hex.as_str().ok_or_else(|| Error::InvalidResponse(response.clone()))?;
+            Ok(deserialize(&Vec::<u8>::from_hex(hex)?)?)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    let mut decoded: GetHeadersRes = serde_json::from_value(response.clone())?;
+    decoded.headers = headers;
+
+    Ok(decoded)
 }
 
 /// Read the certificate a server presents, so the user can confirm it before
@@ -251,7 +330,9 @@ macro_rules! dispatch {
     ($self:expr, $method:ident $(, $arg:expr)*) => {
         match $self {
             Transport::Default(inner) => inner.$method($($arg),*),
-            Transport::Pinned(pinned) => pinned.call(|inner| inner.$method($($arg),*)),
+            Transport::Pinned(pinned) => {
+                pinned.call(|connection| connection.client.$method($($arg),*))
+            }
         }
     };
 }
@@ -284,7 +365,12 @@ impl ElectrumApi for Transport {
     }
 
     fn block_headers(&self, start_height: usize, count: usize) -> Result<GetHeadersRes, Error> {
-        dispatch!(self, block_headers, start_height, count)
+        match self {
+            Transport::Default(inner) => inner.block_headers(start_height, count),
+            Transport::Pinned(pinned) => {
+                pinned.call(|connection| block_headers(connection, start_height, count))
+            }
+        }
     }
 
     fn estimate_fee(&self, number: usize, mode: Option<EstimationMode>) -> Result<f64, Error> {
@@ -442,7 +528,7 @@ mod tests {
     use super::*;
     use crate::node::client::electrum::ElectrumClient;
     use crate::node::client::electrum::test_server::{
-        Authority, TEST_HEIGHT, TestServer, self_signed, setup,
+        Authority, PROTOCOL_VERSION, TEST_HEIGHT, TestServer, self_signed, setup,
     };
     use crate::node::{ApiType, Node};
     use cove_types::network::Network;
@@ -552,6 +638,55 @@ mod tests {
 
         let error = get_height(&test_node("localhost", server.port, None)).await.unwrap_err();
         assert!(error.contains("UnknownIssuer"), "{error}");
+    }
+
+    /// Protocol 1.6 requires `server.version` before anything else, and the
+    /// negotiated version decides how `blockchain.block.headers` is decoded.
+    #[tokio::test]
+    async fn a_pinned_connection_negotiates_the_protocol_version() {
+        setup();
+        let server = TestServer::self_signed("localhost");
+        let trust = server.fingerprint_trust();
+        let url = format!("ssl://localhost:{}", server.port);
+
+        let transport = Transport::connect_pinned(&url, &trust).unwrap();
+        let Transport::Pinned(pinned) = &transport else { panic!("not pinned") };
+
+        assert_eq!(pinned.read().protocol_version, PROTOCOL_VERSION);
+        assert_eq!(transport.block_headers(TEST_HEIGHT, 1).unwrap().headers.len(), 1);
+    }
+
+    /// A reconnect starts a new session, so it has to negotiate again rather
+    /// than carry the previous connection's version.
+    #[tokio::test]
+    async fn a_reconnect_negotiates_again() {
+        setup();
+        let server = TestServer::self_signed("localhost");
+        let trust = server.fingerprint_trust();
+        let url = format!("ssl://localhost:{}", server.port);
+
+        let transport = Transport::connect_pinned(&url, &trust).unwrap();
+        let Transport::Pinned(pinned) = &transport else { panic!("not pinned") };
+
+        // The server answers this one and then drops the socket, so it is the
+        // call after it that has to rebuild the connection.
+        server.hang_up_once();
+        assert_eq!(transport.block_headers(TEST_HEIGHT, 1).unwrap().headers.len(), 1);
+        assert_eq!(transport.block_headers(TEST_HEIGHT, 1).unwrap().headers.len(), 1);
+
+        let connection = pinned.read();
+        assert_eq!(connection.generation, 1, "did not reconnect");
+        assert_eq!(connection.protocol_version, PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn protocol_versions_compare_by_number() {
+        assert!(is_at_least_1_6("1.6"));
+        assert!(is_at_least_1_6("1.10"));
+        assert!(is_at_least_1_6("2.0"));
+        assert!(!is_at_least_1_6("1.4"));
+        assert!(!is_at_least_1_6("1.5"));
+        assert!(!is_at_least_1_6(""));
     }
 
     /// The client is cached for the lifetime of a wallet, so it has to survive

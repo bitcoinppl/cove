@@ -13,6 +13,10 @@ use crate::node::tls::{self, TlsTrust};
 
 pub const TEST_HEIGHT: usize = 840_000;
 
+/// What the server negotiates, so the newer `blockchain.block.headers` shape is
+/// what the client has to decode.
+pub const PROTOCOL_VERSION: &str = "1.6";
+
 const GENESIS_HEADER: &str = "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c";
 
 /// The client installs its own crypto provider, but the test server and cove's
@@ -179,7 +183,14 @@ fn response(request: &str) -> String {
         .and_then(|digits| digits.parse::<u64>().ok())
         .unwrap_or(0);
 
-    format!(
-        "{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"height\":{TEST_HEIGHT},\"hex\":\"{GENESIS_HEADER}\"}}}}\n"
-    )
+    let result = if request.contains("server.version") {
+        format!("[\"cove test server\",\"{PROTOCOL_VERSION}\"]")
+    } else if request.contains("blockchain.block.headers") {
+        // The 1.6 shape, which is what a server answering with that version sends.
+        format!("{{\"count\":1,\"max\":2016,\"headers\":[\"{GENESIS_HEADER}\"]}}")
+    } else {
+        format!("{{\"height\":{TEST_HEIGHT},\"hex\":\"{GENESIS_HEADER}\"}}")
+    };
+
+    format!("{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{result}}}\n")
 }
