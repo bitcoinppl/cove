@@ -74,7 +74,8 @@ pub(crate) use self::error::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE,
     CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CLOUD_BACKUP_RECREATE_MESSAGE,
     CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupError, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
-    blocking_cloud_error, is_connectivity_related_issue, offline_error_for_step,
+    blocking_cloud_error, is_connectivity_related_issue, is_provider_wide_interruption,
+    offline_error_for_step,
 };
 pub(crate) use self::keychain::CloudBackupKeychain;
 #[cfg(test)]

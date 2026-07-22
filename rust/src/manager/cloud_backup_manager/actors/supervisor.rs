@@ -70,6 +70,7 @@ use crate::manager::cloud_backup_manager::{
     PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
     PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
     SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
+    is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 

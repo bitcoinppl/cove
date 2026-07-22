@@ -22,8 +22,8 @@ use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
     CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupError, CloudBackupRestoreFlow,
     CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus, CloudBackupStore,
-    CloudStorageIssue, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager,
-    blocking_cloud_error, is_connectivity_related_issue, offline_error_for_step,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager, blocking_cloud_error,
+    is_connectivity_related_issue, is_provider_wide_interruption, offline_error_for_step,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -64,6 +64,13 @@ const PASSKEY_NAMESPACE_REFRESH_OFFSETS: [Duration; 5] = [
     Duration::from_secs(15),
 ];
 
+const PASSKEY_NAMESPACE_MATCH_GRACE_OFFSETS: [Duration; 4] = [
+    Duration::from_secs(1),
+    Duration::from_secs(3),
+    Duration::from_secs(7),
+    Duration::from_secs(10),
+];
+
 #[derive(Debug, Clone, Copy)]
 enum RestoreProgressPhase {
     Downloading,
@@ -84,6 +91,19 @@ fn restore_progress_flow(
             CloudBackupRestoreFlow::Downloading { completed, total }
         }
         RestoreProgressPhase::Restoring => CloudBackupRestoreFlow::Restoring { completed, total },
+    }
+}
+
+fn merge_namespace_matches(accumulated: &mut Vec<NamespaceMatch>, discovered: Vec<NamespaceMatch>) {
+    for namespace_match in discovered {
+        if let Some(existing) = accumulated
+            .iter_mut()
+            .find(|existing| existing.namespace_id == namespace_match.namespace_id)
+        {
+            *existing = namespace_match;
+        } else {
+            accumulated.push(namespace_match);
+        }
     }
 }
 
@@ -486,7 +506,7 @@ impl RestoreOperation {
                     report.failed_wallet_errors.push(error);
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
+                    if is_provider_wide_interruption(&error) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
                     let error = GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.to_string();
@@ -523,8 +543,13 @@ impl RestoreOperation {
         let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
         let mut session = matcher.start_session();
         let started_at = Instant::now();
+        let mut first_match_at = None;
+        let mut no_match_refresh_index = 0;
+        let mut grace_refresh_index = 0;
+        let mut refresh_index = 0;
+        let mut accumulated_matches = Vec::new();
 
-        for refresh_index in 0..=PASSKEY_NAMESPACE_REFRESH_OFFSETS.len() {
+        loop {
             self.ensure_current().await?;
 
             let mut namespaces = match cloud.list_namespaces().await {
@@ -556,20 +581,44 @@ impl RestoreOperation {
             match session.match_snapshot(&namespaces).await? {
                 NamespaceMatchSnapshotOutcome::Matched(matches) => {
                     info!("Restore: matched {} namespace(s)", matches.len());
-                    return Ok(matches);
+                    merge_namespace_matches(&mut accumulated_matches, matches);
+                    first_match_at.get_or_insert_with(Instant::now);
                 }
                 NamespaceMatchSnapshotOutcome::UserDeclined => {
-                    return Err(CloudBackupError::PasskeyDiscoveryCancelled);
+                    if accumulated_matches.is_empty() {
+                        return Err(CloudBackupError::PasskeyDiscoveryCancelled);
+                    }
+
+                    return Ok(accumulated_matches);
                 }
                 NamespaceMatchSnapshotOutcome::Continue => {}
             }
 
-            let Some(refresh_offset) = PASSKEY_NAMESPACE_REFRESH_OFFSETS.get(refresh_index) else {
-                break;
+            let next_refresh_at = if let Some(first_match_at) = first_match_at {
+                let Some(refresh_offset) =
+                    PASSKEY_NAMESPACE_MATCH_GRACE_OFFSETS.get(grace_refresh_index)
+                else {
+                    return Ok(accumulated_matches);
+                };
+                grace_refresh_index += 1;
+
+                // keep scanning through the anchored 10-second grace window so another matching namespace can appear
+                // then restore without waiting longer
+                first_match_at + *refresh_offset
+            } else {
+                let Some(refresh_offset) =
+                    PASSKEY_NAMESPACE_REFRESH_OFFSETS.get(no_match_refresh_index)
+                else {
+                    break;
+                };
+                no_match_refresh_index += 1;
+
+                started_at + *refresh_offset
             };
 
-            tokio::time::sleep_until(started_at + *refresh_offset).await;
+            tokio::time::sleep_until(next_refresh_at).await;
             self.ensure_current().await?;
+            refresh_index += 1;
         }
 
         let saw_supported_candidate = session.saw_supported_candidate();
@@ -740,5 +789,31 @@ mod tests {
             restore_progress_flow(RestoreProgressPhase::Restoring, 0, 0),
             CloudBackupRestoreFlow::Finding
         );
+    }
+
+    #[test]
+    fn namespace_match_merge_preserves_first_seen_order_and_replaces_revisions_in_place() {
+        let namespace_match = |namespace_id: &str, prf_salt: [u8; 32]| NamespaceMatch {
+            namespace_id: namespace_id.into(),
+            master_key: MasterKey::generate(),
+            prf_salt,
+            credential_id: vec![1, 2, 3],
+        };
+        let mut accumulated =
+            vec![namespace_match("first", [1; 32]), namespace_match("second", [2; 32])];
+
+        merge_namespace_matches(
+            &mut accumulated,
+            vec![namespace_match("second", [9; 32]), namespace_match("third", [3; 32])],
+        );
+
+        assert_eq!(
+            accumulated
+                .iter()
+                .map(|namespace_match| namespace_match.namespace_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "second", "third"]
+        );
+        assert_eq!(accumulated[1].prf_salt, [9; 32]);
     }
 }

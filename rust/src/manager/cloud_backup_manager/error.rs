@@ -212,6 +212,15 @@ pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>)
     matches!(issue.into(), CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
 }
 
+pub(crate) fn is_provider_wide_interruption(issue: impl Into<CloudStorageIssue>) -> bool {
+    matches!(
+        issue.into(),
+        CloudStorageIssue::AuthorizationRequired
+            | CloudStorageIssue::Offline
+            | CloudStorageIssue::Unavailable
+    )
+}
+
 pub(crate) fn blocking_cloud_error(
     step: BlockingCloudStep,
     error: CloudBackupError,
@@ -504,6 +513,25 @@ impl From<serde_json::Error> for CloudBackupError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_wide_interruption_covers_access_and_provider_availability() {
+        for issue in [
+            CloudStorageIssue::AuthorizationRequired,
+            CloudStorageIssue::Offline,
+            CloudStorageIssue::Unavailable,
+        ] {
+            assert!(is_provider_wide_interruption(issue));
+        }
+
+        for issue in [
+            CloudStorageIssue::NotFound,
+            CloudStorageIssue::QuotaExceeded,
+            CloudStorageIssue::Other,
+        ] {
+            assert!(!is_provider_wide_interruption(issue));
+        }
+    }
 
     #[test]
     fn platform_authorization_failures_use_durable_recovery_message() {
