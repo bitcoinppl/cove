@@ -86,7 +86,11 @@ fun NodeSettingsScreen(
     var isLoading by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var pendingCertificate by remember { mutableStateOf<NodeCertificate?>(null) }
+    // A certificate accepted in this session, with the url it was accepted for
+    // so editing the url does not check a different server against it. A saved
+    // node's settings are not held here: parseCustomNode carries those forward.
     var customTls by remember { mutableStateOf<TlsTrust?>(null) }
+    var customTlsUrl by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
 
@@ -139,7 +143,6 @@ fun NodeSettingsScreen(
                 if (matchesType) {
                     customUrl = node.url
                     customNodeName = node.name
-                    customTls = node.tls
                 }
             }
         }
@@ -233,13 +236,18 @@ fun NodeSettingsScreen(
                             customUrl,
                             selectedNodeName,
                             customNodeName,
-                            customTls,
+                            if (customTlsUrl == customUrl) customTls else null,
                         )
                     }
 
                 // update fields with parsed values
                 customUrl = node.url
                 customNodeName = node.name
+
+                // The url has just been normalized, so follow it, otherwise a
+                // retry after a failed save would ask about the same
+                // certificate again.
+                if (node.tls != null) customTlsUrl = node.url
 
                 withContext(Dispatchers.IO) {
                     nodeSelector.checkAndSaveNode(node)
@@ -289,6 +297,7 @@ fun NodeSettingsScreen(
                 TextButton(onClick = {
                     pendingCertificate = null
                     customTls = TlsTrust.PinnedFingerprint(certificate.sha256)
+                    customTlsUrl = customUrl
                     checkAndSaveCustomNode()
                 }) { Text(certificateTrust) }
             },

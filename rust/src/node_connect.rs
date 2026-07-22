@@ -40,6 +40,9 @@ pub const SIGNET_ESPLORA: [(&str, &str); 1] = [("mutinynet", "https://mutinynet.
 pub struct NodeSelector {
     network: Network,
     node_list: Vec<NodeSelection>,
+    /// The node that was selected when this selector was built, so a custom
+    /// node can inherit the certificate settings already saved for its url.
+    saved_node: Node,
 }
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash)]
@@ -118,7 +121,7 @@ impl NodeSelector {
             node_selection_list
         };
 
-        Self { network, node_list: node_selection_list }
+        Self { network, node_list: node_selection_list, saved_node: selected_node }
     }
 
     #[uniffi::method]
@@ -199,6 +202,13 @@ impl NodeSelector {
                     "custom certificates require an ssl:// url".to_string(),
                 ));
             }
+
+            // Certificate settings belong to the url they were accepted for, so
+            // an unchanged url keeps what is saved and an edited one starts
+            // clean rather than checking a new server against the old
+            // certificate. A `tls` passed in is one the user has just accepted,
+            // so it wins.
+            let tls = tls.or_else(|| trusted_certificate(&self.saved_node, &url_string));
 
             Node { tls, ..Node::new_electrum(name, url_string, self.network) }
         } else if node_type.contains("esplora") {
@@ -449,7 +459,75 @@ mod tests {
     use super::*;
 
     fn selector() -> NodeSelector {
-        NodeSelector { network: Network::Bitcoin, node_list: Vec::new() }
+        selector_with_saved(Node::default(Network::Bitcoin))
+    }
+
+    fn selector_with_saved(saved_node: Node) -> NodeSelector {
+        NodeSelector { network: Network::Bitcoin, node_list: Vec::new(), saved_node }
+    }
+
+    fn saved_pinned_node(url: &str, trust: &TlsTrust) -> Node {
+        Node {
+            tls: Some(trust.clone()),
+            ..Node::new_electrum("saved".to_string(), url.to_string(), Network::Bitcoin)
+        }
+    }
+
+    /// Re-saving the node that is already selected must not fall back to
+    /// default trust and ask about its certificate all over again.
+    #[test]
+    fn an_unchanged_url_inherits_the_certificate_it_already_trusts() {
+        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
+        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
+
+        let node = selector_with_saved(saved)
+            .parse_custom_node(
+                "ssl://node.example.com:50002".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(node.tls, Some(trust));
+    }
+
+    /// Editing the url points at a different server, which the previous
+    /// certificate says nothing about.
+    #[test]
+    fn an_edited_url_does_not_inherit_the_previous_certificate() {
+        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
+        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
+
+        let node = selector_with_saved(saved)
+            .parse_custom_node(
+                "ssl://other.example.com:50002".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(node.tls, None);
+    }
+
+    /// Esplora refuses certificate settings, so inheriting them would make the
+    /// node impossible to save.
+    #[test]
+    fn switching_to_esplora_does_not_inherit_the_certificate() {
+        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
+        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
+
+        let node = selector_with_saved(saved)
+            .parse_custom_node(
+                "https://node.example.com".to_string(),
+                "Custom Esplora".to_string(),
+                String::new(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(node.tls, None);
     }
 
     fn parse(url: &str) -> Result<Node, Error> {
