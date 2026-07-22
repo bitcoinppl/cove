@@ -69,6 +69,7 @@ pub enum SettingsRoute {
     Network,
     Appearance,
     Node,
+    Tor,
     BlockExplorer,
     FiatCurrency,
 
