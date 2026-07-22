@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -193,6 +194,7 @@ fun SecretWordsScreen(
                         .fillMaxWidth()
                         .heightIn(min = maxHeight)
                         .padding(top = 16.dp)
+                        .clipToBounds()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
@@ -226,7 +228,7 @@ fun SecretWordsScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 32.dp),
+                            .padding(top = 24.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
