@@ -35,6 +35,7 @@ android {
         targetSdk = 36
         versionCode = 37
         versionName = "1.4.0"
+        manifestPlaceholders["keyTeleportAppLinksEnabled"] = "false"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] =

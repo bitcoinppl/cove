@@ -35,16 +35,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:host="keyteleport.com"
-                    android:scheme="https" />
-            </intent-filter>
-            <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -52,6 +42,23 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <activity-alias
+            android:name=".KeyTeleportLinkActivity"
+            android:enabled="${keyTeleportAppLinksEnabled}"
+            android:exported="true"
+            android:targetActivity="org.bitcoinppl.cove.MainActivity">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="keyteleport.com" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"
