@@ -619,6 +619,8 @@ impl FfiApp {
 
     /// Fetch external data (prices, fees) with retry logic, called after AppManager creation
     pub async fn init_data(&self) {
+        crate::manager::tor_manager::TOR_MANAGER.warmup().await;
+
         // get / update prices
         cove_tokio::task::spawn(async move {
             let init_result = (|| crate::fiat::client::init_prices())

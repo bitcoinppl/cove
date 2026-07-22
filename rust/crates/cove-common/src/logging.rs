@@ -22,8 +22,16 @@ pub fn init() {
             };
         }
 
+        let fmt_layer = fmt::layer().with_ansi(false);
+
+        #[cfg(target_os = "android")]
+        let fmt_layer = fmt_layer.with_writer(std::io::stderr);
+
+        #[cfg(not(target_os = "android"))]
+        let fmt_layer = fmt_layer.with_writer(std::io::stdout);
+
         tracing_subscriber::registry()
-            .with(fmt::layer().with_writer(std::io::stdout).with_ansi(false))
+            .with(fmt_layer)
             .with(capture::layer())
             .with(EnvFilter::from_default_env())
             .init();

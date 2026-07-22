@@ -71,6 +71,10 @@ pub enum Error {
     #[error("built-in Tor runtime stopped before it became ready")]
     StoppedBeforeReady,
 
+    /// No built-in Tor runtime has been started by the lifecycle owner
+    #[error("built-in Tor runtime is not running")]
+    NotRunning,
+
     /// An internal runtime lifecycle channel closed unexpectedly
     #[error("built-in Tor runtime lifecycle channel closed")]
     LifecycleChannelClosed,
@@ -236,16 +240,14 @@ impl RuntimeController {
     }
 
     async fn endpoint(&self) -> Result<SocketAddr, Error> {
-        self.start().await?;
-
+        let mut status_rx = self.status_tx.subscribe();
         let endpoint = {
             let lifecycle = self.lifecycle.lock().await;
             match &*lifecycle {
-                Lifecycle::Stopped => return Err(Error::StoppedBeforeReady),
+                Lifecycle::Stopped => return Err(Error::NotRunning),
                 Lifecycle::Running(handle) => handle.endpoint,
             }
         };
-        let mut status_rx = self.status_tx.subscribe();
 
         loop {
             match status_rx.borrow_and_update().clone() {

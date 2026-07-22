@@ -69,10 +69,7 @@ pub enum Error {
     #[error("failed to create node client: {0}")]
     CreateElectrumClient(electrum_client::Error),
 
-    #[error("built-in Tor proxy is not available")]
-    BuiltInTorProxyUnavailable,
-
-    #[error("failed to start built-in Tor runtime: {0}")]
+    #[error("built-in Tor runtime is unavailable")]
     BuiltInTorRuntime(#[from] crate::tor_runtime::Error),
 
     #[error("failed to connect to node: {0}")]
@@ -127,6 +124,18 @@ pub struct NodeClientOptions {
     pub tor: Option<TorProxy>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedNodeClientOptions {
+    batch_size: usize,
+    tor: Option<Socks5Endpoint>,
+}
+
+#[derive(Debug, Clone)]
+struct Socks5Endpoint {
+    host: String,
+    port: u16,
+}
+
 impl NodeClientOptions {
     /// Loads the persisted Tor route from the database
     pub fn from_db(batch_size: usize) -> Self {
@@ -140,27 +149,34 @@ impl NodeClientOptions {
         Self { batch_size, tor }
     }
 
-    async fn resolve_built_in_tor(self) -> Result<Self, crate::tor_runtime::Error> {
+    /// Loads persisted options with the backend's standard batch size
+    pub(crate) fn from_db_for_node(node: &Node) -> Self {
+        let batch_size = match node.api_type {
+            ApiType::Electrum => ELECTRUM_BATCH_SIZE,
+            ApiType::Esplora | ApiType::Rpc => ESPLORA_BATCH_SIZE,
+        };
+
+        Self::from_db(batch_size)
+    }
+
+    async fn resolve_tor(self) -> Result<ResolvedNodeClientOptions, crate::tor_runtime::Error> {
         let tor = match self.tor {
             Some(TorProxy::BuiltIn) => {
                 let endpoint = crate::tor_runtime::built_in_socks_endpoint().await?;
 
-                Some(TorProxy::Socks5 { host: endpoint.ip().to_string(), port: endpoint.port() })
+                Some(Socks5Endpoint { host: endpoint.ip().to_string(), port: endpoint.port() })
             }
-            tor => tor,
+            Some(TorProxy::Socks5 { host, port }) => Some(Socks5Endpoint { host, port }),
+            None => None,
         };
 
-        Ok(Self { batch_size: self.batch_size, tor })
+        Ok(ResolvedNodeClientOptions { batch_size: self.batch_size, tor })
     }
 }
 
 impl NodeClient {
     pub async fn new(node: &Node) -> Result<Self, Error> {
-        let batch_size = match node.api_type {
-            ApiType::Electrum => ELECTRUM_BATCH_SIZE,
-            ApiType::Esplora | ApiType::Rpc => ESPLORA_BATCH_SIZE,
-        };
-        let options = NodeClientOptions::from_db(batch_size);
+        let options = NodeClientOptions::from_db_for_node(node);
 
         Self::new_with_options(node, options).await
     }
@@ -175,7 +191,7 @@ impl NodeClient {
         // computed fresh from the persisted config; only backend construction
         // sees the resolved built-in endpoint, which changes on runtime restart
         let connection_identity = node.connection_identity_with_tor(options.tor.clone());
-        let options = options.resolve_built_in_tor().await?;
+        let options = options.resolve_tor().await?;
         let backend = match node.api_type {
             ApiType::Esplora => {
                 let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;

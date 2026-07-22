@@ -19,11 +19,11 @@ use serde::Deserialize;
 use serde_json::Value;
 use tap::TapFallible as _;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 #[cfg(test)]
-use super::ELECTRUM_BATCH_SIZE;
-use super::{Error, NodeClientOptions, TorProxy};
+use super::{ELECTRUM_BATCH_SIZE, NodeClientOptions};
+use super::{Error, ResolvedNodeClientOptions};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
@@ -37,28 +37,28 @@ struct ElectrumTransactionResponse {
 #[derive(Clone)]
 pub struct ElectrumClient {
     client: Arc<ElectrumClientInner>,
-    options: NodeClientOptions,
+    options: ResolvedNodeClientOptions,
 }
 
 impl ElectrumClient {
-    pub const fn new_with_options(
+    const fn new_with_options(
         client: Arc<ElectrumClientInner>,
-        options: NodeClientOptions,
+        options: ResolvedNodeClientOptions,
     ) -> Self {
         Self { client, options }
     }
 
     #[cfg(test)]
     async fn new_from_node(node: &Node) -> Result<Self, Error> {
-        Self::new_from_node_and_options(node, Self::default_options()).await
+        Self::new_from_node_and_options(node, Self::default_options().await).await
     }
 
-    pub async fn new_from_node_and_options(
+    pub(crate) async fn new_from_node_and_options(
         node: &Node,
-        options: NodeClientOptions,
+        options: ResolvedNodeClientOptions,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
-        let config = Self::connection_config(&options)?;
+        let config = Self::connection_config(&options);
 
         // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
         let inner_client =
@@ -78,7 +78,7 @@ impl ElectrumClient {
             client
                 .inner
                 .block_headers_subscribe()
-                .tap_err(|error| error!("Failed to get height: {error:?}"))
+                .tap_err(|error| debug!("Failed to get height: {error:?}"))
         })
         .await
         .map_err(Error::ElectrumConnect)?;
@@ -92,7 +92,7 @@ impl ElectrumClient {
             client
                 .inner
                 .block_headers_subscribe()
-                .tap_err(|error| error!("Failed to get height: {error:?}"))
+                .tap_err(|error| debug!("Failed to get height: {error:?}"))
         })
         .await
         .map_err(Error::ElectrumConnect)?;
@@ -116,7 +116,7 @@ impl ElectrumClient {
                     "blockchain.transaction.get",
                     [Param::String(txid_string), Param::Bool(true)],
                 )
-                .tap_err(|error| error!("electrum failed to get transaction: {error:?}"))
+                .tap_err(|error| debug!("electrum failed to get transaction: {error:?}"))
         })
         .await;
 
@@ -194,7 +194,7 @@ impl ElectrumClient {
         let tx: Transaction =
             cove_tokio::unblock::run_blocking(move || client.inner.transaction_get(&txid_clone))
                 .await
-                .tap_err(|error| error!("electrum failed to get transaction: {error:?}"))
+                .tap_err(|error| debug!("electrum failed to get transaction: {error:?}"))
                 .map_err(Error::ElectrumGetTransaction)?;
 
         let tip_height = self.get_height().await? as u32;
@@ -334,20 +334,21 @@ impl ElectrumClient {
     }
 
     #[cfg(test)]
-    fn default_options() -> NodeClientOptions {
-        NodeClientOptions::from_db(ELECTRUM_BATCH_SIZE)
+    async fn default_options() -> ResolvedNodeClientOptions {
+        NodeClientOptions::from_db(ELECTRUM_BATCH_SIZE).resolve_tor().await.unwrap()
     }
 
-    fn connection_config(options: &NodeClientOptions) -> Result<Config, Error> {
+    fn connection_config(options: &ResolvedNodeClientOptions) -> Config {
         let socks5 = match &options.tor {
             None => None,
-            Some(TorProxy::Socks5 { host, port }) => {
+            Some(endpoint) => {
+                let host = &endpoint.host;
+                let port = endpoint.port;
                 Some(Socks5Config::new(format!("{host}:{port}")))
             }
-            Some(TorProxy::BuiltIn) => return Err(Error::BuiltInTorProxyUnavailable),
         };
 
-        Ok(ConfigBuilder::new().socks5(socks5).build())
+        ConfigBuilder::new().socks5(socks5).build()
     }
 }
 

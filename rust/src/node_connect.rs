@@ -171,7 +171,7 @@ impl NodeSelector {
     /// Check the node url and set it as selected node if it is valid
     pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
         node.check_url().await.map_err(|error| {
-            tracing::warn!("error checking node: {error:?}");
+            tracing::debug!("error checking node: {error:?}");
             Error::NodeAccessError(error.to_string())
         })?;
 
@@ -236,6 +236,45 @@ fn node_list(network: Network) -> Vec<Node> {
             nodes
         }
     }
+}
+
+/// Returns whether a node address requires onion routing
+pub(crate) fn node_implies_tor(node: &Node) -> bool {
+    Url::parse(&node.url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .or_else(|| {
+            Url::parse(&format!("tcp://{}", node.url.trim()))
+                .ok()
+                .and_then(|url| url.host_str().map(str::to_string))
+        })
+        .is_some_and(|host| host.to_ascii_lowercase().ends_with(".onion"))
+}
+
+/// Switches the selected node to the first clearnet preset for the active network
+pub(crate) fn switch_to_first_clearnet_preset() -> Result<Node, ClearnetPresetError> {
+    let database = Database::global();
+    let network = database.global_config.selected_network();
+    let node = node_list(network)
+        .into_iter()
+        .find(|node| !node_implies_tor(node))
+        .ok_or(ClearnetPresetError::NotFound(network))?;
+
+    database.global_config.set_selected_node(&node)?;
+
+    Ok(node)
+}
+
+/// Error produced while selecting a clearnet fallback node
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ClearnetPresetError {
+    /// No clearnet preset exists for the active network
+    #[error("no clearnet preset exists for {0}")]
+    NotFound(Network),
+
+    /// The selected preset could not be persisted
+    #[error("failed to save the clearnet preset: {0}")]
+    Database(#[from] crate::database::Error),
 }
 
 fn parse_node_url(url: &str) -> eyre::Result<Url> {
@@ -308,5 +347,21 @@ fn default_node_selection() -> NodeSelection {
             let (name, url) = TESTNET4_ESPLORA[0];
             NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(url: &str) -> Node {
+        Node::new_electrum("test".to_string(), url.to_string(), Network::Bitcoin)
+    }
+
+    #[test]
+    fn onion_detection_accepts_schemed_and_bare_hosts() {
+        assert!(node_implies_tor(&node("ssl://example.onion:50002")));
+        assert!(node_implies_tor(&node("EXAMPLE.ONION:50001")));
+        assert!(!node_implies_tor(&node("ssl://example.com:50002")));
     }
 }

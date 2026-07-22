@@ -17,26 +17,27 @@ use tracing::debug;
 
 use crate::node::Node;
 
-use super::{Error, NodeClientOptions, TorProxy};
+use super::{Error, ResolvedNodeClientOptions};
 
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
     client: Arc<AsyncClient>,
-    options: NodeClientOptions,
+    options: ResolvedNodeClientOptions,
 }
 
 impl EsploraClient {
-    pub fn new_from_node_and_options(
+    pub(crate) fn new_from_node_and_options(
         node: &Node,
-        options: NodeClientOptions,
+        options: ResolvedNodeClientOptions,
     ) -> Result<Self, Error> {
         let mut builder = esplora_client::Builder::new(&node.url);
         match &options.tor {
             None => {}
-            Some(TorProxy::Socks5 { host, port }) => {
+            Some(endpoint) => {
+                let host = &endpoint.host;
+                let port = endpoint.port;
                 builder = builder.proxy(&format!("socks5h://{host}:{port}"));
             }
-            Some(TorProxy::BuiltIn) => return Err(Error::BuiltInTorProxyUnavailable),
         }
 
         let client = builder.build_async().map_err(Error::CreateEsploraClient)?.into();
@@ -44,7 +45,10 @@ impl EsploraClient {
         Ok(Self::new_with_options(client, options))
     }
 
-    pub const fn new_with_options(client: Arc<AsyncClient>, options: NodeClientOptions) -> Self {
+    const fn new_with_options(
+        client: Arc<AsyncClient>,
+        options: ResolvedNodeClientOptions,
+    ) -> Self {
         Self { client, options }
     }
 
@@ -52,7 +56,7 @@ impl EsploraClient {
         self.client
             .get_height()
             .await
-            .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
+            .tap_err(|error| tracing::debug!("Failed to get height: {error:?}"))
             .map_err(Error::EsploraConnect)
     }
 
@@ -62,7 +66,7 @@ impl EsploraClient {
             .client
             .get_block_hash(height)
             .await
-            .tap_err(|e| tracing::error!("Failed to get block hash: {e:?}"))
+            .tap_err(|e| tracing::debug!("Failed to get block hash: {e:?}"))
             .map_err(Error::EsploraConnect)?;
 
         Ok(BlockId { height, hash })

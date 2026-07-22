@@ -9,4 +9,5 @@ pub mod onboarding_manager;
 pub mod pending_wallet_manager;
 pub mod reconcile_channel;
 pub mod send_flow_manager;
+pub mod tor_manager;
 pub mod wallet_manager;
