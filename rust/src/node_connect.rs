@@ -1,7 +1,15 @@
-use tracing::error;
+use tracing::{debug, error};
 use url::Url;
 
-use crate::{database::Database, network::Network, node::Node};
+use crate::{
+    database::{Database, global_flag::GlobalFlagKey},
+    manager::tor_manager::{TOR_MANAGER, TorManagerAction},
+    network::Network,
+    node::{
+        ApiType, Node,
+        client::{NodeClient, NodeClientOptions},
+    },
+};
 use cove_macros::impl_default_for;
 use eyre::{Context, eyre};
 
@@ -49,17 +57,37 @@ type Error = NodeSelectorError;
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum NodeSelectorError {
+    /// No preset or selected custom node has the requested name
     #[error("node with name {0} not found")]
     NodeNotFound(String),
 
+    /// The selected node could not be persisted
     #[error("unable to set selected node: {0}")]
     SetSelectedNodeError(String),
 
+    /// The node could not be reached
     #[error("unable to access node: {0}")]
     NodeAccessError(String),
 
+    /// The node URL is invalid
     #[error("unable to parse node url: {0}")]
     ParseNodeUrlError(String),
+
+    /// The node is an onion service but Tor is disabled
+    #[error("the selected node requires Tor")]
+    OnionNodeRequiresTor,
+
+    /// The selected API type contradicts the URL's transport scheme
+    #[error("the selected node type does not match the URL scheme")]
+    ApiTypeMismatch { selected: ApiType, inferred: ApiType },
+
+    /// Tor could not be enabled before saving an onion node
+    #[error("unable to enable Tor for the selected node")]
+    TorEnableError,
+
+    /// The progressive-discovery flag could not be persisted
+    #[error("unable to save that Tor settings were discovered")]
+    TorSettingsDiscoveryError,
 }
 
 impl_default_for!(NodeSelector);
@@ -125,7 +153,7 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url().await.map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
+        check_node_with_tor_inference(&node).await?;
 
         Ok(())
     }
@@ -139,9 +167,33 @@ impl NodeSelector {
         entered_name: String,
     ) -> Result<Node, Error> {
         let node_type = name.to_ascii_lowercase();
+        let selected_api_type = if node_type.contains("electrum") {
+            ApiType::Electrum
+        } else if node_type.contains("esplora") {
+            ApiType::Esplora
+        } else {
+            error!(node_type, "invalid node type");
+            return Err(Error::ParseNodeUrlError("invalid node type".to_string()));
+        };
 
-        let url =
-            parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
+        if let Some(inferred_api_type) = infer_api_type_from_url_hint(&url)
+            && inferred_api_type != selected_api_type
+        {
+            debug!(
+                selected_api_type = ?selected_api_type,
+                inferred_api_type = ?inferred_api_type,
+                host = "<redacted>",
+                "custom node type does not match URL scheme",
+            );
+
+            return Err(Error::ApiTypeMismatch {
+                selected: selected_api_type,
+                inferred: inferred_api_type,
+            });
+        }
+
+        let url = parse_node_url(&url, selected_api_type)
+            .map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
 
         if !url.domain().unwrap_or_default().contains('.') {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
@@ -155,13 +207,10 @@ impl NodeSelector {
             entered_name
         };
 
-        let node = if node_type.contains("electrum") {
-            Node::new_electrum(name, url_string, self.network)
-        } else if node_type.contains("esplora") {
-            Node::new_esplora(name, url_string, self.network)
-        } else {
-            error!("invalid node type: {node_type}");
-            Node::default(self.network)
+        let node = match selected_api_type {
+            ApiType::Electrum => Node::new_electrum(name, url_string, self.network),
+            ApiType::Esplora => Node::new_esplora(name, url_string, self.network),
+            ApiType::Rpc => Node::default(self.network),
         };
 
         Ok(node)
@@ -170,12 +219,21 @@ impl NodeSelector {
     #[uniffi::method]
     /// Check the node url and set it as selected node if it is valid
     pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url().await.map_err(|error| {
-            tracing::debug!("error checking node: {error:?}");
-            Error::NodeAccessError(error.to_string())
-        })?;
+        enable_tor_for_onion_save(&node).await?;
+        check_node_with_tor_inference(&node).await?;
 
-        Database::global()
+        let database = Database::global();
+        if node_implies_tor(&node) {
+            database
+                .global_flag
+                .set_bool_config(GlobalFlagKey::TorSettingsDiscovered, true)
+                .map_err(|error| {
+                    debug!(error = ?error, "failed to persist Tor discovery flag");
+                    Error::TorSettingsDiscoveryError
+                })?;
+        }
+
+        database
             .global_config
             .set_selected_node(&node)
             .map_err(|error| Error::SetSelectedNodeError(error.to_string()))?;
@@ -277,7 +335,91 @@ pub(crate) enum ClearnetPresetError {
     Database(#[from] crate::database::Error),
 }
 
-fn parse_node_url(url: &str) -> eyre::Result<Url> {
+async fn enable_tor_for_onion_save(node: &Node) -> Result<(), Error> {
+    if !node_implies_tor(node) {
+        return Ok(());
+    }
+
+    TOR_MANAGER.dispatch(TorManagerAction::Enable).await.map_err(|error| {
+        debug!(error = ?error, host = "<redacted-onion-host>", "failed to enable Tor for onion node");
+        Error::TorEnableError
+    })?;
+
+    Ok(())
+}
+
+async fn check_node_with_tor_inference(node: &Node) -> Result<(), Error> {
+    let options = check_options_for_node(node, NodeClientOptions::from_db_for_node(node))?;
+    let redacted_host =
+        if node_implies_tor(node) { "<redacted-onion-host>" } else { "<redacted-host>" };
+
+    debug!(
+        api_type = ?node.api_type,
+        host = redacted_host,
+        through_tor = options.tor.is_some(),
+        "checking node",
+    );
+
+    let client = NodeClient::new_with_options(node, options).await.map_err(|_| {
+        debug!(api_type = ?node.api_type, host = redacted_host, "failed to create node client");
+        Error::NodeAccessError("connection failed".to_string())
+    })?;
+    client.check_url().await.map_err(|_| {
+        debug!(api_type = ?node.api_type, host = redacted_host, "node check failed");
+        Error::NodeAccessError("connection failed".to_string())
+    })?;
+
+    Ok(())
+}
+
+fn check_options_for_node(
+    node: &Node,
+    options: NodeClientOptions,
+) -> Result<NodeClientOptions, Error> {
+    if node_implies_tor(node) && options.tor.is_none() {
+        return Err(Error::OnionNodeRequiresTor);
+    }
+
+    Ok(options)
+}
+
+fn parse_node_url(url: &str, api_type: ApiType) -> eyre::Result<Url> {
+    match api_type {
+        ApiType::Electrum => parse_electrum_url(url),
+        ApiType::Esplora | ApiType::Rpc => parse_esplora_url(url),
+    }
+}
+
+fn infer_api_type_from_url_hint(url: &str) -> Option<ApiType> {
+    let lowered = url.trim().to_ascii_lowercase();
+
+    if lowered.is_empty() {
+        return None;
+    }
+
+    if lowered.starts_with("tcp://") || lowered.starts_with("ssl://") {
+        return Some(ApiType::Electrum);
+    }
+
+    if lowered.starts_with("http://") || lowered.starts_with("https://") {
+        return Some(ApiType::Esplora);
+    }
+
+    if lowered.contains("://") {
+        return None;
+    }
+
+    if lowered.contains('/') {
+        return Some(ApiType::Esplora);
+    }
+
+    match lowered.rsplit_once(':') {
+        Some((_, "50001" | "50002")) => Some(ApiType::Electrum),
+        _ => None,
+    }
+}
+
+fn parse_electrum_url(url: &str) -> eyre::Result<Url> {
     let url = url.replace("http://", "tcp://");
     let url = url.replace("https://", "ssl://");
 
@@ -306,6 +448,13 @@ fn parse_node_url(url: &str) -> eyre::Result<Url> {
         _ => {}
     }
 
+    if !matches!(url.scheme(), "ssl" | "tcp") {
+        return Err(eyre!(
+            "invalid electrum url scheme `{}`; expected tcp:// or ssl://",
+            url.scheme(),
+        ));
+    }
+
     // set the port to if not set, default to 50002 for ssl and 50001 for tcp
     match (url.port(), url.scheme()) {
         (Some(_), _) => {}
@@ -314,6 +463,25 @@ fn parse_node_url(url: &str) -> eyre::Result<Url> {
         (None, _) => {
             url.set_port(Some(50002)).map_err(|()| eyre!("can't set port"))?;
         }
+    }
+
+    Ok(url)
+}
+
+fn parse_esplora_url(url: &str) -> eyre::Result<Url> {
+    let url = if url.contains("://") { url.to_string() } else { format!("https://{url}") };
+    let mut url = Url::parse(&url)?;
+
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(eyre!(
+            "invalid esplora url scheme `{}`; expected http:// or https://",
+            url.scheme(),
+        ));
+    }
+
+    if url.port().is_none() {
+        let default_port = if url.scheme() == "http" { 80 } else { 443 };
+        url.set_port(Some(default_port)).map_err(|()| eyre!("can't set port"))?;
     }
 
     Ok(url)
@@ -353,6 +521,7 @@ fn default_node_selection() -> NodeSelection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node::client::TorProxy;
 
     fn node(url: &str) -> Node {
         Node::new_electrum("test".to_string(), url.to_string(), Network::Bitcoin)
@@ -361,7 +530,94 @@ mod tests {
     #[test]
     fn onion_detection_accepts_schemed_and_bare_hosts() {
         assert!(node_implies_tor(&node("ssl://example.onion:50002")));
+        assert!(node_implies_tor(&node("https://example.onion/api")));
+        assert!(node_implies_tor(&node("custom://example.onion/path")));
         assert!(node_implies_tor(&node("EXAMPLE.ONION:50001")));
         assert!(!node_implies_tor(&node("ssl://example.com:50002")));
+    }
+
+    #[test]
+    fn electrum_parser_accepts_onion_hosts_and_normalizes_transport() {
+        let parsed = parse_electrum_url("example.onion:50002").unwrap();
+
+        assert_eq!(parsed.scheme(), "ssl");
+        assert_eq!(parsed.host_str(), Some("example.onion"));
+        assert_eq!(parsed.port(), Some(50002));
+
+        let parsed = parse_electrum_url("http://example.onion:50001").unwrap();
+        assert_eq!(parsed.scheme(), "tcp");
+    }
+
+    #[test]
+    fn electrum_parser_rejects_unsupported_schemes() {
+        let error = parse_electrum_url("ftp://example.onion:50002").unwrap_err();
+
+        assert!(error.to_string().contains("invalid electrum url scheme"));
+    }
+
+    #[test]
+    fn esplora_parser_preserves_http_schemes_and_onion_hosts() {
+        let https = parse_esplora_url("https://example.onion/api").unwrap();
+        assert_eq!(https.scheme(), "https");
+        assert_eq!(https.host_str(), Some("example.onion"));
+        assert_eq!(https.path(), "/api");
+
+        let http = parse_esplora_url("http://example.com/api").unwrap();
+        assert_eq!(http.scheme(), "http");
+    }
+
+    #[test]
+    fn esplora_parser_rejects_electrum_schemes() {
+        let error = parse_esplora_url("ssl://example.onion:50002").unwrap_err();
+
+        assert!(error.to_string().contains("invalid esplora url scheme"));
+    }
+
+    #[test]
+    fn parse_custom_node_returns_typed_api_mismatch() {
+        let selector = NodeSelector { network: Network::Bitcoin, node_list: Vec::new() };
+
+        assert_eq!(
+            selector.parse_custom_node(
+                "https://example.com/api".to_string(),
+                "Electrum".to_string(),
+                String::new(),
+            ),
+            Err(Error::ApiTypeMismatch { selected: ApiType::Electrum, inferred: ApiType::Esplora })
+        );
+        assert_eq!(
+            selector.parse_custom_node(
+                "ssl://example.com:50002".to_string(),
+                "Esplora".to_string(),
+                String::new(),
+            ),
+            Err(Error::ApiTypeMismatch { selected: ApiType::Esplora, inferred: ApiType::Electrum })
+        );
+    }
+
+    #[test]
+    fn parse_custom_esplora_node_preserves_https() {
+        let selector = NodeSelector { network: Network::Bitcoin, node_list: Vec::new() };
+        let node = selector
+            .parse_custom_node(
+                "https://example.onion/api".to_string(),
+                "Esplora".to_string(),
+                String::new(),
+            )
+            .unwrap();
+
+        assert_eq!(node.api_type, ApiType::Esplora);
+        assert!(node.url.starts_with("https://"));
+    }
+
+    #[test]
+    fn onion_check_requires_a_tor_route() {
+        let onion = node("ssl://example.onion:50002");
+        let direct = NodeClientOptions { batch_size: 10, tor: None };
+
+        assert_eq!(check_options_for_node(&onion, direct), Err(Error::OnionNodeRequiresTor));
+
+        let routed = NodeClientOptions { batch_size: 10, tor: Some(TorProxy::BuiltIn) };
+        assert_eq!(check_options_for_node(&onion, routed.clone()), Ok(routed));
     }
 }
