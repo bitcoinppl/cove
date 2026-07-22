@@ -57,36 +57,49 @@ fun SettingsContainer(
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.Network -> {
                     NetworkSettingsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.Appearance -> {
                     AppearanceSettingsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.Node -> {
                     NodeSettingsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
+                is SettingsRoute.Tor -> {
+                    TorSettingsScreen(
+                        app = app,
+                        modifier = modifier,
+                    )
+                }
+
                 is SettingsRoute.BlockExplorer -> {
                     BlockExplorerSettingsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.FiatCurrency -> {
                     FiatCurrencySettingsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.Wallet -> {
                     // wallet settings container (nested)
                     WalletSettingsContainer(
@@ -95,18 +108,21 @@ fun SettingsContainer(
                         route = route.route,
                     )
                 }
+
                 is SettingsRoute.AllWallets -> {
                     SettingsListAllWalletsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.About -> {
                     AboutSettingsScreen(
                         app = app,
                         modifier = modifier,
                     )
                 }
+
                 is SettingsRoute.CloudBackup -> {
                     CloudBackupScreen(
                         app = app,

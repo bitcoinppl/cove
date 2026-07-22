@@ -342,6 +342,7 @@ class MainActivity : FragmentActivity() {
                             encryptionProgress = null
                             (application as CoveApplication).onBootstrapComplete()
                             val appInstance = AppManager.getInstance()
+                            TorManager.getInstance()
                             appInstance.asyncRuntimeReady = true
 
                             runCatching {

@@ -32,6 +32,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,11 +52,14 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
+import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.SettingsRoute
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +84,7 @@ fun NodeSettingsScreen(
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
+    var showTorSetupDialog by remember { mutableStateOf(false) }
 
     // compute all string resources at composable level
     val customElectrum = stringResource(R.string.node_custom_electrum)
@@ -93,6 +98,12 @@ fun NodeSettingsScreen(
     val errorUnknown = stringResource(R.string.node_error_unknown)
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
+    val errorApiTypeMismatch = stringResource(R.string.node_error_api_type_mismatch)
+    val errorTorEnable = stringResource(R.string.node_error_tor_enable)
+
+    DisposableEffect(nodeSelector) {
+        onDispose { nodeSelector.close() }
+    }
 
     val showCustomFields =
         selectedNodeSelection is NodeSelection.Custom ||
@@ -164,6 +175,8 @@ fun NodeSettingsScreen(
                 errorTitle = errorConnectionFailed
                 errorMessage = errorConnectionMessage.format(e.v1)
                 showErrorDialog = true
+            } catch (e: NodeSelectorException.OnionNodeRequiresTor) {
+                showTorSetupDialog = true
             } catch (e: Exception) {
                 errorTitle = errorTitleDefault
                 errorMessage = errorUnknown.format(e.message ?: "")
@@ -207,9 +220,19 @@ fun NodeSettingsScreen(
                 errorTitle = errorParseTitle
                 errorMessage = e.v1
                 showErrorDialog = true
+            } catch (e: NodeSelectorException.ApiTypeMismatch) {
+                errorTitle = errorParseTitle
+                errorMessage = errorApiTypeMismatch.format(e.selected, e.inferred)
+                showErrorDialog = true
             } catch (e: NodeSelectorException.NodeAccessException) {
                 errorTitle = errorConnectionFailed
                 errorMessage = errorConnectionMessage.format(e.v1)
+                showErrorDialog = true
+            } catch (e: NodeSelectorException.OnionNodeRequiresTor) {
+                showTorSetupDialog = true
+            } catch (e: NodeSelectorException.TorEnableException) {
+                errorTitle = errorTitleDefault
+                errorMessage = errorTorEnable
                 showErrorDialog = true
             } catch (e: Exception) {
                 errorTitle = errorTitleDefault
@@ -348,6 +371,19 @@ fun NodeSettingsScreen(
                         }
                     }
                 }
+
+                SectionHeader(stringResource(R.string.title_settings_tor))
+                MaterialSection {
+                    MaterialSettingsItem(
+                        title = stringResource(R.string.title_settings_tor),
+                        subtitle = stringResource(R.string.node_tor_settings_subtitle),
+                        onClick = {
+                            app.pushRoute(Route.Settings(SettingsRoute.Tor))
+                        },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(MaterialSpacing.medium))
             }
         },
     )
@@ -360,6 +396,29 @@ fun NodeSettingsScreen(
             confirmButton = {
                 TextButton(onClick = { showErrorDialog = false }) {
                     Text(stringResource(R.string.btn_ok))
+                }
+            },
+        )
+    }
+
+    if (showTorSetupDialog) {
+        AlertDialog(
+            onDismissRequest = { showTorSetupDialog = false },
+            title = { Text(stringResource(R.string.node_tor_setup_title)) },
+            text = { Text(stringResource(R.string.node_tor_setup_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showTorSetupDialog = false
+                        app.pushRoute(Route.Settings(SettingsRoute.Tor))
+                    },
+                ) {
+                    Text(stringResource(R.string.node_tor_setup_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTorSetupDialog = false }) {
+                    Text(stringResource(R.string.btn_cancel))
                 }
             },
         )

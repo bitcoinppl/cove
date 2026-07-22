@@ -740,10 +740,12 @@ class WalletManager :
                         }
                     }
                 }
+                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.UpdatedTransactions -> {
                 loadState = loadStateForTransactions(message.v1)
+                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.TransactionUpdated -> {
@@ -756,10 +758,12 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.ScanComplete -> {
                 loadState = loadStateForTransactions(message.v1)
+                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
                 balance = message.v1
+                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {

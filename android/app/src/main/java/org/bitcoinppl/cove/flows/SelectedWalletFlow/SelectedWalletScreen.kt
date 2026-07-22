@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -50,6 +53,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -62,11 +66,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TorManager
+import org.bitcoinppl.cove.TorStatus
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.initialScanActive
 import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.FiatOrBtc
@@ -74,6 +81,7 @@ import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.TorConfig
 import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -195,6 +203,8 @@ fun SelectedWalletScreen(
         manager.walletMetadata?.walletType == WalletType.COLD ||
             manager.walletMetadata?.walletType == WalletType.XPUB_ONLY
     val isWatchOnly = manager.walletMetadata?.walletType == WalletType.WATCH_ONLY
+    val torManager = remember { TorManager.getInstance() }
+    var showTorStatusDialog by remember { mutableStateOf(false) }
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -287,6 +297,12 @@ fun SelectedWalletScreen(
                 },
                 actions = {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        if (torManager.isEnabled) {
+                            TorToolbarIndicator(
+                                status = torManager.status,
+                                onClick = { showTorStatusDialog = true },
+                            )
+                        }
                         IconButton(
                             onClick = onQrCode,
                             modifier = Modifier.size(36.dp),
@@ -364,8 +380,14 @@ fun SelectedWalletScreen(
                             val firstScan = manager.ledgerState.initialScanIncomplete
                             Pair(txns, firstScan)
                         }
-                        is WalletLoadState.Loaded -> Pair(loadState.v1, false)
-                        is WalletLoadState.Loading -> Pair(emptyList(), true)
+
+                        is WalletLoadState.Loaded -> {
+                            Pair(loadState.v1, false)
+                        }
+
+                        is WalletLoadState.Loading -> {
+                            Pair(emptyList(), true)
+                        }
                     }
 
                 // transfer pending scroll ID to active when returning from details screen
@@ -499,7 +521,96 @@ fun SelectedWalletScreen(
             }
         }
     }
+
+    if (showTorStatusDialog) {
+        AlertDialog(
+            onDismissRequest = { showTorStatusDialog = false },
+            title = { Text(stringResource(R.string.selected_wallet_tor_network_status)) },
+            text = { Text(torWalletStatusText(torManager.config, torManager.status)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showTorStatusDialog = false
+                        app.pushRoute(Route.Settings(SettingsRoute.Tor))
+                    },
+                ) {
+                    Text(stringResource(R.string.selected_wallet_tor_settings))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTorStatusDialog = false }) {
+                    Text(stringResource(R.string.btn_ok))
+                }
+            },
+        )
+    }
 }
+
+@Composable
+private fun TorToolbarIndicator(
+    status: TorStatus,
+    onClick: () -> Unit,
+) {
+    val statusColor =
+        when (status) {
+            is TorStatus.Ready -> MaterialTheme.coveColors.systemGreen
+            is TorStatus.Bootstrapping -> CoveColor.WarningOrange
+            is TorStatus.Failed -> MaterialTheme.colorScheme.error
+            is TorStatus.Off, is TorStatus.Stopped -> MaterialTheme.colorScheme.outline
+        }
+
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(36.dp),
+    ) {
+        Box {
+            Icon(
+                painter = painterResource(R.drawable.icon_tor_onion),
+                contentDescription = stringResource(R.string.content_description_tor_status),
+                tint = Color.White,
+                modifier = Modifier.size(22.dp),
+            )
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(7.dp)
+                        .background(statusColor, CircleShape),
+            )
+        }
+    }
+}
+
+@Composable
+private fun torWalletStatusText(
+    config: TorConfig,
+    status: TorStatus,
+): String =
+    when (status) {
+        is TorStatus.Off -> {
+            stringResource(R.string.tor_status_disabled)
+        }
+
+        is TorStatus.Bootstrapping -> {
+            stringResource(R.string.selected_wallet_tor_bootstrapping, status.percent, status.message)
+        }
+
+        is TorStatus.Ready -> {
+            stringResource(R.string.selected_wallet_tor_ready)
+        }
+
+        is TorStatus.Stopped -> {
+            if (config is TorConfig.External) {
+                stringResource(R.string.selected_wallet_tor_external_configured, config.host, config.port.toInt())
+            } else {
+                stringResource(R.string.tor_status_stopped)
+            }
+        }
+
+        is TorStatus.Failed -> {
+            stringResource(R.string.tor_status_error_detail, status.message)
+        }
+    }
 
 @Composable
 private fun VerifyReminder(

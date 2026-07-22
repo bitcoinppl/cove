@@ -7,18 +7,24 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationHost
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationPolicy
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingContainer
+import org.bitcoinppl.cove.flows.SettingsFlow.OrbotPackageHelper
 import org.bitcoinppl.cove.navigation.CoveNavDisplay
 import org.bitcoinppl.cove.sidebar.SidebarContainer
 import org.bitcoinppl.cove.ui.theme.CoveTheme
@@ -36,6 +42,9 @@ internal fun MainActivityAppShell(
     onOnboardingComplete: () -> Unit,
 ) {
     val systemDarkTheme = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val torManager = remember { TorManager.getInstance() }
+    val isOrbotInstalled = remember(context) { OrbotPackageHelper.detect(context) != null }
     val darkTheme =
         when (app.colorSchemeSelection) {
             ColorSchemeSelection.DARK -> true
@@ -81,12 +90,14 @@ internal fun MainActivityAppShell(
                                     )
                                 }
                             }
-                            StartupMode.READY ->
+
+                            StartupMode.READY -> {
                                 SidebarContainer(app = app) {
                                     key(app.selectedNetwork, app.routeId) {
                                         CoveNavDisplay(app = app)
                                     }
                                 }
+                            }
                         }
                     }
 
@@ -102,6 +113,46 @@ internal fun MainActivityAppShell(
                         app = app,
                         snackbarHostState = snackbarHostState,
                     )
+
+                    torManager.startupFailure?.let { failure ->
+                        AlertDialog(
+                            onDismissRequest = torManager::dismissStartupFailure,
+                            title = { Text(context.getString(R.string.tor_startup_failure_title)) },
+                            text = {
+                                Text(
+                                    context.getString(
+                                        R.string.tor_startup_failure_message,
+                                        failure,
+                                    ),
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        torManager.dismissStartupFailure()
+                                        torManager.disableConfirmed()
+                                    },
+                                ) {
+                                    Text(context.getString(R.string.tor_startup_use_clearnet))
+                                }
+                            },
+                            dismissButton = {
+                                if (isOrbotInstalled) {
+                                    TextButton(
+                                        onClick = {
+                                            torManager.dismissStartupFailure()
+                                            OrbotPackageHelper.openOrbot(context)
+                                        },
+                                    ) {
+                                        Text(context.getString(R.string.tor_action_open_orbot))
+                                    }
+                                }
+                                TextButton(onClick = torManager::dismissStartupFailure) {
+                                    Text(context.getString(R.string.tor_startup_dismiss))
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
