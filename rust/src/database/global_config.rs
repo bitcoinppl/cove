@@ -111,6 +111,9 @@ pub enum GlobalConfigTableError {
 
     #[error("invalid custom block explorer: {0}")]
     InvalidCustomBlockExplorer(String),
+
+    #[error("this setting is managed by the app and cannot be written directly")]
+    ManagerOwnedKey,
 }
 
 impl From<CustomBlockExplorerError> for GlobalConfigTableError {
@@ -440,28 +443,20 @@ impl GlobalConfigTable {
     }
 
     pub(crate) fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
-        let write_txn =
-            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
-
-            let key: &'static str = key.into();
-            table
-                .insert(key, value)
-                .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
+        // tor config is owned by TorManager, which validates and drives the
+        // runtime lifecycle; direct writes would bypass both
+        if matches!(key, GlobalConfigKey::TorConfig) {
+            return Err(GlobalConfigTableError::ManagerOwnedKey.into());
         }
 
-        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        Updater::send_update(Update::DatabaseUpdated);
-
-        Ok(())
+        self.set_unchecked(key, value)
     }
 
     pub fn delete(&self, key: GlobalConfigKey) -> Result<()> {
+        if matches!(key, GlobalConfigKey::TorConfig) {
+            return Err(GlobalConfigTableError::ManagerOwnedKey.into());
+        }
+
         let write_txn =
             self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
@@ -495,7 +490,29 @@ impl GlobalConfigTable {
         let config_json =
             serde_json::to_string(&config).map_err_str(SerdeError::SerializationError)?;
 
-        self.set(GlobalConfigKey::TorConfig, config_json)
+        self.set_unchecked(GlobalConfigKey::TorConfig, config_json)
+    }
+
+    fn set_unchecked(&self, key: GlobalConfigKey, value: String) -> Result<()> {
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        {
+            let mut table = write_txn
+                .open_table(TABLE)
+                .map_err(|error| Error::TableAccess(error.to_string()))?;
+
+            let key: &'static str = key.into();
+            table
+                .insert(key, value)
+                .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
+        }
+
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        Updater::send_update(Update::DatabaseUpdated);
+
+        Ok(())
     }
 }
 

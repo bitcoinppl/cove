@@ -26347,6 +26347,7 @@ enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.Locali
     case PinCodeMustBeHashed
     case InvalidCustomBlockExplorer(String
     )
+    case ManagerOwnedKey
 
 
 
@@ -26397,6 +26398,7 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
         case 4: return .InvalidCustomBlockExplorer(
             try FfiConverterString.read(from: &buf)
             )
+        case 5: return .ManagerOwnedKey
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26426,6 +26428,10 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
         case let .InvalidCustomBlockExplorer(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
+
+
+        case .ManagerOwnedKey:
+            writeInt(&buf, Int32(5))
 
         }
     }

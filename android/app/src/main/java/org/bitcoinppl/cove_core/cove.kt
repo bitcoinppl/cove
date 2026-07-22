@@ -43821,6 +43821,12 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class ManagerOwnedKey(
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -43859,6 +43865,7 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             4 -> GlobalConfigTableException.InvalidCustomBlockExplorer(
                 FfiConverterString.read(buf),
                 )
+            5 -> GlobalConfigTableException.ManagerOwnedKey()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -43884,6 +43891,10 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is GlobalConfigTableException.ManagerOwnedKey -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -43906,6 +43917,10 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             is GlobalConfigTableException.InvalidCustomBlockExplorer -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is GlobalConfigTableException.ManagerOwnedKey -> {
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
