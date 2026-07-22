@@ -428,6 +428,16 @@ async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
 
     assert_eq!(busy, CloudBackupDriveAccountSwitchError::Busy);
 
+    let invalid_commit = supervisor
+        .confirm_drive_account_switch_committed((transition_id.value() + 1).into())
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap_err();
+
+    assert_eq!(invalid_commit, CloudBackupDriveAccountSwitchError::InvalidTransition);
+
     supervisor
         .cancel_drive_account_switch(transition_id)
         .await
@@ -454,7 +464,7 @@ async fn drive_account_switch_restart_without_staged_account_requests_rollback()
     let manager = test_supervisor_manager();
     CloudBackupStore::global().persist_enabled(0).unwrap();
     let transition = PersistedDriveAccountSwitch {
-        transition_id: 7,
+        transition_id: 7.into(),
         phase: PersistedDriveAccountSwitchPhase::AwaitingAccountSelection,
     };
     let mut persisted = RustCloudBackupManager::load_persisted_state();
@@ -466,7 +476,7 @@ async fn drive_account_switch_restart_without_staged_account_requests_rollback()
     );
 
     supervisor
-        .reconcile_drive_account_switch(None)
+        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::NoTransition)
         .await
         .unwrap()
         .await
@@ -497,7 +507,7 @@ async fn drive_account_switch_restart_replays_required_commit() {
     let manager = test_supervisor_manager();
     CloudBackupStore::global().persist_enabled(0).unwrap();
     let transition = PersistedDriveAccountSwitch {
-        transition_id: 7,
+        transition_id: 7.into(),
         phase: PersistedDriveAccountSwitchPhase::AwaitingAccountCommitFailed,
     };
     let mut persisted = RustCloudBackupManager::load_persisted_state();
@@ -509,7 +519,7 @@ async fn drive_account_switch_restart_replays_required_commit() {
     );
 
     supervisor
-        .reconcile_drive_account_switch(Some(7))
+        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Staged(7))
         .await
         .unwrap()
         .await
@@ -524,6 +534,87 @@ async fn drive_account_switch_restart_replays_required_commit() {
         SingleOrMany::Many(messages) => messages.into_iter().any(|message| matches!(
             message,
             CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(7)
+        )),
+    }));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn drive_account_switch_restart_finalizes_platform_only_commit() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    CloudBackupStore::global().persist_enabled(0).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
+    );
+
+    supervisor
+        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Committed(7))
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
+        SingleOrMany::Single(message) => matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchFinalizeRequired(7)
+        ),
+        SingleOrMany::Many(messages) => messages.into_iter().any(|message| matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchFinalizeRequired(7)
+        )),
+    }));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transition() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    CloudBackupStore::global().persist_enabled(0).unwrap();
+    let transition = PersistedDriveAccountSwitch {
+        transition_id: 7.into(),
+        phase: PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded,
+    };
+    let mut persisted = RustCloudBackupManager::load_persisted_state();
+    assert!(persisted.set_drive_account_switch(transition));
+    Database::global().cloud_backup_state.set(&persisted).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
+    );
+
+    supervisor
+        .reconcile_drive_account_switch(DriveAccountSwitchPlatformState::Committed(8))
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        RustCloudBackupManager::load_persisted_state().drive_account_switch(),
+        Some(&transition)
+    );
+    assert_eq!(
+        supervisor.active_operation.claim().and_then(|claim| claim.drive_account_switch_id()),
+        Some(transition.transition_id)
+    );
+    assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
+        SingleOrMany::Single(message) => matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchRecoveryRequired {
+                transition_id: 7,
+                ..
+            }
+        ),
+        SingleOrMany::Many(messages) => messages.into_iter().any(|message| matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchRecoveryRequired {
+                transition_id: 7,
+                ..
+            }
         )),
     }));
 }

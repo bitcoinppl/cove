@@ -363,6 +363,60 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    globals.reset();
+
+    let prf_key = [7u8; 32];
+    let mut candidates = [
+        cove_cspp::master_key::MasterKey::generate(),
+        cove_cspp::master_key::MasterKey::generate(),
+    ]
+    .map(|master_key| (master_key.namespace_id(), master_key));
+    candidates.sort_by(|left, right| left.0.cmp(&right.0));
+    let [(matched_namespace, matched_master_key), (cancelled_namespace, cancelled_master_key)] =
+        &candidates;
+    let matched_encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(matched_master_key, &prf_key, &[9; 32])
+            .unwrap();
+    let cancelled_encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(cancelled_master_key, &prf_key, &[8; 32])
+            .unwrap();
+
+    globals.cloud.set_master_key_backup(
+        matched_namespace.clone(),
+        serde_json::to_vec(&matched_encrypted).unwrap(),
+    );
+    globals.cloud.set_master_key_backup(
+        cancelled_namespace.clone(),
+        serde_json::to_vec(&cancelled_encrypted).unwrap(),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+
+    let outcome = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&[matched_namespace.clone(), cancelled_namespace.clone()])
+    .await
+    .unwrap();
+
+    let NamespaceMatchOutcome::Matched(matches) = outcome else {
+        panic!("expected the earlier namespace match");
+    };
+    assert_eq!(matches.len(), 1);
+    assert_eq!(&matches[0].namespace_id, matched_namespace);
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn passkey_match_session_authenticates_new_namespace_after_discovery_refresh() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

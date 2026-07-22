@@ -1,5 +1,7 @@
 use cove_device::cloud_storage::CloudSyncHealth;
 
+use crate::database::cloud_backup::DriveAccountSwitchId;
+
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
     CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
@@ -50,27 +52,45 @@ pub(crate) enum CloudBackupRestoreAllRuntimeState {
     RetryRemaining,
 }
 
-/// Generation-tagged ownership proof for an exclusive operation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloudBackupExclusiveOperationOwner {
+    Generation(u64),
+    DriveAccountSwitch(DriveAccountSwitchId),
+}
+
+/// Ownership proof for an exclusive operation
 ///
 /// Async completions must present the claim they started with before the
 /// reducer or supervisor accepts their result
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CloudBackupExclusiveOperationClaim {
     operation: CloudBackupExclusiveOperation,
-    generation: u64,
+    owner: CloudBackupExclusiveOperationOwner,
 }
 
 impl CloudBackupExclusiveOperationClaim {
     pub(crate) fn new(operation: CloudBackupExclusiveOperation, generation: u64) -> Self {
-        Self { operation, generation }
+        Self { operation, owner: CloudBackupExclusiveOperationOwner::Generation(generation) }
+    }
+
+    pub(crate) fn drive_account_switch(transition_id: DriveAccountSwitchId) -> Self {
+        Self {
+            operation: CloudBackupExclusiveOperation::ReinitializeBackup,
+            owner: CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id),
+        }
     }
 
     pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
         self.operation
     }
 
-    pub(crate) fn generation(self) -> u64 {
-        self.generation
+    pub(crate) fn drive_account_switch_id(self) -> Option<DriveAccountSwitchId> {
+        match self.owner {
+            CloudBackupExclusiveOperationOwner::DriveAccountSwitch(transition_id) => {
+                Some(transition_id)
+            }
+            CloudBackupExclusiveOperationOwner::Generation(_) => None,
+        }
     }
 }
 

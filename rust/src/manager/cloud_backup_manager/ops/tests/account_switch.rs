@@ -31,7 +31,7 @@ async fn assert_drive_account_switch_release_resumes_dirty_wallet(
         DriveAccountSwitchReleaseForTest::Commit => {
             let mut persisted = RustCloudBackupManager::load_persisted_state();
             assert!(persisted.set_drive_account_switch(PersistedDriveAccountSwitch {
-                transition_id,
+                transition_id: transition_id.into(),
                 phase: PersistedDriveAccountSwitchPhase::AwaitingAccountCommitFailed,
             }));
             Database::global().cloud_backup_state.set(&persisted).unwrap();

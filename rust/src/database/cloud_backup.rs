@@ -15,12 +15,12 @@ pub(crate) use compat::ensure_table_type_compatibility;
 pub use state::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
     CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
-    PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
-    PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-    PersistedConfiguredCloudBackup, PersistedDeepVerificationReport, PersistedDisablingCloudBackup,
-    PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
-    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
-    PersistedRestoreAllMarker,
+    DriveAccountSwitchId, PersistedBackupSyncState, PersistedBackupVerificationState,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+    PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup, PersistedDeepVerificationReport,
+    PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
+    PersistedPasskeyState, PersistedPendingVerificationCompletion,
+    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 

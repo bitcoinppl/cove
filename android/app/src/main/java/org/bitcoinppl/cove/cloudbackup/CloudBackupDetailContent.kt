@@ -105,6 +105,13 @@ internal fun CloudBackupDetailContent(
             ErrorInlineMessage(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
 
+        manager.driveAccountSwitchRecovery?.let { recovery ->
+            DriveAccountSwitchRecoveryCard(
+                message = recovery.message,
+                onRetry = manager::retryDriveAccountSwitchRecovery,
+            )
+        }
+
         manager.detailError?.let { error ->
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -212,6 +219,36 @@ internal fun CloudBackupDetailContent(
                 detail = manager.detail,
                 allowDisable = allowDisable,
             )
+        }
+    }
+}
+
+@Composable
+private fun DriveAccountSwitchRecoveryCard(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Google Drive account change needs attention",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Button(onClick = onRetry) {
+                Text("Try Again")
+            }
         }
     }
 }

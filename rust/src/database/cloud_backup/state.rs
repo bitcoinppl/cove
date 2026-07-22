@@ -318,7 +318,7 @@ impl PersistedCloudBackupState {
 
     pub(crate) fn set_drive_account_switch_phase(
         &mut self,
-        transition_id: u64,
+        transition_id: DriveAccountSwitchId,
         phase: PersistedDriveAccountSwitchPhase,
     ) -> bool {
         let Self::Configured(configured) = self else {
@@ -335,7 +335,10 @@ impl PersistedCloudBackupState {
         true
     }
 
-    pub(crate) fn clear_drive_account_switch(&mut self, transition_id: u64) -> bool {
+    pub(crate) fn clear_drive_account_switch(
+        &mut self,
+        transition_id: DriveAccountSwitchId,
+    ) -> bool {
         let Self::Configured(configured) = self else {
             return false;
         };
@@ -380,8 +383,30 @@ pub struct PersistedConfiguredCloudBackup {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersistedDriveAccountSwitch {
-    pub transition_id: u64,
+    pub transition_id: DriveAccountSwitchId,
     pub phase: PersistedDriveAccountSwitchPhase,
+}
+
+/// Durable identifier for one Google Drive account switch
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DriveAccountSwitchId(u64);
+
+impl DriveAccountSwitchId {
+    pub(crate) fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Return the platform representation of this transition identifier
+    pub fn value(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for DriveAccountSwitchId {
+    fn from(value: u64) -> Self {
+        Self::new(value)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

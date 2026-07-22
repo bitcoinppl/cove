@@ -26,7 +26,7 @@ use super::write::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudStorageIssue, PersistedCloudBackupState,
+    CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -64,12 +64,12 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudBackupWalletStatus,
     CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
-    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
-    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
-    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
-    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
-    blocking_cloud_error,
+    DriveAccountSwitchPlatformState, EnablePasskeyRegistrationFlow,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation, PendingEnableJournal,
+    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
+    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
+    PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
+    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 

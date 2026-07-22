@@ -4,6 +4,7 @@ import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
+import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.bitcoinppl.cove_core.device.RemoteBackupLocation
@@ -26,10 +27,24 @@ class AndroidCloudStorageAccessTest {
             assertEquals(DriveAccountSelectionOutcome.Changed, outcome)
             assertEquals(replacement, store.selectedIdentity())
             assertEquals(original, store.committedIdentity())
-            assertEquals(1UL, store.pendingTransitionId())
-            assertTrue(storage.commitAccountSwitch(1UL))
+            assertEquals(
+                DriveAccountBindingState.Staged(1UL, original, replacement),
+                store.state(),
+            )
+            assertEquals(
+                DriveAccountSwitchPlatformState.Staged(1UL),
+                storage.driveAccountSwitchPlatformState(),
+            )
+            assertEquals(DriveAccountTransitionResult.Applied, storage.commitAccountSwitch(1UL))
             assertEquals(replacement, store.committedIdentity())
-            assertEquals(null, store.pendingTransitionId())
+            assertEquals(
+                DriveAccountBindingState.Committed(1UL, replacement),
+                store.state(),
+            )
+            assertEquals(
+                DriveAccountSwitchPlatformState.Committed(1UL),
+                storage.driveAccountSwitchPlatformState(),
+            )
             assertEquals(listOf(true), authorization.accessRequests)
         }
 
@@ -51,7 +66,7 @@ class AndroidCloudStorageAccessTest {
 
             assertEquals(DriveAccountSelectionOutcome.Unchanged, outcome)
             assertEquals(refreshed, store.committedIdentity())
-            assertEquals(null, store.pendingTransitionId())
+            assertEquals(DriveAccountBindingState.Bound(refreshed), store.state())
         }
 
     @Test
@@ -65,10 +80,10 @@ class AndroidCloudStorageAccessTest {
 
             storage.selectAccountForCloudBackup(7UL)
 
-            assertTrue(storage.rollbackAccountSwitch(7UL))
+            assertEquals(DriveAccountTransitionResult.Applied, storage.rollbackAccountSwitch(7UL))
             assertEquals(original, store.selectedIdentity())
             assertEquals(original, store.committedIdentity())
-            assertEquals(null, store.pendingTransitionId())
+            assertEquals(DriveAccountBindingState.Bound(original), store.state())
         }
 
     @Test
@@ -88,7 +103,7 @@ class AndroidCloudStorageAccessTest {
             assertTrue(error is IllegalStateException)
             assertEquals(original, store.selectedIdentity())
             assertEquals(original, store.committedIdentity())
-            assertEquals(null, store.pendingTransitionId())
+            assertEquals(DriveAccountBindingState.Bound(original), store.state())
             assertEquals(listOf("token-1"), authorization.clearedTokens)
         }
 

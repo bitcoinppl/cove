@@ -86,7 +86,6 @@ class AppManager private constructor() : FfiReconcile {
             override fun onRoutesChanged() {
                 clearInactiveSendFlowManager()
             }
-
         }
 
     var router: RouterManager = RouterManager(rust.state().router, mainScope, routerHost)
@@ -272,13 +271,15 @@ class AppManager private constructor() : FfiReconcile {
         clearWalletManager()
 
         database = Database()
-        needsOnboarding = withRustOr(needsOnboarding) {
-            needsOnboarding()
-        }
+        needsOnboarding =
+            withRustOr(needsOnboarding) {
+                needsOnboarding()
+            }
 
-        val routerState = withRustOr(null) {
-            state()
-        }
+        val routerState =
+            withRustOr(null) {
+                state()
+            }
         router.reset(routerState?.router)
     }
 
@@ -418,9 +419,7 @@ class AppManager private constructor() : FfiReconcile {
      *
      * @return `true` only when a route was removed
      */
-    fun popRoute(): Boolean {
-        return router.popRoute()
-    }
+    fun popRoute(): Boolean = router.popRoute()
 
     internal fun popRouteForRecovery(): RoutePopResult = router.popRouteForRecovery()
 
@@ -462,26 +461,33 @@ class AppManager private constructor() : FfiReconcile {
 
     fun captureLoadAndResetGeneration(): GenerationToken = router.captureLoadAndResetGeneration()
 
-    suspend fun completeLoadAndReset(route: Route.LoadAndReset) = coroutineScope {
-        val generation = captureLoadAndResetGeneration()
-        val nextRoutes = route.resetTo.map { it.route() }
-        val selectedWalletId = (nextRoutes.firstOrNull() as? Route.SelectedWallet)?.v1
-        val preparation =
-            async {
-                when (selectedWalletId?.let { prepareWalletRoute(it, generation) }) {
-                    is WalletRoutePreparation.Ready, null -> LoadAndResetPreparation.ReadyToReset
-                    WalletRoutePreparation.RouteRedirected -> LoadAndResetPreparation.RouteRedirected
-                }
-            }
-        val minimumDelay = async { delay(route.afterMillis.toLong()) }
-
-        val preparationResult = preparation.await()
-        minimumDelay.await()
-
-        if (preparationResult == LoadAndResetPreparation.ReadyToReset) {
-            resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+    suspend fun completeLoadAndReset(route: Route.LoadAndReset) {
+        runCatchingCancellable(tag, "Unable to prepare load-and-reset target") {
+            completeLoadAndResetOrThrow(route)
         }
     }
+
+    private suspend fun completeLoadAndResetOrThrow(route: Route.LoadAndReset) =
+        coroutineScope {
+            val generation = captureLoadAndResetGeneration()
+            val nextRoutes = route.resetTo.map { it.route() }
+            val selectedWalletId = (nextRoutes.firstOrNull() as? Route.SelectedWallet)?.v1
+            val preparation =
+                async {
+                    when (selectedWalletId?.let { prepareWalletRoute(it, generation) }) {
+                        is WalletRoutePreparation.Ready, null -> LoadAndResetPreparation.ReadyToReset
+                        WalletRoutePreparation.RouteRedirected -> LoadAndResetPreparation.RouteRedirected
+                    }
+                }
+            val minimumDelay = async { delay(route.afterMillis.toLong()) }
+
+            val preparationResult = preparation.await()
+            minimumDelay.await()
+
+            if (preparationResult == LoadAndResetPreparation.ReadyToReset) {
+                resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+            }
+        }
 
     internal suspend fun prepareWalletRoute(
         walletId: WalletId,
@@ -508,8 +514,9 @@ class AppManager private constructor() : FfiReconcile {
         val cachedId = withContext(Dispatchers.Main.immediate) { walletManager?.id }
         val displayedIds =
             withContext(Dispatchers.IO) {
-                runCatching { database.wallets().all() }
-                    .getOrElse { emptyList() }
+                runCatchingCancellable(tag, "Unable to read wallets for wallet route recovery") {
+                    database.wallets().all()
+                }.getOrThrow()
                     .map(WalletMetadata::id)
             }
 
@@ -711,8 +718,7 @@ class AppManager private constructor() : FfiReconcile {
             withRust {
                 dispatch(action)
             }
-        }
-            .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
+        }.onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
     }
 
     companion object {

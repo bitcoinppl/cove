@@ -139,89 +139,71 @@ internal class BlockingClearDriveAuthorization : DriveAuthorization {
 }
 
 internal class TestDriveAccountBindingStore(
-    private var identity: DriveAccountIdentity? = null,
+    identity: DriveAccountIdentity? = null,
 ) : DriveAccountBindingStore {
-    private var pendingTransitionId: ULong? = null
-    private var pendingIdentity: DriveAccountIdentity? = null
-    private var committedTransitionId: ULong? = null
+    private var bindingState: DriveAccountBindingState =
+        identity?.let(DriveAccountBindingState::Bound) ?: DriveAccountBindingState.Unbound
     var stageSucceeds = true
     var retainFailedStage = false
 
-    override fun selectedIdentity(): DriveAccountIdentity? = pendingIdentity ?: identity
+    override fun state(): DriveAccountBindingState = bindingState
 
-    fun committedIdentity(): DriveAccountIdentity? = identity
+    fun committedIdentity(): DriveAccountIdentity? =
+        when (val state = bindingState) {
+            DriveAccountBindingState.Unbound -> null
+            is DriveAccountBindingState.Bound -> state.identity
+            is DriveAccountBindingState.Staged -> state.previousIdentity
+            is DriveAccountBindingState.Committed -> state.identity
+        }
 
     override fun bindIdentity(identity: DriveAccountIdentity) {
-        if (pendingTransitionId != null) {
-            pendingIdentity = identity
-        } else {
-            this.identity = identity
-        }
+        bindingState = DriveAccountBindingTransitions.bind(bindingState, identity)
     }
 
     override fun clearIdentity() {
-        identity = null
-        pendingTransitionId = null
-        pendingIdentity = null
-        committedTransitionId = null
+        bindingState = DriveAccountBindingState.Unbound
     }
-
-    override fun pendingTransitionId(): ULong? = pendingTransitionId
-
-    override fun isIdentityStaged(transitionId: ULong): Boolean =
-        pendingTransitionId == transitionId && pendingIdentity != null
 
     override fun stageIdentity(
         transitionId: ULong,
         identity: DriveAccountIdentity,
-    ): Boolean {
-        val transitionMatches = pendingTransitionId == null || pendingTransitionId == transitionId
-        val succeeds = stageSucceeds && transitionMatches
-        val shouldRetain = succeeds || !stageSucceeds && retainFailedStage
-
-        if (shouldRetain) {
-            pendingTransitionId = transitionId
-            pendingIdentity = identity
+    ): DriveAccountTransitionResult {
+        val update = DriveAccountBindingTransitions.stage(bindingState, transitionId, identity)
+        val nextState = when (update) {
+            is DriveAccountBindingUpdate.Apply -> update.state
+            DriveAccountBindingUpdate.WrongTransition ->
+                return DriveAccountTransitionResult.WrongTransition
         }
 
-        return succeeds
-    }
-
-    override fun commitStagedIdentity(transitionId: ULong): Boolean {
-        return when {
-            pendingTransitionId == null -> committedTransitionId == transitionId
-            pendingTransitionId != transitionId -> false
-            else -> pendingIdentity?.let { stagedIdentity ->
-                identity = stagedIdentity
-                pendingTransitionId = null
-                pendingIdentity = null
-                committedTransitionId = transitionId
-                true
-            } ?: false
-        }
-    }
-
-    override fun finalizeCommittedIdentity(transitionId: ULong): Boolean {
-        val currentTransitionId = committedTransitionId ?: return true
-        if (currentTransitionId != transitionId) {
-            return false
-        }
-
-        committedTransitionId = null
-        return true
-    }
-
-    override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
-        return when {
-            pendingTransitionId == null -> true
-            pendingTransitionId != transitionId -> false
-            else -> {
-                pendingTransitionId = null
-                pendingIdentity = null
-                true
+        return if (stageSucceeds) {
+            bindingState = nextState
+            DriveAccountTransitionResult.Applied
+        } else {
+            if (retainFailedStage) {
+                bindingState = nextState
             }
+            DriveAccountTransitionResult.WriteFailed
         }
     }
+
+    override fun commitStagedIdentity(transitionId: ULong): DriveAccountTransitionResult =
+        apply(DriveAccountBindingTransitions.commit(bindingState, transitionId))
+
+    override fun finalizeCommittedIdentity(transitionId: ULong): DriveAccountTransitionResult =
+        apply(DriveAccountBindingTransitions.finalize(bindingState, transitionId))
+
+    override fun rollbackStagedIdentity(transitionId: ULong): DriveAccountTransitionResult =
+        apply(DriveAccountBindingTransitions.rollback(bindingState, transitionId))
+
+    private fun apply(update: DriveAccountBindingUpdate): DriveAccountTransitionResult =
+        when (update) {
+            is DriveAccountBindingUpdate.Apply -> {
+                bindingState = update.state
+                DriveAccountTransitionResult.Applied
+            }
+            DriveAccountBindingUpdate.WrongTransition ->
+                DriveAccountTransitionResult.WrongTransition
+        }
 }
 
 internal fun driveErrorBody(reason: String): String =

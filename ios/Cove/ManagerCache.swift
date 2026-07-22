@@ -15,7 +15,7 @@ enum WalletManagerCacheLoadDecision: Equatable {
             return .useCached
         }
 
-        guard capturedGeneration == currentGeneration else {
+        guard capturedGeneration == currentGeneration || cachedWalletId == nil else {
             return .cancelLoaded
         }
 

@@ -2608,7 +2608,7 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_onboarding_enable_completion_readiness(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(`ptr`: Long,`pendingTransitionId`: RustBuffer.ByValue,
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(`ptr`: Long,`platformState`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -4442,7 +4442,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 61990.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 29464.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590.toShort()) {
@@ -19179,7 +19179,7 @@ public interface RustCloudBackupManagerInterface {
     /**
      * Reconcile persisted Rust and Android transition state after process startup
      */
-    suspend fun `reconcileDriveAccountSwitch`(`pendingTransitionId`: kotlin.ULong?)
+    suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState)
 
     fun `resumePendingCloudUploadVerification`()
 
@@ -19571,13 +19571,13 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
      */
     @Throws(CloudBackupDriveAccountSwitchException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `reconcileDriveAccountSwitch`(`pendingTransitionId`: kotlin.ULong?) {
+    override suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(
                 uniffiHandle,
 
-        FfiConverterOptionalULong.lower(`pendingTransitionId`),
+        FfiConverterTypeDriveAccountSwitchPlatformState.lower(`platformState`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -38804,6 +38804,31 @@ sealed class CloudBackupReconcileMessage {
         companion object
     }
 
+    /**
+     * Android must remove the completed transition marker without changing identity
+     */
+    data class DriveAccountSwitchFinalizeRequired(
+        val v1: kotlin.ULong) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The persisted Rust and Android transition states require user-visible recovery
+     */
+    data class DriveAccountSwitchRecoveryRequired(
+        val `transitionId`: kotlin.ULong,
+        val `message`: kotlin.String) : CloudBackupReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
 
@@ -38832,6 +38857,13 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 )
             4 -> CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired(
                 FfiConverterULong.read(buf),
+                )
+            5 -> CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired(
+                FfiConverterULong.read(buf),
+                )
+            6 -> CloudBackupReconcileMessage.DriveAccountSwitchRecoveryRequired(
+                FfiConverterULong.read(buf),
+                FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -38867,6 +38899,21 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
                 + FfiConverterULong.allocationSize(value.v1)
             )
         }
+        is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupReconcileMessage.DriveAccountSwitchRecoveryRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`transitionId`)
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
     }
 
     override fun write(value: CloudBackupReconcileMessage, buf: ByteBuffer) {
@@ -38890,6 +38937,17 @@ public object FfiConverterTypeCloudBackupReconcileMessage : FfiConverterRustBuff
             is CloudBackupReconcileMessage.DriveAccountSwitchRollbackRequired -> {
                 buf.putInt(4)
                 FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchFinalizeRequired -> {
+                buf.putInt(5)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupReconcileMessage.DriveAccountSwitchRecoveryRequired -> {
+                buf.putInt(6)
+                FfiConverterULong.write(value.`transitionId`, buf)
+                FfiConverterString.write(value.`message`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -43051,6 +43109,115 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
             }
             is DiscoveryState.ChoseAdressType -> {
                 buf.putInt(7)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Durable Google Drive account-switch state owned by the platform
+ */
+sealed class DriveAccountSwitchPlatformState {
+
+    /**
+     * No platform transition exists
+     */
+    object NoTransition : DriveAccountSwitchPlatformState()
+
+
+    /**
+     * A selected identity is staged but not yet committed
+     */
+    data class Staged(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The selected identity is committed but Rust has not finalized the transition
+     */
+    data class Committed(
+        val v1: kotlin.ULong) : DriveAccountSwitchPlatformState()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDriveAccountSwitchPlatformState : FfiConverterRustBuffer<DriveAccountSwitchPlatformState>{
+    override fun read(buf: ByteBuffer): DriveAccountSwitchPlatformState {
+        return when(buf.getInt()) {
+            1 -> DriveAccountSwitchPlatformState.NoTransition
+            2 -> DriveAccountSwitchPlatformState.Staged(
+                FfiConverterULong.read(buf),
+                )
+            3 -> DriveAccountSwitchPlatformState.Committed(
+                FfiConverterULong.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: DriveAccountSwitchPlatformState): ULong = when(value) {
+        is DriveAccountSwitchPlatformState.NoTransition -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is DriveAccountSwitchPlatformState.Staged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchPlatformState.Committed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: DriveAccountSwitchPlatformState, buf: ByteBuffer) {
+        when(value) {
+            is DriveAccountSwitchPlatformState.NoTransition -> {
+                buf.putInt(1)
+                Unit
+            }
+            is DriveAccountSwitchPlatformState.Staged -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchPlatformState.Committed -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

@@ -1,11 +1,11 @@
 package org.bitcoinppl.cove
 
-import kotlin.coroutines.cancellation.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.cancellation.CancellationException
 
 class WalletSelectionRecoveryTest {
     @Test
@@ -51,7 +51,7 @@ class WalletSelectionRecoveryTest {
     }
 
     @Test
-    fun completedBootstrapCancelsWhenAnotherWalletChangedTheCache() {
+    fun completedBootstrapCancelsForSupersedingReplacement() {
         val decision =
             WalletManagerBootstrapDecision.resolve(
                 targetId = "wallet-b",
@@ -61,6 +61,19 @@ class WalletSelectionRecoveryTest {
             )
 
         assertEquals(WalletManagerBootstrapDecision.Cancel, decision)
+    }
+
+    @Test
+    fun completedBootstrapInstallsAfterUnrelatedCacheClear() {
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                targetId = "wallet-b",
+                capturedGeneration = 1,
+                currentGeneration = 2,
+                cachedWalletId = null,
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Install, decision)
     }
 
     @Test

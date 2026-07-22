@@ -15,11 +15,10 @@ use tokio::sync::oneshot;
 use tracing::{error, warn};
 
 use crate::database::Database;
+use crate::database::cloud_backup::DriveAccountSwitchId;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::CloudBackupError;
-use crate::manager::cloud_backup_manager::model::{
-    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
-};
+use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::{CloudBackupStore, RustCloudBackupManager};
 
 use super::super::supervisor::CloudBackupSupervisor;
@@ -84,17 +83,16 @@ impl<T> CloudBackupWriteCommandResult<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupWriteBlocker {
     Disabling { operation_id: u64 },
-    DriveAccountSwitch { transition_id: u64 },
+    DriveAccountSwitch { transition_id: DriveAccountSwitchId },
 }
 
 impl CloudBackupWriteBlocker {
     fn allows(self, context: CloudBackupWriteCommandContext) -> bool {
         match self {
             Self::Disabling { .. } => false,
-            Self::DriveAccountSwitch { transition_id } => context.origin().is_some_and(|origin| {
-                origin.generation() == transition_id
-                    && origin.operation() == CloudBackupExclusiveOperation::ReinitializeBackup
-            }),
+            Self::DriveAccountSwitch { transition_id } => context
+                .origin()
+                .is_some_and(|origin| origin.drive_account_switch_id() == Some(transition_id)),
         }
     }
 }
@@ -921,29 +919,26 @@ mod tests {
 
     #[test]
     fn drive_account_switch_blocker_admits_only_matching_reinitialization_writes() {
-        let blocker = CloudBackupWriteBlocker::DriveAccountSwitch { transition_id: 7 };
+        let blocker = CloudBackupWriteBlocker::DriveAccountSwitch { transition_id: 7.into() };
         let matching = CloudBackupWriteCommandContext::new(
             1,
+            Some(CloudBackupExclusiveOperationClaim::drive_account_switch(7.into())),
+        );
+        let wrong_generation = CloudBackupWriteCommandContext::new(
+            2,
+            Some(CloudBackupExclusiveOperationClaim::drive_account_switch(8.into())),
+        );
+        let wrong_owner = CloudBackupWriteCommandContext::new(
+            3,
             Some(CloudBackupExclusiveOperationClaim::new(
                 CloudBackupExclusiveOperation::ReinitializeBackup,
                 7,
             )),
         );
-        let wrong_generation = CloudBackupWriteCommandContext::new(
-            2,
-            Some(CloudBackupExclusiveOperationClaim::new(
-                CloudBackupExclusiveOperation::ReinitializeBackup,
-                8,
-            )),
-        );
-        let wrong_operation = CloudBackupWriteCommandContext::new(
-            3,
-            Some(CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 7)),
-        );
 
         assert!(blocker.allows(matching));
         assert!(!blocker.allows(wrong_generation));
-        assert!(!blocker.allows(wrong_operation));
+        assert!(!blocker.allows(wrong_owner));
         assert!(!blocker.allows(CloudBackupWriteCommandContext::new(4, None)));
     }
 
@@ -1011,6 +1006,12 @@ mod tests {
 
         assert_eq!(supervisor.active_blocker, Some(blocker));
         assert_eq!(supervisor.drain_waiters.len(), 1);
+        assert!(
+            supervisor
+                .in_flight_write
+                .as_ref()
+                .is_some_and(|write| write.completion_admitted_before_blocker)
+        );
 
         supervisor
             .complete_remote_write(

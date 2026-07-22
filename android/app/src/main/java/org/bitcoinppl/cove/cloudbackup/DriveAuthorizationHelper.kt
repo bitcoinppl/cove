@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.cloudbackup
 import android.accounts.Account
 import android.app.Activity
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.activity.result.IntentSenderRequest
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
@@ -133,6 +134,11 @@ internal data class DriveAccessToken(
     val account: DriveAccountIdentity?,
 )
 
+internal data class SelectedDriveAccessToken(
+    val token: String,
+    val account: DriveAccountIdentity,
+)
+
 internal sealed class DriveAccountBindingException(
     message: String,
 ) : Exception(message) {
@@ -143,43 +149,246 @@ internal sealed class DriveAccountBindingException(
         DriveAccountBindingException("google drive account does not match the account selected for Cloud Backup")
 }
 
+internal sealed interface DriveAccountBindingState {
+    val selectedIdentity: DriveAccountIdentity?
+
+    data object Unbound : DriveAccountBindingState {
+        override val selectedIdentity: DriveAccountIdentity? = null
+    }
+
+    data class Bound(
+        val identity: DriveAccountIdentity,
+    ) : DriveAccountBindingState {
+        override val selectedIdentity: DriveAccountIdentity = identity
+    }
+
+    data class Staged(
+        val transitionId: ULong,
+        val previousIdentity: DriveAccountIdentity?,
+        val identity: DriveAccountIdentity,
+    ) : DriveAccountBindingState {
+        override val selectedIdentity: DriveAccountIdentity = identity
+    }
+
+    data class Committed(
+        val transitionId: ULong,
+        val identity: DriveAccountIdentity,
+    ) : DriveAccountBindingState {
+        override val selectedIdentity: DriveAccountIdentity = identity
+    }
+}
+
+internal enum class DriveAccountTransitionResult {
+    Applied,
+    WrongTransition,
+    WriteFailed,
+}
+
+internal sealed interface DriveAccountBindingUpdate {
+    data class Apply(
+        val state: DriveAccountBindingState,
+    ) : DriveAccountBindingUpdate
+
+    data object WrongTransition : DriveAccountBindingUpdate
+}
+
+internal object DriveAccountBindingTransitions {
+    fun bind(
+        state: DriveAccountBindingState,
+        identity: DriveAccountIdentity,
+    ): DriveAccountBindingState =
+        when (state) {
+            DriveAccountBindingState.Unbound -> DriveAccountBindingState.Bound(identity)
+            is DriveAccountBindingState.Bound -> DriveAccountBindingState.Bound(identity)
+            is DriveAccountBindingState.Staged -> state.copy(identity = identity)
+            is DriveAccountBindingState.Committed -> state.copy(identity = identity)
+        }
+
+    fun stage(
+        state: DriveAccountBindingState,
+        transitionId: ULong,
+        identity: DriveAccountIdentity,
+    ): DriveAccountBindingUpdate =
+        when (state) {
+            DriveAccountBindingState.Unbound ->
+                DriveAccountBindingUpdate.Apply(
+                    DriveAccountBindingState.Staged(transitionId, null, identity),
+                )
+            is DriveAccountBindingState.Bound ->
+                DriveAccountBindingUpdate.Apply(
+                    DriveAccountBindingState.Staged(transitionId, state.identity, identity),
+                )
+            is DriveAccountBindingState.Staged ->
+                if (state.transitionId == transitionId) {
+                    DriveAccountBindingUpdate.Apply(state.copy(identity = identity))
+                } else {
+                    DriveAccountBindingUpdate.WrongTransition
+                }
+            is DriveAccountBindingState.Committed -> DriveAccountBindingUpdate.WrongTransition
+        }
+
+    fun commit(
+        state: DriveAccountBindingState,
+        transitionId: ULong,
+    ): DriveAccountBindingUpdate =
+        when (state) {
+            is DriveAccountBindingState.Staged ->
+                if (state.transitionId == transitionId) {
+                    DriveAccountBindingUpdate.Apply(
+                        DriveAccountBindingState.Committed(transitionId, state.identity),
+                    )
+                } else {
+                    DriveAccountBindingUpdate.WrongTransition
+                }
+            is DriveAccountBindingState.Committed ->
+                if (state.transitionId == transitionId) {
+                    DriveAccountBindingUpdate.Apply(state)
+                } else {
+                    DriveAccountBindingUpdate.WrongTransition
+                }
+            DriveAccountBindingState.Unbound,
+            is DriveAccountBindingState.Bound,
+            -> DriveAccountBindingUpdate.WrongTransition
+        }
+
+    fun finalize(
+        state: DriveAccountBindingState,
+        transitionId: ULong,
+    ): DriveAccountBindingUpdate =
+        when (state) {
+            is DriveAccountBindingState.Committed ->
+                if (state.transitionId == transitionId) {
+                    DriveAccountBindingUpdate.Apply(DriveAccountBindingState.Bound(state.identity))
+                } else {
+                    DriveAccountBindingUpdate.WrongTransition
+                }
+            DriveAccountBindingState.Unbound,
+            is DriveAccountBindingState.Bound,
+            -> DriveAccountBindingUpdate.Apply(state)
+            is DriveAccountBindingState.Staged -> DriveAccountBindingUpdate.WrongTransition
+        }
+
+    fun rollback(
+        state: DriveAccountBindingState,
+        transitionId: ULong,
+    ): DriveAccountBindingUpdate =
+        when (state) {
+            is DriveAccountBindingState.Staged ->
+                if (state.transitionId == transitionId) {
+                    DriveAccountBindingUpdate.Apply(
+                        state.previousIdentity?.let(DriveAccountBindingState::Bound)
+                            ?: DriveAccountBindingState.Unbound,
+                    )
+                } else {
+                    DriveAccountBindingUpdate.WrongTransition
+                }
+            DriveAccountBindingState.Unbound,
+            is DriveAccountBindingState.Bound,
+            -> DriveAccountBindingUpdate.Apply(state)
+            is DriveAccountBindingState.Committed -> DriveAccountBindingUpdate.WrongTransition
+        }
+}
+
 internal interface DriveAccountBindingStore {
-    fun selectedIdentity(): DriveAccountIdentity?
+    fun state(): DriveAccountBindingState
+
+    fun selectedIdentity(): DriveAccountIdentity? = state().selectedIdentity
 
     fun bindIdentity(identity: DriveAccountIdentity)
 
     fun clearIdentity()
 
-    fun pendingTransitionId(): ULong?
+    fun stageIdentity(
+        transitionId: ULong,
+        identity: DriveAccountIdentity,
+    ): DriveAccountTransitionResult
 
-    fun isIdentityStaged(transitionId: ULong): Boolean
+    fun commitStagedIdentity(transitionId: ULong): DriveAccountTransitionResult
 
-    fun stageIdentity(transitionId: ULong, identity: DriveAccountIdentity): Boolean
+    fun finalizeCommittedIdentity(transitionId: ULong): DriveAccountTransitionResult
 
-    fun commitStagedIdentity(transitionId: ULong): Boolean
-
-    fun finalizeCommittedIdentity(transitionId: ULong): Boolean
-
-    fun rollbackStagedIdentity(transitionId: ULong): Boolean
+    fun rollbackStagedIdentity(transitionId: ULong): DriveAccountTransitionResult
 }
 
 internal class SharedPreferencesDriveAccountBindingStore(
     context: Context,
 ) : DriveAccountBindingStore {
     internal val appContext: Context = context.applicationContext
-    private val preferences =
-        appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val persistence = DriveAccountBindingPreferences(appContext)
 
-    override fun selectedIdentity(): DriveAccountIdentity? {
-        if (storedPendingTransitionId() != null) {
-            pendingIdentity()?.let { return it }
-        }
+    override fun state(): DriveAccountBindingState = persistence.readState()
 
-        return identity(KEY_ID, KEY_PERMISSION_ID, KEY_EMAIL)
+    override fun bindIdentity(identity: DriveAccountIdentity) {
+        persistence.applyState(DriveAccountBindingTransitions.bind(state(), identity))
     }
 
-    private fun pendingIdentity(): DriveAccountIdentity? =
-        identity(KEY_PENDING_ID, KEY_PENDING_PERMISSION_ID, KEY_PENDING_EMAIL)
+    override fun stageIdentity(
+        transitionId: ULong,
+        identity: DriveAccountIdentity,
+    ): DriveAccountTransitionResult =
+        persist(DriveAccountBindingTransitions.stage(state(), transitionId, identity))
+
+    override fun commitStagedIdentity(transitionId: ULong): DriveAccountTransitionResult =
+        persist(DriveAccountBindingTransitions.commit(state(), transitionId))
+
+    override fun finalizeCommittedIdentity(transitionId: ULong): DriveAccountTransitionResult =
+        persist(DriveAccountBindingTransitions.finalize(state(), transitionId))
+
+    override fun rollbackStagedIdentity(transitionId: ULong): DriveAccountTransitionResult =
+        persist(DriveAccountBindingTransitions.rollback(state(), transitionId))
+
+    private fun persist(update: DriveAccountBindingUpdate): DriveAccountTransitionResult =
+        when (update) {
+            is DriveAccountBindingUpdate.Apply ->
+                if (persistence.commitState(update.state)) {
+                    DriveAccountTransitionResult.Applied
+                } else {
+                    DriveAccountTransitionResult.WriteFailed
+                }
+            DriveAccountBindingUpdate.WrongTransition ->
+                DriveAccountTransitionResult.WrongTransition
+        }
+
+    override fun clearIdentity() {
+        persistence.applyState(DriveAccountBindingState.Unbound)
+    }
+}
+
+private class DriveAccountBindingPreferences(
+    context: Context,
+) {
+    private val preferences =
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    fun readState(): DriveAccountBindingState {
+        val boundIdentity = identity(KEY_ID, KEY_PERMISSION_ID, KEY_EMAIL)
+        val pendingTransitionId = storedTransitionId(KEY_PENDING_TRANSITION_ID)
+        val pendingIdentity =
+            identity(KEY_PENDING_ID, KEY_PENDING_PERMISSION_ID, KEY_PENDING_EMAIL)
+        val committedTransitionId = storedTransitionId(KEY_COMMITTED_TRANSITION_ID)
+
+        return when {
+            pendingTransitionId != null && pendingIdentity != null ->
+                DriveAccountBindingState.Staged(
+                    transitionId = pendingTransitionId,
+                    previousIdentity = boundIdentity,
+                    identity = pendingIdentity,
+                )
+            pendingTransitionId != null -> {
+                logDriveWarning("incomplete staged drive account identity found")
+                boundIdentity?.let(DriveAccountBindingState::Bound)
+                    ?: DriveAccountBindingState.Unbound
+            }
+            committedTransitionId != null && boundIdentity != null ->
+                DriveAccountBindingState.Committed(committedTransitionId, boundIdentity)
+            committedTransitionId != null -> {
+                logDriveWarning("incomplete committed drive account identity found")
+                DriveAccountBindingState.Unbound
+            }
+            boundIdentity != null -> DriveAccountBindingState.Bound(boundIdentity)
+            else -> DriveAccountBindingState.Unbound
+        }
+    }
 
     private fun identity(
         idKey: String,
@@ -201,112 +410,23 @@ internal class SharedPreferencesDriveAccountBindingStore(
         }
     }
 
-    override fun bindIdentity(identity: DriveAccountIdentity) {
-        if (storedPendingTransitionId() != null) {
-            preferences
-                .edit()
-                .putString(KEY_PENDING_ID, identity.googleAccountId)
-                .putString(KEY_PENDING_PERMISSION_ID, identity.drivePermissionId)
-                .putString(KEY_PENDING_EMAIL, identity.email)
-                .apply()
-            return
-        }
-
-        preferences
-            .edit()
-            .putString(KEY_ID, identity.googleAccountId)
-            .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
-            .putString(KEY_EMAIL, identity.email)
-            .apply()
-    }
-
-    override fun pendingTransitionId(): ULong? = storedPendingTransitionId()
-
-    override fun isIdentityStaged(transitionId: ULong): Boolean =
-        storedPendingTransitionId() == transitionId && pendingIdentity() != null
-
-    private fun storedPendingTransitionId(): ULong? =
-        if (preferences.contains(KEY_PENDING_TRANSITION_ID)) {
-            preferences.getLong(KEY_PENDING_TRANSITION_ID, 0).toULong()
+    private fun storedTransitionId(key: String): ULong? =
+        if (preferences.contains(key)) {
+            preferences.getLong(key, 0).toULong()
         } else {
             null
         }
 
-    override fun stageIdentity(
-        transitionId: ULong,
-        identity: DriveAccountIdentity,
-    ): Boolean {
-        val pendingTransitionId = storedPendingTransitionId()
-        if (pendingTransitionId != null && pendingTransitionId != transitionId) {
-            return false
-        }
-
-        return preferences
-            .edit()
-            .putLong(KEY_PENDING_TRANSITION_ID, transitionId.toLong())
-            .putString(KEY_PENDING_ID, identity.googleAccountId)
-            .putString(KEY_PENDING_PERMISSION_ID, identity.drivePermissionId)
-            .putString(KEY_PENDING_EMAIL, identity.email)
-            .commit()
+    fun applyState(state: DriveAccountBindingState) {
+        editorFor(state).apply()
     }
 
-    override fun commitStagedIdentity(transitionId: ULong): Boolean {
-        val pendingTransitionId = storedPendingTransitionId()
-        return when {
-            pendingTransitionId == null -> storedCommittedTransitionId() == transitionId
-            pendingTransitionId != transitionId -> false
-            else ->
-                pendingIdentity()?.let { identity ->
-                    preferences
-                        .edit()
-                        .putString(KEY_ID, identity.googleAccountId)
-                        .putString(KEY_PERMISSION_ID, identity.drivePermissionId)
-                        .putString(KEY_EMAIL, identity.email)
-                        .putLong(KEY_COMMITTED_TRANSITION_ID, transitionId.toLong())
-                        .remove(KEY_PENDING_TRANSITION_ID)
-                        .remove(KEY_PENDING_ID)
-                        .remove(KEY_PENDING_PERMISSION_ID)
-                        .remove(KEY_PENDING_EMAIL)
-                        .commit()
-                } ?: false
-        }
-    }
+    fun commitState(state: DriveAccountBindingState): Boolean =
+        editorFor(state).commit()
 
-    override fun finalizeCommittedIdentity(transitionId: ULong): Boolean {
-        val committedTransitionId = storedCommittedTransitionId() ?: return true
-        if (committedTransitionId != transitionId) {
-            return false
-        }
-
-        return preferences.edit().remove(KEY_COMMITTED_TRANSITION_ID).commit()
-    }
-
-    private fun storedCommittedTransitionId(): ULong? =
-        if (preferences.contains(KEY_COMMITTED_TRANSITION_ID)) {
-            preferences.getLong(KEY_COMMITTED_TRANSITION_ID, 0).toULong()
-        } else {
-            null
-        }
-
-    override fun rollbackStagedIdentity(transitionId: ULong): Boolean {
-        val pendingTransitionId = storedPendingTransitionId()
-        return when {
-            pendingTransitionId == null -> true
-            pendingTransitionId == transitionId ->
-                preferences
-                    .edit()
-                    .remove(KEY_PENDING_TRANSITION_ID)
-                    .remove(KEY_PENDING_ID)
-                    .remove(KEY_PENDING_PERMISSION_ID)
-                    .remove(KEY_PENDING_EMAIL)
-                    .commit()
-            else -> false
-        }
-    }
-
-    override fun clearIdentity() {
-        preferences
-            .edit()
+    private fun editorFor(state: DriveAccountBindingState): SharedPreferences.Editor {
+        val editor = preferences.edit()
+        editor
             .remove(KEY_ID)
             .remove(KEY_PERMISSION_ID)
             .remove(KEY_EMAIL)
@@ -315,8 +435,42 @@ internal class SharedPreferencesDriveAccountBindingStore(
             .remove(KEY_PENDING_PERMISSION_ID)
             .remove(KEY_PENDING_EMAIL)
             .remove(KEY_COMMITTED_TRANSITION_ID)
-            .apply()
+
+        when (state) {
+            DriveAccountBindingState.Unbound -> Unit
+            is DriveAccountBindingState.Bound ->
+                editor.putIdentity(state.identity, KEY_ID, KEY_PERMISSION_ID, KEY_EMAIL)
+            is DriveAccountBindingState.Staged -> {
+                state.previousIdentity?.let { identity ->
+                    editor.putIdentity(identity, KEY_ID, KEY_PERMISSION_ID, KEY_EMAIL)
+                }
+                editor
+                    .putLong(KEY_PENDING_TRANSITION_ID, state.transitionId.toLong())
+                    .putIdentity(
+                        state.identity,
+                        KEY_PENDING_ID,
+                        KEY_PENDING_PERMISSION_ID,
+                        KEY_PENDING_EMAIL,
+                    )
+            }
+            is DriveAccountBindingState.Committed ->
+                editor
+                    .putIdentity(state.identity, KEY_ID, KEY_PERMISSION_ID, KEY_EMAIL)
+                    .putLong(KEY_COMMITTED_TRANSITION_ID, state.transitionId.toLong())
+        }
+
+        return editor
     }
+
+    private fun SharedPreferences.Editor.putIdentity(
+        identity: DriveAccountIdentity,
+        idKey: String,
+        permissionIdKey: String,
+        emailKey: String,
+    ): SharedPreferences.Editor =
+        putString(idKey, identity.googleAccountId)
+            .putString(permissionIdKey, identity.drivePermissionId)
+            .putString(emailKey, identity.email)
 
     companion object {
         private const val PREFERENCES_NAME = "cove_cloud_backup_drive_account"

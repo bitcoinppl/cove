@@ -3,6 +3,9 @@ package org.bitcoinppl.cove.cloudbackup
 import android.content.Context
 import java.net.HttpURLConnection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.CloudStorageException
@@ -45,7 +48,7 @@ class AndroidCloudStorageAccess internal constructor(
     internal suspend fun selectAccountForCloudBackup(transitionId: ULong): DriveAccountSelectionOutcome {
         val previouslySelectedIdentity = accountBindingStore.selectedIdentity()
         val access = tokenProvider.selectAccount()
-        val identity = checkNotNull(access.account)
+        val identity = access.account
 
         if (previouslySelectedIdentity?.matches(identity) == true) {
             val enriched = previouslySelectedIdentity.verifiedMerge(identity)
@@ -57,8 +60,16 @@ class AndroidCloudStorageAccess internal constructor(
             return DriveAccountSelectionOutcome.Unchanged
         }
 
-        if (!accountBindingStore.stageIdentity(transitionId, identity)) {
-            if (!accountBindingStore.rollbackStagedIdentity(transitionId)) {
+        val stageResult = withContext(Dispatchers.IO) {
+            accountBindingStore.stageIdentity(transitionId, identity)
+        }
+        if (stageResult != DriveAccountTransitionResult.Applied) {
+            if (
+                stageResult == DriveAccountTransitionResult.WriteFailed &&
+                withContext(Dispatchers.IO) {
+                    accountBindingStore.rollbackStagedIdentity(transitionId)
+                } != DriveAccountTransitionResult.Applied
+            ) {
                 logDriveWarning("failed to clear unstaged drive account")
             }
             runCatching {
@@ -74,26 +85,31 @@ class AndroidCloudStorageAccess internal constructor(
         return DriveAccountSelectionOutcome.Changed
     }
 
-    internal fun pendingAccountSwitchTransitionId(): ULong? =
-        accountBindingStore.pendingTransitionId()?.let { transitionId ->
-            if (accountBindingStore.isIdentityStaged(transitionId)) {
-                transitionId
-            } else {
-                check(accountBindingStore.rollbackStagedIdentity(transitionId)) {
-                    "incomplete google drive account selection could not be cleared"
-                }
-                null
-            }
+    internal fun driveAccountSwitchPlatformState(): DriveAccountSwitchPlatformState =
+        when (val state = accountBindingStore.state()) {
+            DriveAccountBindingState.Unbound,
+            is DriveAccountBindingState.Bound,
+            -> DriveAccountSwitchPlatformState.NoTransition
+            is DriveAccountBindingState.Staged ->
+                DriveAccountSwitchPlatformState.Staged(state.transitionId)
+            is DriveAccountBindingState.Committed ->
+                DriveAccountSwitchPlatformState.Committed(state.transitionId)
         }
 
-    internal fun commitAccountSwitch(transitionId: ULong): Boolean =
-        accountBindingStore.commitStagedIdentity(transitionId)
+    internal suspend fun commitAccountSwitch(transitionId: ULong): DriveAccountTransitionResult =
+        withContext(Dispatchers.IO) {
+            accountBindingStore.commitStagedIdentity(transitionId)
+        }
 
-    internal fun finalizeAccountSwitchCommit(transitionId: ULong): Boolean =
-        accountBindingStore.finalizeCommittedIdentity(transitionId)
+    internal suspend fun finalizeAccountSwitchCommit(transitionId: ULong): DriveAccountTransitionResult =
+        withContext(Dispatchers.IO) {
+            accountBindingStore.finalizeCommittedIdentity(transitionId)
+        }
 
-    internal fun rollbackAccountSwitch(transitionId: ULong): Boolean =
-        accountBindingStore.rollbackStagedIdentity(transitionId)
+    internal suspend fun rollbackAccountSwitch(transitionId: ULong): DriveAccountTransitionResult =
+        withContext(Dispatchers.IO) {
+            accountBindingStore.rollbackStagedIdentity(transitionId)
+        }
 
     private fun CloudAccessPolicy.allowsConsent(): Boolean =
         this == CloudAccessPolicy.CONSENT_ALLOWED

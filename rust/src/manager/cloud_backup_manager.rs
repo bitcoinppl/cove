@@ -111,6 +111,7 @@ pub(crate) use self::pending_verification::{
     PendingVerificationCompletion, PendingVerificationUpload,
 };
 use self::reconcile::CloudBackupReconcileMessage;
+pub use self::reconcile::DriveAccountSwitchPlatformState;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
@@ -880,6 +881,7 @@ impl RustCloudBackupManager {
         call!(self.supervisor.begin_drive_account_switch())
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
+            .map(crate::database::cloud_backup::DriveAccountSwitchId::value)
     }
 
     /// Continue the claimed transition after Android durably stages the selected account
@@ -887,7 +889,7 @@ impl RustCloudBackupManager {
         &self,
         transition_id: u64,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.continue_drive_account_switch(transition_id))
+        call!(self.supervisor.continue_drive_account_switch(transition_id.into()))
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
     }
@@ -897,7 +899,7 @@ impl RustCloudBackupManager {
         &self,
         transition_id: u64,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.cancel_drive_account_switch(transition_id))
+        call!(self.supervisor.cancel_drive_account_switch(transition_id.into()))
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
     }
@@ -907,7 +909,7 @@ impl RustCloudBackupManager {
         &self,
         transition_id: u64,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.confirm_drive_account_switch_committed(transition_id))
+        call!(self.supervisor.confirm_drive_account_switch_committed(transition_id.into()))
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
     }
@@ -917,7 +919,7 @@ impl RustCloudBackupManager {
         &self,
         transition_id: u64,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.confirm_drive_account_switch_rolled_back(transition_id))
+        call!(self.supervisor.confirm_drive_account_switch_rolled_back(transition_id.into()))
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
     }
@@ -925,9 +927,9 @@ impl RustCloudBackupManager {
     /// Reconcile persisted Rust and Android transition state after process startup
     pub async fn reconcile_drive_account_switch(
         &self,
-        pending_transition_id: Option<u64>,
+        platform_state: DriveAccountSwitchPlatformState,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
-        call!(self.supervisor.reconcile_drive_account_switch(pending_transition_id))
+        call!(self.supervisor.reconcile_drive_account_switch(platform_state))
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
     }

@@ -1,7 +1,7 @@
 package org.bitcoinppl.cove
 
-import kotlin.coroutines.cancellation.CancellationException
 import org.bitcoinppl.cove_core.types.WalletId
+import kotlin.coroutines.cancellation.CancellationException
 
 internal enum class LoadAndResetPreparation {
     ReadyToReset,
@@ -19,7 +19,8 @@ internal sealed interface WalletRoutePreparation {
 internal enum class WalletManagerBootstrapDecision {
     Install,
     UseCached,
-    Cancel;
+    Cancel,
+    ;
 
     companion object {
         fun resolve(
@@ -30,7 +31,7 @@ internal enum class WalletManagerBootstrapDecision {
         ): WalletManagerBootstrapDecision =
             when {
                 cachedWalletId == targetId -> UseCached
-                capturedGeneration != currentGeneration -> Cancel
+                capturedGeneration != currentGeneration && cachedWalletId != null -> Cancel
                 else -> Install
             }
     }
@@ -109,13 +110,20 @@ private fun popRouteAfterRecoveryFailure(
 ): WalletSelectionRecoveryResult =
     try {
         when (val popResult = popRoute()) {
-            RoutePopResult.Popped -> WalletSelectionRecoveryResult.PoppedRoute(recoveryError)
-            RoutePopResult.NoRouteToPop -> WalletSelectionRecoveryResult.NoRouteToPop(recoveryError)
-            is RoutePopResult.Failed ->
+            RoutePopResult.Popped -> {
+                WalletSelectionRecoveryResult.PoppedRoute(recoveryError)
+            }
+
+            RoutePopResult.NoRouteToPop -> {
+                WalletSelectionRecoveryResult.NoRouteToPop(recoveryError)
+            }
+
+            is RoutePopResult.Failed -> {
                 WalletSelectionRecoveryResult.FailedToPopRoute(
                     recoveryError = recoveryError,
                     navigationError = popResult.error,
                 )
+            }
         }
     } catch (e: CancellationException) {
         throw e

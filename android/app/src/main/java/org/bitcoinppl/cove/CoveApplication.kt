@@ -69,7 +69,7 @@ open class CoveApplication : Application() {
             }
             cloudStorageAccess?.let { access ->
                 CloudBackupManager.setDriveAccountSwitchCallbacks(
-                    pendingTransitionId = access::pendingAccountSwitchTransitionId,
+                    platformState = access::driveAccountSwitchPlatformState,
                     selectAccount = access::selectAccountForCloudBackup,
                     commit = access::commitAccountSwitch,
                     finalizeCommit = access::finalizeAccountSwitchCommit,

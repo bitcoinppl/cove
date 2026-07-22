@@ -538,9 +538,12 @@ impl RestoreOperation {
                     Vec::new()
                 }
                 Err(error) => {
-                    return Err(CloudBackupError::cloud_storage_context(
-                        "list cloud backup namespaces",
-                        error,
+                    return Err(blocking_cloud_error(
+                        BlockingCloudStep::Restore,
+                        CloudBackupError::cloud_storage_context(
+                            "list cloud backup namespaces",
+                            error,
+                        ),
                     ));
                 }
             };

@@ -630,6 +630,86 @@ async fn restore_empty_namespace_list_returns_no_backup_found() {
     assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
 }
 
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_distinguishes_passkey_mismatch_from_no_backup_found() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals.cloud.set_master_key_backup(namespace, serde_json::to_vec(&encrypted).unwrap());
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: vec![8; 32],
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+
+    assert!(matches!(error, CloudBackupError::PasskeyMismatch));
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.cloud.list_namespaces_attempt_count(), 6);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_refresh_finds_namespace_that_appears_late() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &[9; 32]).unwrap();
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    let encrypted_wallet =
+        encrypted_wallet_backup_bytes(&wallet, &master_key, "late-revision", 1).await;
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let cloud = globals.cloud.clone();
+    let delayed_namespace = namespace.clone();
+    let delayed_record_id = record_id.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        cloud.set_master_key_backup(
+            delayed_namespace.clone(),
+            serde_json::to_vec(&encrypted_master).unwrap(),
+        );
+        cloud.set_wallet_backup(
+            delayed_namespace.clone(),
+            delayed_record_id.clone(),
+            encrypted_wallet,
+        );
+        cloud.set_wallet_files(
+            delayed_namespace,
+            vec![wallet_filename_from_record_id(&delayed_record_id)],
+        );
+    });
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(report.wallets_restored, 1);
+    assert_eq!(report.wallets_failed, 0);
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(namespace));
+    assert!(globals.cloud.list_namespaces_attempt_count() >= 2);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn restore_propagates_namespace_authorization_failure_without_retrying() {
     let _guard = async_test_lock().lock().await;

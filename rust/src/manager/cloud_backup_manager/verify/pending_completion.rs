@@ -103,7 +103,7 @@ impl RustCloudBackupManager {
 
         for upload in completion.uploads() {
             let sync_state = sync_states_by_record_id.get(upload.record_id());
-            if !self.is_pending_upload_confirmed(completion, upload, sync_state).await {
+            if !self.is_pending_upload_confirmed(upload, sync_state).await {
                 return false;
             }
         }
@@ -113,7 +113,6 @@ impl RustCloudBackupManager {
 
     async fn is_pending_upload_confirmed(
         &self,
-        _completion: &PendingVerificationCompletion,
         upload: &PendingVerificationUpload,
         sync_state: Option<&PersistedCloudBlobState>,
     ) -> bool {

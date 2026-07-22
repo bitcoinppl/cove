@@ -16,7 +16,7 @@ final class WalletTransitionTests: XCTestCase {
         )
     }
 
-    func testCacheRaceUsesMatchingWinnerAndRejectsUnrelatedReplacement() {
+    func testCacheRaceUsesMatchingWinnerAndRejectsSupersedingReplacement() {
         XCTAssertEqual(
             WalletManagerCacheLoadDecision.resolve(
                 targetId: "wallet-b",
@@ -41,6 +41,18 @@ final class WalletTransitionTests: XCTestCase {
                 capturedGeneration: 1,
                 currentGeneration: 1,
                 cachedWalletId: "wallet-a"
+            ),
+            .installLoaded
+        )
+    }
+
+    func testCacheRaceInstallsTargetAfterUnrelatedClear() {
+        XCTAssertEqual(
+            WalletManagerCacheLoadDecision.resolve(
+                targetId: "wallet-b",
+                capturedGeneration: 1,
+                currentGeneration: 2,
+                cachedWalletId: nil
             ),
             .installLoaded
         )

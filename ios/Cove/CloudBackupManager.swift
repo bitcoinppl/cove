@@ -317,9 +317,15 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         case let .lifecycle(lifecycle, settingsRowStatus):
             state.lifecycle = lifecycle
             state.settingsRowStatus = settingsRowStatus
+
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
-        case .driveAccountSwitchCommitRequired, .driveAccountSwitchRollbackRequired:
+
+        // drive account switching is Android-only, so iOS intentionally ignores these messages
+        case .driveAccountSwitchCommitRequired,
+             .driveAccountSwitchRollbackRequired,
+             .driveAccountSwitchFinalizeRequired,
+             .driveAccountSwitchRecoveryRequired:
             break
         }
     }

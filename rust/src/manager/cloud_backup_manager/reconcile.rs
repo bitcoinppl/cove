@@ -13,6 +13,17 @@ use super::{
     PendingUploadVerificationState, RustCloudBackupManager,
 };
 
+/// Durable Google Drive account-switch state owned by the platform
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DriveAccountSwitchPlatformState {
+    /// No platform transition exists
+    NoTransition,
+    /// A selected identity is staged but not yet committed
+    Staged(u64),
+    /// The selected identity is committed but Rust has not finalized the transition
+    Committed(u64),
+}
+
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
@@ -22,6 +33,13 @@ pub enum CloudBackupReconcileMessage {
     DriveAccountSwitchCommitRequired(u64),
     /// Android must atomically discard its staged Google Drive identity
     DriveAccountSwitchRollbackRequired(u64),
+    /// Android must remove the completed transition marker without changing identity
+    DriveAccountSwitchFinalizeRequired(u64),
+    /// The persisted Rust and Android transition states require user-visible recovery
+    DriveAccountSwitchRecoveryRequired {
+        transition_id: u64,
+        message: String,
+    },
 }
 
 #[uniffi::export(callback_interface)]

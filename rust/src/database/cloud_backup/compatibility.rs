@@ -529,7 +529,7 @@ mod tests {
             Some(2),
         );
         assert!(state.set_drive_account_switch(PersistedDriveAccountSwitch {
-            transition_id: 7,
+            transition_id: 7.into(),
             phase: PersistedDriveAccountSwitchPhase::Reinitializing,
         }));
 

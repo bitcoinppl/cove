@@ -52,6 +52,12 @@ struct NamespacePasskeyCandidate {
     encrypted: EncryptedMasterKeyBackup,
 }
 
+enum CredentialSelection {
+    NotAttempted,
+    NoCredentialFound,
+    Selected(Vec<u8>),
+}
+
 impl NamespacePasskeyCandidate {
     fn registration_timestamp(&self) -> u64 {
         self.encrypted
@@ -67,8 +73,7 @@ pub(crate) struct NamespacePasskeyMatchSession {
     cloud: CloudStorageClient,
     passkey: PasskeyAccess,
     authorization_retrier: PlatformAuthorizationRetrier,
-    selected_credential_id: Option<Vec<u8>>,
-    discoverable_assertion_completed: bool,
+    credential_selection: CredentialSelection,
     attempted_candidates: HashSet<CandidateRevisionIdentity>,
     had_inconclusive_cloud_failure: bool,
     had_unsupported_versions: bool,
@@ -86,8 +91,7 @@ impl NamespacePasskeyMatcher {
             cloud: self.cloud.clone(),
             passkey: self.passkey.clone(),
             authorization_retrier: PlatformAuthorizationRetrier::new(),
-            selected_credential_id: None,
-            discoverable_assertion_completed: false,
+            credential_selection: CredentialSelection::NotAttempted,
             attempted_candidates: HashSet::new(),
             had_inconclusive_cloud_failure: false,
             had_unsupported_versions: false,
@@ -150,12 +154,8 @@ impl NamespacePasskeyMatchSession {
                 continue;
             }
 
-            if self.discoverable_assertion_completed && self.selected_credential_id.is_none() {
-                continue;
-            }
-
-            let (credential_id, prf_output) = match &self.selected_credential_id {
-                Some(credential_id) => {
+            let (credential_id, prf_output) = match &self.credential_selection {
+                CredentialSelection::Selected(credential_id) => {
                     let auth = self
                         .authorization_retrier
                         .authenticate(&self.passkey, credential_id, candidate.encrypted.prf_salt)
@@ -163,7 +163,11 @@ impl NamespacePasskeyMatchSession {
                     let prf_output = match auth {
                         Ok(prf_output) => prf_output,
                         Err(PasskeyError::UserCancelled) => {
-                            return Ok(NamespaceMatchSnapshotOutcome::UserDeclined);
+                            return Ok(if matches.is_empty() {
+                                NamespaceMatchSnapshotOutcome::UserDeclined
+                            } else {
+                                NamespaceMatchSnapshotOutcome::Matched(matches)
+                            });
                         }
                         Err(PasskeyError::PrfUnsupportedProvider) => {
                             return Err(CloudBackupError::UnsupportedPasskeyProvider);
@@ -179,8 +183,7 @@ impl NamespacePasskeyMatchSession {
 
                     (credential_id.clone(), prf_output)
                 }
-                None => {
-                    self.discoverable_assertion_completed = true;
+                CredentialSelection::NotAttempted => {
                     let discovery = self
                         .authorization_retrier
                         .discover(&self.passkey, candidate.encrypted.prf_salt)
@@ -191,6 +194,7 @@ impl NamespacePasskeyMatchSession {
                             return Ok(NamespaceMatchSnapshotOutcome::UserDeclined);
                         }
                         Err(PasskeyError::NoCredentialFound) => {
+                            self.credential_selection = CredentialSelection::NoCredentialFound;
                             continue;
                         }
                         Err(PasskeyError::PrfUnsupportedProvider) => {
@@ -203,10 +207,12 @@ impl NamespacePasskeyMatchSession {
                         "Passkey discovery selected credential fingerprint={}",
                         credential_id_fingerprint(&discovered.credential_id)
                     );
-                    self.selected_credential_id = Some(discovered.credential_id.clone());
+                    self.credential_selection =
+                        CredentialSelection::Selected(discovered.credential_id.clone());
 
                     (discovered.credential_id, discovered.prf_output)
                 }
+                CredentialSelection::NoCredentialFound => continue,
             };
 
             let prf_key = prf_output_to_key(prf_output)?;

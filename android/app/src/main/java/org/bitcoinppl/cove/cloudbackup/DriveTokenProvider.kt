@@ -14,7 +14,7 @@ internal class DriveTokenProvider(
         driveAuthorization.clearToken(token)
     }
 
-    suspend fun selectAccount(): DriveAccessToken {
+    suspend fun selectAccount(): SelectedDriveAccessToken {
         val unresolvedAccess = driveAuthorization.selectAccount()
         val access =
             try {
@@ -27,7 +27,7 @@ internal class DriveTokenProvider(
             }
         val identity = access.account
         if (identity != null) {
-            return access
+            return SelectedDriveAccessToken(access.token, identity)
         }
 
         runCatching {

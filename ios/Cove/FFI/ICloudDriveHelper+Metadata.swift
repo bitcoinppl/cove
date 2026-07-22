@@ -259,7 +259,12 @@ final class ICloudMetadataIndex {
     }
 
     func addObserver(_ observer: @escaping @MainActor @Sendable () -> Void) -> UUID {
-        try? startIfNeeded()
+        do {
+            try startIfNeeded()
+        } catch {
+            Log.error("metadataIndex: failed to start shared query: \(error.localizedDescription)")
+        }
+
         let id = UUID()
         observers[id] = observer
         return id
@@ -435,11 +440,6 @@ extension ICloudDriveHelper {
         SyncHealthObserver(settleInterval: metadataSettleInterval, onChange: onChange)
     }
 
-    func fileExistsInCloud(name: String) async throws -> Bool {
-        let records = try await metadataRecords(timeout: defaultTimeout)
-        return records.contains { $0.name == name }
-    }
-
     func logMetadataItems(
         under parentDirectoryURL: URL,
         reason: String,
@@ -499,6 +499,9 @@ extension ICloudDriveHelper {
         } catch let error as CancellationError {
             throw error
         } catch {
+            Log.error(
+                "metadataLookup: failed name=\(name) parent=\(parentDirectoryURL.path) error=\(error.localizedDescription)"
+            )
             return nil
         }
     }

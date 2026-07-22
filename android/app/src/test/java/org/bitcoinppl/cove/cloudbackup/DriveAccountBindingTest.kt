@@ -1,7 +1,6 @@
 package org.bitcoinppl.cove.cloudbackup
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -115,14 +114,30 @@ class DriveAccountBindingTest {
         val staged = DriveAccountIdentity(googleAccountId = "account-1", email = null)
         val verified = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
 
-        assertTrue(store.stageIdentity(7UL, staged))
-        assertTrue(store.commitStagedIdentity(7UL))
+        assertEquals(DriveAccountTransitionResult.Applied, store.stageIdentity(7UL, staged))
+        assertEquals(DriveAccountTransitionResult.Applied, store.commitStagedIdentity(7UL))
 
         verifyDriveAccountBinding(store, verified)
 
         assertEquals(verified, store.selectedIdentity())
-        assertTrue(store.commitStagedIdentity(7UL))
-        assertTrue(store.finalizeCommittedIdentity(7UL))
-        assertFalse(store.commitStagedIdentity(7UL))
+        assertEquals(DriveAccountTransitionResult.Applied, store.commitStagedIdentity(7UL))
+        assertEquals(DriveAccountTransitionResult.Applied, store.finalizeCommittedIdentity(7UL))
+        assertEquals(DriveAccountTransitionResult.WrongTransition, store.commitStagedIdentity(7UL))
+    }
+
+    @Test
+    fun driveAccountBindingRejectsWrongTransitionWithoutChangingStagedIdentity() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1")
+        val replacement = DriveAccountIdentity(googleAccountId = "account-2")
+        val store = TestDriveAccountBindingStore(original)
+
+        assertEquals(DriveAccountTransitionResult.Applied, store.stageIdentity(7UL, replacement))
+
+        assertEquals(DriveAccountTransitionResult.WrongTransition, store.commitStagedIdentity(8UL))
+        assertEquals(DriveAccountTransitionResult.WrongTransition, store.rollbackStagedIdentity(8UL))
+        assertEquals(
+            DriveAccountBindingState.Staged(7UL, original, replacement),
+            store.state(),
+        )
     }
 }
