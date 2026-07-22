@@ -461,6 +461,7 @@ private struct WalletManagerBootstrap {
             notifyInitialScanLifecycleChanged()
 
         case let .availableTransactions(txns):
+            errorAlert = nil
             switch self.loadState {
             case .loading:
                 self.loadState = loadStateForTransactions(txns)
@@ -475,6 +476,7 @@ private struct WalletManagerBootstrap {
             }
 
         case let .updatedTransactions(txns):
+            errorAlert = nil
             self.loadState = loadStateForTransactions(txns)
 
         case let .transactionUpdated(transaction):
@@ -484,10 +486,12 @@ private struct WalletManagerBootstrap {
             transactionDetailsPresentations[presentation.txId()] = presentation
 
         case let .scanComplete(txns):
+            errorAlert = nil
             self.loadState = loadStateForTransactions(txns)
             notifyInitialScanLifecycleChanged()
 
         case let .walletBalanceChanged(balance):
+            errorAlert = nil
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:

@@ -18,6 +18,11 @@ struct MainSettingsGeneralSection: View {
                 symbol: "point.3.filled.connected.trianglepath.dotted"
             )
             SettingsRow(
+                title: "Tor",
+                route: .tor,
+                symbol: "network.badge.shield.half.filled"
+            )
+            SettingsRow(
                 title: "Block Explorer",
                 route: .blockExplorer,
                 symbol: "safari"

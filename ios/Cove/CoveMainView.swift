@@ -18,6 +18,7 @@ struct CoveMainView: View {
     @State var showCover: Bool = true
     @State var scannedCode: TaggedItem<MultiFormat>? = .none
     @State var coverClearTask: Task<Void, Never>?
+    @State private var tor = TorManager.shared
 
     var navBarColor: Color {
         switch app.currentRoute {
@@ -116,6 +117,26 @@ struct CoveMainView: View {
         Log.debug("[COVE APP ROOT] onChangeNfc")
         guard let nfcMessage else { return }
         ScanManager.shared.handleNfcScan(nfcMessage)
+    }
+
+    @MainActor
+    private func useClearnetNode() async {
+        tor.builtInFailure = nil
+
+        do {
+            try await tor.disableConfirmed()
+        } catch {
+            let message = if let error = error as? TorError {
+                error.description
+            } else {
+                error.localizedDescription
+            }
+
+            app.alertState = .init(.general(
+                title: "Unable to Disable Tor",
+                message: message
+            ))
+        }
     }
 
     func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
@@ -240,6 +261,20 @@ struct CoveMainView: View {
                 .presentingSheet($app.sheetState, context: presentationContext)
                 .onOpenURL(perform: ScanManager.shared.handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
+        }
+        .alert("Built-in Tor Unavailable", isPresented: Binding(
+            get: { tor.builtInFailure != nil },
+            set: { if !$0 { tor.builtInFailure = nil } }
+        ), presenting: tor.builtInFailure) { _ in
+            Button("Use Clearnet Node", role: .destructive) {
+                Task { await useClearnetNode() }
+            }
+
+            Button("Dismiss", role: .cancel) {
+                tor.builtInFailure = nil
+            }
+        } message: { failure in
+            Text("Cove could not start its built-in Tor connection. \(failure.value)")
         }
     }
 }

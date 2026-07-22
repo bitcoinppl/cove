@@ -46,6 +46,8 @@ struct SelectedWalletScreen: View {
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
     @State private var cloudBackupManager = CloudBackupManager.shared
+    @State private var tor = TorManager.shared
+    @State private var showTorStatus = false
 
     /// import / export
     @State var exportingBackup: ExportingBackup? = nil
@@ -277,6 +279,46 @@ struct SelectedWalletScreen: View {
     var MainToolBar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             HStack(spacing: 5) {
+                if tor.isEnabled {
+                    Button {
+                        showTorStatus.toggle()
+                    } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            Image(systemName: "network.badge.shield.half.filled")
+                                .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
+                                .font(.callout)
+
+                            Circle()
+                                .fill(torStatusColor)
+                                .frame(width: 7, height: 7)
+                                .overlay {
+                                    Circle().stroke(.background, lineWidth: 1)
+                                }
+                        }
+                    }
+                    .accessibilityLabel("Tor status: \(torStatusTitle)")
+                    .popover(isPresented: $showTorStatus) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(torStatusTitle, systemImage: "network.badge.shield.half.filled")
+                                .font(.headline)
+
+                            if let detail = torStatusDetail {
+                                Text(detail)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Button("Open Tor Settings") {
+                                showTorStatus = false
+                                app.pushRoute(.settings(.tor))
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: 300, alignment: .leading)
+                        .presentationCompactAdaptation(.popover)
+                    }
+                }
+
                 Button(action: {
                     app.sheetState = .init(.qr)
                 }) {
@@ -333,6 +375,45 @@ struct SelectedWalletScreen: View {
                     Button("Cancel", role: .cancel) {}
                 }
             }
+        }
+    }
+
+    private var torStatusTitle: String {
+        switch tor.status {
+        case .off:
+            "Tor Off"
+        case let .bootstrapping(percent, _):
+            "Tor Connecting · \(percent)%"
+        case .ready:
+            "Tor Ready"
+        case .stopped:
+            "Tor Proxy Configured"
+        case .failed:
+            "Tor Unavailable"
+        }
+    }
+
+    private var torStatusDetail: String? {
+        switch tor.status {
+        case let .bootstrapping(_, message), let .failed(message):
+            message
+        case .stopped:
+            "Open Tor settings to test the external proxy."
+        case .off, .ready:
+            nil
+        }
+    }
+
+    private var torStatusColor: Color {
+        switch tor.status {
+        case .off, .stopped:
+            .secondary
+        case .bootstrapping:
+            .statusWarning
+        case .ready:
+            .statusSuccess
+        case .failed:
+            .statusError
         }
     }
 

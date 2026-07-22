@@ -8,7 +8,25 @@
 import MijickPopups
 import SwiftUI
 
+private enum NodeSelectionAlert: Identifiable {
+    case parseUrl(String)
+    case onionNodeRequiresTor
+    case apiTypeMismatch(selected: ApiType, inferred: ApiType)
+    case torEnableError
+
+    var id: Int {
+        switch self {
+        case .parseUrl: 0
+        case .onionNodeRequiresTor: 1
+        case .apiTypeMismatch: 2
+        case .torEnableError: 3
+        }
+    }
+}
+
 struct NodeSelectionView: View {
+    @Environment(AppManager.self) private var app
+
     /// private
     private let nodeSelector = NodeSelector()
 
@@ -19,8 +37,8 @@ struct NodeSelectionView: View {
     @State private var customNodeName: String = ""
     @State private var customUrl: String = ""
 
-    @State private var showParseUrlAlert = false
-    @State private var parseUrlMessage = ""
+    @State private var nodeAlert: NodeSelectionAlert?
+    @State private var navigatingToTorSettings = false
 
     @State private var checkUrlTask: Task<Void, Never>?
 
@@ -113,13 +131,7 @@ struct NodeSelectionView: View {
             customUrl = node?.url ?? customUrl
             customNodeName = node?.name ?? customNodeName
         } catch {
-            showParseUrlAlert = true
-            switch error {
-            case let NodeSelectorError.ParseNodeUrlError(errorString):
-                parseUrlMessage = errorString
-            default:
-                parseUrlMessage = "Unknown error \(error.localizedDescription)"
-            }
+            nodeAlert = nodeSelectionAlert(for: error)
         }
 
         if let node {
@@ -132,6 +144,11 @@ struct NodeSelectionView: View {
                     refreshNodeState()
                     completeLoading(.success("Connected to node successfully"))
                 case let .failure(error):
+                    if let alert = typedNodeSelectionAlert(for: error) {
+                        await presentNodeSelectionAlert(alert)
+                        return
+                    }
+
                     let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
                     let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
 
@@ -226,25 +243,122 @@ struct NodeSelectionView: View {
                     refreshNodeState()
                     completeLoading(.success("Succesfully connected to \(node.url)"))
                 } catch {
+                    if let alert = typedNodeSelectionAlert(for: error) {
+                        await presentNodeSelectionAlert(alert)
+                        return
+                    }
+
                     completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
                 }
             }
             checkUrlTask = task
         }
+        .onAppear {
+            navigatingToTorSettings = false
+        }
         .onDisappear {
+            guard !navigatingToTorSettings else { return }
+
             // custom esplora or electrum is selected
             if showCustomUrlField { checkAndSaveNode() }
         }
-        .alert(isPresented: $showParseUrlAlert) {
-            Alert(
-                title: Text("Unable to parse URL"),
-                message: Text(parseUrlMessage),
-                dismissButton: .default(Text("OK")) {
-                    showParseUrlAlert = false
-                    parseUrlMessage = ""
-                    Task { await dismissAllPopups() }
-                }
-            )
+        .alert(item: $nodeAlert) { alert in
+            switch alert {
+            case let .parseUrl(message):
+                Alert(
+                    title: Text("Unable to Parse URL"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK")) {
+                        Task { await dismissAllPopups() }
+                    }
+                )
+
+            case .onionNodeRequiresTor:
+                torSetupAlert(
+                    message: "This onion node requires Tor. Set up Tor, then return and save the node again."
+                )
+
+            case let .apiTypeMismatch(selected, inferred):
+                Alert(
+                    title: Text("Node Type Does Not Match"),
+                    message: Text(
+                        "This URL uses \(apiTypeName(inferred)), but \(apiTypeName(selected)) is selected. Choose the matching custom node type or change the URL scheme."
+                    ),
+                    dismissButton: .default(Text("OK"))
+                )
+
+            case .torEnableError:
+                torSetupAlert(
+                    title: "Unable to Enable Tor",
+                    message: "Cove could not enable Tor for this onion node. Review Tor settings, then return and save the node again."
+                )
+            }
+        }
+    }
+
+    private func typedNodeSelectionAlert(for error: Error) -> NodeSelectionAlert? {
+        guard let error = error as? NodeSelectorError else { return nil }
+
+        return switch error {
+        case .OnionNodeRequiresTor:
+            .onionNodeRequiresTor
+        case let .ApiTypeMismatch(selected, inferred):
+            .apiTypeMismatch(selected: selected, inferred: inferred)
+        case .TorEnableError:
+            .torEnableError
+        case .NodeNotFound,
+             .SetSelectedNodeError,
+             .NodeAccessError,
+             .ParseNodeUrlError,
+             .TorSettingsDiscoveryError:
+            nil
+        }
+    }
+
+    private func nodeSelectionAlert(for error: Error) -> NodeSelectionAlert {
+        if let alert = typedNodeSelectionAlert(for: error) {
+            return alert
+        }
+
+        if let error = error as? NodeSelectorError,
+           case let .ParseNodeUrlError(message) = error
+        {
+            return .parseUrl(message)
+        }
+
+        return .parseUrl(error.localizedDescription)
+    }
+
+    @MainActor
+    private func presentNodeSelectionAlert(_ alert: NodeSelectionAlert) async {
+        checkUrlTask = nil
+        await dismissAllPopups()
+        nodeAlert = alert
+    }
+
+    private func torSetupAlert(
+        title: String = "Tor Required",
+        message: String
+    ) -> Alert {
+        Alert(
+            title: Text(title),
+            message: Text(message),
+            primaryButton: .default(Text("Set Up Tor")) {
+                navigatingToTorSettings = true
+                app.pushRoute(.settings(.tor))
+            },
+            secondaryButton: .cancel()
+        )
+    }
+
+    private func apiTypeName(_ apiType: ApiType) -> String {
+        switch apiType {
+        case .electrum:
+            "Electrum"
+        case .esplora:
+            "Esplora"
+        case .rpc:
+            "Bitcoin RPC"
         }
     }
 }

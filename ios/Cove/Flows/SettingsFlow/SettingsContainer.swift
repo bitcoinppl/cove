@@ -43,6 +43,8 @@ struct SettingsContainer: View {
                 )
             case .node:
                 NodeSelectionView()
+            case .tor:
+                TorSettingsView()
             case .blockExplorer:
                 BlockExplorerSettingsView()
             case .fiatCurrency:
