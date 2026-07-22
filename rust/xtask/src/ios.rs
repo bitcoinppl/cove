@@ -121,7 +121,7 @@ impl IosRunOptions {
             return Ok(IosRunTarget::Simulator);
         }
 
-        let selector = DeviceSelector::new(self.device_name.clone(), self.udid.clone());
+        let selector = DeviceSelector::new(self.device_name.clone(), self.udid.clone())?;
 
         Ok(IosRunTarget::Device(selector.resolve(sh)?))
     }
@@ -171,24 +171,24 @@ enum DeviceSelector {
 }
 
 impl DeviceSelector {
-    fn new(device_name: Option<String>, udid: Option<String>) -> Self {
-        if let Some(udid) = udid {
-            return Self::Udid(udid);
-        }
-
+    fn new(device_name: Option<String>, udid: Option<String>) -> Result<Self> {
+        // prefer -d/--device-name over --udid so aliases like `se` win when both are set
         if let Some(device_name) = device_name {
-            return Self::Name(device_name);
+            return resolve_device_name_or_alias(&device_name);
         }
 
-        Self::Auto
+        if let Some(udid) = udid {
+            return Ok(Self::Udid(udid));
+        }
+
+        print_info("No device specified; defaulting to alias 'main'");
+        resolve_device_name_or_alias("main")
     }
 
     fn resolve(&self, sh: &Shell) -> Result<ResolvedDevice> {
         match self {
             Self::Auto => {
-                print_info(
-                    "No simulator or device passed via arg or env. Using the first available iOS device",
-                );
+                print_info("Using the first available iOS device");
 
                 first_available_ios_device(sh)
             }
@@ -196,6 +196,80 @@ impl DeviceSelector {
             Self::Udid(udid) => resolve_available_ios_device_by_udid(sh, udid),
         }
     }
+}
+
+/// Device aliases for local phones: `main` and `se`.
+///
+/// Configure via env (typically in `.envrc`):
+/// - `IOS_DEVICE_MAIN` — name or UDID for the main phone
+/// - `IOS_DEVICE_SE` — name or UDID for the secondary iPhone SE
+///
+/// `main` also falls back to `IOS_DEVICE_UDID` when `IOS_DEVICE_MAIN` is unset.
+fn resolve_device_name_or_alias(device_name: &str) -> Result<DeviceSelector> {
+    if let Some(selector) = resolve_device_alias(device_name)? {
+        return Ok(selector);
+    }
+
+    if looks_like_ios_udid(device_name) {
+        return Ok(DeviceSelector::Udid(device_name.to_string()));
+    }
+
+    Ok(DeviceSelector::Name(device_name.to_string()))
+}
+
+fn resolve_device_alias(device_name: &str) -> Result<Option<DeviceSelector>> {
+    let alias = device_name.to_ascii_lowercase();
+    let env_keys: &[&str] = match alias.as_str() {
+        "main" => &["IOS_DEVICE_MAIN", "IOS_DEVICE_UDID"],
+        "se" => &["IOS_DEVICE_SE"],
+        _ => return Ok(None),
+    };
+
+    for env_key in env_keys {
+        if let Some(value) = std::env::var(env_key).ok().and_then(normalize_arg) {
+            print_info(&format!("Resolved device alias '{device_name}' from {env_key}"));
+            return Ok(Some(device_selector_from_target_value(&value)));
+        }
+    }
+
+    if alias == "main" {
+        print_info(
+            "Device alias 'main' has no IOS_DEVICE_MAIN/IOS_DEVICE_UDID; using first available device",
+        );
+        return Ok(Some(DeviceSelector::Auto));
+    }
+
+    Err(eyre!(
+        "Device alias '{device_name}' is not configured. Set IOS_DEVICE_SE to a device name or UDID in .envrc (list devices with: xcrun xctrace list devices)"
+    ))
+}
+
+fn device_selector_from_target_value(value: &str) -> DeviceSelector {
+    if looks_like_ios_udid(value) {
+        DeviceSelector::Udid(value.to_string())
+    } else {
+        DeviceSelector::Name(value.to_string())
+    }
+}
+
+fn looks_like_ios_udid(value: &str) -> bool {
+    let value = value.trim();
+
+    // modern hardware UDID: 00008120-0006243420214032
+    if value.len() == 25 {
+        let mut parts = value.split('-');
+        return matches!(
+            (parts.next(), parts.next(), parts.next()),
+            (Some(prefix), Some(suffix), None)
+                if prefix.len() == 8
+                    && suffix.len() == 16
+                    && prefix.chars().all(|c| c.is_ascii_hexdigit())
+                    && suffix.chars().all(|c| c.is_ascii_hexdigit())
+        );
+    }
+
+    // legacy 40-char hex UDID
+    value.len() == 40 && value.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 #[derive(Debug, Clone)]
@@ -1534,13 +1608,86 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 mod tests {
     use super::{
         default_build_slot_from_cwd, derived_data_dir_name_for_slot,
-        devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, normalize_pem_text,
-        sanitize_build_slot, simulator_line_matches_device, simulator_state_from_line,
-        DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
-        DevicectlHardwareProperties, IOS_DEVICE_DERIVED_DATA_SUFFIX,
+        device_selector_from_target_value, devicectl_device_is_available_ios,
+        ensure_aasa_webcredentials_app, looks_like_ios_udid, normalize_pem_text,
+        resolve_device_name_or_alias, sanitize_build_slot, simulator_line_matches_device,
+        simulator_state_from_line, DeviceSelector, DevicectlConnectionProperties, DevicectlDevice,
+        DevicectlDeviceProperties, DevicectlHardwareProperties, IOS_DEVICE_DERIVED_DATA_SUFFIX,
         IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
     use std::path::Path;
+
+    #[test]
+    fn looks_like_ios_udid_accepts_modern_and_legacy_formats() {
+        assert!(looks_like_ios_udid("00008120-0006243420214032"));
+        assert!(looks_like_ios_udid("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"));
+        assert!(!looks_like_ios_udid("Praveen's iPhone"));
+        assert!(!looks_like_ios_udid("main"));
+        assert!(!looks_like_ios_udid("00008120-000624342021403"));
+    }
+
+    #[test]
+    fn device_selector_from_target_value_picks_udid_or_name() {
+        match device_selector_from_target_value("00008120-0006243420214032") {
+            DeviceSelector::Udid(udid) => assert_eq!(udid, "00008120-0006243420214032"),
+            other => panic!("expected udid selector, got {other:?}"),
+        }
+
+        match device_selector_from_target_value("Praveen's iPhone") {
+            DeviceSelector::Name(name) => assert_eq!(name, "Praveen's iPhone"),
+            other => panic!("expected name selector, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_device_name_or_alias_expands_main_and_se_from_env() {
+        let _guard = device_alias_env_lock();
+
+        std::env::set_var("IOS_DEVICE_MAIN", "00008120-0006243420214032");
+        std::env::set_var("IOS_DEVICE_SE", "Secondary SE");
+
+        match resolve_device_name_or_alias("main").expect("main alias") {
+            DeviceSelector::Udid(udid) => assert_eq!(udid, "00008120-0006243420214032"),
+            other => panic!("expected main udid, got {other:?}"),
+        }
+
+        match resolve_device_name_or_alias("se").expect("se alias") {
+            DeviceSelector::Name(name) => assert_eq!(name, "Secondary SE"),
+            other => panic!("expected se name, got {other:?}"),
+        }
+
+        match resolve_device_name_or_alias("Someone's iPhone").expect("literal name") {
+            DeviceSelector::Name(name) => assert_eq!(name, "Someone's iPhone"),
+            other => panic!("expected literal name, got {other:?}"),
+        }
+
+        std::env::remove_var("IOS_DEVICE_SE");
+
+        let err = resolve_device_name_or_alias("se").expect_err("se should require env");
+        assert!(err.to_string().contains("IOS_DEVICE_SE"));
+
+        std::env::remove_var("IOS_DEVICE_MAIN");
+    }
+
+    #[test]
+    fn device_selector_defaults_to_main_when_unspecified() {
+        let _guard = device_alias_env_lock();
+
+        std::env::set_var("IOS_DEVICE_MAIN", "00008120-0006243420214032");
+        std::env::remove_var("IOS_DEVICE_UDID");
+
+        match DeviceSelector::new(None, None).expect("default selector") {
+            DeviceSelector::Udid(udid) => assert_eq!(udid, "00008120-0006243420214032"),
+            other => panic!("expected default main udid, got {other:?}"),
+        }
+
+        std::env::remove_var("IOS_DEVICE_MAIN");
+    }
+
+    fn device_alias_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     const VALID_PEM: &str = "\
 -----BEGIN PRIVATE KEY-----

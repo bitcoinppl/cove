@@ -6,6 +6,7 @@ mod android_device;
 mod common;
 mod github;
 mod ios;
+mod mobile;
 mod mobile_artifact;
 mod rebase;
 mod util;
@@ -58,6 +59,10 @@ enum Commands {
         /// Build profile: 'debug' or 'release'
         #[arg(default_value = "debug")]
         profile: String,
+
+        /// Device alias (`main`/`sim`) or adb serial. Defaults to `main`. Aliases use ANDROID_DEVICE_MAIN / ANDROID_DEVICE_SIM
+        #[arg(short = 'D', long = "device", env = "ANDROID_DEVICE")]
+        device: Option<String>,
     },
 
     /// Build Android App Bundle (AAB) and APK for Play Store, copy to Downloads
@@ -111,12 +116,17 @@ enum Commands {
         #[arg(long)]
         simulator: bool,
 
-        /// Physical device name to target
-        #[arg(long, env = "IOS_DEVICE_NAME")]
+        /// Device alias (`main`/`se`), name, or UDID. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
+        #[arg(
+            short = 'd',
+            long = "device-name",
+            visible_alias = "device",
+            env = "IOS_DEVICE_NAME"
+        )]
         device_name: Option<String>,
 
         /// Physical device UDID to target
-        #[arg(long, env = "IOS_DEVICE_UDID")]
+        #[arg(long)]
         udid: Option<String>,
     },
 
@@ -127,13 +137,43 @@ enum Commands {
         #[arg(long)]
         simulator: bool,
 
-        /// Physical device name to target
-        #[arg(long, env = "IOS_DEVICE_NAME")]
+        /// Device alias (`main`/`se`), name, or UDID. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
+        #[arg(
+            short = 'd',
+            long = "device-name",
+            visible_alias = "device",
+            env = "IOS_DEVICE_NAME"
+        )]
         device_name: Option<String>,
 
         /// Physical device UDID to target
-        #[arg(long, env = "IOS_DEVICE_UDID")]
+        #[arg(long)]
         udid: Option<String>,
+    },
+
+    /// Rebuild, install, and run iOS and Android apps
+    #[command(name = "build-run-all")]
+    BuildRunAll {
+        /// Run iOS in the simulator instead of on a physical device
+        #[arg(long)]
+        simulator: bool,
+
+        /// iOS device alias (`main`/`se`), name, or UDID. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
+        #[arg(
+            short = 'd',
+            long = "device-name",
+            visible_alias = "device",
+            env = "IOS_DEVICE_NAME"
+        )]
+        device_name: Option<String>,
+
+        /// Physical iOS device UDID to target
+        #[arg(long)]
+        udid: Option<String>,
+
+        /// Android device alias (`main`/`sim`) or adb serial. Defaults to `main`. Aliases use ANDROID_DEVICE_MAIN / ANDROID_DEVICE_SIM
+        #[arg(short = 'D', long = "android-device", env = "ANDROID_DEVICE")]
+        android_device: Option<String>,
     },
 
     /// Run manual iOS full-launch UI tests
@@ -288,9 +328,10 @@ fn main() -> Result<()> {
             android::build_android(build_profile, build_targets, cli.verbose)
         }
 
-        Commands::RunAndroid { profile } => {
+        Commands::RunAndroid { profile, device } => {
             let build_profile = android::BuildProfile::from_str(&profile);
-            android::run_android(build_profile, cli.verbose)
+            let options = android::AndroidRunOptions::new(device);
+            android::run_android(build_profile, options, cli.verbose)
         }
 
         Commands::BundleAndroid => android::bundle_android(cli.verbose),
@@ -318,6 +359,12 @@ fn main() -> Result<()> {
         Commands::BuildRunIos { simulator, device_name, udid } => {
             let options = ios::IosRunOptions::new(simulator, device_name, udid);
             ios::build_run_ios(options, cli.verbose)
+        }
+
+        Commands::BuildRunAll { simulator, device_name, udid, android_device } => {
+            let ios_options = ios::IosRunOptions::new(simulator, device_name, udid);
+            let android_options = android::AndroidRunOptions::new(android_device);
+            mobile::build_run_all(ios_options, android_options, cli.verbose)
         }
 
         Commands::IosUi { device, test, foreground } => {

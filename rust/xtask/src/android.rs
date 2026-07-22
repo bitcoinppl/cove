@@ -307,7 +307,24 @@ pub fn build_android(
     Ok(())
 }
 
-pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
+#[derive(Debug, Clone)]
+pub struct AndroidRunOptions {
+    /// Device alias (`main`/`sim`) or adb serial. Defaults to `main`.
+    device: Option<String>,
+}
+
+impl AndroidRunOptions {
+    pub fn new(device: Option<String>) -> Self {
+        Self {
+            device: device.and_then(|value| {
+                let value = value.trim();
+                (!value.is_empty()).then(|| value.to_string())
+            }),
+        }
+    }
+}
+
+pub fn run_android(profile: BuildProfile, options: AndroidRunOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
     // check for adb
@@ -315,6 +332,10 @@ pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
         print_error("adb not found. Please install Android SDK platform-tools");
         color_eyre::eyre::bail!("adb command not found");
     }
+
+    let device = AndroidDevice::select(options.device.as_deref())?;
+    device.ensure_ready()?;
+    let serial = device.serial();
 
     // change to android directory
     sh.change_dir("../android");
@@ -334,14 +355,16 @@ pub fn run_android(profile: BuildProfile, verbose: bool) -> Result<()> {
     print_success("Build successful");
 
     // install the APK
-    print_info("Installing APK on device/emulator...");
-    cmd!(sh, "adb install -r {apk_path}").run().wrap_err("Failed to install APK")?;
+    print_info(&format!("Installing APK on {}...", device.description()));
+    cmd!(sh, "adb -s {serial} install -r {apk_path}").run().wrap_err("Failed to install APK")?;
     print_success("App installed successfully");
 
     // launch the app
-    print_info("Launching app...");
+    print_info(&format!("Launching app on {}...", device.description()));
     let full_activity = format!("{}/{}", ANDROID_PACKAGE_NAME, ANDROID_ACTIVITY_NAME);
-    cmd!(sh, "adb shell am start -n {full_activity}").run().wrap_err("Failed to launch app")?;
+    cmd!(sh, "adb -s {serial} shell am start -n {full_activity}")
+        .run()
+        .wrap_err("Failed to launch app")?;
     print_success("App launched successfully");
 
     Ok(())

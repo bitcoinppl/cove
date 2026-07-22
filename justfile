@@ -453,23 +453,26 @@ update pkg="":
     cargo update {{ pkg }}
 
 # [external] Run Android app
+# device alias: -D main (default physical) or -D sim (emulator)
 [group('util')]
-run-android profile="debug":
-    just xtask run-android {{ profile }} && just notf "done run android"
+run-android *args:
+    just xtask run-android {{ args }} && just notf "done run android"
 
 alias ra := run-android
 
 # [long, external] Rebuild Android bindings, then install and run the Android app
+# device alias: -D main (default physical) or -D sim (emulator)
 [group('util')]
-build-run-android:
-    just ba && just ra
+build-run-android *args:
+    just ba && just ra {{ args }}
 
 alias bra := build-run-android
 
 # [long, external] Rebuild, install, and run iOS and Android apps
+# iOS: -d main|se   Android: -D main|sim
 [group('util')]
-build-run-all:
-    just bri && just bra
+build-run-all *args:
+    just xtask build-run-all {{ args }} && just notf "done build run all"
 
 alias brall := build-run-all
 
