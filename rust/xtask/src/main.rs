@@ -158,22 +158,28 @@ enum Commands {
         #[arg(long)]
         simulator: bool,
 
-        /// iOS device alias (`main`/`se`), name, or UDID. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
+        /// iOS device alias (`main`/`se`), name, or UDID. Repeat to target multiple devices. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
         #[arg(
             short = 'd',
             long = "device-name",
             visible_alias = "device",
-            env = "IOS_DEVICE_NAME"
+            env = "IOS_DEVICE_NAME",
+            action = clap::ArgAction::Append
         )]
-        device_name: Option<String>,
+        device_name: Vec<String>,
 
         /// Physical iOS device UDID to target
         #[arg(long)]
         udid: Option<String>,
 
-        /// Android device alias (`main`/`sim`) or adb serial. Defaults to `main`. Aliases use ANDROID_DEVICE_MAIN / ANDROID_DEVICE_SIM
-        #[arg(short = 'D', long = "android-device", env = "ANDROID_DEVICE")]
-        android_device: Option<String>,
+        /// Android device alias (`main`/`sim`) or adb serial. Repeat to target multiple devices. Defaults to `main`. Aliases use ANDROID_DEVICE_MAIN / ANDROID_DEVICE_SIM
+        #[arg(
+            short = 'D',
+            long = "android-device",
+            env = "ANDROID_DEVICE",
+            action = clap::ArgAction::Append
+        )]
+        android_device: Vec<String>,
     },
 
     /// Run manual iOS full-launch UI tests
@@ -362,8 +368,8 @@ fn main() -> Result<()> {
         }
 
         Commands::BuildRunAll { simulator, device_name, udid, android_device } => {
-            let ios_options = ios::IosRunOptions::new(simulator, device_name, udid);
-            let android_options = android::AndroidRunOptions::new(android_device);
+            let ios_options = ios::IosRunOptions::new_multiple(simulator, device_name, udid);
+            let android_options = android::AndroidRunOptions::new_multiple(android_device);
             mobile::build_run_all(ios_options, android_options, cli.verbose)
         }
 
@@ -445,4 +451,34 @@ fn install_deps(verbose: bool) -> Result<()> {
 
     println!("{}", "Dependency check completed!".green().bold());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Commands};
+    use clap::Parser;
+
+    #[test]
+    fn build_run_all_accepts_multiple_ios_and_android_devices() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "build-run-all",
+            "-d",
+            "main",
+            "-d",
+            "se",
+            "-D",
+            "main",
+            "-D",
+            "sim",
+        ])
+        .expect("multiple mobile devices should parse");
+
+        let Commands::BuildRunAll { device_name, android_device, .. } = cli.command else {
+            panic!("expected build-run-all command");
+        };
+
+        assert_eq!(device_name, ["main", "se"]);
+        assert_eq!(android_device, ["main", "sim"]);
+    }
 }

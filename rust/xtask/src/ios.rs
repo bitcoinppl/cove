@@ -8,6 +8,7 @@ use color_eyre::{
 };
 use colored::Colorize;
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{
     fs,
@@ -99,31 +100,50 @@ impl IosBuildType {
 #[derive(Debug, Clone)]
 pub struct IosRunOptions {
     simulator: bool,
-    device_name: Option<String>,
+    device_names: Vec<String>,
     udid: Option<String>,
 }
 
 impl IosRunOptions {
     pub fn new(simulator: bool, device_name: Option<String>, udid: Option<String>) -> Self {
+        Self::new_multiple(simulator, device_name.into_iter().collect(), udid)
+    }
+
+    pub fn new_multiple(simulator: bool, device_names: Vec<String>, udid: Option<String>) -> Self {
         Self {
             simulator,
-            device_name: device_name.and_then(normalize_arg),
+            device_names: device_names.into_iter().filter_map(normalize_arg).collect(),
             udid: udid.and_then(normalize_arg),
         }
     }
 
-    fn target(&self, sh: &Shell) -> Result<IosRunTarget> {
-        if self.simulator && (self.device_name.is_some() || self.udid.is_some()) {
+    fn targets(&self, sh: &Shell) -> Result<IosRunTargets> {
+        if self.simulator && (!self.device_names.is_empty() || self.udid.is_some()) {
             color_eyre::eyre::bail!("--simulator cannot be combined with --device-name or --udid");
         }
 
         if self.simulator {
-            return Ok(IosRunTarget::Simulator);
+            return Ok(IosRunTargets::Simulator);
         }
 
-        let selector = DeviceSelector::new(self.device_name.clone(), self.udid.clone())?;
+        let selectors = if self.device_names.is_empty() {
+            vec![DeviceSelector::new(None, self.udid.clone())?]
+        } else {
+            self.device_names
+                .iter()
+                .map(|device_name| resolve_device_name_or_alias(device_name))
+                .collect::<Result<Vec<_>>>()?
+        };
+        let mut seen_udids = HashSet::new();
+        let mut devices = selectors
+            .into_iter()
+            .map(|selector| selector.resolve(sh))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|device| seen_udids.insert(device.udid.clone()));
+        let first = devices.next().ok_or_else(|| eyre!("No iOS run target specified"))?;
 
-        Ok(IosRunTarget::Device(selector.resolve(sh)?))
+        Ok(IosRunTargets::Devices(ResolvedDevices { first, additional: devices.collect() }))
     }
 }
 
@@ -158,9 +178,21 @@ impl TestflightUploadOptions {
 }
 
 #[derive(Debug, Clone)]
-enum IosRunTarget {
+enum IosRunTargets {
     Simulator,
-    Device(ResolvedDevice),
+    Devices(ResolvedDevices),
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedDevices {
+    first: ResolvedDevice,
+    additional: Vec<ResolvedDevice>,
+}
+
+impl ResolvedDevices {
+    fn iter(&self) -> impl Iterator<Item = &ResolvedDevice> {
+        std::iter::once(&self.first).chain(&self.additional)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -480,20 +512,20 @@ pub fn run_ios(options: IosRunOptions, verbose: bool) -> Result<()> {
     ensure_ios_run_commands()?;
 
     let sh = Shell::new()?;
-    let run_target = options.target(&sh)?;
+    let run_targets = options.targets(&sh)?;
 
-    run_ios_target(&sh, run_target, verbose)
+    run_ios_targets(&sh, run_targets, verbose)
 }
 
 pub fn build_run_ios(options: IosRunOptions, verbose: bool) -> Result<()> {
     ensure_ios_run_commands()?;
 
     let sh = Shell::new()?;
-    let run_target = options.target(&sh)?;
-    let build_for_device = matches!(run_target, IosRunTarget::Device(_));
+    let run_targets = options.targets(&sh)?;
+    let build_for_device = matches!(&run_targets, IosRunTargets::Devices(_));
 
     build_ios(IosBuildType::Debug, build_for_device, false, verbose)?;
-    run_ios_target(&sh, run_target, verbose)
+    run_ios_targets(&sh, run_targets, verbose)
 }
 
 fn ensure_ios_run_commands() -> Result<()> {
@@ -510,12 +542,12 @@ fn ensure_ios_run_commands() -> Result<()> {
     Ok(())
 }
 
-fn run_ios_target(sh: &Shell, run_target: IosRunTarget, verbose: bool) -> Result<()> {
+fn run_ios_targets(sh: &Shell, run_targets: IosRunTargets, verbose: bool) -> Result<()> {
     sh.change_dir("../ios");
 
-    match run_target {
-        IosRunTarget::Simulator => run_ios_simulator(sh, verbose),
-        IosRunTarget::Device(device) => run_ios_device(sh, &device, verbose),
+    match run_targets {
+        IosRunTargets::Simulator => run_ios_simulator(sh, verbose),
+        IosRunTargets::Devices(devices) => run_ios_devices(sh, &devices, verbose),
     }
 }
 
@@ -1216,28 +1248,41 @@ fn run_ios_simulator(sh: &Shell, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-fn run_ios_device(sh: &Shell, device: &ResolvedDevice, verbose: bool) -> Result<()> {
-    let device_identifier = device.device_identifier.clone();
-    print_info(&format!("Running iOS app on {}", device.description));
-
+fn run_ios_devices(sh: &Shell, devices: &ResolvedDevices, verbose: bool) -> Result<()> {
     let derived_data_path = derived_data_path(IOS_DEVICE_DERIVED_DATA_SUFFIX)?;
     let app_path = build_ios_app(
         sh,
-        &device.destination,
+        &devices.first.destination,
         &derived_data_path,
         IOS_DEVICE_PRODUCTS_DIR,
         verbose,
     )?;
 
-    print_info("Installing app on physical device...");
+    for device in devices.iter() {
+        install_and_launch_ios_device(sh, device, &app_path)?;
+    }
+
+    Ok(())
+}
+
+fn install_and_launch_ios_device(
+    sh: &Shell,
+    device: &ResolvedDevice,
+    app_path: &str,
+) -> Result<()> {
+    let device_identifier = &device.device_identifier;
+    print_info(&format!("Running iOS app on {}", device.description));
+
+    print_info(&format!("Installing app on {}...", device.description));
     cmd!(sh, "xcrun devicectl device install app --device {device_identifier} {app_path}")
         .run()
-        .wrap_err("Failed to install app on physical device")?;
-    print_success("App installed successfully");
+        .wrap_err_with(|| format!("Failed to install app on {}", device.description))?;
+    print_success(&format!("App installed on {}", device.description));
 
-    print_info("Launching app on physical device...");
-    launch_ios_device_app(sh, &device_identifier)?;
-    print_success("App launched successfully");
+    print_info(&format!("Launching app on {}...", device.description));
+    launch_ios_device_app(sh, device_identifier)
+        .wrap_err_with(|| format!("Failed to launch app on {}", device.description))?;
+    print_success(&format!("App launched on {}", device.description));
 
     Ok(())
 }

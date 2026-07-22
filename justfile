@@ -469,7 +469,7 @@ build-run-android *args:
 alias bra := build-run-android
 
 # [long, external] Rebuild, install, and run iOS and Android apps
-# iOS: -d main|se   Android: -D main|sim
+# repeat targets as needed: -d main -d se -D main -D sim
 [group('util')]
 build-run-all *args:
     just xtask build-run-all {{ args }} && just notf "done build run all"

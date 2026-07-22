@@ -40,6 +40,29 @@ impl AndroidDevice {
         selector.resolve(&devices)
     }
 
+    pub(crate) fn select_many(device_args: &[String]) -> Result<Vec<Self>> {
+        let devices = list_connected()?;
+        let selectors = if device_args.is_empty() {
+            vec![AndroidDeviceSelector::from_arg(None)?]
+        } else {
+            device_args
+                .iter()
+                .map(|device| AndroidDeviceSelector::from_arg(Some(device)))
+                .collect::<Result<Vec<_>>>()?
+        };
+        let mut selected = Vec::with_capacity(selectors.len());
+
+        for selector in selectors {
+            let device = selector.resolve(&devices)?;
+
+            if !selected.iter().any(|selected: &Self| selected.serial == device.serial) {
+                selected.push(device);
+            }
+        }
+
+        Ok(selected)
+    }
+
     pub(crate) fn select_connected() -> Result<Self> {
         Self::select(None)
     }

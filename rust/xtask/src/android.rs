@@ -309,17 +309,24 @@ pub fn build_android(
 
 #[derive(Debug, Clone)]
 pub struct AndroidRunOptions {
-    /// Device alias (`main`/`sim`) or adb serial. Defaults to `main`.
-    device: Option<String>,
+    /// Device aliases (`main`/`sim`) or adb serials. Defaults to `main`.
+    devices: Vec<String>,
 }
 
 impl AndroidRunOptions {
     pub fn new(device: Option<String>) -> Self {
+        Self::new_multiple(device.into_iter().collect())
+    }
+
+    pub fn new_multiple(devices: Vec<String>) -> Self {
         Self {
-            device: device.and_then(|value| {
-                let value = value.trim();
-                (!value.is_empty()).then(|| value.to_string())
-            }),
+            devices: devices
+                .into_iter()
+                .filter_map(|value| {
+                    let value = value.trim();
+                    (!value.is_empty()).then(|| value.to_string())
+                })
+                .collect(),
         }
     }
 }
@@ -333,9 +340,11 @@ pub fn run_android(profile: BuildProfile, options: AndroidRunOptions, verbose: b
         color_eyre::eyre::bail!("adb command not found");
     }
 
-    let device = AndroidDevice::select(options.device.as_deref())?;
-    device.ensure_ready()?;
-    let serial = device.serial();
+    let devices = AndroidDevice::select_many(&options.devices)?;
+
+    for device in &devices {
+        device.ensure_ready()?;
+    }
 
     // change to android directory
     sh.change_dir("../android");
@@ -354,18 +363,28 @@ pub fn run_android(profile: BuildProfile, options: AndroidRunOptions, verbose: b
     }
     print_success("Build successful");
 
-    // install the APK
-    print_info(&format!("Installing APK on {}...", device.description()));
-    cmd!(sh, "adb -s {serial} install -r {apk_path}").run().wrap_err("Failed to install APK")?;
-    print_success("App installed successfully");
+    for device in devices {
+        install_and_launch_android(&sh, &device, apk_path)?;
+    }
 
-    // launch the app
+    Ok(())
+}
+
+fn install_and_launch_android(sh: &Shell, device: &AndroidDevice, apk_path: &str) -> Result<()> {
+    let serial = device.serial();
+
+    print_info(&format!("Installing APK on {}...", device.description()));
+    cmd!(sh, "adb -s {serial} install -r {apk_path}")
+        .run()
+        .wrap_err_with(|| format!("Failed to install APK on {}", device.description()))?;
+    print_success(&format!("App installed on {}", device.description()));
+
     print_info(&format!("Launching app on {}...", device.description()));
     let full_activity = format!("{}/{}", ANDROID_PACKAGE_NAME, ANDROID_ACTIVITY_NAME);
     cmd!(sh, "adb -s {serial} shell am start -n {full_activity}")
         .run()
-        .wrap_err("Failed to launch app")?;
-    print_success("App launched successfully");
+        .wrap_err_with(|| format!("Failed to launch app on {}", device.description()))?;
+    print_success(&format!("App launched on {}", device.description()));
 
     Ok(())
 }
