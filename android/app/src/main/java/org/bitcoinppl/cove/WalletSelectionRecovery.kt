@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove
 
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -16,6 +17,62 @@ internal sealed interface WalletRoutePreparation {
     data object RouteRedirected : WalletRoutePreparation
 }
 
+internal sealed interface WalletManagerInvalidation {
+    data object All : WalletManagerInvalidation
+
+    data class Wallet(
+        val id: WalletId,
+    ) : WalletManagerInvalidation
+}
+
+internal data class WalletManagerLoadToken(
+    val targetId: WalletId,
+    val managerGeneration: Long,
+    val allInvalidationGeneration: Long,
+    val walletInvalidationGeneration: Long,
+)
+
+internal data class WalletManagerCacheState(
+    val managerGeneration: Long = 0,
+    val allInvalidationGeneration: Long = 0,
+    val walletInvalidationGenerations: Map<WalletId, Long> = emptyMap(),
+) {
+    fun loadToken(targetId: WalletId): WalletManagerLoadToken =
+        WalletManagerLoadToken(
+            targetId = targetId,
+            managerGeneration = managerGeneration,
+            allInvalidationGeneration = allInvalidationGeneration,
+            walletInvalidationGeneration = walletInvalidationGeneration(targetId),
+        )
+
+    fun managerChanged(): WalletManagerCacheState =
+        copy(managerGeneration = managerGeneration + 1)
+
+    fun invalidate(invalidation: WalletManagerInvalidation): WalletManagerCacheState =
+        when (invalidation) {
+            WalletManagerInvalidation.All ->
+                copy(
+                    allInvalidationGeneration = allInvalidationGeneration + 1,
+                    walletInvalidationGenerations = emptyMap(),
+                )
+
+            is WalletManagerInvalidation.Wallet ->
+                copy(
+                    walletInvalidationGenerations =
+                        walletInvalidationGenerations +
+                            (invalidation.id to walletInvalidationGeneration(invalidation.id) + 1),
+                )
+        }
+
+    fun invalidated(loadToken: WalletManagerLoadToken): Boolean =
+        allInvalidationGeneration != loadToken.allInvalidationGeneration ||
+            walletInvalidationGeneration(loadToken.targetId) !=
+            loadToken.walletInvalidationGeneration
+
+    fun walletInvalidationGeneration(id: WalletId): Long =
+        walletInvalidationGenerations[id] ?: 0
+}
+
 internal enum class WalletManagerBootstrapDecision {
     Install,
     UseCached,
@@ -24,15 +81,36 @@ internal enum class WalletManagerBootstrapDecision {
 
     companion object {
         fun resolve(
-            targetId: WalletId,
-            capturedGeneration: Long,
-            currentGeneration: Long,
+            loadToken: WalletManagerLoadToken,
+            cacheState: WalletManagerCacheState,
             cachedWalletId: WalletId?,
         ): WalletManagerBootstrapDecision =
             when {
-                cachedWalletId == targetId -> UseCached
-                capturedGeneration != currentGeneration && cachedWalletId != null -> Cancel
+                cachedWalletId == loadToken.targetId -> UseCached
+                cacheState.invalidated(loadToken) -> Cancel
+                cacheState.managerGeneration != loadToken.managerGeneration && cachedWalletId != null -> Cancel
                 else -> Install
+            }
+    }
+}
+
+internal sealed interface WalletPreparationFailureDisposition {
+    data object MissingWallet : WalletPreparationFailureDisposition
+
+    data class CorruptedWallet(
+        val error: WalletManagerException.DatabaseCorruption,
+    ) : WalletPreparationFailureDisposition
+
+    data class Rethrow(
+        val error: Throwable,
+    ) : WalletPreparationFailureDisposition
+
+    companion object {
+        fun classify(error: Throwable): WalletPreparationFailureDisposition =
+            when (error) {
+                is WalletManagerException.WalletDoesNotExist -> MissingWallet
+                is WalletManagerException.DatabaseCorruption -> CorruptedWallet(error)
+                else -> Rethrow(error)
             }
     }
 }

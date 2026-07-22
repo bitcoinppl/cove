@@ -535,20 +535,28 @@ class AppManager private constructor() : FfiReconcile {
                     router.isNavigationGenerationCurrent(generation)
                 }
             }
-        val error = result.exceptionOrNull()
-        if (error is WalletManagerException.DatabaseCorruption) {
-            withContext(Dispatchers.Main.immediate) {
-                alertState =
-                    TaggedItem(
-                        AppAlertState.WalletDatabaseCorrupted(
-                            walletId = error.`id`,
-                            error = error.`error`,
-                        ),
-                    )
+
+        return result.getOrElse { error ->
+            when (val disposition = WalletPreparationFailureDisposition.classify(error)) {
+                WalletPreparationFailureDisposition.MissingWallet -> null
+
+                is WalletPreparationFailureDisposition.CorruptedWallet -> {
+                    withContext(Dispatchers.Main.immediate) {
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.WalletDatabaseCorrupted(
+                                    walletId = disposition.error.`id`,
+                                    error = disposition.error.`error`,
+                                ),
+                            )
+                    }
+
+                    null
+                }
+
+                is WalletPreparationFailureDisposition.Rethrow -> throw disposition.error
             }
         }
-
-        return result.getOrNull()
     }
 
     private fun ensureWalletRouteGenerationIsCurrent(
