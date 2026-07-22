@@ -940,6 +940,32 @@ impl RustWalletManager {
             .is_some_and(|secret| secret.as_mnemonic().is_some())
     }
 
+    /// Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+    #[uniffi::method]
+    pub fn has_xprv_secret(&self) -> bool {
+        Keychain::global()
+            .get_wallet_secret(&self.metadata.read().id)
+            .ok()
+            .flatten()
+            .is_some_and(|secret| secret.as_xprv().is_some())
+    }
+
+    /// Returns the wallet's master extended private key string for export
+    ///
+    /// Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+    /// zeroized; same limitation as displaying the mnemonic words
+    #[uniffi::method]
+    pub fn expose_xprv(&self) -> Result<String, Error> {
+        let secret = Keychain::global()
+            .get_wallet_secret(&self.metadata.read().id)?
+            .ok_or(Error::WalletDoesNotExist)?;
+        let xprv = secret
+            .as_xprv()
+            .ok_or(Error::SecretRetrievalError(KeychainError::WalletSecretTypeMismatch))?;
+
+        Ok(xprv.expose().to_string())
+    }
+
     pub fn fees(&self) -> Option<FeeResponse> {
         let cached_fees = *FEES.load().as_ref();
 

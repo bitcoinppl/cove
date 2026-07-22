@@ -1685,6 +1685,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_dispatch(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_expose_xprv(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_fees(
@@ -1704,6 +1706,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_initial_state(
     ): Short
@@ -2921,6 +2925,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_expose_xprv(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2940,6 +2946,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_has_recovery_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_rustwalletmanager_has_xprv_secret(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustwalletmanager_initial_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4817,6 +4825,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 57298.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 36145.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4845,6 +4856,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words() != 23756.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret() != 29721.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436.toShort()) {
@@ -23580,6 +23594,14 @@ public interface RustWalletManagerInterface {
      */
     fun `dispatch`(`action`: WalletManagerAction)
 
+    /**
+     * Returns the wallet's master extended private key string for export
+     *
+     * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+     * zeroized; same limitation as displaying the mnemonic words
+     */
+    fun `exposeXprv`(): kotlin.String
+
     suspend fun `feeRateOptions`(): FeeRateOptions
 
     fun `fees`(): FeeResponse?
@@ -23605,6 +23627,11 @@ public interface RustWalletManagerInterface {
      * Returns whether this hot wallet is backed by BIP39 recovery words
      */
     fun `hasRecoveryWords`(): kotlin.Boolean
+
+    /**
+     * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+     */
+    fun `hasXprvSecret`(): kotlin.Boolean
 
     /**
      * Returns the bootstrap wallet snapshot used before reconcile messages arrive
@@ -24070,6 +24097,26 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
 
+    /**
+     * Returns the wallet's master extended private key string for export
+     *
+     * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+     * zeroized; same limitation as displaying the mnemonic words
+     */
+    @Throws(WalletManagerException::class)override fun `exposeXprv`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(WalletManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_expose_xprv(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `feeRateOptions`() : FeeRateOptions {
@@ -24255,6 +24302,22 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_has_recovery_words(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+     */override fun `hasXprvSecret`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_has_xprv_secret(
         it,
         _status)
 }

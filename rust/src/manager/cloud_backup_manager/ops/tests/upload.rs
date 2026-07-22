@@ -77,7 +77,7 @@ async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
         manager.do_backup_wallets(&[first_wallet.clone(), second_wallet]).await.unwrap_err();
 
     let record_id = wallet_record_id(first_wallet.id.as_ref());
-    assert!(error.to_string().contains("has no mnemonic"), "{error}");
+    assert!(error.to_string().contains("has no private key"), "{error}");
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(4));
     assert!(matches!(
