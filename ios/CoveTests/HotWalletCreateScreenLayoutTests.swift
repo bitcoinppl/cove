@@ -44,6 +44,16 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         addScreenshotAttachment(image, name: "compact-hot-wallet-select")
         try saveAuditScreenshotIfDirectoryRequested(image, name: "hot-wallet-select-after.png")
         try assertPrimaryActionIsNotClippedAtBottom(in: image)
+        try assertTextIsInBottomScreenRegion(
+            "do you already",
+            maximumNormalizedMidY: 0.5,
+            in: image
+        )
+        try assertTextIsInBottomScreenRegion(
+            "create new wallet",
+            maximumNormalizedMidY: 0.25,
+            in: image
+        )
 
         let recognizedText = try normalizedRecognizedText(in: image)
 
@@ -697,6 +707,52 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             brightPixelCount,
             maximumAllowedBrightPixels,
             "expected dark padding below the primary action; bright pixels at the bottom edge indicate the button is clipped",
+            file: file,
+            line: line
+        )
+    }
+
+    /// Vision text boxes use a bottom-left origin, so smaller midY is closer to the bottom
+    private func assertTextIsInBottomScreenRegion(
+        _ substring: String,
+        maximumNormalizedMidY: CGFloat,
+        in image: UIImage,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+
+        let handler = VNImageRequestHandler(cgImage: cgImage)
+        try handler.perform([request])
+
+        let needle = substring.lowercased()
+        let observations = request.results ?? []
+        guard let observation = observations.first(where: { observation in
+            observation.topCandidates(1).first?
+                .string
+                .lowercased()
+                .contains(needle) == true
+        }) else {
+            let recognizedText = observations
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
+
+            XCTFail(
+                "expected text containing \"\(substring)\" so layout position can be checked, got:\n\(recognizedText)",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        let midY = observation.boundingBox.midY
+        XCTAssertLessThanOrEqual(
+            midY,
+            maximumNormalizedMidY,
+            "expected \"\(substring)\" midY \(midY) to stay within the bottom \(maximumNormalizedMidY) of the screen",
             file: file,
             line: line
         )
