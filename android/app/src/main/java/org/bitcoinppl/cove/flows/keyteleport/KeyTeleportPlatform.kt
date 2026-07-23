@@ -44,13 +44,13 @@ private fun KeyTeleportAlert.receiveMessageForDisplay(): String? =
 
 private fun KeyTeleportAlert.nonReceiveMessageForDisplay(): String =
     when (this) {
-        is KeyTeleportAlert.ParseFailed -> "That is not a valid Key Teleport code."
+        is KeyTeleportAlert.ParseFailed -> "That is not a valid KeyTeleport code."
         is KeyTeleportAlert.UnsupportedPsbt -> "PSBT teleport packets are not supported yet."
-        is KeyTeleportAlert.UnsupportedPayload -> "This Key Teleport payload type is not supported yet."
+        is KeyTeleportAlert.UnsupportedPayload -> "This KeyTeleport payload type is not supported yet."
         is KeyTeleportAlert.InvalidPayload -> "The transfer unlocked, but its contents are invalid."
         is KeyTeleportAlert.WrongReceiverCode -> "The receiver code is incorrect."
         is KeyTeleportAlert.NoEligibleWallets -> "No eligible hot wallets are available on this device."
-        is KeyTeleportAlert.IneligibleWallet -> "That wallet is not eligible for Key Teleport."
+        is KeyTeleportAlert.IneligibleWallet -> "That wallet is not eligible for KeyTeleport."
         is KeyTeleportAlert.NoPendingSend -> "There is no pending send in progress."
         is KeyTeleportAlert.ImportFailed -> v1
         is KeyTeleportAlert.Keychain -> v1

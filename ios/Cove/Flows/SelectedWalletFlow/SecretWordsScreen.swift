@@ -16,7 +16,7 @@ private enum SecretWordsSensitiveAction {
         case .seedQr:
             "Show Seed QR?"
         case .keyTeleport:
-            "Send with Key Teleport?"
+            "Send with KeyTeleport?"
         }
     }
 
@@ -34,7 +34,7 @@ private enum SecretWordsSensitiveAction {
         case .seedQr:
             "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to."
         case .keyTeleport:
-            "Key Teleport sends this wallet's secret words to another device. Only continue if you trust the receiving device and can verify its request."
+            "KeyTeleport sends this wallet's secret words to another device. Only continue if you trust the receiving device and can verify its request."
         }
     }
 }
@@ -127,7 +127,7 @@ struct SecretWordsScreen: View {
                     Button {
                         presentConfirmation(for: .keyTeleport)
                     } label: {
-                        Label("Key Teleport", systemImage: "paperplane")
+                        Label("KeyTeleport", systemImage: "paperplane")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

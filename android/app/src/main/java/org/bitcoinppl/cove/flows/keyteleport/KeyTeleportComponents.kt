@@ -82,7 +82,7 @@ internal fun PacketQr(text: String) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Key Teleport QR",
+            contentDescription = "KeyTeleport QR",
             contentScale = ContentScale.Fit,
             modifier =
                 Modifier
@@ -196,7 +196,7 @@ internal fun KeyTeleportAlertDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Key Teleport") },
+        title = { Text("KeyTeleport") },
         text = { Text(alert.messageForDisplay()) },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
     )
@@ -209,7 +209,7 @@ internal fun KeyTeleportErrorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Key Teleport") },
+        title = { Text("KeyTeleport") },
         text = { Text(message) },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
     )

@@ -82,7 +82,7 @@ internal fun KeyTeleportRevealable(
         animateDpAsState(
             targetValue = if (isHidden) blurRadius else 0.dp,
             animationSpec = tween(durationMillis = REVEAL_ANIMATION_DURATION_MILLIS),
-            label = "Key Teleport reveal blur",
+            label = "KeyTeleport reveal blur",
         )
     val revealModifier =
         if (isHidden) {

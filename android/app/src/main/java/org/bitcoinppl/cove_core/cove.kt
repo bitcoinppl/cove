@@ -32900,7 +32900,7 @@ public object FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer<Inter
 
 
 /**
- * Display-ready Secure Notes & Passwords content received through Key Teleport
+ * Display-ready Secure Notes & Passwords content received through KeyTeleport
  */
 data class KeyTeleportMessageReview (
     /**
@@ -47397,7 +47397,7 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
 
 
 /**
- * Validated or unparsed input for a Key Teleport flow
+ * Validated or unparsed input for a KeyTeleport flow
  */
 sealed class KeyTeleportInput: Disposable  {
 
@@ -48516,7 +48516,7 @@ public object FfiConverterTypeKeyTeleportMessageItem : FfiConverterRustBuffer<Ke
 
 
 /**
- * A failure while rendering a validated Key Teleport packet
+ * A failure while rendering a validated KeyTeleport packet
  */
 sealed class KeyTeleportPacketEncodingException: kotlin.Exception() {
 

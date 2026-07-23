@@ -85,12 +85,12 @@ impl KeyTeleportSenderPacket {
     }
 }
 
-/// A failure while rendering a validated Key Teleport packet
+/// A failure while rendering a validated KeyTeleport packet
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum KeyTeleportPacketEncodingError {
     /// The packet could not be encoded as a single-part BBQr value
-    #[error("unable to encode Key Teleport packet: {0}")]
+    #[error("unable to encode KeyTeleport packet: {0}")]
     Encoding(String),
 }
 
@@ -110,7 +110,7 @@ pub enum ParsedKeyTeleport {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum KeyTeleportParseError {
-    #[error("unrecognized Key Teleport packet")]
+    #[error("unrecognized KeyTeleport packet")]
     Unrecognized,
 }
 

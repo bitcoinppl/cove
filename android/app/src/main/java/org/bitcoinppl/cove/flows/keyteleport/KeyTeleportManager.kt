@@ -61,7 +61,7 @@ class KeyTeleportManager internal constructor(
                     dispatch(action)
                 }
             }.onFailure {
-                Log.e(tag, "Unable to dispatch Key Teleport action", it)
+                Log.e(tag, "Unable to dispatch KeyTeleport action", it)
             }
         }
     }
@@ -122,7 +122,7 @@ class KeyTeleportManager internal constructor(
                 runCatching {
                     rust.dispatch(KeyTeleportManagerAction.Clear)
                 }.onFailure {
-                    Log.w(tag, "Error clearing Key Teleport manager: ${it.message}")
+                    Log.w(tag, "Error clearing KeyTeleport manager: ${it.message}")
                 }
                 rust.close()
             }

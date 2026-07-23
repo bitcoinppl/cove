@@ -73,7 +73,7 @@ import SwiftUI
         } catch let error as MultiFormatError {
             if case .KeyTeleportPsbtNotSupported = error {
                 app.alertState = TaggedItem(
-                    .invalidFormat(message: "Key Teleport PSBT packets are not supported yet.")
+                    .invalidFormat(message: "KeyTeleport PSBT packets are not supported yet.")
                 )
                 return true
             }
@@ -85,7 +85,7 @@ import SwiftUI
                 || normalized.hasPrefix("b$2p")
             if looksLikeKeyTeleport {
                 app.alertState = TaggedItem(
-                    .invalidFormat(message: "This Key Teleport packet could not be read.")
+                    .invalidFormat(message: "This KeyTeleport packet could not be read.")
                 )
             }
 
@@ -193,7 +193,7 @@ extension ScanManager {
             return true
         } catch {
             app.alertState = .init(
-                .invalidFormat(message: "This Key Teleport link is not supported.")
+                .invalidFormat(message: "This KeyTeleport link is not supported.")
             )
             return true
         }

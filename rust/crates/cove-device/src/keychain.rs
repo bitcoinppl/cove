@@ -336,23 +336,23 @@ impl Keychain {
             (Some(cryptor), Some(session)) => (cryptor, session),
             (Some(_), None) => {
                 return Err(KeychainError::Decrypt(
-                    "key teleport receive session cryptor found but encrypted session is missing"
+                    "KeyTeleport receive session cryptor found but encrypted session is missing"
                         .into(),
                 ));
             }
             (None, Some(_)) => {
                 return Err(KeychainError::Decrypt(
-                    "encrypted key teleport receive session found but cryptor is missing".into(),
+                    "encrypted KeyTeleport receive session found but cryptor is missing".into(),
                 ));
             }
         };
 
         let cryptor = Cryptor::try_from_string(&cryptor_str)
-            .map_err_prefix("key teleport receive session cryptor", KeychainError::Decrypt)?;
+            .map_err_prefix("KeyTeleport receive session cryptor", KeychainError::Decrypt)?;
 
         cryptor
             .decrypt_from_string(&encrypted)
-            .map_err_prefix("key teleport receive session", KeychainError::Decrypt)
+            .map_err_prefix("KeyTeleport receive session", KeychainError::Decrypt)
             .map(Some)
     }
 

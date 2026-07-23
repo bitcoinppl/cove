@@ -270,7 +270,7 @@ private struct KeyTeleportLoadedView: View {
                 try ShareSheet.presentFromMenu(text: url())
             } catch {
                 app.alertState = TaggedItem(
-                    .invalidFormat(message: "Unable to encode this Key Teleport packet.")
+                    .invalidFormat(message: "Unable to encode this KeyTeleport packet.")
                 )
             }
         } label: {
@@ -294,9 +294,9 @@ private struct KeyTeleportLoadedView: View {
     private var title: String {
         switch route {
         case .receive:
-            "Receive by Key Teleport"
+            "Receive by KeyTeleport"
         case .send:
-            "Send by Key Teleport"
+            "Send by KeyTeleport"
         }
     }
 
@@ -350,7 +350,7 @@ private struct KeyTeleportLoadedView: View {
         case let .keyTeleportSender(packet):
             manager.ingest(packet)
         default:
-            app.alertState = .init(.invalidFormat(message: "This is not a Key Teleport packet."))
+            app.alertState = .init(.invalidFormat(message: "This is not a KeyTeleport packet."))
         }
     }
 
@@ -399,21 +399,21 @@ private struct KeyTeleportAlertBanner: View {
         case .ReceiveSessionReset:
             "The previous receive request was unreadable, so Cove replaced it. Responses for the old request will not work."
         case .ParseFailed:
-            "This Key Teleport packet could not be read."
+            "This KeyTeleport packet could not be read."
         case .UnsupportedPsbt:
-            "Key Teleport PSBT packets are not supported yet."
+            "KeyTeleport PSBT packets are not supported yet."
         case .UnsupportedPayload:
-            "This type of Key Teleport payload is not supported yet."
+            "This type of KeyTeleport payload is not supported yet."
         case .InvalidPayload:
-            "The transfer was unlocked, but its contents are not valid Key Teleport data."
+            "The transfer was unlocked, but its contents are not valid KeyTeleport data."
         case .WrongReceiverCode:
             "The receiver code does not match this request."
         case .WrongTeleportPassword:
             "The Teleport Password is incorrect."
         case .NoEligibleWallets:
-            "No wallet on this device can send with Key Teleport."
+            "No wallet on this device can send with KeyTeleport."
         case .IneligibleWallet:
-            "This wallet cannot send with Key Teleport."
+            "This wallet cannot send with KeyTeleport."
         case .NoPendingSend:
             "Scan or paste a receiver request first."
         case .NoPendingReceiveSecret:
@@ -455,9 +455,9 @@ private struct KeyTeleportScanPasteSection: View {
             .buttonStyle(OnboardingPrimaryButtonStyle())
 
             TextField(
-                "Paste Key Teleport packet or link",
+                "Paste KeyTeleport packet or link",
                 text: $pastedText,
-                prompt: keyTeleportInputPlaceholder("Paste Key Teleport packet or link"),
+                prompt: keyTeleportInputPlaceholder("Paste KeyTeleport packet or link"),
                 axis: .vertical
             )
             .textInputAutocapitalization(.never)

@@ -252,7 +252,7 @@ struct WalletSettingsView: View {
                         titleVisibility: .visible
                     ) {
                         Button("Share…") { startXprvExport(.share) }
-                        Button("Key Teleport") { startXprvExport(.keyTeleport) }
+                        Button("KeyTeleport") { startXprvExport(.keyTeleport) }
                         Button("Cancel", role: .cancel) {}
                     }
                 }
