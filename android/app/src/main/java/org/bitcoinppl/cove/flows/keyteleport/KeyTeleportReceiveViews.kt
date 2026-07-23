@@ -58,6 +58,7 @@ import org.bitcoinppl.cove_core.WalletMetadata
 
 private val ImportedWalletSuccessTint = Color(0xFF7DD195)
 private val ImportedWalletSuccessFill = Color(0x297DD195)
+private const val MNEMONIC_PLACEHOLDER_WORD_COUNT = 4
 
 @Composable
 internal fun ReceiveReadyView(
@@ -142,11 +143,10 @@ internal fun ReceiveMnemonicReviewView(
     wordCount: Int,
     onDone: () -> Unit,
 ) {
-    var words by remember { mutableStateOf<List<String>?>(null) }
+    var disclosure by remember(wordCount) { mutableStateOf<MnemonicDisclosure>(MnemonicDisclosure.Hidden) }
 
-    LaunchedEffect(wordCount) { words = manager.revealMnemonicWords() }
     DisposableEffect(Unit) {
-        onDispose { words = emptyList() }
+        onDispose { disclosure = MnemonicDisclosure.Hidden }
     }
     SecureScreenEffect()
 
@@ -154,16 +154,35 @@ internal fun ReceiveMnemonicReviewView(
         title = "Recovery words received",
         body = "Cove found a $wordCount-word wallet. Review it below or import it directly.",
     )
-    val revealedWords = words
-    if (revealedWords == null || revealedWords.isEmpty()) {
+    val displayedWords =
+        when (val currentDisclosure = disclosure) {
+            MnemonicDisclosure.Hidden -> List(MNEMONIC_PLACEHOLDER_WORD_COUNT) { "••••••" }
+            is MnemonicDisclosure.Revealed -> currentDisclosure.words
+            MnemonicDisclosure.Failed -> null
+        }
+    if (displayedWords == null) {
         Text("Unable to reveal recovery words.", color = MaterialTheme.colorScheme.error)
     } else {
-        RecoveryWordsGrid(revealedWords)
+        KeyTeleportRevealable(
+            isHidden = disclosure == MnemonicDisclosure.Hidden,
+            hint = "Tap to reveal recovery words",
+            blurRadius = 10.dp,
+            onReveal = {
+                val words = manager.revealMnemonicWords()
+                disclosure =
+                    if (words.isNullOrEmpty()) {
+                        MnemonicDisclosure.Failed
+                    } else {
+                        MnemonicDisclosure.Revealed(words)
+                    }
+            },
+        ) {
+            RecoveryWordsGrid(displayedWords)
+        }
     }
     Button(
-        enabled = !revealedWords.isNullOrEmpty(),
         onClick = {
-            words = emptyList()
+            disclosure = MnemonicDisclosure.Hidden
             manager.dispatch(KeyTeleportManagerAction.ImportReceivedWallet)
         },
         modifier = Modifier.fillMaxWidth(),
@@ -172,7 +191,7 @@ internal fun ReceiveMnemonicReviewView(
     }
     TextButton(
         onClick = {
-            words = emptyList()
+            disclosure = MnemonicDisclosure.Hidden
             manager.dispatch(KeyTeleportManagerAction.FinishReview)
             onDone()
         },
@@ -181,6 +200,16 @@ internal fun ReceiveMnemonicReviewView(
     ) {
         Text("Finish Without Importing")
     }
+}
+
+private sealed interface MnemonicDisclosure {
+    data object Hidden : MnemonicDisclosure
+
+    data class Revealed(
+        val words: List<String>,
+    ) : MnemonicDisclosure
+
+    data object Failed : MnemonicDisclosure
 }
 
 @Composable

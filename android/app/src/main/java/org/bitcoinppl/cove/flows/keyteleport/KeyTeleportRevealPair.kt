@@ -38,11 +38,9 @@ private const val REVEAL_ANIMATION_DURATION_MILLIS = 200
 private const val REVEAL_HINT_CORNER_PERCENT = 50
 private const val REVEAL_SCRIM_ALPHA = 0.88f
 
-private enum class KeyTeleportRevealedElement(
-    val hiddenBlurRadius: Dp,
-) {
-    QrCode(14.dp),
-    TextCode(10.dp),
+private enum class KeyTeleportRevealedElement {
+    QrCode,
+    TextCode,
 }
 
 @Composable
@@ -56,34 +54,33 @@ internal fun KeyTeleportRevealPair(
 
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         KeyTeleportRevealable(
-            revealed = revealed,
-            element = KeyTeleportRevealedElement.QrCode,
+            isHidden = revealed != KeyTeleportRevealedElement.QrCode,
             hint = qrHint,
-            onReveal = { revealed = it },
+            blurRadius = 14.dp,
+            onReveal = { revealed = KeyTeleportRevealedElement.QrCode },
             content = qr,
         )
         KeyTeleportRevealable(
-            revealed = revealed,
-            element = KeyTeleportRevealedElement.TextCode,
+            isHidden = revealed != KeyTeleportRevealedElement.TextCode,
             hint = codeHint,
-            onReveal = { revealed = it },
+            blurRadius = 10.dp,
+            onReveal = { revealed = KeyTeleportRevealedElement.TextCode },
             content = code,
         )
     }
 }
 
 @Composable
-private fun KeyTeleportRevealable(
-    revealed: KeyTeleportRevealedElement,
-    element: KeyTeleportRevealedElement,
+internal fun KeyTeleportRevealable(
+    isHidden: Boolean,
     hint: String,
-    onReveal: (KeyTeleportRevealedElement) -> Unit,
+    blurRadius: Dp,
+    onReveal: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val isHidden = revealed != element
-    val blurRadius by
+    val animatedBlurRadius by
         animateDpAsState(
-            targetValue = if (isHidden) element.hiddenBlurRadius else 0.dp,
+            targetValue = if (isHidden) blurRadius else 0.dp,
             animationSpec = tween(durationMillis = REVEAL_ANIMATION_DURATION_MILLIS),
             label = "Key Teleport reveal blur",
         )
@@ -93,7 +90,7 @@ private fun KeyTeleportRevealable(
                 .clickable(
                     onClickLabel = hint,
                     role = Role.Button,
-                    onClick = { onReveal(element) },
+                    onClick = onReveal,
                 )
                 .semantics(mergeDescendants = true) {
                     contentDescription = hint
@@ -110,7 +107,7 @@ private fun KeyTeleportRevealable(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .blur(blurRadius)
+                    .blur(animatedBlurRadius)
                     .then(hiddenSemanticsModifier(isHidden)),
         ) {
             content()
