@@ -555,7 +555,7 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
     }
 
     errors.extend(restore_custom_block_explorers(config, &settings.custom_block_explorers));
-    errors.extend(restore_ohttp_relay_url(config, &settings.ohttp_relay_url));
+    errors.extend(restore_ohttp_relay_urls(config, &settings.ohttp_relay_urls));
 
     if errors.is_empty() {
         Ok(())
@@ -595,28 +595,32 @@ fn restore_custom_block_explorers(
     errors
 }
 
-fn restore_ohttp_relay_url(
+fn restore_ohttp_relay_urls(
     config: &GlobalConfigTable,
-    ohttp_relay_url: &Option<String>,
+    ohttp_relay_urls: &[String],
 ) -> Vec<String> {
-    let Some(url) = ohttp_relay_url else {
-        return Vec::new();
-    };
-
-    if url.trim().is_empty() {
-        warn!("skipping empty ohttp relay url");
+    if ohttp_relay_urls.is_empty() {
         return Vec::new();
     }
 
-    if let Err(error) = config.set_ohttp_relay_url(url.clone()) {
-        if !matches!(
-            error,
-            DatabaseError::GlobalConfig(GlobalConfigTableError::InvalidOhttpRelayUrl(_))
-        ) {
-            return vec![format!("ohttp relay url: {error}")];
-        }
+    let valid: Vec<String> = ohttp_relay_urls
+        .iter()
+        .filter(|url| !url.trim().is_empty())
+        .filter_map(|url| match GlobalConfigTable::parse_ohttp_relay_url(url.trim()) {
+            Ok(canonical) => Some(canonical),
+            Err(error) => {
+                warn!("skipping invalid ohttp relay url: {error}");
+                None
+            }
+        })
+        .collect();
 
-        warn!("skipping invalid ohttp relay url: {error}");
+    if valid.is_empty() {
+        return Vec::new();
+    }
+
+    if let Err(error) = config.set_ohttp_relay_urls(valid) {
+        return vec![format!("ohttp relay urls: {error}")];
     }
 
     Vec::new()
@@ -719,30 +723,43 @@ mod tests {
     }
 
     #[test]
-    fn backup_import_restores_valid_ohttp_relay_url() {
+    fn backup_import_restores_valid_ohttp_relay_urls() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, config) = test_config();
 
-        let errors =
-            restore_ohttp_relay_url(&config, &Some("https://relay.example.com".to_string()));
+        let errors = restore_ohttp_relay_urls(
+            &config,
+            &["https://relay1.example.com".to_string(), "https://relay2.example.com".to_string()],
+        );
 
         assert!(errors.is_empty());
-        assert_eq!(config.ohttp_relay_url().as_deref(), Some("https://relay.example.com/"));
+        assert_eq!(
+            config.ohttp_relay_urls(),
+            vec!["https://relay1.example.com/", "https://relay2.example.com/"]
+        );
     }
 
     #[test]
-    fn backup_import_skips_invalid_ohttp_relay_url_without_clearing_existing() {
+    fn backup_import_skips_invalid_ohttp_relay_urls_without_clearing_existing() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, config) = test_config();
-        config.set_ohttp_relay_url("https://existing.example".to_string()).unwrap();
+        config.set_ohttp_relay_urls(vec!["https://existing.example".to_string()]).unwrap();
 
-        let errors = restore_ohttp_relay_url(&config, &Some("http://insecure.example".to_string()));
+        let errors = restore_ohttp_relay_urls(&config, &["http://insecure.example".to_string()]);
         assert!(errors.is_empty());
-        assert_eq!(config.ohttp_relay_url().as_deref(), Some("https://existing.example/"));
+        assert_eq!(config.ohttp_relay_urls(), vec!["https://existing.example/"]);
 
-        let errors = restore_ohttp_relay_url(&config, &Some("   ".to_string()));
+        let errors = restore_ohttp_relay_urls(&config, &["   ".to_string()]);
         assert!(errors.is_empty());
-        assert_eq!(config.ohttp_relay_url().as_deref(), Some("https://existing.example/"));
+        assert_eq!(config.ohttp_relay_urls(), vec!["https://existing.example/"]);
+
+        // mixed batch: valid URLs are kept and invalid ones are skipped
+        let errors = restore_ohttp_relay_urls(
+            &config,
+            &["https://valid.example".to_string(), "http://insecure.example".to_string()],
+        );
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_urls(), vec!["https://valid.example/"]);
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {

@@ -51,14 +51,18 @@ async fn http_post(
         .to_vec())
 }
 
-// returns OHTTP relay URLs shuffled per call for resilience and privacy
-fn ohttp_relays() -> Vec<&'static str> {
-    let mut relays = OHTTP_RELAYS.to_vec();
+// returns OHTTP relay URLs: custom list if set, otherwise the 3 defaults shuffled for privacy
+fn ohttp_relays() -> Vec<String> {
+    let custom = crate::database::Database::global().global_config.ohttp_relay_urls();
+    if !custom.is_empty() {
+        return custom;
+    }
+    let mut relays: Vec<String> = OHTTP_RELAYS.iter().map(|s| s.to_string()).collect();
     relays.shuffle(&mut rand::rng());
     relays
 }
 
-// tries each OHTTP relay in shuffled order, returning the first successful (body, context) pair
+// tries each OHTTP relay in order, returning the first successful (body, context) pair
 async fn try_ohttp_relays<C>(
     client: &reqwest::Client,
     timeout: Duration,
@@ -66,7 +70,7 @@ async fn try_ohttp_relays<C>(
 ) -> Result<(Vec<u8>, C)> {
     let mut last_err = eyre::eyre!("no OHTTP relays configured");
     for relay in ohttp_relays() {
-        let (req, ctx) = match build_request(relay) {
+        let (req, ctx) = match build_request(&relay) {
             Ok(pair) => pair,
             Err(e) => {
                 warn!("payjoin: relay {relay} rejected: {e:?}");

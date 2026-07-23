@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,24 +8,26 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.AppAlertState
@@ -64,17 +68,18 @@ fun OhttpRelaySettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val config = remember { Database().globalConfig() }
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
-    val savedMessage = stringResource(R.string.ohttp_relay_saved)
     val invalidUrlTitle = stringResource(R.string.ohttp_relay_invalid_url_title)
     val invalidUrlMessage = stringResource(R.string.ohttp_relay_invalid_url_message)
     val updateFailedTitle = stringResource(R.string.ohttp_relay_update_failed_title)
     val updateFailedMessage = stringResource(R.string.ohttp_relay_update_failed_message)
+    val savedMessage = stringResource(R.string.ohttp_relay_saved)
 
-    var input by remember { mutableStateOf(config.ohttpRelayUrl() ?: "") }
-    var isSaving by remember { mutableStateOf(false) }
+    var relays by remember { mutableStateOf(config.ohttpRelayUrls()) }
+    var newInput by remember { mutableStateOf("") }
+    var isAdding by remember { mutableStateOf(false) }
 
     fun showAlert(
         title: String,
@@ -89,41 +94,36 @@ fun OhttpRelaySettingsScreen(
             )
     }
 
-    fun save() {
-        if (isSaving) return
-
-        val inputToSave = input
-        scope.launch {
-            isSaving = true
-            try {
-                val normalized = config.setOhttpRelayUrl(inputToSave)
-                input = normalized ?: ""
-                keyboardController?.hide()
-                isSaving = false
-
-                launch {
-                    snackbarHostState.showSnackbar(savedMessage)
-                }
-            } catch (e: Exception) {
-                if (e is DatabaseException.GlobalConfig &&
-                    e.v1 is GlobalConfigTableException.InvalidOhttpRelayUrl
-                ) {
-                    showAlert(invalidUrlTitle, invalidUrlMessage)
-                } else {
-                    showAlert(updateFailedTitle, updateFailedMessage)
-                }
-                isSaving = false
+    fun save(newRelays: List<String>, showSuccess: Boolean = true): Boolean {
+        return try {
+            relays = config.setOhttpRelayUrls(newRelays)
+            newInput = ""
+            isAdding = false
+            keyboardController?.hide()
+            if (showSuccess) scope.launch { snackbarHostState.showSnackbar(savedMessage) }
+            true
+        } catch (e: Exception) {
+            if (e is DatabaseException.GlobalConfig &&
+                e.v1 is GlobalConfigTableException.InvalidOhttpRelayUrl
+            ) {
+                showAlert(invalidUrlTitle, invalidUrlMessage)
+            } else {
+                showAlert(updateFailedTitle, updateFailedMessage)
             }
+            false
         }
     }
 
-    fun reset() {
-        try {
-            config.clearOhttpRelayUrl()
-            input = ""
-        } catch (e: Exception) {
-            showAlert(updateFailedTitle, updateFailedMessage)
-        }
+    fun addRelay() {
+        val url = newInput.trim()
+        if (url.isEmpty()) return
+        save(relays + url)
+    }
+
+    fun deleteRelay(index: Int): Boolean {
+        val updated = relays.toMutableList()
+        updated.removeAt(index)
+        return save(updated, showSuccess = false)
     }
 
     Scaffold(
@@ -136,18 +136,6 @@ fun OhttpRelaySettingsScreen(
             SettingsTopAppBar(
                 title = stringResource(R.string.title_settings_ohttp_relay),
                 onBack = { app.popRoute() },
-                actions = {
-                    if (isSaving) {
-                        Box(
-                            modifier = Modifier.padding(end = 16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.width(24.dp).height(24.dp),
-                            )
-                        }
-                    }
-                },
             )
         },
     ) { paddingValues ->
@@ -184,42 +172,115 @@ fun OhttpRelaySettingsScreen(
 
             SectionHeader(stringResource(R.string.ohttp_relay_custom_section))
             MaterialSection {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        label = { Text(stringResource(R.string.ohttp_relay_url_placeholder)) },
-                        keyboardOptions =
-                            KeyboardOptions(
-                                capitalization = KeyboardCapitalization.None,
-                                imeAction = ImeAction.Done,
-                                keyboardType = KeyboardType.Uri,
-                            ),
-                        keyboardActions = KeyboardActions(onDone = { save() }),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Button(
-                            onClick = ::save,
-                            enabled = !isSaving,
-                        ) {
-                            Text(stringResource(R.string.ohttp_relay_save))
+                Column {
+                    relays.forEachIndexed { index, relay ->
+                        RelayItem(
+                            relay = relay,
+                            onDelete = { deleteRelay(index) },
+                        )
+                        if (index < relays.lastIndex) {
+                            MaterialDivider(indent = 16.dp)
                         }
+                    }
 
-                        TextButton(onClick = ::reset) {
-                            Text(stringResource(R.string.ohttp_relay_reset))
+                    if (isAdding) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = newInput,
+                                onValueChange = { newInput = it },
+                                label = {
+                                    Text(stringResource(R.string.ohttp_relay_url_placeholder))
+                                },
+                                keyboardOptions =
+                                    KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.None,
+                                        imeAction = ImeAction.Done,
+                                        keyboardType = KeyboardType.Uri,
+                                    ),
+                                keyboardActions = KeyboardActions(onDone = { addRelay() }),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+
+                            TextButton(
+                                onClick = ::addRelay,
+                                enabled = newInput.trim().isNotEmpty(),
+                            ) {
+                                Text(stringResource(R.string.ohttp_relay_add))
+                            }
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { isAdding = true },
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        ) {
+                            Text(stringResource(R.string.ohttp_relay_add_relay))
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RelayItem(
+    relay: String,
+    onDelete: () -> Boolean,
+) {
+    val dismissState =
+        rememberSwipeToDismissBoxState(
+            confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.EndToStart) {
+                    onDelete()
+                } else {
+                    false
+                }
+            },
+            positionalThreshold = { it * 0.4f },
+        )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.error)
+                        .padding(end = 16.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onError,
+                )
+            }
+        },
+        enableDismissFromStartToEnd = false,
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = relay,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

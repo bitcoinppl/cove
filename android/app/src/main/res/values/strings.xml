@@ -38,12 +38,15 @@
     <string name="block_explorer_invalid_url_message">Enter a valid URL, IP address, or block explorer template.</string>
     <string name="block_explorer_update_failed_title">Unable to Update Block Explorer</string>
     <string name="block_explorer_update_failed_message">Try again later.</string>
+    <string name="settings_advanced_section">Advanced</string>
     <string name="title_settings_ohttp_relay">PayJoin Relay</string>
     <string name="ohttp_relay_description_title">Description</string>
-    <string name="ohttp_relay_description">PayJoin uses an OHTTP relay to send transactions privately. By default Cove rotates between three public relays. You can specify your own relay for extra privacy.</string>
+    <string name="ohttp_relay_description">PayJoin uses an OHTTP relay to send transactions privately. By default Cove rotates between three public relays. Adding custom relays replaces the defaults.</string>
     <string name="ohttp_relay_default_relays">Default Relays</string>
-    <string name="ohttp_relay_custom_section">Custom Relay</string>
+    <string name="ohttp_relay_custom_section">Custom Relays</string>
     <string name="ohttp_relay_url_placeholder">https://your-relay.example.com</string>
+    <string name="ohttp_relay_add">Add</string>
+    <string name="ohttp_relay_add_relay">+ Add Relay</string>
     <string name="ohttp_relay_save">Save</string>
     <string name="ohttp_relay_saved">Relay saved successfully</string>
     <string name="ohttp_relay_reset">Reset to Default</string>
