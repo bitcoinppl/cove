@@ -34,6 +34,7 @@ pub enum CloudBackupVerificationState {
     Required,
     Running,
     AwaitingUploadConfirmation,
+    Cancelled,
     Failed(DeepVerificationFailure),
 }
 

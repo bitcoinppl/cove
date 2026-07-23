@@ -4,6 +4,7 @@ import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
+import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 import org.bitcoinppl.cove_core.device.RemoteBackupLocation
@@ -12,6 +13,112 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidCloudStorageAccessTest {
+    @Test
+    fun explicitDriveAccountSelectionStagesReplacementUntilCommit() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply { account = replacement }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val outcome = storage.selectAccountForCloudBackup(1UL)
+
+            assertEquals(DriveAccountSelectionOutcome.Changed, outcome)
+            assertEquals(replacement, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(
+                DriveAccountBindingState.Staged(1UL, original, replacement),
+                store.state(),
+            )
+            assertEquals(
+                DriveAccountSwitchPlatformState.Staged(1UL),
+                storage.driveAccountSwitchPlatformState(),
+            )
+            assertEquals(
+                DriveAccountTransitionReceipt(
+                    DriveAccountTransitionResult.Applied,
+                    DriveAccountBindingState.Committed(1UL, replacement),
+                ),
+                storage.commitAccountSwitch(1UL),
+            )
+            assertEquals(replacement, store.committedIdentity())
+            assertEquals(
+                DriveAccountBindingState.Committed(1UL, replacement),
+                store.state(),
+            )
+            assertEquals(
+                DriveAccountSwitchPlatformState.Committed(1UL),
+                storage.driveAccountSwitchPlatformState(),
+            )
+            assertEquals(listOf(true), authorization.accessRequests)
+        }
+
+    @Test
+    fun selectingBoundDriveAccountDoesNotStageReinitialization() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val refreshed =
+                DriveAccountIdentity(
+                    googleAccountId = "account-1",
+                    drivePermissionId = "permission-1",
+                    email = "person@example.com",
+                )
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply { account = refreshed }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val outcome = storage.selectAccountForCloudBackup(1UL)
+
+            assertEquals(DriveAccountSelectionOutcome.Unchanged, outcome)
+            assertEquals(refreshed, store.committedIdentity())
+            assertEquals(DriveAccountBindingState.Bound(refreshed), store.state())
+        }
+
+    @Test
+    fun rolledBackDriveAccountSelectionRestoresCommittedBinding() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original)
+            val authorization = RecordingDriveAuthorization().apply { account = replacement }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            storage.selectAccountForCloudBackup(7UL)
+
+            assertEquals(
+                DriveAccountTransitionReceipt(
+                    DriveAccountTransitionResult.Applied,
+                    DriveAccountBindingState.Bound(original),
+                ),
+                storage.rollbackAccountSwitch(7UL),
+            )
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(DriveAccountBindingState.Bound(original), store.state())
+        }
+
+    @Test
+    fun failedDriveAccountStagingPreservesBindingAndClearsSelectedToken() =
+        runBlocking {
+            val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+            val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+            val store = TestDriveAccountBindingStore(original).apply {
+                stageSucceeds = false
+                retainFailedStage = true
+            }
+            val authorization = RecordingDriveAuthorization().apply { account = replacement }
+            val storage = AndroidCloudStorageAccess(authorization, store)
+
+            val error = captureError { storage.selectAccountForCloudBackup(7UL) }
+
+            assertTrue(error is IllegalStateException)
+            assertEquals(original, store.selectedIdentity())
+            assertEquals(original, store.committedIdentity())
+            assertEquals(DriveAccountBindingState.Bound(original), store.state())
+            assertEquals(listOf("token-1"), authorization.clearedTokens)
+        }
+
     @Test
     fun scP05SilentAuthoritativeEmptySnapshotCompletesWithoutRetryOrConsent() =
         runBlocking {

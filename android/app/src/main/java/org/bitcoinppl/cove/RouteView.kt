@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
 import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletContainer
@@ -91,7 +90,6 @@ private fun LoadAndResetContainer(
     route: Route.LoadAndReset,
 ) {
     val nextRoutes = route.resetTo.map { it.route() }
-    val loadingTimeMs = route.afterMillis.toLong()
     val loadingMessage =
         if (nextRoutes.firstOrNull() is Route.SelectedWallet) {
             stringResource(R.string.label_loading_wallet)
@@ -101,12 +99,7 @@ private fun LoadAndResetContainer(
 
     FullPageLoadingView(message = loadingMessage)
 
-    // execute reset after delay
     LaunchedEffect(route) {
-        val generation = app.captureLoadAndResetGeneration()
-        app.startLoadAndResetTargetPrewarm(generation, nextRoutes)
-        delay(loadingTimeMs)
-
-        app.resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+        app.completeLoadAndReset(route)
     }
 }

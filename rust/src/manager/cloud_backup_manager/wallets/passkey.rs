@@ -10,7 +10,7 @@ pub(crate) use material::{
     map_wrapper_repair_passkey_error,
 };
 pub(crate) use namespace_matcher::{
-    NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
+    NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
 };
 
 fn prf_output_to_key(prf_output: Vec<u8>) -> Result<[u8; 32], CloudBackupError> {

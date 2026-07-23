@@ -39,16 +39,36 @@ impl CloudBackupStore {
         wallet_count: u32,
         completion: PersistedPendingVerificationCompletion,
     ) -> Result<(), CloudBackupError> {
-        let mut state = PersistedCloudBackupState::mark_enabled_reset_verification(
-            crate::manager::cloud_backup_manager::current_timestamp(),
-            wallet_count,
-        );
-        let replaced = state.replace_pending_verification_completion(completion);
-        debug_assert!(replaced);
+        let now = crate::manager::cloud_backup_manager::current_timestamp();
+        let mutation = self
+            .0
+            .cloud_backup_state
+            .mutate(|state| {
+                if matches!(
+                    state,
+                    PersistedCloudBackupState::Disabled
+                        | PersistedCloudBackupState::Corrupted { .. }
+                ) {
+                    *state = PersistedCloudBackupState::mark_enabled_reset_verification(
+                        now,
+                        wallet_count,
+                    );
+                } else if !state.reset_verification_after_successful_sync(now, wallet_count) {
+                    return false;
+                }
 
-        self.0.cloud_backup_state.set(&state).map_err(|source| {
-            CloudBackupError::internal_context("persist cloud backup state", source)
-        })
+                state.replace_pending_verification_completion(completion)
+            })
+            .map_err(|source| {
+                CloudBackupError::internal_context("persist cloud backup state", source)
+            })?;
+        if !mutation.outcome {
+            return Err(CloudBackupError::Internal(
+                "cannot persist successful sync while Cloud Backup is not configured".into(),
+            ));
+        }
+
+        Ok(())
     }
 
     pub(crate) fn last_sync(&self) -> Option<u64> {
@@ -206,15 +226,20 @@ impl CloudBackupStore {
         wallet_count: u32,
     ) -> Result<(), CloudBackupError> {
         let now = crate::manager::cloud_backup_manager::current_timestamp();
-        self.0
+        let mutation = self
+            .0
             .cloud_backup_state
-            .mutate(|state| {
-                *state = state.mark_enabled_preserving_verification(now, wallet_count);
-            })
-            .map(|_| ())
+            .mutate(|state| state.record_successful_sync(now, wallet_count))
             .map_err(|source| {
                 CloudBackupError::internal_context("persist cloud backup state", source)
-            })
+            })?;
+        if !mutation.outcome {
+            return Err(CloudBackupError::Internal(
+                "cannot persist successful sync while Cloud Backup is not configured".into(),
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -239,8 +264,9 @@ mod tests {
     use std::sync::Arc;
 
     use crate::database::cloud_backup::{
-        PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupStatus,
-        PersistedConfiguredCloudBackup, PersistedPasskeyState,
+        DriveAccountSwitchId, PersistedBackupSyncState, PersistedBackupVerificationState,
+        PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedConfiguredCloudBackup,
+        PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
     use crate::manager::cloud_backup_manager::{
@@ -386,7 +412,7 @@ mod tests {
         let marker_store = store.clone();
         race_with_held_state_mutation(
             Arc::clone(&db),
-            |state| *state = state.mark_enabled_preserving_verification(20, 5),
+            |state| assert!(state.record_successful_sync(20, 5)),
             move || {
                 marker_store
                     .persist_restore_all_marker(first_marker_for_write.namespace_id)
@@ -422,7 +448,7 @@ mod tests {
         let clear_store = store.clone();
         race_with_held_state_mutation(
             Arc::clone(&db),
-            |state| *state = state.mark_enabled_preserving_verification(30, 9),
+            |state| assert!(state.record_successful_sync(30, 9)),
             move || assert!(clear_store.clear_restore_all_marker().unwrap()),
         );
 
@@ -557,6 +583,32 @@ mod tests {
         assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
         assert_eq!(state.wallet_count(), Some(3));
         assert_eq!(state.pending_verification_completion(), Some(&completion));
+        let _ = db.cloud_backup_state.delete();
+    }
+
+    #[test]
+    fn reset_verification_with_pending_completion_preserves_drive_transition() {
+        let _guard = setup_database_test();
+        let db = Database::global();
+        let _ = db.cloud_backup_state.delete();
+        let transition = PersistedDriveAccountSwitch {
+            transition_id: DriveAccountSwitchId::new(42),
+            phase: PersistedDriveAccountSwitchPhase::Reinitializing,
+        };
+        let mut initial = passkey_missing_state();
+        assert!(initial.set_drive_account_switch(transition));
+        db.cloud_backup_state.set(&initial).unwrap();
+        let completion = pending_completion();
+
+        CloudBackupStore::new(&db)
+            .persist_enabled_reset_verification_with_pending_completion(3, completion.clone())
+            .unwrap();
+
+        let state = db.cloud_backup_state.get().unwrap();
+        assert_eq!(state.drive_account_switch(), Some(&transition));
+        assert_eq!(state.pending_verification_completion(), Some(&completion));
+        assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
+        assert_eq!(state.wallet_count(), Some(3));
         let _ = db.cloud_backup_state.delete();
     }
 }

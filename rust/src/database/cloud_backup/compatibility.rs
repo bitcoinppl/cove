@@ -22,8 +22,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::{
     CloudBackupRecordKey, PersistedBackupSyncState, PersistedBackupVerificationState,
-    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup, PersistedDisablingCloudBackup,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBackupTransition,
+    PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
+    PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchState,
     PersistedPasskeyState, PersistedPendingVerificationCompletion,
     PersistedPendingVerificationUpload,
 };
@@ -209,11 +210,19 @@ impl PersistedCloudBackupDomainRecord {
     fn from_state(state: &PersistedCloudBackupState) -> Self {
         let backup = match state {
             PersistedCloudBackupState::Disabled => PersistedBackupRecord::Disabled,
-            PersistedCloudBackupState::Configured(configured) => {
-                PersistedBackupRecord::Configured(configured.clone())
-            }
-            PersistedCloudBackupState::Disabling(disabling) => {
-                PersistedBackupRecord::Disabling(disabling.clone())
+            PersistedCloudBackupState::Configured(configured) => PersistedBackupRecord::Configured(
+                PersistedConfiguredCloudBackupV2::from(configured),
+            ),
+            PersistedCloudBackupState::ExclusiveTransition(
+                PersistedCloudBackupTransition::Disabling(disabling),
+            ) => PersistedBackupRecord::Disabling(disabling.clone()),
+            PersistedCloudBackupState::ExclusiveTransition(
+                PersistedCloudBackupTransition::DriveAccountSwitch(account_switch),
+            ) => {
+                let mut configured =
+                    PersistedConfiguredCloudBackupV2::from(&account_switch.configured);
+                configured.drive_account_switch = Some(account_switch.transition);
+                PersistedBackupRecord::Configured(configured)
             }
             PersistedCloudBackupState::Corrupted { error } => {
                 PersistedBackupRecord::Corrupted { error: error.clone() }
@@ -233,11 +242,9 @@ impl PersistedCloudBackupDomainRecord {
 
         match self.backup {
             PersistedBackupRecord::Disabled => Ok(PersistedCloudBackupState::default()),
-            PersistedBackupRecord::Configured(configured) => {
-                Ok(PersistedCloudBackupState::Configured(configured))
-            }
+            PersistedBackupRecord::Configured(configured) => Ok(configured.into_state()),
             PersistedBackupRecord::Disabling(disabling) => {
-                Ok(PersistedCloudBackupState::Disabling(disabling))
+                Ok(PersistedCloudBackupState::disabling_transition(disabling))
             }
             PersistedBackupRecord::Corrupted { error } => {
                 Ok(PersistedCloudBackupState::Corrupted { error })
@@ -250,7 +257,7 @@ impl PersistedCloudBackupDomainRecord {
 #[serde(tag = "state", content = "data")]
 enum PersistedBackupRecordV1 {
     Disabled,
-    Configured(PersistedConfiguredCloudBackup),
+    Configured(PersistedConfiguredCloudBackupV2),
 }
 
 impl PersistedBackupRecordV1 {
@@ -266,9 +273,56 @@ impl PersistedBackupRecordV1 {
 #[serde(tag = "state", content = "data")]
 enum PersistedBackupRecord {
     Disabled,
-    Configured(PersistedConfiguredCloudBackup),
+    Configured(PersistedConfiguredCloudBackupV2),
     Disabling(PersistedDisablingCloudBackup),
     Corrupted { error: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct PersistedConfiguredCloudBackupV2 {
+    passkey: PersistedPasskeyState,
+    verification: PersistedBackupVerificationState,
+    sync: PersistedBackupSyncState,
+    #[serde(default)]
+    pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pending_restore_all: Option<super::PersistedRestoreAllMarker>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    drive_account_switch: Option<PersistedDriveAccountSwitch>,
+}
+
+impl From<&PersistedConfiguredCloudBackup> for PersistedConfiguredCloudBackupV2 {
+    fn from(configured: &PersistedConfiguredCloudBackup) -> Self {
+        Self {
+            passkey: configured.passkey,
+            verification: configured.verification.clone(),
+            sync: configured.sync.clone(),
+            pending_verification_completion: configured.pending_verification_completion.clone(),
+            pending_restore_all: configured.pending_restore_all.clone(),
+            drive_account_switch: None,
+        }
+    }
+}
+
+impl PersistedConfiguredCloudBackupV2 {
+    fn into_state(self) -> PersistedCloudBackupState {
+        let configured = PersistedConfiguredCloudBackup {
+            passkey: self.passkey,
+            verification: self.verification,
+            sync: self.sync,
+            pending_verification_completion: self.pending_verification_completion,
+            pending_restore_all: self.pending_restore_all,
+        };
+
+        match self.drive_account_switch {
+            Some(transition) => PersistedCloudBackupState::ExclusiveTransition(
+                PersistedCloudBackupTransition::DriveAccountSwitch(
+                    PersistedDriveAccountSwitchState { configured, transition },
+                ),
+            ),
+            None => PersistedCloudBackupState::Configured(configured),
+        }
+    }
 }
 
 impl Serialize for PersistedCloudBlobSyncState {
@@ -424,8 +478,9 @@ mod tests {
         CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState, CloudStorageIssue,
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
         PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-        PersistedConfiguredCloudBackup, PersistedPasskeyState, PersistedPendingVerificationUpload,
-        PersistedRestoreAllMarker,
+        PersistedConfiguredCloudBackup, PersistedDriveAccountSwitch,
+        PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
+        PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
     };
 
     fn configured_state(
@@ -512,6 +567,29 @@ mod tests {
 
         let decoded: PersistedCloudBackupState = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded.pending_restore_all(), Some(&marker));
+    }
+
+    #[test]
+    fn cloud_backup_state_round_trips_drive_account_switch_without_changing_record_version() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            Some(10),
+            Some(2),
+        );
+        assert!(state.set_drive_account_switch(PersistedDriveAccountSwitch {
+            transition_id: 7.into(),
+            phase: PersistedDriveAccountSwitchPhase::Reinitializing,
+        }));
+
+        let encoded = serde_json::to_value(&state).unwrap();
+        let decoded: PersistedCloudBackupState = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["version"], 2);
+        assert_eq!(decoded, state);
     }
 
     #[test]

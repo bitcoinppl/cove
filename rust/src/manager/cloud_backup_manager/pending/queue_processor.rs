@@ -5,7 +5,7 @@
 //! verifier without rewriting the persisted blob state
 
 use cove_cspp::backup_data::EncryptedWalletBackup;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
@@ -203,6 +203,27 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         let cloud = CloudStorage::global_silent_client();
+        match cloud
+            .is_backup_uploaded(
+                namespace_id.to_string(),
+                cove_cspp::backup_data::MASTER_KEY_RECORD_ID.to_string(),
+            )
+            .await
+        {
+            Ok(CloudBackupUploadStatus::Uploaded) => {
+                info!("Pending upload verification: master key wrapper upload_state=uploaded")
+            }
+            Ok(CloudBackupUploadStatus::Pending) => {
+                info!("Pending upload verification: master key wrapper upload_state=pending");
+                return BlobCheckResult::NotYetUploaded;
+            }
+            Ok(CloudBackupUploadStatus::NotFound) => {
+                info!("Pending upload verification: master key wrapper upload_state=not_found");
+                return BlobCheckResult::NotYetUploaded;
+            }
+            Err(error) => return BlobCheckResult::cloud_storage_failure(error),
+        }
+
         match cloud.download_master_key_backup(namespace_id.to_string()).await {
             Ok(bytes) => {
                 let remote_revision = master_key_wrapper_revision_hash(&bytes);
@@ -226,6 +247,32 @@ impl PendingUploadVerifier {
         sync_state: &PersistedCloudBlobSyncState,
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
+        let cloud = CloudStorage::global_silent_client();
+        match cloud
+            .is_backup_uploaded(sync_state.namespace_id.clone(), sync_state.record_id().to_string())
+            .await
+        {
+            Ok(CloudBackupUploadStatus::Uploaded) => info!(
+                "Pending upload verification: wallet upload_state=uploaded record_id={}",
+                sync_state.record_id()
+            ),
+            Ok(CloudBackupUploadStatus::Pending) => {
+                info!(
+                    "Pending upload verification: wallet upload_state=pending record_id={}",
+                    sync_state.record_id()
+                );
+                return BlobCheckResult::NotYetUploaded;
+            }
+            Ok(CloudBackupUploadStatus::NotFound) => {
+                info!(
+                    "Pending upload verification: wallet upload_state=not_found record_id={}",
+                    sync_state.record_id()
+                );
+                return BlobCheckResult::NotYetUploaded;
+            }
+            Err(error) => return BlobCheckResult::cloud_storage_failure(error),
+        }
+
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
         let master_key = match cspp.load_master_key_from_store() {
             Ok(Some(master_key)) => master_key,
@@ -240,19 +287,19 @@ impl PendingUploadVerifier {
         };
 
         let reader = WalletBackupReader::new(
-            CloudStorage::global_silent_client(),
+            cloud.clone(),
             sync_state.namespace_id.clone(),
             Zeroizing::new(master_key.critical_data_key()),
         );
 
-        let wallt_download_result = CloudStorage::global_silent_client()
+        let wallet_download_result = cloud
             .download_wallet_backup(
                 sync_state.namespace_id.clone(),
                 sync_state.record_id().to_string(),
             )
             .await;
 
-        let wallet_json = match wallt_download_result {
+        let wallet_json = match wallet_download_result {
             Ok(wallet_json) => wallet_json,
             Err(CloudStorageError::NotFound(_)) => return BlobCheckResult::NotYetUploaded,
             Err(error) => return BlobCheckResult::cloud_storage_failure(error),

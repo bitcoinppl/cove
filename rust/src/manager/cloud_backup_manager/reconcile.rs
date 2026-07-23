@@ -13,11 +13,46 @@ use super::{
     PendingUploadVerificationState, RustCloudBackupManager,
 };
 
+/// Durable Google Drive account-switch state owned by the platform
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DriveAccountSwitchPlatformState {
+    /// No platform transition exists
+    NoTransition,
+    /// A selected identity is staged but not yet committed
+    Staged(u64),
+    /// The selected identity is committed but Rust has not finalized the transition
+    Committed(u64),
+}
+
+/// Platform action required to reconcile a persisted Google Drive account switch
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DriveAccountSwitchReconcileAction {
+    /// Rust and platform state require no immediate platform mutation
+    None,
+    /// Atomically commit the staged Google Drive identity
+    Commit(u64),
+    /// Atomically discard the staged Google Drive identity
+    Rollback(u64),
+    /// Remove the completed transition marker without changing identity
+    Finalize(u64),
+}
+
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
     Lifecycle(Box<CloudBackupLifecycle>, CloudBackupSettingsRowStatus),
     EnableCompleted(CloudBackupEnableContext),
+    /// Android must atomically commit its staged Google Drive identity
+    DriveAccountSwitchCommitRequired(u64),
+    /// Android must atomically discard its staged Google Drive identity
+    DriveAccountSwitchRollbackRequired(u64),
+    /// Android must remove the completed transition marker without changing identity
+    DriveAccountSwitchFinalizeRequired(u64),
+    /// The persisted Rust and Android transition states require user-visible recovery
+    DriveAccountSwitchRecoveryRequired {
+        transition_id: u64,
+        message: String,
+    },
 }
 
 #[uniffi::export(callback_interface)]
@@ -33,7 +68,7 @@ impl RustCloudBackupManager {
         ((&db_state).into(), db_state.should_prompt_verification())
     }
 
-    fn send(&self, message: Message) {
+    pub(crate) fn send(&self, message: Message) {
         self.reconciler.send_sync(message);
     }
 

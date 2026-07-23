@@ -107,4 +107,70 @@ class DriveAccountBindingTest {
 
         assertEquals(verified, store.selectedIdentity())
     }
+
+    @Test
+    fun driveAccountBindingIgnoresEnrichmentDuringCommittedTransitionAndPreservesReplay() {
+        val store = TestDriveAccountBindingStore()
+        val staged = DriveAccountIdentity(googleAccountId = "account-1", email = null)
+        val verified = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+
+        assertEquals(DriveAccountTransitionResult.Applied, store.stageIdentity(7UL, staged))
+        assertEquals(DriveAccountTransitionResult.Applied, store.commitStagedIdentity(7UL))
+
+        verifyDriveAccountBinding(store, verified)
+
+        assertEquals(DriveAccountBindingState.Committed(7UL, staged), store.state())
+        assertEquals(DriveAccountTransitionResult.Applied, store.commitStagedIdentity(7UL))
+        assertEquals(DriveAccountTransitionResult.Applied, store.finalizeCommittedIdentity(7UL))
+        assertEquals(DriveAccountBindingState.Bound(staged), store.state())
+        assertEquals(DriveAccountTransitionResult.WrongTransition, store.commitStagedIdentity(7UL))
+    }
+
+    @Test
+    fun driveAccountBindingIgnoresStaleBindDuringStagedTransition() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+        val stale = DriveAccountIdentity(googleAccountId = "account-1", email = "renamed@example.com")
+        val store = TestDriveAccountBindingStore(original)
+
+        assertEquals(DriveAccountTransitionResult.Applied, store.stageIdentity(7UL, replacement))
+
+        store.bindIdentity(stale)
+
+        assertEquals(
+            DriveAccountBindingState.Staged(7UL, original, replacement),
+            store.state(),
+        )
+    }
+
+    @Test
+    fun driveAccountBindingIgnoresStaleBindDuringCommittedTransition() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1", email = "person@example.com")
+        val replacement = DriveAccountIdentity(googleAccountId = "account-2", email = "other@example.com")
+        val stale = DriveAccountIdentity(googleAccountId = "account-1", email = "renamed@example.com")
+        val store = TestDriveAccountBindingStore(original)
+
+        assertEquals(DriveAccountTransitionResult.Applied, store.stageIdentity(7UL, replacement))
+        assertEquals(DriveAccountTransitionResult.Applied, store.commitStagedIdentity(7UL))
+
+        store.bindIdentity(stale)
+
+        assertEquals(DriveAccountBindingState.Committed(7UL, replacement), store.state())
+    }
+
+    @Test
+    fun driveAccountBindingRejectsWrongTransitionWithoutChangingStagedIdentity() {
+        val original = DriveAccountIdentity(googleAccountId = "account-1")
+        val replacement = DriveAccountIdentity(googleAccountId = "account-2")
+        val store = TestDriveAccountBindingStore(original)
+
+        assertEquals(DriveAccountTransitionResult.Applied, store.stageIdentity(7UL, replacement))
+
+        assertEquals(DriveAccountTransitionResult.WrongTransition, store.commitStagedIdentity(8UL))
+        assertEquals(DriveAccountTransitionResult.WrongTransition, store.rollbackStagedIdentity(8UL))
+        assertEquals(
+            DriveAccountBindingState.Staged(7UL, original, replacement),
+            store.state(),
+        )
+    }
 }

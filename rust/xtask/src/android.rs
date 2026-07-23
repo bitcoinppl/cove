@@ -54,6 +54,11 @@ const RESTORE_ALL_RELAUNCH_TEST_CLASS: &str =
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
 const APK_STORE_RELEASE_PATH: &str = "app/build/outputs/apk/store/release/app-store-release.apk";
 const ANDROID_GRADLE_PATH: &str = "app/build.gradle.kts";
+// paths relative to the rust workspace when cargo xtask runs
+const REPO_ENVRC_PATH: &str = "../.envrc";
+const ANDROID_KEYSTORE_PROPERTIES_PATH: &str = "../android/keystore.properties";
+const DEFAULT_UPLOAD_KEYSTORE_REL: &str = ".secrets/cove-upload.keystore";
+const DEFAULT_UPLOAD_KEY_ALIAS: &str = "upload";
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuildProfile {
@@ -389,11 +394,172 @@ fn install_and_launch_android(sh: &Shell, device: &AndroidDevice, apk_path: &str
     Ok(())
 }
 
+fn env_nonempty(name: &str) -> Option<String> {
+    std::env::var(name).ok().map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+}
+
+fn nonempty_map_value(map: &HashMap<String, String>, key: &str) -> Option<String> {
+    map.get(key).map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+}
+
+fn expand_shell_home(value: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    value.replace("${HOME}", &home).replace("$HOME", &home)
+}
+
+/// Parse export assignments from a direnv-style file
+fn parse_export_env_file(path: &Path) -> Result<HashMap<String, String>> {
+    let contents =
+        fs::read_to_string(path).wrap_err_with(|| format!("Failed to read {}", path.display()))?;
+    let mut vars = HashMap::new();
+
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let assignment = line.strip_prefix("export ").unwrap_or(line).trim();
+        let Some((key, value)) = assignment.split_once('=') else {
+            continue;
+        };
+
+        let key = key.trim();
+        if key.is_empty() || key.contains(char::is_whitespace) {
+            continue;
+        }
+
+        let value = value.trim();
+        let value = value
+            .strip_prefix('"')
+            .and_then(|value| value.strip_suffix('"'))
+            .or_else(|| value.strip_prefix('\'').and_then(|value| value.strip_suffix('\'')))
+            .unwrap_or(value);
+
+        vars.insert(key.to_string(), expand_shell_home(value));
+    }
+
+    Ok(vars)
+}
+
+/// Parse key-value assignments from an Android keystore properties file
+fn parse_keystore_properties(path: &Path) -> Result<HashMap<String, String>> {
+    let contents =
+        fs::read_to_string(path).wrap_err_with(|| format!("Failed to read {}", path.display()))?;
+    let mut vars = HashMap::new();
+
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
+            continue;
+        }
+
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+
+        vars.insert(key.trim().to_string(), expand_shell_home(value.trim()));
+    }
+
+    Ok(vars)
+}
+
+fn default_upload_keystore_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home).join(DEFAULT_UPLOAD_KEYSTORE_REL)
+}
+
+struct AndroidReleaseSigning {
+    keystore_path: String,
+    store_password: String,
+    key_alias: String,
+    key_password: String,
+}
+
+impl AndroidReleaseSigning {
+    /// Resolve Play upload signing from environment, local files, or defaults
+    fn resolve() -> Result<Self> {
+        let mut keystore_path = env_nonempty("COVE_KEYSTORE_PATH");
+        let mut store_password = env_nonempty("COVE_KEYSTORE_PASSWORD");
+        let mut key_alias = env_nonempty("COVE_KEY_ALIAS");
+        let mut key_password = env_nonempty("COVE_KEY_PASSWORD");
+
+        // fill gaps from .envrc when direnv is not active
+        if Path::new(REPO_ENVRC_PATH).exists() {
+            let from_envrc = parse_export_env_file(Path::new(REPO_ENVRC_PATH))?;
+
+            keystore_path =
+                keystore_path.or_else(|| nonempty_map_value(&from_envrc, "COVE_KEYSTORE_PATH"));
+            store_password = store_password
+                .or_else(|| nonempty_map_value(&from_envrc, "COVE_KEYSTORE_PASSWORD"));
+            key_alias = key_alias.or_else(|| nonempty_map_value(&from_envrc, "COVE_KEY_ALIAS"));
+            key_password =
+                key_password.or_else(|| nonempty_map_value(&from_envrc, "COVE_KEY_PASSWORD"));
+        }
+
+        // fill remaining gaps from android/keystore.properties
+        if Path::new(ANDROID_KEYSTORE_PROPERTIES_PATH).exists() {
+            let properties =
+                parse_keystore_properties(Path::new(ANDROID_KEYSTORE_PROPERTIES_PATH))?;
+
+            keystore_path = keystore_path.or_else(|| nonempty_map_value(&properties, "storeFile"));
+            store_password =
+                store_password.or_else(|| nonempty_map_value(&properties, "storePassword"));
+            key_alias = key_alias.or_else(|| nonempty_map_value(&properties, "keyAlias"));
+            key_password = key_password.or_else(|| nonempty_map_value(&properties, "keyPassword"));
+        }
+
+        let keystore_path = keystore_path
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| default_upload_keystore_path().display().to_string());
+        let key_alias = key_alias
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| DEFAULT_UPLOAD_KEY_ALIAS.to_string());
+        let store_password = store_password.unwrap_or_default();
+        let key_password = key_password.unwrap_or_default();
+
+        if !Path::new(&keystore_path).exists() {
+            bail!(
+                "Android release keystore not found at {keystore_path}\n\
+                 Set COVE_KEYSTORE_PATH (see .envrc.example), or place the upload keystore at {}",
+                default_upload_keystore_path().display()
+            );
+        }
+
+        if store_password.is_empty() || key_password.is_empty() {
+            bail!(
+                "COVE_KEYSTORE_PASSWORD / COVE_KEY_PASSWORD are not set\n\
+                 Export them via .envrc or android/keystore.properties — see .envrc.example"
+            );
+        }
+
+        Ok(Self { keystore_path, store_password, key_alias, key_password })
+    }
+
+    fn apply_to_shell(&self, sh: &Shell) {
+        sh.set_var("COVE_KEYSTORE_PATH", &self.keystore_path);
+        sh.set_var("COVE_KEYSTORE_PASSWORD", &self.store_password);
+        sh.set_var("COVE_KEY_ALIAS", &self.key_alias);
+        sh.set_var("COVE_KEY_PASSWORD", &self.key_password);
+    }
+}
+
 pub fn bundle_android(verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
+    let signing = AndroidReleaseSigning::resolve()?;
+    signing.apply_to_shell(&sh);
+    print_info(&format!(
+        "Using Android release keystore {} (alias {})",
+        signing.keystore_path, signing.key_alias
+    ));
+
     // change to android directory
-    sh.change_dir("../android");
+    sh.change_dir(ANDROID_PROJECT_DIR);
+
+    // stop daemons so a fresh process picks up signing environment variables
+    print_info("Stopping Gradle daemons...");
+    let _ = cmd!(sh, "./gradlew --stop").quiet().run();
 
     // build the AAB and APK for store release
     print_info("Building store release AAB and APK...");
@@ -954,8 +1120,55 @@ fn extract_version_code(content: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{target_for_abi, target_path_for_android_file};
+    use super::{
+        parse_export_env_file, parse_keystore_properties, target_for_abi,
+        target_path_for_android_file,
+    };
     use std::fs;
+
+    #[test]
+    fn parses_android_signing_envrc_assignments() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join(".envrc");
+        fs::write(
+            &path,
+            concat!(
+                "# signing\n",
+                "export COVE_KEYSTORE_PATH=\"/tmp/upload.keystore\"\n",
+                "COVE_KEY_ALIAS='upload'\n",
+                "invalid line\n",
+            ),
+        )
+        .unwrap();
+
+        let values = parse_export_env_file(&path).unwrap();
+
+        assert_eq!(values.get("COVE_KEYSTORE_PATH").unwrap(), "/tmp/upload.keystore");
+        assert_eq!(values.get("COVE_KEY_ALIAS").unwrap(), "upload");
+        assert!(!values.contains_key("invalid line"));
+    }
+
+    #[test]
+    fn parses_android_keystore_properties() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("keystore.properties");
+        fs::write(
+            &path,
+            concat!(
+                "# local signing fallback\n",
+                "storeFile=/tmp/upload.keystore\n",
+                "storePassword = secret\n",
+                "keyAlias=upload\n",
+            ),
+        )
+        .unwrap();
+
+        let values = parse_keystore_properties(&path).unwrap();
+
+        assert_eq!(values.get("storeFile").unwrap(), "/tmp/upload.keystore");
+        assert_eq!(values.get("storePassword").unwrap(), "secret");
+        assert_eq!(values.get("keyAlias").unwrap(), "upload");
+    }
 
     #[test]
     fn maps_supported_android_abis_to_rust_targets() {

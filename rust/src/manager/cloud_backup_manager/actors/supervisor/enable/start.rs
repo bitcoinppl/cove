@@ -114,12 +114,21 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn start_reinitialize_backup_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::ReinitializeBackup)
         else {
             return;
         };
+
+        self.start_reinitialize_backup_operation_with_claim(manager, claim);
+    }
+
+    pub(crate) fn start_reinitialize_backup_operation_with_claim(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        let Some(addr) = self.addr() else { return };
 
         manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::ReinitializeBackup));
 

@@ -150,20 +150,22 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         recordId: String,
         locations _: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
-    ) async throws -> Bool {
+    ) async throws -> CloudBackupUploadStatus {
         try validate(namespace: namespace)
 
         if scenario == .nativePasskeySmoke {
-            return lock.withLock {
+            let exists = lock.withLock {
                 if recordId == "cspp-master-key-v1" {
                     uploadedMaster != nil
                 } else {
                     uploadedWallets[recordId] != nil
                 }
             }
+
+            return exists ? .uploaded : .notFound
         }
 
-        return true
+        return .uploaded
     }
 
     func overallSyncHealth(policy _: CloudAccessPolicy) async -> CloudSyncHealth {

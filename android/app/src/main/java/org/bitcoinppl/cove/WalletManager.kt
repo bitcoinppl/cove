@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
@@ -40,11 +41,6 @@ val WalletLedgerState.initialScanIncomplete: Boolean
 
 val WalletLedgerState.initialScanActive: Boolean
     get() = this is WalletLedgerState.InitialScanIncomplete && v1 == InitialScanActivity.ACTIVE
-
-private data class WalletManagerBootstrap(
-    val rust: RustWalletManager,
-    val initialState: WalletInitialState,
-)
 
 /**
  * wallet manager - manages wallet state, balance, transactions
@@ -155,6 +151,61 @@ class WalletManager :
     private val requiredWalletMetadata: WalletMetadata
         get() = walletMetadata ?: error("wallet metadata is not initialized")
 
+    private class Bootstrap private constructor(
+        private val rust: RustWalletManager,
+        private val initialState: WalletInitialState,
+    ) : Closeable {
+        private val consumed = AtomicBoolean(false)
+
+        fun install(): WalletManager {
+            check(consumed.compareAndSet(false, true)) { "Wallet manager bootstrap already consumed" }
+
+            var installed = false
+            try {
+                return WalletManager(initialState.metadata.id, rust, initialState)
+                    .also { installed = true }
+            } finally {
+                if (!installed) {
+                    closeRust()
+                }
+            }
+        }
+
+        override fun close() {
+            if (!consumed.compareAndSet(false, true)) return
+
+            closeRust()
+        }
+
+        private fun closeRust() {
+            try {
+                rust.shutdown()
+            } finally {
+                rust.close()
+            }
+        }
+
+        companion object {
+            fun create(id: WalletId): Bootstrap {
+                val rust = RustWalletManager(id)
+
+                var created = false
+                try {
+                    return Bootstrap(rust, rust.initialState())
+                        .also { created = true }
+                } finally {
+                    if (!created) {
+                        try {
+                            rust.shutdown()
+                        } finally {
+                            rust.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // private constructor - use companion factory methods
     private constructor(
         walletId: WalletId,
@@ -177,10 +228,10 @@ class WalletManager :
     companion object {
         // create from wallet ID
         operator fun invoke(id: WalletId): WalletManager {
-            val rust = RustWalletManager(id)
-            val initialState = rust.initialState()
+            val bootstrap = Bootstrap.create(id)
+            val manager = bootstrap.install()
             android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
-            return WalletManager(initialState.metadata.id, rust, initialState)
+            return manager
         }
 
         suspend fun load(
@@ -188,36 +239,25 @@ class WalletManager :
             rustDispatcher: CoroutineDispatcher = Dispatchers.IO,
         ): WalletManager {
             val bootstrap =
-                withContext(rustDispatcher) {
-                    val rust = RustWalletManager(id)
-                    val initialState = rust.initialState()
+                withContext(NonCancellable + rustDispatcher) {
+                    val bootstrap = Bootstrap.create(id)
                     android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
 
-                    WalletManagerBootstrap(rust, initialState)
+                    bootstrap
                 }
 
             var manager: WalletManager? = null
+            var loaded = false
             try {
                 currentCoroutineContext().ensureActive()
 
                 return withContext(Dispatchers.Main.immediate) {
-                    WalletManager(
-                        bootstrap.initialState.metadata.id,
-                        bootstrap.rust,
-                        bootstrap.initialState,
-                    ).also { manager = it }
-                }
-            } catch (e: CancellationException) {
-                manager?.close() ?: closeBootstrapRust(bootstrap)
-                throw e
-            }
-        }
-
-        private fun closeBootstrapRust(bootstrap: WalletManagerBootstrap) {
-            try {
-                bootstrap.rust.shutdown()
+                    bootstrap.install().also { manager = it }
+                }.also { loaded = true }
             } finally {
-                bootstrap.rust.close()
+                if (!loaded) {
+                    manager?.close() ?: bootstrap.close()
+                }
             }
         }
 

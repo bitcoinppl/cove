@@ -21,6 +21,7 @@ struct SelectedWalletContainer: View {
     var body: some View {
         WalletManagerHost(
             walletId: id,
+            preparesWalletRoute: true,
             loading: {
                 if let metadata = app.walletMetadata(id: id) {
                     SelectedWalletLoadingScreen(metadata: metadata)
@@ -68,18 +69,6 @@ struct SelectedWalletContainer: View {
             )
         default:
             Log.error("Something went very wrong: \(error)")
-            do {
-                let wallets = try Database().wallets().all()
-                let wallet = wallets.first(where: { $0.id != id })
-
-                if let wallet {
-                    try app.selectWalletOrThrow(wallet.id)
-                } else {
-                    app.loadAndReset(to: Route.newWallet(.select))
-                }
-            } catch {
-                app.loadAndReset(to: Route.newWallet(.select))
-            }
         }
     }
 }

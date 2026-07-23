@@ -34,6 +34,7 @@ open class CoveApplication : Application() {
     private var connectivity: Connectivity? = null
     private var passkeyAccess: PasskeyAccess? = null
     private var cloudStorage: CloudStorage? = null
+    private var cloudStorageAccess: AndroidCloudStorageAccess? = null
     private var connectivityAccess: LifecycleConnectivityAccess? = null
     private var bootstrapCompleted = false
 
@@ -60,9 +61,20 @@ open class CoveApplication : Application() {
             connectivityAccess = createdConnectivityAccess
             connectivity = Connectivity(createdConnectivityAccess)
             passkeyAccess = PasskeyAccess(createPasskeyProvider())
-            cloudStorage = CloudStorage(createCloudStorageAccess())
+            val createdCloudStorageAccess = createCloudStorageAccess()
+            cloudStorageAccess = createdCloudStorageAccess as? AndroidCloudStorageAccess
+            cloudStorage = CloudStorage(createdCloudStorageAccess)
             CloudBackupManager.setOnCloudBackupDisabled {
                 clearCloudBackupDriveAccountBinding(this)
+            }
+            cloudStorageAccess?.let { access ->
+                CloudBackupManager.setDriveAccountSwitchCallbacks(
+                    platformState = access::driveAccountSwitchPlatformState,
+                    selectAccount = access::selectAccountForCloudBackup,
+                    commit = access::commitAccountSwitch,
+                    finalizeCommit = access::finalizeAccountSwitchCommit,
+                    rollback = access::rollbackAccountSwitch,
+                )
             }
             Log.d(TAG, "Keychain and device initialized")
         } catch (e: Exception) {
@@ -136,6 +148,7 @@ open class CoveApplication : Application() {
         try {
             cloudStorage?.close()
             cloudStorage = null
+            cloudStorageAccess = null
             Log.d(TAG, "CloudStorage FFI object closed")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing CloudStorage FFI object", e)

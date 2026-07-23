@@ -42,6 +42,24 @@ const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "If this keeps happening, update Cove or contact support."
 );
 
+/// Failure to coordinate an Android Google Drive account transition
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[uniffi::export(Display)]
+pub enum CloudBackupDriveAccountSwitchError {
+    /// Another exclusive Cloud Backup operation owns the supervisor
+    #[error("another cloud backup operation is already in progress")]
+    Busy,
+    /// Cloud Backup has no configured state to move to another account
+    #[error("cloud backup is not configured")]
+    NotConfigured,
+    /// The supplied transition does not own the current operation
+    #[error("invalid Google Drive account switch transition")]
+    InvalidTransition,
+    /// Persistence or actor coordination failed
+    #[error("internal Google Drive account switch error: {0}")]
+    Internal(String),
+}
+
 #[derive(Debug)]
 struct CloudBackupErrorSource {
     message: String,
@@ -194,6 +212,15 @@ pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>)
     matches!(issue.into(), CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
 }
 
+pub(crate) fn is_provider_wide_interruption(issue: impl Into<CloudStorageIssue>) -> bool {
+    matches!(
+        issue.into(),
+        CloudStorageIssue::AuthorizationRequired
+            | CloudStorageIssue::Offline
+            | CloudStorageIssue::Unavailable
+    )
+}
+
 pub(crate) fn blocking_cloud_error(
     step: BlockingCloudStep,
     error: CloudBackupError,
@@ -344,7 +371,9 @@ pub(crate) enum CloudBackupError {
     #[error("compatibility error: {0}")]
     Compatibility(String),
 
-    #[error("Passkey didn't match any backups, please try a new one")]
+    #[error(
+        "This passkey did not unlock backups currently available in cloud storage. Wait for cloud storage to finish syncing, then try again."
+    )]
     PasskeyMismatch,
 
     #[error("no cloud backups found")]
@@ -486,6 +515,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn provider_wide_interruption_covers_access_and_provider_availability() {
+        for issue in [
+            CloudStorageIssue::AuthorizationRequired,
+            CloudStorageIssue::Offline,
+            CloudStorageIssue::Unavailable,
+        ] {
+            assert!(is_provider_wide_interruption(issue));
+        }
+
+        for issue in [
+            CloudStorageIssue::NotFound,
+            CloudStorageIssue::QuotaExceeded,
+            CloudStorageIssue::Other,
+        ] {
+            assert!(!is_provider_wide_interruption(issue));
+        }
+    }
+
+    #[test]
     fn platform_authorization_failures_use_durable_recovery_message() {
         for reason in [
             PasskeyFailureReason::PlatformAuthorizationFailed,
@@ -535,6 +583,15 @@ mod tests {
         assert_eq!(unsupported, UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE);
         assert_ne!(cancellation, missing);
         assert_ne!(missing, unsupported);
+    }
+
+    #[test]
+    fn passkey_mismatch_reader_message_is_provider_neutral() {
+        let message = CloudBackupError::PasskeyMismatch.reader_message();
+
+        assert!(message.contains("cloud storage"));
+        assert!(!message.contains("iCloud"));
+        assert!(!message.contains("Google Drive"));
     }
 
     #[test]

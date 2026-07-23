@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use crate::{
     database::{self, Database},
@@ -43,6 +43,7 @@ pub trait PendingWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'stati
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct RustPendingWalletManager {
     pub state: Arc<RwLock<PendingWalletManagerState>>,
+    saved_result: Arc<Mutex<Option<PendingWalletSaveResult>>>,
     pub reconciler: ReconcileChannel<PendingWalletManagerReconcileMessage>,
 }
 
@@ -95,6 +96,7 @@ impl RustPendingWalletManager {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         Self {
             state: Arc::new(RwLock::new(PendingWalletManagerState::new(number_of_words))),
+            saved_result: Arc::new(Mutex::new(None)),
             reconciler: ReconcileChannel::new(1000),
         }
     }
@@ -121,7 +123,13 @@ impl RustPendingWalletManager {
 
     #[uniffi::method]
     pub fn save_wallet(&self) -> Result<PendingWalletSaveResult, Error> {
-        let network = self.state.read().wallet.network;
+        let mut saved_result = self.saved_result.lock();
+        if let Some(result) = saved_result.as_ref() {
+            return Ok(result.clone());
+        }
+
+        let pending_wallet = self.state.read().wallet.clone();
+        let network = pending_wallet.network;
         let mode = Database::global().global_config.wallet_mode();
 
         // get current number of wallets and add one;
@@ -129,14 +137,14 @@ impl RustPendingWalletManager {
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let fingerprint: Fingerprint =
-            self.state.read().wallet.mnemonic.xpub(network.into()).fingerprint().into();
+            pending_wallet.mnemonic.xpub(network.into()).fingerprint().into();
 
         let wallet_metadata = WalletMetadata::new_cove_created_wallet(name, Some(fingerprint));
 
         // create, persist and select the wallet
         let wallet = Wallet::try_new_persisted_and_selected(
             wallet_metadata,
-            self.state.read().wallet.mnemonic.clone(),
+            pending_wallet.mnemonic.clone(),
             None,
         )?;
         CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
@@ -146,7 +154,10 @@ impl RustPendingWalletManager {
             CLOUD_BACKUP_MANAGER.is_cloud_backup_enabled(),
         );
 
-        Ok(PendingWalletSaveResult { metadata: wallet.metadata, routes })
+        let result = PendingWalletSaveResult { metadata: wallet.metadata, routes };
+        *saved_result = Some(result.clone());
+
+        Ok(result)
     }
 
     #[uniffi::method]
@@ -178,6 +189,7 @@ impl RustPendingWalletManager {
                     state.number_of_words = words;
                 }
 
+                *self.saved_result.lock() = None;
                 self.reconciler.send_sync(PendingWalletManagerReconcileMessage::Words(words));
             }
         }
@@ -254,11 +266,61 @@ fn post_save_routes(
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, sync::Once};
+
+    use parking_lot::Mutex;
+
     use crate::{
-        manager::pending_wallet_manager::post_save_routes,
+        keychain::{Keychain, KeychainAccess, KeychainError},
         router::{HotWalletRoute, NewWalletRoute, Route},
         wallet::metadata::WalletId,
     };
+
+    use super::{RustPendingWalletManager, post_save_routes};
+    use crate::mnemonic::NumberOfBip39Words;
+
+    #[derive(Debug, Default)]
+    struct TestKeychain(Mutex<HashMap<String, String>>);
+
+    impl KeychainAccess for TestKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            self.0.lock().insert(key, value);
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.0.lock().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.0.lock().remove(&key).is_some()
+        }
+    }
+
+    fn test_keychain() -> &'static Keychain {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            Keychain::new(Box::<TestKeychain>::default());
+        });
+
+        Keychain::global()
+    }
+
+    #[test]
+    fn save_wallet_returns_same_result_after_success() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        test_keychain();
+
+        let manager = RustPendingWalletManager::new(NumberOfBip39Words::Twelve);
+
+        let first = manager.save_wallet().expect("first save should succeed");
+        let second = manager.save_wallet().expect("second save should return cached result");
+
+        assert_eq!(second.metadata, first.metadata);
+        assert_eq!(second.routes, first.routes);
+    }
 
     #[test]
     fn post_save_routes_skip_word_verification_when_cloud_backup_enabled() {

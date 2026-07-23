@@ -503,7 +503,7 @@ impl CloudBackupSupervisor {
                 }
             }
             PersistedCloudBackupState::Disabled => PendingCompletionMatch::Missing,
-            PersistedCloudBackupState::Disabling(_)
+            PersistedCloudBackupState::ExclusiveTransition(_)
             | PersistedCloudBackupState::Corrupted { .. } => PendingCompletionMatch::Conflicting,
         }
     }

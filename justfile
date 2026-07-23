@@ -130,7 +130,6 @@ alias bar := build-android-release
 # [long, external] Build signed AAB for Google Play, copy to Downloads
 [group('build')]
 bundle-android: build-android-release
-    cd android && ./gradlew --stop
     just xtask bundle-android && just say "done android bundle"
 
 alias bua := bundle-android

@@ -1,13 +1,212 @@
 package org.bitcoinppl.cove
 
-import kotlin.coroutines.cancellation.CancellationException
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.cancellation.CancellationException
 
 class WalletSelectionRecoveryTest {
+    @Test
+    fun recoveryTriesRequestedThenCachedThenWalletDisplayOrder() {
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = "wallet-b",
+                cachedId = "wallet-a",
+                displayedIds = listOf("wallet-c", "wallet-a", "wallet-b", "wallet-d"),
+            )
+
+        assertEquals("wallet-b", recovery.nextCandidate())
+        assertEquals("wallet-a", recovery.nextCandidate())
+        assertEquals("wallet-c", recovery.nextCandidate())
+        assertEquals("wallet-d", recovery.nextCandidate())
+        assertEquals(null, recovery.nextCandidate())
+    }
+
+    @Test
+    fun recoveryExhaustionDoesNotRetryAttemptedWallets() {
+        val recovery =
+            WalletTransitionRecovery.create(
+                requestedId = "wallet-a",
+                cachedId = "wallet-a",
+                displayedIds = listOf("wallet-a", "wallet-a"),
+            )
+
+        assertEquals("wallet-a", recovery.nextCandidate())
+        assertEquals(null, recovery.nextCandidate())
+    }
+
+    @Test
+    fun completedBootstrapUsesMatchingCacheEvenWhenGenerationChanged() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState = initialState.managerChanged(),
+                cachedWalletId = "wallet-b",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.UseCached, decision)
+    }
+
+    @Test
+    fun completedBootstrapCancelsForSupersedingReplacement() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState = initialState.managerChanged(),
+                cachedWalletId = "wallet-c",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Cancel, decision)
+    }
+
+    @Test
+    fun completedBootstrapInstallsAfterUnrelatedCacheClear() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState = initialState.managerChanged(),
+                cachedWalletId = null,
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Install, decision)
+    }
+
+    @Test
+    fun completedBootstrapInstallsWhenCacheIsUnchanged() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState = initialState,
+                cachedWalletId = "wallet-a",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Install, decision)
+    }
+
+    @Test
+    fun completedBootstrapCancelsAfterAllInvalidationWithEmptyCache() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState = initialState.invalidate(WalletManagerInvalidation.All),
+                cachedWalletId = null,
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Cancel, decision)
+    }
+
+    @Test
+    fun completedBootstrapCancelsAfterTargetInvalidationWithEmptyCache() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState =
+                    initialState.invalidate(WalletManagerInvalidation.Wallet("wallet-b")),
+                cachedWalletId = null,
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Cancel, decision)
+    }
+
+    @Test
+    fun completedBootstrapInstallsAfterUnrelatedTargetInvalidationWithEmptyCache() {
+        val initialState = WalletManagerCacheState()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState =
+                    initialState.invalidate(WalletManagerInvalidation.Wallet("wallet-a")),
+                cachedWalletId = null,
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.Install, decision)
+    }
+
+    @Test
+    fun matchingCacheWinsAfterLoadWasInvalidated() {
+        val initialState = WalletManagerCacheState()
+        val currentState =
+            initialState
+                .invalidate(WalletManagerInvalidation.All)
+                .invalidate(WalletManagerInvalidation.Wallet("wallet-b"))
+                .managerChanged()
+        val decision =
+            WalletManagerBootstrapDecision.resolve(
+                loadToken = initialState.loadToken("wallet-b"),
+                cacheState = currentState,
+                cachedWalletId = "wallet-b",
+            )
+
+        assertEquals(WalletManagerBootstrapDecision.UseCached, decision)
+    }
+
+    @Test
+    fun repeatedInvalidationAdvancesWithoutManagerChanges() {
+        val targetedState =
+            WalletManagerCacheState()
+                .invalidate(WalletManagerInvalidation.Wallet("wallet-b"))
+        val targetedToken = targetedState.loadToken("wallet-b")
+        val retargetedState =
+            targetedState.invalidate(WalletManagerInvalidation.Wallet("wallet-b"))
+
+        assertTrue(retargetedState.invalidated(targetedToken))
+
+        val allState = retargetedState.invalidate(WalletManagerInvalidation.All)
+        val allToken = allState.loadToken("wallet-c")
+        val reinvalidatedAllState = allState.invalidate(WalletManagerInvalidation.All)
+
+        assertTrue(reinvalidatedAllState.invalidated(allToken))
+    }
+
+    @Test
+    fun missingWalletFailureAllowsFallback() {
+        val disposition =
+            WalletPreparationFailureDisposition.classify(
+                WalletManagerException.WalletDoesNotExist(),
+            )
+
+        assertEquals(WalletPreparationFailureDisposition.MissingWallet, disposition)
+    }
+
+    @Test
+    fun databaseCorruptionFailureAllowsFallbackAndRetainsDetails() {
+        val error = WalletManagerException.DatabaseCorruption("wallet-b", "corrupt")
+        val disposition =
+            WalletPreparationFailureDisposition.classify(error)
+                as WalletPreparationFailureDisposition.CorruptedWallet
+
+        assertSame(error, disposition.error)
+    }
+
+    @Test
+    fun ordinaryWalletPreparationFailureIsClassifiedForRethrow() {
+        val error = WalletManagerException.GetSelectedWalletException("failed")
+        val disposition =
+            WalletPreparationFailureDisposition.classify(error)
+                as WalletPreparationFailureDisposition.Rethrow
+
+        assertSame(error, disposition.error)
+    }
+
+    @Test
+    fun walletPreparationCancellationIsRethrown() {
+        val error = CancellationException("cancelled")
+        val disposition =
+            WalletPreparationFailureDisposition.classify(error)
+                as WalletPreparationFailureDisposition.Rethrow
+
+        assertSame(error, disposition.error)
+    }
+
     @Test
     fun recoversWalletSelectionWithoutPoppingRoute() {
         var didPopRoute = false

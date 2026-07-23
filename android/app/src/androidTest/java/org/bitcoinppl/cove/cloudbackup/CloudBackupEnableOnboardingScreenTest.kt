@@ -37,9 +37,12 @@ class CloudBackupEnableOnboardingScreenTest {
                                 CloudBackupSettingsRowStatus.Disabled,
                             ),
                         ),
-                    onBack = {},
-                    onRecreate = {},
-                    onReinitialize = {},
+                    actions =
+                        CloudBackupScreenActions(
+                            onBack = {},
+                            onRecreate = {},
+                            onReinitialize = {},
+                        ),
                 )
             }
         }
@@ -73,9 +76,12 @@ class CloudBackupEnableOnboardingScreenTest {
                                 CloudBackupSettingsRowStatus.RecoveryRequired,
                             ),
                         ),
-                    onBack = {},
-                    onRecreate = {},
-                    onReinitialize = {},
+                    actions =
+                        CloudBackupScreenActions(
+                            onBack = {},
+                            onRecreate = {},
+                            onReinitialize = {},
+                        ),
                 )
             }
         }

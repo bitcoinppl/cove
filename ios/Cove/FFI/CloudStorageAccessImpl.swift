@@ -161,18 +161,41 @@ enum SilentNamespaceRecoveryProbe {
                 return namespaces
             }
 
+            guard inspectionIndex < retryDelays.count else { return [] }
+
             let remainingBeforeDelay = deadline - now()
             guard remainingBeforeDelay > 0 else {
                 throw CloudStorageError.NotAvailable("iCloud namespace lookup timed out")
             }
-
-            guard inspectionIndex < retryDelays.count else { return [] }
 
             let delay = min(retryDelays[inspectionIndex], remainingBeforeDelay)
             try await sleep(delay)
         }
 
         return []
+    }
+}
+
+enum ICloudEventuallyConsistentListing {
+    static func merged(
+        local: [String],
+        metadata: Result<[String], Error>
+    ) throws -> [String] {
+        switch metadata {
+        case let .success(metadata):
+            return Array(Set(local + metadata)).sorted()
+        case let .failure(error):
+            throw error
+        }
+    }
+}
+
+private extension CloudAccessPolicy {
+    var backupLookupMode: ICloudBackupLookupMode {
+        switch self {
+        case .consentAllowed: .waitForSync
+        case .silent: .currentSnapshot
+        }
     }
 }
 
@@ -214,6 +237,47 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         try await CancellableDispatchOperation.run(on: queue, operation: operation)
     }
 
+    private func listSubdirectories(
+        parentPath: String,
+        metadataTimeout: TimeInterval? = nil
+    ) async throws -> [String] {
+        let localNames = try await runCancellable {
+            self.helper.locallyVisibleSubdirectoryNames(parentPath: parentPath)
+        }
+
+        let metadataNames = try await helper.metadataSubdirectoryNames(
+            parentPath: parentPath,
+            timeout: metadataTimeout
+        )
+        let mergedNames = try ICloudEventuallyConsistentListing.merged(
+            local: localNames,
+            metadata: .success(metadataNames)
+        )
+        Log.info(
+            "listSubdirectories: local_count=\(localNames.count) metadata_count=\(metadataNames.count) merged_count=\(mergedNames.count)"
+        )
+        return mergedNames
+    }
+
+    private func listFiles(namespacePath: String, prefix: String) async throws -> [String] {
+        let localNames = try await runCancellable {
+            self.helper.locallyVisibleFileNames(namespacePath: namespacePath, prefix: prefix)
+        }
+
+        let metadataNames = try await helper.metadataFileNames(
+            namespacePath: namespacePath,
+            prefix: prefix
+        )
+        let mergedNames = try ICloudEventuallyConsistentListing.merged(
+            local: localNames,
+            metadata: .success(metadataNames)
+        )
+        Log.info(
+            "listFiles: prefix=\(prefix) local_count=\(localNames.count) metadata_count=\(metadataNames.count) merged_count=\(mergedNames.count)"
+        )
+        return mergedNames
+    }
+
     // MARK: - Upload
 
     func uploadMasterKeyBackup(
@@ -225,7 +289,6 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         try await run {
             let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
-            try self.helper.waitForMetadataVisibility(url: url)
         }
     }
 
@@ -239,7 +302,6 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         try await run {
             let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
-            try self.helper.waitForMetadataVisibility(url: url)
         }
     }
 
@@ -248,32 +310,31 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     func downloadMasterKeyBackup(
         namespace: String,
         locations: [RemoteBackupLocation],
-        policy _: CloudAccessPolicy
+        policy: CloudAccessPolicy
     ) async throws -> Data {
-        try await run {
-            let url = try self.helper.existingBackupFileReadURL(
-                namespace: namespace,
-                recordId: csppMasterKeyRecordId(),
-                locations: locations
-            )
-            return try self.helper.downloadFile(url: url, recordId: csppMasterKeyRecordId())
-        }
+        let recordId = csppMasterKeyRecordId()
+        let url = try await helper.existingBackupFileReadURL(
+            namespace: namespace,
+            recordId: recordId,
+            locations: locations,
+            lookupMode: policy.backupLookupMode
+        )
+        return try await helper.downloadFile(url: url, recordId: recordId)
     }
 
     func downloadWalletBackup(
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation],
-        policy _: CloudAccessPolicy
+        policy: CloudAccessPolicy
     ) async throws -> Data {
-        try await run {
-            let url = try self.helper.existingBackupFileReadURL(
-                namespace: namespace,
-                recordId: recordId,
-                locations: locations
-            )
-            return try self.helper.downloadFile(url: url, recordId: recordId)
-        }
+        let url = try await helper.existingBackupFileReadURL(
+            namespace: namespace,
+            recordId: recordId,
+            locations: locations,
+            lookupMode: policy.backupLookupMode
+        )
+        return try await helper.downloadFile(url: url, recordId: recordId)
     }
 
     func deleteWalletBackup(
@@ -282,29 +343,34 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws {
-        try await run {
-            try self.helper.deleteExistingBackupFile(
-                namespace: namespace,
-                recordId: recordId,
-                locations: locations
-            )
-        }
+        try await helper.deleteExistingBackupFile(
+            namespace: namespace,
+            recordId: recordId,
+            locations: locations
+        )
     }
 
     func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
-        try await run {
-            let url = try self.helper.namespaceDirectoryReadURL(namespace: namespace)
-            if FileManager.default.fileExists(atPath: url.path) {
+        let url = try await run {
+            try self.helper.namespaceDirectoryReadURL(namespace: namespace)
+        }
+        let isLocallyVisible = await run {
+            FileManager.default.fileExists(atPath: url.path)
+        }
+        if isLocallyVisible {
+            try await run {
                 try self.helper.coordinatedDelete(at: url, missingItemID: namespace)
-                return
             }
+            return
+        }
 
-            let resolvedURL = try self.helper.metadataItemIfPresent(
-                named: url.lastPathComponent,
-                parentDirectoryURL: url.deletingLastPathComponent()
-            )?.url
-            guard let resolvedURL else { throw CloudStorageError.NotFound(namespace) }
+        let resolvedURL = try await helper.metadataItemIfPresent(
+            named: url.lastPathComponent,
+            parentDirectoryURL: url.deletingLastPathComponent()
+        )?.url
+        guard let resolvedURL else { throw CloudStorageError.NotFound(namespace) }
 
+        try await run {
             try self.helper.coordinatedDelete(at: resolvedURL, missingItemID: namespace)
         }
     }
@@ -314,50 +380,50 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     func listNamespaces(policy: CloudAccessPolicy) async throws -> [String] {
         switch policy {
         case .consentAllowed:
-            try await run {
-                let namespacesRoot = try self.helper.namespacesRootURL()
-                return try self.helper.listSubdirectories(parentPath: namespacesRoot.path)
+            let namespacesRoot = try await run {
+                try self.helper.namespacesRootURL()
             }
+            return try await listSubdirectories(parentPath: namespacesRoot.path)
         case .silent:
-            try await SilentCloudRecoveryDeadline.run {
+            return try await SilentCloudRecoveryDeadline.run {
                 let namespacesRoot = try await self.runCancellable {
                     try self.helper.namespacesRootReadURL()
                 }
 
                 return try await SilentNamespaceRecoveryProbe.run { metadataTimeout in
-                    try await self.runCancellable {
-                        try self.helper.listSubdirectories(
-                            parentPath: namespacesRoot.path,
-                            metadataTimeout: metadataTimeout
-                        )
-                    }
+                    try await self.listSubdirectories(
+                        parentPath: namespacesRoot.path,
+                        metadataTimeout: metadataTimeout
+                    )
                 }
             }
         }
     }
 
     func listWalletFiles(namespace: String, policy _: CloudAccessPolicy) async throws -> [String] {
-        try await run {
+        let directories = try await run {
             let namespace = try self.helper.validateNamespace(namespace)
             let namespacesRoot = try self.helper.namespacesRootReadURL()
-            let namespaces = try self.helper.listSubdirectories(parentPath: namespacesRoot.path)
-            guard namespaces.contains(namespace) else { throw CloudStorageError.NotFound(namespace) }
-
             let nsDir = try self.helper.namespaceDirectoryReadURL(namespace: namespace)
-            let legacyFiles = try self.helper.listFiles(
-                namespacePath: nsDir.path,
-                prefix: csppWalletFilePrefix()
-            )
-
             let walletsDir = try self.helper.walletsDirectoryReadURL(namespace: namespace)
-            let currentFiles = try self.helper.listFiles(
-                namespacePath: walletsDir.path,
-                prefix: csppWalletFilePrefix()
-            )
-            .map { self.helper.walletLocation(filename: $0) }
-
-            return Array(Set(legacyFiles + currentFiles)).sorted()
+            return (namespace, namespacesRoot, nsDir, walletsDir)
         }
+        let namespaces = try await listSubdirectories(parentPath: directories.1.path)
+        guard namespaces.contains(directories.0) else {
+            throw CloudStorageError.NotFound(directories.0)
+        }
+
+        let legacyFiles = try await listFiles(
+            namespacePath: directories.2.path,
+            prefix: csppWalletFilePrefix()
+        )
+        let currentFiles = try await listFiles(
+            namespacePath: directories.3.path,
+            prefix: csppWalletFilePrefix()
+        )
+        .map { helper.walletLocation(filename: $0) }
+
+        return Array(Set(legacyFiles + currentFiles)).sorted()
     }
 
     func listWalletFilesSnapshot(
@@ -393,14 +459,12 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         recordId: String,
         locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
-    ) async throws -> Bool {
-        try await run {
-            try self.helper.isBackupUploaded(
-                namespace: namespace,
-                recordId: recordId,
-                locations: locations
-            )
-        }
+    ) async throws -> CloudBackupUploadStatus {
+        try await helper.isBackupUploaded(
+            namespace: namespace,
+            recordId: recordId,
+            locations: locations
+        )
     }
 
     func overallSyncHealth(policy _: CloudAccessPolicy) async -> CloudSyncHealth {

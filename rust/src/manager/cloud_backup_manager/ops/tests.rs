@@ -22,7 +22,7 @@ use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobDirtyState, CloudBlobFailedState,
     CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
     PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup,
+    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitchPhase,
 };
 use crate::label_manager::LabelManager;
 use crate::manager::cloud_backup_manager::actors::{
@@ -40,7 +40,8 @@ use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer, StagedPrfKey,
+    NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
+    PasskeyMaterialAcquirer, StagedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE,
@@ -86,12 +87,16 @@ fn pending_enable_awaiting_confirmation(
 }
 
 fn current_disable_generation() -> Option<u64> {
-    match RustCloudBackupManager::load_persisted_state() {
-        PersistedCloudBackupState::Disabling(disabling) => Some(disabling.disable_generation),
-        PersistedCloudBackupState::Configured(_)
-        | PersistedCloudBackupState::Disabled
-        | PersistedCloudBackupState::Corrupted { .. } => None,
-    }
+    RustCloudBackupManager::load_persisted_state()
+        .disabling()
+        .map(|disabling| disabling.disable_generation)
+}
+
+fn persisted_disabling() -> PersistedDisablingCloudBackup {
+    RustCloudBackupManager::load_persisted_state()
+        .disabling()
+        .cloned()
+        .expect("expected persisted disabling state")
 }
 
 async fn deep_verify_for_test(
@@ -111,17 +116,18 @@ async fn deep_verify_for_test(
     .unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
         let snapshot = manager.model_snapshot();
-        if manager.pending_verification_completion().is_some() {
-            return snapshot.detail.is_some();
-        }
+        let awaits_upload_confirmation = manager.pending_verification_completion().is_some()
+            && snapshot.detail.is_some()
+            && manager.projected_exclusive_operation().is_none();
 
-        matches!(
-            snapshot.verification,
-            VerificationState::Verified(_)
-                | VerificationState::PasskeyConfirmed
-                | VerificationState::Failed(_)
-                | VerificationState::Cancelled
-        )
+        awaits_upload_confirmation
+            || matches!(
+                snapshot.verification,
+                VerificationState::Verified(_)
+                    | VerificationState::PasskeyConfirmed
+                    | VerificationState::Failed(_)
+                    | VerificationState::Cancelled
+            )
     })
     .await;
 
@@ -439,6 +445,7 @@ fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: 
         .unwrap();
 }
 
+mod account_switch;
 mod cleanup;
 mod connectivity;
 mod deep_verify;

@@ -21,10 +21,19 @@ pub enum PersistedCloudBackupState {
     #[default]
     Disabled,
     Configured(PersistedConfiguredCloudBackup),
-    Disabling(PersistedDisablingCloudBackup),
+    ExclusiveTransition(PersistedCloudBackupTransition),
     Corrupted {
         error: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// One durable operation that exclusively owns cloud backup configuration
+pub enum PersistedCloudBackupTransition {
+    /// Cloud backup is being deleted and disabled
+    Disabling(PersistedDisablingCloudBackup),
+    /// Cloud backup is moving between Google Drive accounts
+    DriveAccountSwitch(PersistedDriveAccountSwitchState),
 }
 
 impl PersistedCloudBackupState {
@@ -36,23 +45,74 @@ impl PersistedCloudBackupState {
         match self {
             Self::Disabled => PersistedCloudBackupStatus::Disabled,
             Self::Configured(configured) => configured.status(),
-            Self::Disabling(_) => PersistedCloudBackupStatus::Disabling,
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_)) => {
+                PersistedCloudBackupStatus::Disabling
+            }
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+                account_switch,
+            )) => account_switch.configured.status(),
             Self::Corrupted { .. } => PersistedCloudBackupStatus::Corrupted,
         }
     }
 
     pub fn is_configured(&self) -> bool {
-        matches!(self, Self::Configured(_))
+        matches!(
+            self,
+            Self::Configured(_)
+                | Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(_))
+        )
+    }
+
+    pub(crate) fn has_configured_backup(&self) -> bool {
+        self.configured().is_some()
     }
 
     pub fn is_disabling(&self) -> bool {
-        matches!(self, Self::Disabling(_))
+        matches!(self, Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_)))
     }
 
     pub fn disabling(&self) -> Option<&PersistedDisablingCloudBackup> {
         match self {
-            Self::Disabling(disabling) => Some(disabling),
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) => {
+                Some(disabling)
+            }
+            Self::Disabled
+            | Self::Configured(_)
+            | Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(_))
+            | Self::Corrupted { .. } => None,
+        }
+    }
+
+    pub(crate) fn exclusive_transition(&self) -> Option<&PersistedCloudBackupTransition> {
+        match self {
+            Self::ExclusiveTransition(transition) => Some(transition),
             Self::Disabled | Self::Configured(_) | Self::Corrupted { .. } => None,
+        }
+    }
+
+    fn configured(&self) -> Option<&PersistedConfiguredCloudBackup> {
+        match self {
+            Self::Configured(configured) => Some(configured),
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) => {
+                Some(&disabling.previous_configured)
+            }
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+                account_switch,
+            )) => Some(&account_switch.configured),
+            Self::Disabled | Self::Corrupted { .. } => None,
+        }
+    }
+
+    fn configured_mut(&mut self) -> Option<&mut PersistedConfiguredCloudBackup> {
+        match self {
+            Self::Configured(configured) => Some(configured),
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) => {
+                Some(&mut disabling.previous_configured)
+            }
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+                account_switch,
+            )) => Some(&mut account_switch.configured),
+            Self::Disabled | Self::Corrupted { .. } => None,
         }
     }
 
@@ -65,66 +125,44 @@ impl PersistedCloudBackupState {
     }
 
     pub fn last_sync(&self) -> Option<u64> {
-        match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.sync.last_sync,
-            Self::Disabling(disabling) => disabling.previous_configured.sync.last_sync,
-        }
+        self.configured().and_then(|configured| configured.sync.last_sync)
     }
 
     pub fn wallet_count(&self) -> Option<u32> {
-        match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.sync.wallet_count,
-            Self::Disabling(disabling) => disabling.previous_configured.sync.wallet_count,
-        }
+        self.configured().and_then(|configured| configured.sync.wallet_count)
     }
 
     pub fn last_verified_at(&self) -> Option<u64> {
-        match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.verification.last_verified_at(),
-            Self::Disabling(disabling) => {
-                disabling.previous_configured.verification.last_verified_at()
-            }
-        }
+        self.configured().and_then(|configured| configured.verification.last_verified_at())
     }
 
     pub fn last_verification_requested_at(&self) -> Option<u64> {
-        match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.verification.requested_at(),
-            Self::Disabling(disabling) => disabling.previous_configured.verification.requested_at(),
-        }
+        self.configured().and_then(|configured| configured.verification.requested_at())
     }
 
     pub fn last_verification_dismissed_at(&self) -> Option<u64> {
-        match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.verification.dismissed_at(),
-            Self::Disabling(disabling) => disabling.previous_configured.verification.dismissed_at(),
-        }
+        self.configured().and_then(|configured| configured.verification.dismissed_at())
     }
 
     pub fn pending_verification_completion(
         &self,
     ) -> Option<&PersistedPendingVerificationCompletion> {
-        match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.pending_verification_completion.as_ref(),
-            Self::Disabling(disabling) => {
-                disabling.previous_configured.pending_verification_completion.as_ref()
-            }
-        }
+        self.configured().and_then(|configured| configured.pending_verification_completion.as_ref())
     }
 
     pub fn pending_restore_all(&self) -> Option<&PersistedRestoreAllMarker> {
+        self.configured().and_then(|configured| configured.pending_restore_all.as_ref())
+    }
+
+    pub(crate) fn drive_account_switch(&self) -> Option<&PersistedDriveAccountSwitch> {
         match self {
-            Self::Disabled | Self::Corrupted { .. } => None,
-            Self::Configured(configured) => configured.pending_restore_all.as_ref(),
-            Self::Disabling(disabling) => {
-                disabling.previous_configured.pending_restore_all.as_ref()
-            }
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+                account_switch,
+            )) => Some(&account_switch.transition),
+            Self::Disabled
+            | Self::Configured(_)
+            | Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(_))
+            | Self::Corrupted { .. } => None,
         }
     }
 
@@ -152,35 +190,20 @@ impl PersistedCloudBackupState {
     }
 
     pub fn set_wallet_count(&mut self, wallet_count: Option<u32>) {
-        let Self::Configured(configured) = self else {
-            return;
-        };
+        let Some(configured) = self.configured_mut() else { return };
 
         configured.sync.wallet_count = wallet_count;
     }
 
-    pub fn mark_enabled_preserving_verification(&self, last_sync: u64, wallet_count: u32) -> Self {
-        let verification = match self {
-            Self::Configured(configured) => configured.verification.clone(),
-            Self::Disabled | Self::Corrupted { .. } => {
-                PersistedBackupVerificationState::NotVerified {
-                    requested_at: None,
-                    dismissed_at: None,
-                }
-            }
-            Self::Disabling(disabling) => disabling.previous_configured.verification.clone(),
-        };
+    pub fn record_successful_sync(&mut self, last_sync: u64, wallet_count: u32) -> bool {
+        let Some(configured) = self.configured_mut() else { return false };
 
-        Self::Configured(PersistedConfiguredCloudBackup {
-            passkey: PersistedPasskeyState::Available,
-            verification,
-            sync: PersistedBackupSyncState {
-                last_sync: Some(last_sync),
-                wallet_count: Some(wallet_count),
-            },
-            pending_verification_completion: self.pending_verification_completion().cloned(),
-            pending_restore_all: self.pending_restore_all().cloned(),
-        })
+        configured.passkey = PersistedPasskeyState::Available;
+        configured.sync = PersistedBackupSyncState {
+            last_sync: Some(last_sync),
+            wallet_count: Some(wallet_count),
+        };
+        true
     }
 
     pub fn mark_enabled_reset_verification(last_sync: u64, wallet_count: u32) -> Self {
@@ -200,10 +223,46 @@ impl PersistedCloudBackupState {
         })
     }
 
-    pub fn mark_verified_at(&mut self, verified_at: u64) {
-        let Self::Configured(configured) = self else {
-            return;
+    pub fn configured_after_restore(last_sync: u64, wallet_count: u32) -> Self {
+        Self::Configured(PersistedConfiguredCloudBackup {
+            passkey: PersistedPasskeyState::Available,
+            verification: PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            sync: PersistedBackupSyncState {
+                last_sync: Some(last_sync),
+                wallet_count: Some(wallet_count),
+            },
+            pending_verification_completion: None,
+            pending_restore_all: None,
+        })
+    }
+
+    pub(crate) fn reset_verification_after_successful_sync(
+        &mut self,
+        last_sync: u64,
+        wallet_count: u32,
+    ) -> bool {
+        let Some(configured) = self.configured_mut() else { return false };
+
+        configured.passkey = PersistedPasskeyState::Available;
+        configured.verification = PersistedBackupVerificationState::Required {
+            last_verified_at: None,
+            requested_at: None,
+            dismissed_at: None,
         };
+        configured.sync = PersistedBackupSyncState {
+            last_sync: Some(last_sync),
+            wallet_count: Some(wallet_count),
+        };
+        configured.pending_verification_completion = None;
+        configured.pending_restore_all = None;
+        true
+    }
+
+    pub fn mark_verified_at(&mut self, verified_at: u64) {
+        let Some(configured) = self.configured_mut() else { return };
 
         configured.passkey = PersistedPasskeyState::Available;
         configured.verification = PersistedBackupVerificationState::Verified {
@@ -214,17 +273,13 @@ impl PersistedCloudBackupState {
     }
 
     pub fn mark_passkey_missing(&mut self) {
-        let Self::Configured(configured) = self else {
-            return;
-        };
+        let Some(configured) = self.configured_mut() else { return };
 
         configured.passkey = PersistedPasskeyState::Missing;
     }
 
     pub fn mark_verification_required(&mut self, requested_at: Option<u64>) {
-        let Self::Configured(configured) = self else {
-            return;
-        };
+        let Some(configured) = self.configured_mut() else { return };
 
         configured.verification = PersistedBackupVerificationState::Required {
             last_verified_at: configured.verification.last_verified_at(),
@@ -234,9 +289,7 @@ impl PersistedCloudBackupState {
     }
 
     pub fn dismiss_verification_request(&mut self, dismissed_at: u64) -> bool {
-        let Self::Configured(configured) = self else {
-            return false;
-        };
+        let Some(configured) = self.configured_mut() else { return false };
         if configured.verification.requested_at().is_none() {
             return false;
         }
@@ -249,37 +302,147 @@ impl PersistedCloudBackupState {
         &mut self,
         completion: PersistedPendingVerificationCompletion,
     ) -> bool {
-        let Self::Configured(configured) = self else {
-            return false;
-        };
+        let Some(configured) = self.configured_mut() else { return false };
 
         configured.pending_verification_completion = Some(completion);
         true
     }
 
     pub fn clear_pending_verification_completion(&mut self) -> bool {
-        let Self::Configured(configured) = self else {
-            return false;
-        };
+        let Some(configured) = self.configured_mut() else { return false };
 
         configured.pending_verification_completion.take().is_some()
     }
 
     pub fn replace_pending_restore_all(&mut self, marker: PersistedRestoreAllMarker) -> bool {
-        let Self::Configured(configured) = self else {
-            return false;
-        };
+        let Some(configured) = self.configured_mut() else { return false };
 
         configured.pending_restore_all = Some(marker);
         true
     }
 
     pub fn clear_pending_restore_all(&mut self) -> bool {
-        let Self::Configured(configured) = self else {
-            return false;
-        };
+        let Some(configured) = self.configured_mut() else { return false };
 
         configured.pending_restore_all.take().is_some()
+    }
+
+    pub(crate) fn set_drive_account_switch(
+        &mut self,
+        account_switch: PersistedDriveAccountSwitch,
+    ) -> bool {
+        let Self::Configured(_) = self else { return false };
+        let Self::Configured(configured) = std::mem::take(self) else { unreachable!() };
+
+        *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+            PersistedDriveAccountSwitchState { configured, transition: account_switch },
+        ));
+        true
+    }
+
+    pub(crate) fn set_drive_account_switch_phase(
+        &mut self,
+        transition_id: DriveAccountSwitchId,
+        phase: PersistedDriveAccountSwitchPhase,
+    ) -> bool {
+        let Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+            account_switch,
+        )) = self
+        else {
+            return false;
+        };
+        if account_switch.transition.transition_id != transition_id {
+            return false;
+        }
+
+        account_switch.transition.phase = phase;
+        true
+    }
+
+    pub(crate) fn clear_drive_account_switch(
+        &mut self,
+        transition_id: DriveAccountSwitchId,
+    ) -> bool {
+        let Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+            account_switch,
+        )) = self
+        else {
+            return false;
+        };
+        if account_switch.transition.transition_id != transition_id {
+            return false;
+        }
+
+        let Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+            account_switch,
+        )) = std::mem::take(self)
+        else {
+            unreachable!()
+        };
+        *self = Self::Configured(account_switch.configured);
+        true
+    }
+
+    pub(crate) fn begin_disabling(
+        &mut self,
+        namespace_id: String,
+        disable_generation: u64,
+        started_at: u64,
+    ) -> bool {
+        let Self::Configured(_) = self else { return false };
+        let Self::Configured(configured) = std::mem::take(self) else { unreachable!() };
+
+        *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(
+            PersistedDisablingCloudBackup {
+                previous_configured: configured,
+                namespace_id,
+                disable_generation,
+                started_at,
+                delete_started_at: None,
+                last_error: None,
+                retry_after: None,
+            },
+        ));
+        true
+    }
+
+    pub(crate) fn disabling_transition(disabling: PersistedDisablingCloudBackup) -> Self {
+        Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
+    }
+
+    pub(crate) fn restore_configured_after_disable(&mut self, disable_generation: u64) -> bool {
+        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) = self
+        else {
+            return false;
+        };
+        if disabling.disable_generation != disable_generation {
+            return false;
+        }
+
+        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) =
+            std::mem::take(self)
+        else {
+            unreachable!()
+        };
+        *self = Self::Configured(disabling.previous_configured);
+        true
+    }
+
+    pub(crate) fn update_disabling(&mut self, update: &PersistedDisablingCloudBackup) -> bool {
+        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) = self
+        else {
+            return false;
+        };
+        if disabling.disable_generation != update.disable_generation
+            || disabling.namespace_id != update.namespace_id
+        {
+            return false;
+        }
+
+        disabling.delete_started_at = update.delete_started_at;
+        disabling.last_error.clone_from(&update.last_error);
+        disabling.retry_after = update.retry_after;
+        true
     }
 }
 
@@ -306,6 +469,53 @@ pub struct PersistedConfiguredCloudBackup {
     pub pending_verification_completion: Option<PersistedPendingVerificationCompletion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_restore_all: Option<PersistedRestoreAllMarker>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Configured backup state held while a Google Drive account switch is in progress
+pub struct PersistedDriveAccountSwitchState {
+    /// Backup configuration updated by writes admitted before the switch fence
+    pub configured: PersistedConfiguredCloudBackup,
+    /// Durable account-switch protocol state
+    pub transition: PersistedDriveAccountSwitch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedDriveAccountSwitch {
+    pub transition_id: DriveAccountSwitchId,
+    pub phase: PersistedDriveAccountSwitchPhase,
+}
+
+/// Durable identifier for one Google Drive account switch
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DriveAccountSwitchId(u64);
+
+impl DriveAccountSwitchId {
+    pub(crate) fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Return the platform representation of this transition identifier
+    pub fn value(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for DriveAccountSwitchId {
+    fn from(value: u64) -> Self {
+        Self::new(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PersistedDriveAccountSwitchPhase {
+    AwaitingAccountSelection,
+    Reinitializing,
+    AwaitingAccountCommitSucceeded,
+    #[serde(rename = "AwaitingAccountCommitFailed")]
+    AwaitingReinitializationRetry,
+    AwaitingAccountRollback,
 }
 
 impl PersistedConfiguredCloudBackup {

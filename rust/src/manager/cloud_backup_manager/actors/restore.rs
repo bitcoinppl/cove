@@ -1,25 +1,29 @@
+use std::time::Duration;
+
 use act_zero::{Addr, call};
 use cove_cspp::master_key::MasterKey;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use futures::stream::{self, StreamExt as _};
+use tokio::time::Instant;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::try_restore_from_local_master_key;
 use crate::manager::cloud_backup_manager::wallets::{
-    DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespacePasskeyMatcher,
-    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
+    DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
+    NamespacePasskeyMatcher, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
+    WalletRestoreSession,
 };
 
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
     CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupError, CloudBackupRestoreFlow,
     CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupStatus, CloudBackupStore,
-    CloudStorageIssue, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager,
-    blocking_cloud_error, is_connectivity_related_issue, offline_error_for_step,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager, blocking_cloud_error,
+    is_connectivity_related_issue, is_provider_wide_interruption, offline_error_for_step,
 };
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -52,6 +56,21 @@ struct RestoreDownloadProgress {
     total: u32,
 }
 
+const PASSKEY_NAMESPACE_REFRESH_OFFSETS: [Duration; 5] = [
+    Duration::from_secs(1),
+    Duration::from_secs(3),
+    Duration::from_secs(7),
+    Duration::from_secs(11),
+    Duration::from_secs(15),
+];
+
+const PASSKEY_NAMESPACE_MATCH_GRACE_OFFSETS: [Duration; 4] = [
+    Duration::from_secs(1),
+    Duration::from_secs(3),
+    Duration::from_secs(7),
+    Duration::from_secs(10),
+];
+
 #[derive(Debug, Clone, Copy)]
 enum RestoreProgressPhase {
     Downloading,
@@ -72,6 +91,19 @@ fn restore_progress_flow(
             CloudBackupRestoreFlow::Downloading { completed, total }
         }
         RestoreProgressPhase::Restoring => CloudBackupRestoreFlow::Restoring { completed, total },
+    }
+}
+
+fn merge_namespace_matches(accumulated: &mut Vec<NamespaceMatch>, discovered: Vec<NamespaceMatch>) {
+    for namespace_match in discovered {
+        if let Some(existing) = accumulated
+            .iter_mut()
+            .find(|existing| existing.namespace_id == namespace_match.namespace_id)
+        {
+            *existing = namespace_match;
+        } else {
+            accumulated.push(namespace_match);
+        }
     }
 }
 
@@ -222,12 +254,14 @@ impl RestoreOperation {
                 info!("Restore: passkey discovery cancelled");
                 return Err(CloudBackupError::PasskeyDiscoveryCancelled);
             }
-            Err(CloudBackupError::PasskeyMismatch) => {
-                info!("Restore: passkey didn't match, trying local master key fallback");
+            Err(error @ (CloudBackupError::PasskeyMismatch | CloudBackupError::NoBackupFound)) => {
+                info!(
+                    "Restore: passkey matching found no restore, trying local master key fallback"
+                );
                 let (master_key, namespace_id) = try_restore_from_local_master_key(&cloud, &cspp)
                     .await
                     .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?
-                    .ok_or(CloudBackupError::PasskeyMismatch)?;
+                    .ok_or(error)?;
                 vec![RestorableNamespace { namespace_id, master_key, passkey: None }]
             }
             Err(error) => return Err(error),
@@ -417,11 +451,10 @@ impl RestoreOperation {
 
         self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
 
-        let enabled_state = RustCloudBackupManager::load_persisted_state()
-            .mark_enabled_preserving_verification(
-                crate::manager::cloud_backup_manager::current_timestamp(),
-                wallet_count,
-            );
+        let enabled_state = PersistedCloudBackupState::configured_after_restore(
+            crate::manager::cloud_backup_manager::current_timestamp(),
+            wallet_count,
+        );
         self.persist_cloud_backup_state(
             enabled_state,
             "persist restored cloud backup state".into(),
@@ -473,7 +506,7 @@ impl RestoreOperation {
                     report.failed_wallet_errors.push(error);
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
+                    if is_provider_wide_interruption(&error) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
                     let error = GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.to_string();
@@ -507,30 +540,97 @@ impl RestoreOperation {
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
     ) -> Result<Vec<NamespaceMatch>, CloudBackupError> {
-        let mut namespaces = cloud.list_namespaces().await.map_err(|error| {
-            blocking_cloud_error(
-                BlockingCloudStep::Restore,
-                CloudBackupError::cloud_storage_context("list cloud backup namespaces", error),
-            )
-        })?;
+        let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
+        let mut session = matcher.start_session();
+        let started_at = Instant::now();
+        let mut first_match_at = None;
+        let mut no_match_refresh_index = 0;
+        let mut grace_refresh_index = 0;
+        let mut refresh_index = 0;
+        let mut accumulated_matches = Vec::new();
 
-        namespaces.sort();
-        if namespaces.is_empty() {
-            return Err(CloudBackupError::NoBackupFound);
+        loop {
+            self.ensure_current().await?;
+
+            let mut namespaces = match cloud.list_namespaces().await {
+                Ok(namespaces) => namespaces,
+                Err(error) if is_connectivity_related_issue(&error) => {
+                    warn!(
+                        "Restore: cloud namespace refresh failed refresh_index={refresh_index}: {error}"
+                    );
+                    session.note_namespace_discovery_failure();
+                    Vec::new()
+                }
+                Err(error) => {
+                    return Err(blocking_cloud_error(
+                        BlockingCloudStep::Restore,
+                        CloudBackupError::cloud_storage_context(
+                            "list cloud backup namespaces",
+                            error,
+                        ),
+                    ));
+                }
+            };
+            namespaces.sort();
+            namespaces.dedup();
+
+            info!(
+                "Restore: passkey candidate refresh refresh_index={refresh_index} namespace_count={}",
+                namespaces.len()
+            );
+            match session.match_snapshot(&namespaces).await? {
+                NamespaceMatchSnapshotOutcome::Matched(matches) => {
+                    info!("Restore: matched {} namespace(s)", matches.len());
+                    merge_namespace_matches(&mut accumulated_matches, matches);
+                    first_match_at.get_or_insert_with(Instant::now);
+                }
+                NamespaceMatchSnapshotOutcome::UserDeclined => {
+                    if accumulated_matches.is_empty() {
+                        return Err(CloudBackupError::PasskeyDiscoveryCancelled);
+                    }
+
+                    return Ok(accumulated_matches);
+                }
+                NamespaceMatchSnapshotOutcome::Continue => {}
+            }
+
+            let next_refresh_at = if let Some(first_match_at) = first_match_at {
+                let Some(refresh_offset) =
+                    PASSKEY_NAMESPACE_MATCH_GRACE_OFFSETS.get(grace_refresh_index)
+                else {
+                    return Ok(accumulated_matches);
+                };
+                grace_refresh_index += 1;
+
+                // keep scanning through the anchored 10-second grace window so another matching namespace can appear
+                // then restore without waiting longer
+                first_match_at + *refresh_offset
+            } else {
+                let Some(refresh_offset) =
+                    PASSKEY_NAMESPACE_REFRESH_OFFSETS.get(no_match_refresh_index)
+                else {
+                    break;
+                };
+                no_match_refresh_index += 1;
+
+                started_at + *refresh_offset
+            };
+
+            tokio::time::sleep_until(next_refresh_at).await;
+            self.ensure_current().await?;
+            refresh_index += 1;
         }
 
-        info!("Restore: authenticating with passkey across {} namespace(s)", namespaces.len());
-
-        let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
-        let match_outcome = matcher.match_namespaces(&namespaces).await?;
+        let saw_supported_candidate = session.saw_supported_candidate();
+        let match_outcome = session.finish();
 
         match match_outcome {
-            NamespaceMatchOutcome::Matched(matches) => {
-                info!("Restore: matched {} namespace(s)", matches.len());
-                Ok(matches)
-            }
+            NamespaceMatchOutcome::Matched(matches) => Ok(matches),
             NamespaceMatchOutcome::UserDeclined => Err(CloudBackupError::PasskeyDiscoveryCancelled),
-            NamespaceMatchOutcome::NoMatch => Err(CloudBackupError::PasskeyMismatch),
+            NamespaceMatchOutcome::NoMatch if saw_supported_candidate => {
+                Err(CloudBackupError::PasskeyMismatch)
+            }
+            NamespaceMatchOutcome::NoMatch => Err(CloudBackupError::NoBackupFound),
             NamespaceMatchOutcome::Inconclusive => {
                 Err(offline_error_for_step(BlockingCloudStep::Restore))
             }
@@ -689,5 +789,31 @@ mod tests {
             restore_progress_flow(RestoreProgressPhase::Restoring, 0, 0),
             CloudBackupRestoreFlow::Finding
         );
+    }
+
+    #[test]
+    fn namespace_match_merge_preserves_first_seen_order_and_replaces_revisions_in_place() {
+        let namespace_match = |namespace_id: &str, prf_salt: [u8; 32]| NamespaceMatch {
+            namespace_id: namespace_id.into(),
+            master_key: MasterKey::generate(),
+            prf_salt,
+            credential_id: vec![1, 2, 3],
+        };
+        let mut accumulated =
+            vec![namespace_match("first", [1; 32]), namespace_match("second", [2; 32])];
+
+        merge_namespace_matches(
+            &mut accumulated,
+            vec![namespace_match("second", [9; 32]), namespace_match("third", [3; 32])],
+        );
+
+        assert_eq!(
+            accumulated
+                .iter()
+                .map(|namespace_match| namespace_match.namespace_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "second", "third"]
+        );
+        assert_eq!(accumulated[1].prf_salt, [9; 32]);
     }
 }

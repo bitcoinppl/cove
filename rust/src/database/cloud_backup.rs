@@ -15,11 +15,13 @@ pub(crate) use compat::ensure_table_type_compatibility;
 pub use state::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
     CloudBlobUploadedPendingConfirmationState, CloudBlobUploadingState, CloudStorageIssue,
-    PersistedBackupSyncState, PersistedBackupVerificationState, PersistedCloudBackupState,
-    PersistedCloudBackupStatus, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-    PersistedConfiguredCloudBackup, PersistedDeepVerificationReport, PersistedDisablingCloudBackup,
-    PersistedPasskeyState, PersistedPendingVerificationCompletion,
-    PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
+    DriveAccountSwitchId, PersistedBackupSyncState, PersistedBackupVerificationState,
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBackupTransition,
+    PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
+    PersistedDeepVerificationReport, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
+    PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedPasskeyState,
+    PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
+    PersistedRestoreAllMarker,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -302,9 +304,30 @@ mod tests {
         );
         assert!(state.replace_pending_restore_all(marker.clone()));
 
-        let enabled = state.mark_enabled_preserving_verification(20, 3);
+        assert!(state.record_successful_sync(20, 3));
 
-        assert_eq!(enabled.pending_restore_all(), Some(&marker));
+        assert_eq!(state.pending_restore_all(), Some(&marker));
+    }
+
+    #[test]
+    fn successful_sync_updates_configured_payload_without_finishing_disable_transition() {
+        let mut state = configured_state(
+            PersistedPasskeyState::Available,
+            PersistedBackupVerificationState::NotVerified {
+                requested_at: None,
+                dismissed_at: None,
+            },
+            Some(10),
+            Some(2),
+        );
+        assert!(state.begin_disabling("namespace".into(), 7, 20));
+
+        assert!(state.record_successful_sync(30, 3));
+
+        assert!(state.is_disabling());
+        assert_eq!(state.last_sync(), Some(30));
+        assert_eq!(state.wallet_count(), Some(3));
+        assert_eq!(state.disabling().map(|disabling| disabling.disable_generation), Some(7));
     }
 
     #[test]

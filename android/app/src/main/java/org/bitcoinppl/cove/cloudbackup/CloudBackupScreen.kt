@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,7 +20,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -30,10 +28,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
@@ -43,6 +45,8 @@ import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.SavedPasskeyConfirmationMode
 
+private const val TAG = "CloudBackupScreen"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CloudBackupScreen(
@@ -51,14 +55,14 @@ fun CloudBackupScreen(
 ) {
     val manager = remember { CloudBackupManager.getInstance() }
     val coordinator = LocalCloudBackupPresentationCoordinator.current
+    val coroutineScope = rememberCoroutineScope()
 
-    var showRecreateConfirmation by remember { mutableStateOf(false) }
-    var showReinitializeConfirmation by remember { mutableStateOf(false) }
+    var dialog by remember { mutableStateOf<CloudBackupDialog?>(null) }
     var wasLifecycleDisabled by remember(manager) { mutableStateOf(manager.isLifecycleDisabled) }
 
     val isLifecycleDisabled = manager.isLifecycleDisabled
     val isReturningToSettingsAfterDisable = !wasLifecycleDisabled && isLifecycleDisabled
-    val detailDialogBlocker = showRecreateConfirmation || showReinitializeConfirmation
+    val detailDialogBlocker = dialog != null
 
     DisposableEffect(coordinator, detailDialogBlocker) {
         coordinator?.setBlocker(
@@ -98,81 +102,62 @@ fun CloudBackupScreen(
         CloudBackupScreenFrame(
             manager = manager,
             modifier = modifier,
-            onBack = { app.popRoute() },
-            onRecreate = {
-                if (manager.isDetailInventoryComplete) {
-                    showRecreateConfirmation = true
-                }
-            },
-            onReinitialize = {
-                if (manager.isDetailInventoryComplete) {
-                    showReinitializeConfirmation = true
-                }
-            },
+            actions =
+                CloudBackupScreenActions(
+                    onBack = { app.popRoute() },
+                    onRecreate = {
+                        if (manager.isDetailInventoryComplete) {
+                            dialog = CloudBackupDialog.RecreateConfirmation
+                        }
+                    },
+                    onReinitialize = {
+                        if (manager.isDetailInventoryComplete) {
+                            dialog = CloudBackupDialog.ReinitializeConfirmation
+                        }
+                    },
+                    onSwitchAccount = {
+                        dialog = CloudBackupDialog.AccountSwitchConfirmation
+                    },
+                ),
         )
     }
 
-    if (showRecreateConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showRecreateConfirmation = false },
-            title = { Text("Recreate Backup Index") },
-            text = {
-                Text(
-                    "This will rebuild the backup index from wallets on this device. Wallets that only exist in the cloud backup will no longer be referenced.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = manager.isDetailInventoryComplete,
-                    onClick = {
-                        showRecreateConfirmation = false
-                        manager.dispatch(CloudBackupManagerAction.RecreateManifest)
-                    },
-                ) { Text("Recreate") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRecreateConfirmation = false }) { Text("Cancel") }
-            },
-        )
-    }
+    CloudBackupDialogHost(
+        dialog = dialog,
+        manager = manager,
+        onDismiss = { dialog = null },
+        onSwitchAccount = {
+            dialog = CloudBackupDialog.AccountSwitchInProgress
+            coroutineScope.launch {
+                try {
+                    val error =
+                        runCatchingCancellable(TAG, "Google Drive account switch failed") {
+                            manager.switchDriveAccount()
+                        }.exceptionOrNull()
 
-    if (showReinitializeConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showReinitializeConfirmation = false },
-            title = { Text("Reinitialize Cloud Backup") },
-            text = {
-                Text(
-                    "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = manager.isDetailInventoryComplete,
-                    onClick = {
-                        showReinitializeConfirmation = false
-                        manager.dispatch(CloudBackupManagerAction.ReinitializeBackup)
-                    },
-                ) { Text("Reinitialize") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReinitializeConfirmation = false }) { Text("Cancel") }
-            },
-        )
-    }
+                    dialog = error?.let {
+                        CloudBackupDialog.AccountSwitchFailed(driveAccountSelectionErrorMessage(it))
+                    }
+                } catch (error: CancellationException) {
+                    dialog = null
+                    throw error
+                }
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CloudBackupScreenFrame(
     manager: CloudBackupManager,
-    onBack: () -> Unit,
-    onRecreate: () -> Unit,
-    onReinitialize: () -> Unit,
+    actions: CloudBackupScreenActions,
     modifier: Modifier = Modifier,
 ) {
     val colors = cloudBackupVisualColors()
     var isMenuOpen by remember { mutableStateOf(false) }
     val isConfigured = manager.isConfigured
+    val canSwitchAccount = isConfigured || manager.isCloudBackupEnabled
     val lifecycle = manager.lifecycle
 
     if (lifecycle is CloudBackupLifecycle.PendingEnableRecovery) {
@@ -181,7 +166,7 @@ internal fun CloudBackupScreenFrame(
             onConfirmCleanup = {
                 manager.dispatch(CloudBackupManagerAction.ConfirmPendingEnableCleanup)
             },
-            onCancel = onBack,
+            onCancel = actions.onBack,
         )
         return
     }
@@ -190,7 +175,7 @@ internal fun CloudBackupScreenFrame(
         CloudBackupSettingsEnableOnboarding(
             manager = manager,
             message = (lifecycle as? CloudBackupLifecycle.Failed)?.v1?.message,
-            onCancel = onBack,
+            onCancel = actions.onBack,
         )
         return
     }
@@ -216,12 +201,12 @@ internal fun CloudBackupScreenFrame(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = actions.onBack) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    if (isConfigured && manager.isDetailInventoryComplete) {
+                    if (canSwitchAccount || isConfigured && manager.isDetailInventoryComplete) {
                         IconButton(onClick = { isMenuOpen = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "Cloud Backup options")
                         }
@@ -229,20 +214,31 @@ internal fun CloudBackupScreenFrame(
                             expanded = isMenuOpen,
                             onDismissRequest = { isMenuOpen = false },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Recreate Backup Index") },
-                                onClick = {
-                                    isMenuOpen = false
-                                    onRecreate()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Reinitialize Cloud Backup") },
-                                onClick = {
-                                    isMenuOpen = false
-                                    onReinitialize()
-                                },
-                            )
+                            if (canSwitchAccount) {
+                                DropdownMenuItem(
+                                    text = { Text("Switch Google Account") },
+                                    onClick = {
+                                        isMenuOpen = false
+                                        actions.onSwitchAccount()
+                                    },
+                                )
+                            }
+                            if (isConfigured && manager.isDetailInventoryComplete) {
+                                DropdownMenuItem(
+                                    text = { Text("Recreate Backup Index") },
+                                    onClick = {
+                                        isMenuOpen = false
+                                        actions.onRecreate()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Reinitialize Cloud Backup") },
+                                    onClick = {
+                                        isMenuOpen = false
+                                        actions.onReinitialize()
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -275,8 +271,8 @@ internal fun CloudBackupScreenFrame(
                     CloudBackupDetailContent(
                         manager = manager,
                         headerError = lifecycle.v1.message,
-                        onRecreate = onRecreate,
-                        onReinitialize = onReinitialize,
+                        onRecreate = actions.onRecreate,
+                        onReinitialize = actions.onReinitialize,
                     )
                 }
 
@@ -284,8 +280,8 @@ internal fun CloudBackupScreenFrame(
                     CloudBackupDetailContent(
                         manager = manager,
                         headerError = null,
-                        onRecreate = onRecreate,
-                        onReinitialize = onReinitialize,
+                        onRecreate = actions.onRecreate,
+                        onReinitialize = actions.onReinitialize,
                     )
                 }
             }

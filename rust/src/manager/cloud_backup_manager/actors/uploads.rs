@@ -510,7 +510,7 @@ mod tests {
         };
         Database::global()
             .cloud_backup_state
-            .set(&PersistedCloudBackupState::Disabling(PersistedDisablingCloudBackup {
+            .set(&PersistedCloudBackupState::disabling_transition(PersistedDisablingCloudBackup {
                 previous_configured: configured,
                 namespace_id: namespace.clone(),
                 disable_generation: 7,
