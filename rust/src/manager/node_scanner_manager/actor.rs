@@ -435,6 +435,7 @@ fn selectable_state(state: &NodeScannerState) -> bool {
         NodeScannerState::Scanning { .. }
             | NodeScannerState::Stopped { .. }
             | NodeScannerState::Finished { .. }
+            | NodeScannerState::Failed { .. }
     )
 }
 
@@ -455,7 +456,11 @@ fn map_results(
             update(&mut results);
             NodeScannerState::Finished { generation, network, results }
         }
-        NodeScannerState::Idle | NodeScannerState::Failed { .. } => return None,
+        NodeScannerState::Failed { generation, network, error, mut results } => {
+            update(&mut results);
+            NodeScannerState::Failed { generation, network, error, results }
+        }
+        NodeScannerState::Idle => return None,
     };
 
     Some(state)
@@ -778,6 +783,12 @@ mod tests {
         database.global_config.set_selected_network(Network::Bitcoin).unwrap();
         let selected_before = database.global_config.selected_node();
         let verified = found(7, "192.168.1.2");
+        let failed_state = Arc::new(RwLock::new(NodeScannerState::Failed {
+            generation: 7,
+            network: Network::Bitcoin,
+            error: NodeScannerError::ScanFailed("fixture".to_string()),
+            results: vec![NodeScannerResult::Verified(verified.clone())],
+        }));
 
         for state in [
             scanning(7, vec![NodeScannerResult::Verified(verified.clone())]),
@@ -791,6 +802,7 @@ mod tests {
                 network: Network::Bitcoin,
                 results: vec![NodeScannerResult::Verified(verified.clone())],
             })),
+            failed_state.clone(),
         ] {
             let (mut actor, _) = actor_with_state(state.clone());
             let node = actor.create_node(verified.clone()).await.unwrap().await.unwrap().unwrap();
@@ -798,11 +810,18 @@ mod tests {
             assert_eq!(node.url, "tcp://192.168.1.2:50001");
             assert_eq!(node.name, "Fulcrum");
             assert_eq!(node.tls, None);
-            if matches!(*state.read(), NodeScannerState::Stopped { .. }) {
-                assert_eq!(state.read().results().len(), 1);
-            }
+            assert_eq!(state.read().results().len(), 1);
         }
 
+        assert_eq!(
+            *failed_state.read(),
+            NodeScannerState::Failed {
+                generation: 7,
+                network: Network::Bitcoin,
+                error: NodeScannerError::ScanFailed("fixture".to_string()),
+                results: vec![NodeScannerResult::Verified(verified)],
+            }
+        );
         assert_eq!(database.global_config.selected_node(), selected_before);
     }
 
@@ -893,5 +912,60 @@ mod tests {
             channel.receiver().recv().unwrap(),
             SingleOrMany::Single(NodeScannerReconcileMessage::ResultRemoved { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn failed_state_allows_trust_promotion_and_retains_failure() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        init_database();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        let pending = candidate(7, "192.168.1.2");
+        let error = NodeScannerError::ScanFailed("fixture".to_string());
+        let state = Arc::new(RwLock::new(NodeScannerState::Failed {
+            generation: 7,
+            network: Network::Bitcoin,
+            error: error.clone(),
+            results: vec![NodeScannerResult::TrustRequired(pending.clone())],
+        }));
+        let (mut actor, _) = actor_with_state(state.clone());
+
+        let promotion =
+            actor.prepare_trust_promotion(pending).await.unwrap().await.unwrap().unwrap();
+        let node = actor
+            .complete_trust_promotion(
+                promotion,
+                Ok(PromotionVerification {
+                    metadata: VerifiedMetadata {
+                        server_software: "Fulcrum".to_string(),
+                        protocol_version: "1.4".to_string(),
+                    },
+                    transport: FoundNodeTransport::Tls,
+                }),
+            )
+            .await
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(node.url, "ssl://192.168.1.2:50002");
+        assert_eq!(node.tls, Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }));
+        assert_eq!(
+            *state.read(),
+            NodeScannerState::Failed {
+                generation: 7,
+                network: Network::Bitcoin,
+                error,
+                results: vec![NodeScannerResult::Verified(FoundNode {
+                    scan_generation: 7,
+                    ip: "192.168.1.2".to_string(),
+                    port: 50002,
+                    transport: FoundNodeTransport::Tls,
+                    server_software: "Fulcrum".to_string(),
+                    protocol_version: "1.4".to_string(),
+                    tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }),
+                })],
+            }
+        );
     }
 }
