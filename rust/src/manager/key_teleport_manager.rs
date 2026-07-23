@@ -422,6 +422,30 @@ enum Phase {
 }
 
 impl Phase {
+    fn is_receive_flow_active(&self) -> bool {
+        matches!(
+            self,
+            Self::ReceiveReady { .. }
+                | Self::ReceiveEnterPassword { .. }
+                | Self::ReceiveMnemonicReview { .. }
+                | Self::ReceiveXprvReview { .. }
+                | Self::ReceiveMessageReview(_)
+                | Self::ReceiveImported(_)
+                | Self::ReceiveAlreadyImported(_)
+        )
+    }
+
+    fn can_restore_receive_session(&self) -> bool {
+        matches!(
+            self,
+            Self::Idle
+                | Self::SendAwaitReceiver { .. }
+                | Self::SendChooseWallet { .. }
+                | Self::SendEnterCode { .. }
+                | Self::SendReady(_)
+        )
+    }
+
     fn public_state(&self) -> KeyTeleportManagerState {
         match self {
             Self::Idle => KeyTeleportManagerState::Idle,
@@ -604,6 +628,10 @@ impl RustKeyTeleportManager {
     }
 
     fn start_receive(&self) -> Result<(), KeyTeleportAlert> {
+        if self.model.lock().phase.is_receive_flow_active() {
+            return Ok(());
+        }
+
         match self.load_receive_session() {
             Ok(Some(existing)) if !existing.is_expired() => {
                 match ActiveReceiveSession::restore(&existing) {
@@ -907,12 +935,21 @@ impl RustKeyTeleportManager {
     }
 
     fn take_receive_ready_session(&self) -> Result<ActiveReceiveSession, KeyTeleportAlert> {
-        let session = {
+        let active_session = {
             let model = self.model.lock();
-            let Phase::ReceiveReady { session, .. } = &model.phase else {
-                return Err(KeyTeleportAlert::NoActiveReceiveSession);
-            };
-            session.try_clone()?
+            match &model.phase {
+                Phase::ReceiveReady { session, .. } => Some(session.try_clone()?),
+                phase if phase.can_restore_receive_session() => None,
+                _ => return Err(KeyTeleportAlert::NoActiveReceiveSession),
+            }
+        };
+        let session = match active_session {
+            Some(session) => session,
+            None => {
+                let persisted =
+                    self.load_receive_session()?.ok_or(KeyTeleportAlert::NoActiveReceiveSession)?;
+                ActiveReceiveSession::restore(&persisted)?
+            }
         };
 
         self.ensure_receive_session_fresh(session)
@@ -1440,6 +1477,40 @@ mod tests {
             manager.handle_action(Action::Ingest(KeyTeleportInput::Sender(Arc::new(packet))));
 
         assert_eq!(error, Err(KeyTeleportAlert::NoActiveReceiveSession));
+    }
+
+    #[test]
+    fn sender_packet_resumes_persisted_receive_session_before_route_appears() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let original_manager = RustKeyTeleportManager::new();
+        original_manager.clone().dispatch(Action::StartReceive);
+        let request = match original_manager.state() {
+            KeyTeleportManagerState::ReceiveReady(state) => state,
+            other => panic!("expected receive ready, got {other:?}"),
+        };
+        let sender = SenderSession::with_private_key_and_password(
+            request.packet.inner(),
+            &NumericCode::from_str(&request.numeric_code).unwrap(),
+            [5; 32],
+            TeleportPassword::from_bytes([1, 2, 3, 4, 5]),
+        )
+        .unwrap();
+        let mnemonic = Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
+        let manager = RustKeyTeleportManager::new();
+
+        manager
+            .handle_action(Action::Ingest(KeyTeleportInput::Sender(Arc::new(
+                KeyTeleportSenderPacket::new(response.packet),
+            ))))
+            .unwrap();
+        manager.handle_action(Action::StartReceive).unwrap();
+
+        assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveEnterPassword));
     }
 
     #[test]
