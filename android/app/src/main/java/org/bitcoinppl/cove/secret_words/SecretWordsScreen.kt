@@ -87,10 +87,10 @@ private enum class SecretWordsSensitiveAction(
                 "QR codes are machine-readable, so be careful who or what device you show this to.",
     ),
     KEY_TELEPORT(
-        confirmationTitle = "Send with Key Teleport?",
+        confirmationTitle = "Send with KeyTeleport?",
         confirmationButtonTitle = "Continue",
         confirmationMessage =
-            "Key Teleport sends this wallet's secret words to another device. " +
+            "KeyTeleport sends this wallet's secret words to another device. " +
                 "Only continue if you trust the receiving device and can verify its request.",
     ),
     ;
@@ -349,7 +349,7 @@ private fun SecretWordsToolbarMenu(onAction: (SecretWordsSensitiveAction) -> Uni
             },
         )
         DropdownMenuItem(
-            text = { Text("Key Teleport") },
+            text = { Text("KeyTeleport") },
             leadingIcon = {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
             },

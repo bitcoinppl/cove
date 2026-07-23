@@ -72,18 +72,18 @@ extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTe
     }
 
     func logReconcile(message _: Message) {
-        logger.debug("Reconciling Key Teleport update")
+        logger.debug("Reconciling KeyTeleport update")
     }
 
     func logReconcileMany(messages _: [Message]) {
-        logger.debug("Reconciling Key Teleport updates")
+        logger.debug("Reconciling KeyTeleport updates")
     }
 
     func dispatch(_ action: Action) {
         rustBridge.async { [weak self] in
             guard let self, let rust = self.rust else { return }
 
-            self.logger.debug("Dispatching Key Teleport action")
+            self.logger.debug("Dispatching KeyTeleport action")
             rust.dispatch(action: action)
         }
     }

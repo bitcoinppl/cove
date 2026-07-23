@@ -281,11 +281,11 @@ fn parse_bbqr_data(
                 }
                 Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt) => {
                     Err(MultiQrError::ParseError(
-                        "Key Teleport PSBT packets are not supported yet".into(),
+                        "KeyTeleport PSBT packets are not supported yet".into(),
                     ))
                 }
                 Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {
-                    Err(MultiQrError::ParseError("Invalid Key Teleport packet".into()))
+                    Err(MultiQrError::ParseError("Invalid KeyTeleport packet".into()))
                 }
             }
         }

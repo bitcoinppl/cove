@@ -131,7 +131,7 @@ class ScanManager private constructor() {
                 app.alertState =
                     TaggedItem(
                         AppAlertState.InvalidFileFormat(
-                            "Key Teleport PSBT packets are not supported yet.",
+                            "KeyTeleport PSBT packets are not supported yet.",
                         ),
                     )
                 true
@@ -141,7 +141,7 @@ class ScanManager private constructor() {
                 app.alertState =
                     TaggedItem(
                         AppAlertState.InvalidFileFormat(
-                            "This Key Teleport packet could not be read.",
+                            "This KeyTeleport packet could not be read.",
                         ),
                     )
                 true

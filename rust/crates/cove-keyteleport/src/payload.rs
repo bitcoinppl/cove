@@ -37,7 +37,7 @@ enum PayloadKind {
     Xprv(XprvPayload),
 }
 
-/// A secret payload that can be transferred by COLDCARD Key Teleport
+/// A secret payload that can be transferred by COLDCARD KeyTeleport
 #[derive(Clone, PartialEq, Eq)]
 pub struct Payload(PayloadKind);
 
@@ -74,7 +74,7 @@ impl fmt::Debug for Payload {
     }
 }
 
-/// A validated master extended private key transferred by Key Teleport
+/// A validated master extended private key transferred by KeyTeleport
 #[derive(Clone, PartialEq, Eq)]
 pub struct XprvPayload {
     value: String,

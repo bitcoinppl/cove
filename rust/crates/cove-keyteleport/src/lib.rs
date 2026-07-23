@@ -32,19 +32,19 @@ pub enum Error {
     #[error("invalid sender packet")]
     InvalidSenderPacket,
 
-    #[error("invalid Key Teleport packet")]
+    #[error("invalid KeyTeleport packet")]
     InvalidPacket,
 
-    #[error("invalid Key Teleport URL")]
+    #[error("invalid KeyTeleport URL")]
     InvalidUrl,
 
-    #[error("unsupported Key Teleport payload type {0}")]
+    #[error("unsupported KeyTeleport payload type {0}")]
     UnsupportedPayload(UnsupportedPayloadKind),
 
     #[error("invalid mnemonic payload")]
     InvalidMnemonicPayload,
 
-    #[error("unsupported Key Teleport mnemonic word count {0}; expected 12, 18, or 24 words")]
+    #[error("unsupported KeyTeleport mnemonic word count {0}; expected 12, 18, or 24 words")]
     UnsupportedMnemonicWordCount(usize),
 
     #[error("invalid xprv payload")]

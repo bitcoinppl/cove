@@ -59,7 +59,7 @@ impl ImportedWalletDefaultName {
         match self {
             Self::Numbered => format!("Wallet {}", wallet_count + 1),
             Self::KeyTeleportFingerprint => {
-                format!("Key Teleport {}", fingerprint.as_uppercase())
+                format!("KeyTeleport {}", fingerprint.as_uppercase())
             }
         }
     }
@@ -329,6 +329,6 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(metadata.name, format!("Key Teleport {}", fingerprint.as_uppercase()));
+        assert_eq!(metadata.name, format!("KeyTeleport {}", fingerprint.as_uppercase()));
     }
 }

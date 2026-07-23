@@ -32,7 +32,7 @@ private sealed interface KeyTeleportToolbarActions {
     data class Send(
         override val url: String?,
     ) : KeyTeleportToolbarActions {
-        override val shareTitle = "Share Key Teleport"
+        override val shareTitle = "Share KeyTeleport"
     }
 }
 
@@ -48,7 +48,7 @@ internal fun KeyTeleportToolbarMenu(
     var showRestartSessionConfirmation by remember(actions) { mutableStateOf(false) }
 
     IconButton(onClick = { isExpanded = true }) {
-        Icon(Icons.Default.MoreVert, contentDescription = "Key Teleport options")
+        Icon(Icons.Default.MoreVert, contentDescription = "KeyTeleport options")
     }
     DropdownMenu(
         expanded = isExpanded,

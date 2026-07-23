@@ -402,7 +402,7 @@ private struct WalletXprvExportButton: View {
             titleVisibility: .visible
         ) {
             Button("Share…") { export(.share) }
-            Button("Key Teleport") { export(.keyTeleport) }
+            Button("KeyTeleport") { export(.keyTeleport) }
             Button("Cancel", role: .cancel) {}
         }
     }

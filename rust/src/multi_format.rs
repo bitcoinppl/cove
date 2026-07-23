@@ -70,7 +70,7 @@ pub enum MultiFormatError {
     #[error("PSBT has no signatures — sign it with your hardware wallet before importing")]
     PsbtNotSigned,
 
-    #[error("Key Teleport PSBT packets are not supported yet")]
+    #[error("KeyTeleport PSBT packets are not supported yet")]
     KeyTeleportPsbtNotSupported,
 }
 

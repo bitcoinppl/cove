@@ -306,7 +306,7 @@ private fun XprvRevealContent(
     }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(
-            onClick = { copyText(context, "Key Teleport xprv", xprv, sensitive = true) },
+            onClick = { copyText(context, "KeyTeleport xprv", xprv, sensitive = true) },
             modifier = Modifier.weight(1f),
         ) {
             Icon(Icons.Default.ContentCopy, contentDescription = null)

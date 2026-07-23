@@ -76,7 +76,7 @@ pub enum KeyTeleportManagerAction {
     Clear,
 }
 
-/// Validated or unparsed input for a Key Teleport flow
+/// Validated or unparsed input for a KeyTeleport flow
 #[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum KeyTeleportInput {
     /// Text or bytes that still need protocol parsing
@@ -177,7 +177,7 @@ pub struct KeyTeleportXprvReview {
     pub revealed: bool,
 }
 
-/// Display-ready Secure Notes & Passwords content received through Key Teleport
+/// Display-ready Secure Notes & Passwords content received through KeyTeleport
 #[derive(Clone, PartialEq, Eq, uniffi::Record)]
 pub struct KeyTeleportMessageReview {
     /// Records in their transmitted order
@@ -319,17 +319,17 @@ pub enum KeyTeleportAlert {
     #[error("the previous receive request was unreadable and has been replaced")]
     ReceiveSessionReset,
 
-    #[error("unable to parse Key Teleport data")]
+    #[error("unable to parse KeyTeleport data")]
     ParseFailed,
 
-    #[error("Key Teleport PSBT packets are not supported yet")]
+    #[error("KeyTeleport PSBT packets are not supported yet")]
     UnsupportedPsbt,
 
-    #[error("this Key Teleport payload is not supported")]
+    #[error("this KeyTeleport payload is not supported")]
     /// The payload uses a valid but unsupported protocol type
     UnsupportedPayload,
 
-    #[error("the decrypted Key Teleport payload is invalid")]
+    #[error("the decrypted KeyTeleport payload is invalid")]
     /// The password was valid but the decrypted typed payload was malformed
     InvalidPayload,
 
@@ -527,7 +527,7 @@ impl RustKeyTeleportManager {
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         self.reconciler.listen_async(move |field| {
-            trace!("key teleport reconcile: {field:?}");
+            trace!("KeyTeleport reconcile: {field:?}");
             match field {
                 SingleOrMany::Single(message) => reconciler.reconcile(message),
                 SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
@@ -609,7 +609,7 @@ impl RustKeyTeleportManager {
                 match ActiveReceiveSession::restore(&existing) {
                     Ok(session) => return self.activate_receive_session(session),
                     Err(error) => {
-                        error!("unable to restore key teleport receive session: {error}");
+                        error!("unable to restore KeyTeleport receive session: {error}");
                         self.replace_receive_session(KeyTeleportAlert::ReceiveSessionReset)?;
                         return Ok(());
                     }
@@ -621,7 +621,7 @@ impl RustKeyTeleportManager {
             }
             Ok(None) => {}
             Err(error) => {
-                error!("unable to load key teleport receive session: {error}");
+                error!("unable to load KeyTeleport receive session: {error}");
                 self.replace_receive_session(KeyTeleportAlert::ReceiveSessionReset)?;
                 return Ok(());
             }
@@ -946,7 +946,7 @@ impl RustKeyTeleportManager {
 
     fn delete_receive_session(&self) {
         if !Keychain::global().delete_key_teleport_receive_session() {
-            tracing::warn!("unable to delete key teleport receive session");
+            tracing::warn!("unable to delete KeyTeleport receive session");
         }
     }
 }
@@ -1088,7 +1088,7 @@ pub(crate) fn is_send_eligible_wallet_id(wallet_id: &WalletId) -> bool {
         Ok(_) => true,
         Err(KeyTeleportAlert::IneligibleWallet) => false,
         Err(error) => {
-            tracing::warn!("unable to determine key teleport send eligibility: {error}");
+            tracing::warn!("unable to determine KeyTeleport send eligibility: {error}");
             false
         }
     }

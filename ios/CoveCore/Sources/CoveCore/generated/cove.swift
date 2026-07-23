@@ -16951,7 +16951,7 @@ public func FfiConverterTypeInternalOnlyMetadata_lower(_ value: InternalOnlyMeta
 
 
 /**
- * Display-ready Secure Notes & Passwords content received through Key Teleport
+ * Display-ready Secure Notes & Passwords content received through KeyTeleport
  */
 public struct KeyTeleportMessageReview: Equatable, Hashable {
     /**
@@ -29077,7 +29077,7 @@ public func FfiConverterTypeKeyTeleportAlert_lower(_ value: KeyTeleportAlert) ->
 
 
 /**
- * Validated or unparsed input for a Key Teleport flow
+ * Validated or unparsed input for a KeyTeleport flow
  */
 
 public enum KeyTeleportInput {
@@ -29690,7 +29690,7 @@ public func FfiConverterTypeKeyTeleportMessageItem_lower(_ value: KeyTeleportMes
 
 
 /**
- * A failure while rendering a validated Key Teleport packet
+ * A failure while rendering a validated KeyTeleport packet
  */
 public
 enum KeyTeleportPacketEncodingError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {

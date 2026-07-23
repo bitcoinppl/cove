@@ -100,7 +100,7 @@ private fun KeyTeleportScreen(
                             navigationIconContentColor = Color.White,
                             actionIconContentColor = Color.White,
                         ),
-                    title = { Text("Key Teleport", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                    title = { Text("KeyTeleport", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
                     navigationIcon = {
                         IconButton(onClick = { app.popRoute() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -311,7 +311,7 @@ private fun KeyTeleportRouteHeader(route: KeyTeleportRoute) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = if (receiving) "Receive by Key Teleport" else "Send by Key Teleport",
+            text = if (receiving) "Receive by KeyTeleport" else "Send by KeyTeleport",
             color = Color.White,
             fontSize = 24.sp,
             fontWeight = FontWeight.SemiBold,
@@ -342,7 +342,7 @@ private fun KeyTeleportOverlays(
             onScanned = { multiFormat ->
                 actions.onScannerDismiss()
                 if (!manager.ingestKeyTeleportMultiFormat(multiFormat)) {
-                    actions.onScanError("Scan a Key Teleport QR code.")
+                    actions.onScanError("Scan a KeyTeleport QR code.")
                 }
             },
             onDismiss = actions.onScannerDismiss,

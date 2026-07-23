@@ -413,7 +413,7 @@ fun WalletSettingsScreen(
                         onClick = { startXprvExport(XprvExportAction.KEY_TELEPORT) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Key Teleport")
+                        Text("KeyTeleport")
                     }
                 }
             },
