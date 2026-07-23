@@ -183,7 +183,7 @@ impl NodeSelector {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
         }
 
-        let url_string = url.to_string();
+        let url_string = canonical_url_string(&url);
 
         let name = if entered_name.is_empty() {
             url.host_str().unwrap_or(url_string.as_str()).to_string()
@@ -227,7 +227,7 @@ impl NodeSelector {
     pub async fn certificate_decision(&self, url: String) -> Result<CertificateDecision, Error> {
         let url = normalized_url(&url)?;
 
-        if self.trusted_certificate(&url).is_some() {
+        if self.trusted_certificate(url.clone()).is_some() {
             return Ok(CertificateDecision::Changed);
         }
 
@@ -251,6 +251,13 @@ impl NodeSelector {
         let sha256 = tls::fingerprint(&certificate);
 
         Ok(NodeCertificate { sha256: sha256.to_vec(), display: tls::display_fingerprint(&sha256) })
+    }
+
+    #[uniffi::method]
+    /// The certificate settings the saved node trusts for `url`, compared by
+    /// endpoint so url formatting differences do not drop a pin.
+    pub fn trusted_certificate(&self, url: String) -> Option<TlsTrust> {
+        trusted_certificate(&Database::global().global_config.selected_node(), &url)
     }
 
     #[uniffi::method]
@@ -338,16 +345,24 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
-impl NodeSelector {
-    fn trusted_certificate(&self, url: &str) -> Option<TlsTrust> {
-        trusted_certificate(&Database::global().global_config.selected_node(), url)
-    }
+/// The certificate `saved` trusts for `url`, which is only its own certificate
+/// settings and only when it names the same endpoint.
+fn trusted_certificate(saved: &Node, url: &str) -> Option<TlsTrust> {
+    let saved_url = trust_endpoint_url(&saved.url).unwrap_or_else(|| saved.url.clone());
+    let candidate_url = trust_endpoint_url(url).unwrap_or_else(|| url.to_string());
+
+    (saved_url == candidate_url).then(|| saved.tls.clone()).flatten()
 }
 
-/// The certificate `saved` trusts for `url`, which is only its own certificate
-/// settings and only when it is the same url.
-fn trusted_certificate(saved: &Node, url: &str) -> Option<TlsTrust> {
-    (saved.url == url).then(|| saved.tls.clone()).flatten()
+/// The endpoint a certificate applies to. The Electrum transport connects to
+/// scheme, host, and port only, so a path cannot change which certificate the
+/// server presents and must not split one endpoint into two trust identities
+pub(crate) fn trust_endpoint_url(url: &str) -> Option<String> {
+    let url = parse_node_url(url).ok()?;
+    let host = url.host_str()?;
+    let port = url.port()?;
+
+    Some(format!("{}://{host}:{port}", url.scheme()))
 }
 
 /// Whether saving `node` would drop a certificate `saved` already trusts.
@@ -356,9 +371,18 @@ fn would_forget_certificate(saved: &Node, node: &Node) -> bool {
 }
 
 fn normalized_url(url: &str) -> Result<String, Error> {
-    let url = parse_node_url(url).map_err_str(Error::ParseNodeUrlError)?.to_string();
+    let url = parse_node_url(url).map_err_str(Error::ParseNodeUrlError)?;
 
-    Ok(url.strip_suffix('/').unwrap_or(&url).to_string())
+    Ok(canonical_url_string(&url))
+}
+
+fn canonical_url_string(url: &Url) -> String {
+    let mut url_string = url.to_string();
+    if url.path() == "/" && url_string.ends_with('/') {
+        url_string.pop();
+    }
+
+    url_string
 }
 
 /// A url is usable when it names a host we can actually reach.
@@ -481,16 +505,16 @@ mod tests {
 
     #[test]
     fn nodes_can_be_reached_by_single_label_and_local_names() {
-        assert_eq!(parse("fulcrum:50001").unwrap().url, "tcp://fulcrum:50001/");
+        assert_eq!(parse("fulcrum:50001").unwrap().url, "tcp://fulcrum:50001");
         assert_eq!(parse("ssl://fulcrum.local").unwrap().url, "ssl://fulcrum.local:50002");
-        assert_eq!(parse("electrum.example.com").unwrap().url, "tcp://electrum.example.com:50001/");
+        assert_eq!(parse("electrum.example.com").unwrap().url, "tcp://electrum.example.com:50001");
     }
 
     #[test]
-    fn scheme_and_port_normalization_is_unchanged() {
+    fn scheme_port_and_root_path_are_normalized() {
         assert_eq!(parse("http://fulcrum:50001").unwrap().url, "tcp://fulcrum:50001");
         assert_eq!(parse("https://fulcrum").unwrap().url, "ssl://fulcrum:50002");
-        assert_eq!(parse("fulcrum:50002").unwrap().url, "ssl://fulcrum:50002/");
+        assert_eq!(parse("fulcrum:50002").unwrap().url, "ssl://fulcrum:50002");
     }
 
     #[test]
@@ -541,6 +565,55 @@ mod tests {
 
         assert!(trusted_certificate(&saved, "ssl://node.example.com:50002").is_some());
         assert!(trusted_certificate(&saved, "ssl://other.example.com:50002").is_none());
+    }
+
+    #[test]
+    fn certificate_lookup_canonicalizes_root_paths() {
+        let saved_with_slash = pinned("ssl://node.example.com:50002/");
+        let candidate_without_slash = Node {
+            tls: None,
+            url: "ssl://node.example.com:50002".to_string(),
+            ..saved_with_slash.clone()
+        };
+
+        assert!(trusted_certificate(&saved_with_slash, "ssl://node.example.com:50002").is_some());
+        assert!(would_forget_certificate(&saved_with_slash, &candidate_without_slash));
+
+        let saved_without_slash = pinned("ssl://node.example.com:50002");
+        let candidate_with_slash = Node {
+            tls: None,
+            url: "ssl://node.example.com:50002/".to_string(),
+            ..saved_without_slash.clone()
+        };
+
+        assert!(
+            trusted_certificate(&saved_without_slash, "ssl://node.example.com:50002/").is_some()
+        );
+        assert!(would_forget_certificate(&saved_without_slash, &candidate_with_slash));
+    }
+
+    /// The transport connects to host and port only, so a path difference must
+    /// not hide the pin and reopen the endpoint to an unrecognized certificate.
+    #[test]
+    fn certificate_lookup_ignores_paths_the_transport_ignores() {
+        let saved_with_path = pinned("ssl://192.168.1.50:50002/admin");
+        assert!(trusted_certificate(&saved_with_path, "ssl://192.168.1.50:50002").is_some());
+
+        let saved_without_path = pinned("ssl://192.168.1.50:50002");
+        assert!(
+            trusted_certificate(&saved_without_path, "ssl://192.168.1.50:50002/admin").is_some()
+        );
+
+        assert!(trusted_certificate(&saved_with_path, "ssl://192.168.1.51:50002").is_none());
+        assert!(trusted_certificate(&saved_with_path, "ssl://192.168.1.50:50001").is_none());
+    }
+
+    #[test]
+    fn unparseable_saved_urls_still_match_exactly() {
+        let saved = pinned("ssl://[invalid");
+
+        assert!(trusted_certificate(&saved, "ssl://[invalid").is_some());
+        assert!(trusted_certificate(&saved, "ssl://[different").is_none());
     }
 
     #[test]

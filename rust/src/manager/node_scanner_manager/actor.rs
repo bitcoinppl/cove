@@ -112,7 +112,7 @@ impl NodeScannerActor {
         let context = ScanContext {
             generation,
             network,
-            selected_tls_url: selected.tls.as_ref().map(|_| selected.url),
+            selected_tls_url: selected_tls_url(&selected),
             selected_tls_trust: selected.tls,
         };
         let cancel = CancellationToken::new();
@@ -476,6 +476,11 @@ fn node_from_found(found: FoundNode, network: Network) -> Node {
     }
 }
 
+fn selected_tls_url(node: &Node) -> Option<String> {
+    node.tls.as_ref()?;
+    crate::node_connect::trust_endpoint_url(&node.url)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
@@ -727,6 +732,30 @@ mod tests {
             results: Vec::new(),
         };
         assert!(state.read().results().is_empty());
+    }
+
+    #[test]
+    fn selected_tls_url_is_canonical_only_for_nodes_with_tls() {
+        let pinned = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }),
+            ..Node::new_electrum(
+                "Fulcrum".to_string(),
+                "ssl://192.168.1.50:50002/".to_string(),
+                Network::Bitcoin,
+            )
+        };
+        let unpinned = Node { tls: None, ..pinned.clone() };
+        let pinned_with_path =
+            Node { url: "ssl://192.168.1.50:50002/admin".to_string(), ..pinned.clone() };
+
+        assert_eq!(selected_tls_url(&pinned), Some("ssl://192.168.1.50:50002".to_string()));
+        // the scanner compares against generated ssl://ip:port urls, so a saved
+        // path must not hide the pin from a rediscovered endpoint
+        assert_eq!(
+            selected_tls_url(&pinned_with_path),
+            Some("ssl://192.168.1.50:50002".to_string())
+        );
+        assert_eq!(selected_tls_url(&unpinned), None);
     }
 
     #[test]
