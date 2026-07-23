@@ -323,10 +323,6 @@ pub struct AndroidRunOptions {
 }
 
 impl AndroidRunOptions {
-    pub fn new(device: Option<String>) -> Self {
-        Self::new_multiple(device.into_iter().collect())
-    }
-
     pub fn new_multiple(devices: Vec<String>) -> Self {
         Self {
             devices: devices
