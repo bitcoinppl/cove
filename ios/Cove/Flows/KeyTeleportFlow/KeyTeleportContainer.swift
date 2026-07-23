@@ -40,8 +40,7 @@ private struct KeyTeleportLoadedView: View {
     @State private var pastedText = ""
     @State private var receiverCode = ""
     @State private var senderPassword = ""
-    @State private var mnemonicWords: [String]?
-    @State private var loadedMnemonicReviewID: KeyTeleportMnemonicReviewID?
+    @State private var mnemonicDisclosure = KeyTeleportMnemonicDisclosure.hidden
     @State private var xprv: String?
     @State private var showEndSessionConfirmation = false
     @State private var showRestartSessionConfirmation = false
@@ -82,8 +81,7 @@ private struct KeyTeleportLoadedView: View {
         .onDisappear(perform: handleDisappear)
         .onChange(of: isMnemonicReview) { _, isReview in
             if !isReview {
-                mnemonicWords = nil
-                loadedMnemonicReviewID = nil
+                mnemonicDisclosure = .hidden
             }
         }
         .onChange(of: isXprvReview) { _, isReview in
@@ -132,19 +130,19 @@ private struct KeyTeleportLoadedView: View {
                     manager.dispatch(.enterSenderPassword(senderPassword))
                 }
             case let .receiveMnemonicReview(review):
-                KeyTeleportMnemonicReviewView(review: review, words: mnemonicWords) {
-                    mnemonicWords = nil
-                    loadedMnemonicReviewID = nil
+                KeyTeleportMnemonicReviewView(
+                    review: review,
+                    disclosure: mnemonicDisclosure
+                ) {
+                    revealMnemonicWords()
+                } importWords: {
+                    mnemonicDisclosure = .hidden
                     manager.dispatch(.importReceivedWallet)
                 } finish: {
-                    mnemonicWords = nil
-                    loadedMnemonicReviewID = nil
+                    mnemonicDisclosure = .hidden
                     finishReview()
                 }
                 .protectedFromScreenCapture()
-                .task(id: KeyTeleportMnemonicReviewID(review: review)) {
-                    loadMnemonicWords(for: review)
-                }
             case let .receiveXprvReview(review):
                 KeyTeleportXprvReviewView(review: review, xprv: $xprv) {
                     xprv = manager.revealXprv()
@@ -323,8 +321,7 @@ private struct KeyTeleportLoadedView: View {
     }
 
     private func handleDisappear() {
-        mnemonicWords = nil
-        loadedMnemonicReviewID = nil
+        mnemonicDisclosure = .hidden
         xprv = nil
 
         if case .receiveXprvReview = manager.state {
@@ -339,13 +336,11 @@ private struct KeyTeleportLoadedView: View {
         manager.ingest(text)
     }
 
-    private func loadMnemonicWords(for review: KeyTeleportMnemonicReview) {
-        let reviewID = KeyTeleportMnemonicReviewID(review: review)
-        guard loadedMnemonicReviewID != reviewID else { return }
+    private func revealMnemonicWords() {
+        guard case .hidden = mnemonicDisclosure else { return }
 
-        mnemonicWords = nil
-        mnemonicWords = manager.revealMnemonicWords()
-        loadedMnemonicReviewID = reviewID
+        let words = manager.revealMnemonicWords()
+        mnemonicDisclosure = words.isEmpty ? .failed : .revealed(words)
     }
 
     private func finishReview() {
@@ -372,14 +367,6 @@ private struct KeyTeleportLoadedView: View {
     private var isXprvReview: Bool {
         if case .receiveXprvReview = manager.state { return true }
         return false
-    }
-}
-
-private struct KeyTeleportMnemonicReviewID: Equatable {
-    let wordCount: UInt32
-
-    init(review: KeyTeleportMnemonicReview) {
-        wordCount = review.wordCount
     }
 }
 
@@ -568,6 +555,46 @@ private enum KeyTeleportRevealedElement {
     case textCode
 }
 
+private struct KeyTeleportRevealable<Content: View>: View {
+    let isHidden: Bool
+    let hint: String
+    let blurRadius: CGFloat
+    let onReveal: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .blur(radius: isHidden ? blurRadius : 0)
+            .accessibilityHidden(isHidden)
+            .allowsHitTesting(!isHidden)
+            .overlay {
+                if isHidden {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2), onReveal)
+                    } label: {
+                        ZStack {
+                            Color.clear
+
+                            Label(hint, systemImage: "eye")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.midnightBlue.opacity(0.88))
+                                )
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(hint)
+                }
+            }
+    }
+}
+
 private struct KeyTeleportRevealPair<QR: View, Code: View>: View {
     let qrHint: String
     let codeHint: String
@@ -590,61 +617,24 @@ private struct KeyTeleportRevealPair<QR: View, Code: View>: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            revealable(
-                qr,
-                element: .qrCode,
+            KeyTeleportRevealable(
+                isHidden: revealed != .qrCode,
                 hint: qrHint,
-                blurRadius: 14
-            )
-
-            revealable(
-                code,
-                element: .textCode,
-                hint: codeHint,
-                blurRadius: 10
-            )
-        }
-    }
-
-    private func revealable(
-        _ content: some View,
-        element: KeyTeleportRevealedElement,
-        hint: String,
-        blurRadius: CGFloat
-    ) -> some View {
-        let isHidden = revealed != element
-
-        return content
-            .blur(radius: isHidden ? blurRadius : 0)
-            .accessibilityHidden(isHidden)
-            .allowsHitTesting(!isHidden)
-            .overlay {
-                if isHidden {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            revealed = element
-                        }
-                    } label: {
-                        ZStack {
-                            Color.clear
-
-                            Label(hint, systemImage: "eye")
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.midnightBlue.opacity(0.88))
-                                )
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(hint)
-                }
+                blurRadius: 14,
+                onReveal: { revealed = .qrCode }
+            ) {
+                qr
             }
+
+            KeyTeleportRevealable(
+                isHidden: revealed != .textCode,
+                hint: codeHint,
+                blurRadius: 10,
+                onReveal: { revealed = .textCode }
+            ) {
+                code
+            }
+        }
     }
 }
 
@@ -739,9 +729,32 @@ private func keyTeleportInputPlaceholder(_ title: LocalizedStringKey) -> Text {
         .foregroundStyle(.coveLightGray.opacity(0.58))
 }
 
+private enum KeyTeleportMnemonicDisclosure {
+    case hidden
+    case revealed([String])
+    case failed
+
+    var isHidden: Bool {
+        if case .hidden = self { return true }
+        return false
+    }
+
+    var displayedWords: [String]? {
+        switch self {
+        case .hidden:
+            Array(repeating: "••••••", count: 4)
+        case let .revealed(words):
+            words
+        case .failed:
+            nil
+        }
+    }
+}
+
 private struct KeyTeleportMnemonicReviewView: View {
     let review: KeyTeleportMnemonicReview
-    let words: [String]?
+    let disclosure: KeyTeleportMnemonicDisclosure
+    let reveal: () -> Void
     let importWords: () -> Void
     let finish: () -> Void
 
@@ -754,35 +767,44 @@ private struct KeyTeleportMnemonicReviewView: View {
                 .font(.subheadline)
                 .foregroundStyle(.coveLightGray.opacity(0.74))
 
-            if let words {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
-                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                        HStack {
-                            Text("\(index + 1)")
-                                .foregroundStyle(.coveLightGray.opacity(0.6))
-                            Text(word)
-                            Spacer()
-                        }
-                        .font(.system(.subheadline, design: .monospaced))
-                        .padding(10)
-                        .background(Color.midnightBlue.opacity(0.48))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
+            if let words = disclosure.displayedWords {
+                KeyTeleportRevealable(
+                    isHidden: disclosure.isHidden,
+                    hint: "Tap to reveal recovery words",
+                    blurRadius: 10,
+                    onReveal: reveal
+                ) {
+                    recoveryWordsGrid(words)
                 }
             } else {
-                ProgressView()
-                    .tint(.white)
+                Text("Unable to reveal recovery words.")
+                    .foregroundStyle(.red)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
-                    .accessibilityLabel("Loading recovery words")
             }
 
             Button("Import Wallet", action: importWords)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
-                .disabled(words == nil)
 
             Button("Finish Without Importing", action: finish)
                 .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+
+    private func recoveryWordsGrid(_ words: [String]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                HStack {
+                    Text("\(index + 1)")
+                        .foregroundStyle(.coveLightGray.opacity(0.6))
+                    Text(word)
+                    Spacer()
+                }
+                .font(.system(.subheadline, design: .monospaced))
+                .padding(10)
+                .background(Color.midnightBlue.opacity(0.48))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
         }
     }
 }
