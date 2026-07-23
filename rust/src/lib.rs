@@ -60,6 +60,7 @@ mod mnemonic;
 mod multi_format;
 mod node;
 mod node_connect;
+mod node_scanner;
 mod pending_wallet;
 mod push_tx;
 mod qr_scanner;

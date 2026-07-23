@@ -38,7 +38,36 @@ pub enum Transport {
 
 impl Transport {
     pub fn connect_pinned(url: &str, trust: &TlsTrust) -> Result<Self, ConnectError> {
-        Ok(Self::Pinned(Box::new(Pinned::connect(url, trust)?)))
+        Ok(Self::Pinned(Box::new(Pinned::connect(url, trust, ConnectionOptions::wallet())?)))
+    }
+
+    pub(crate) fn connect_pinned_for_scan(
+        url: &str,
+        trust: &TlsTrust,
+        timeout: Duration,
+    ) -> Result<Self, ConnectError> {
+        Ok(Self::Pinned(Box::new(Pinned::connect(
+            url,
+            trust,
+            ConnectionOptions::scanner(timeout),
+        )?)))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ConnectionOptions {
+    connect_timeout: Duration,
+    io_timeout: Duration,
+    reconnect: bool,
+}
+
+impl ConnectionOptions {
+    const fn wallet() -> Self {
+        Self { connect_timeout: CONNECT_TIMEOUT, io_timeout: IO_TIMEOUT, reconnect: true }
+    }
+
+    const fn scanner(timeout: Duration) -> Self {
+        Self { connect_timeout: timeout, io_timeout: timeout, reconnect: false }
     }
 }
 
@@ -51,6 +80,7 @@ impl Transport {
 pub struct Pinned {
     url: String,
     trust: TlsTrust,
+    options: ConnectionOptions,
     connection: RwLock<Connection>,
 }
 
@@ -62,12 +92,17 @@ struct Connection {
 }
 
 impl Pinned {
-    fn connect(url: &str, trust: &TlsTrust) -> Result<Self, ConnectError> {
-        let client = connect(url, trust)?;
+    fn connect(
+        url: &str,
+        trust: &TlsTrust,
+        options: ConnectionOptions,
+    ) -> Result<Self, ConnectError> {
+        let client = connect(url, trust, options)?;
 
         Ok(Self {
             url: url.to_string(),
             trust: trust.clone(),
+            options,
             connection: RwLock::new(Connection { client, generation: 0 }),
         })
     }
@@ -95,12 +130,16 @@ impl Pinned {
 
         debug!("electrum call failed ({error}), reconnecting to {}", self.url);
 
+        if !self.options.reconnect {
+            return Err(error);
+        }
+
         {
             let mut connection = self.write();
 
             // Another caller may already have replaced the dead connection.
             if connection.generation == generation {
-                connection.client = connect(&self.url, &self.trust)
+                connection.client = connect(&self.url, &self.trust, self.options)
                     .map_err(|error| Error::Message(error.to_string()))?;
                 connection.generation += 1;
             }
@@ -147,7 +186,11 @@ pub enum ConnectError {
     Connect(std::io::Error),
 }
 
-fn connect(url: &str, trust: &TlsTrust) -> Result<RawClient<ElectrumSslStream>, ConnectError> {
+fn connect(
+    url: &str,
+    trust: &TlsTrust,
+    options: ConnectionOptions,
+) -> Result<RawClient<ElectrumSslStream>, ConnectError> {
     let (host, port) = target(url)?;
 
     // A pinned fingerprint ignores this name, but rustls still requires a
@@ -156,7 +199,7 @@ fn connect(url: &str, trust: &TlsTrust) -> Result<RawClient<ElectrumSslStream>, 
         .map_err(|_| ConnectError::InvalidHost(host.clone()))?
         .to_owned();
 
-    handshake(server_name, tls::client_config(trust)?, &host, port).map(RawClient::from)
+    handshake(server_name, tls::client_config(trust)?, &host, port, options).map(RawClient::from)
 }
 
 /// Read the certificate a server presents, so the user can confirm it before
@@ -165,6 +208,13 @@ fn connect(url: &str, trust: &TlsTrust) -> Result<RawClient<ElectrumSslStream>, 
 /// Nothing about the certificate is verified here, and the connection is closed
 /// without being used. The value only becomes trusted once the user accepts it.
 pub(crate) fn peer_certificate(url: &str) -> Result<CertificateDer<'static>, ConnectError> {
+    peer_certificate_with_timeout(url, CONNECT_TIMEOUT)
+}
+
+pub(crate) fn peer_certificate_with_timeout(
+    url: &str,
+    timeout: Duration,
+) -> Result<CertificateDer<'static>, ConnectError> {
     let (host, port) = target(url)?;
 
     let server_name = ServerName::try_from(host.as_str())
@@ -172,7 +222,13 @@ pub(crate) fn peer_certificate(url: &str) -> Result<CertificateDer<'static>, Con
         .to_owned();
 
     let capture = Arc::new(tls::CapturedCertificate::default());
-    handshake(server_name, tls::capture_config(capture.clone())?, &host, port)?;
+    handshake(
+        server_name,
+        tls::capture_config(capture.clone())?,
+        &host,
+        port,
+        ConnectionOptions::scanner(timeout),
+    )?;
 
     capture.take().ok_or(ConnectError::NoCertificate)
 }
@@ -185,13 +241,14 @@ fn handshake(
     config: rustls::ClientConfig,
     host: &str,
     port: u16,
+    options: ConnectionOptions,
 ) -> Result<ElectrumSslStream, ConnectError> {
     let mut session =
         ClientConnection::new(Arc::new(config), server_name).map_err(ConnectError::Session)?;
 
-    let mut tcp = connect_timeout(host, port)?;
-    tcp.set_read_timeout(Some(IO_TIMEOUT)).map_err(ConnectError::Connect)?;
-    tcp.set_write_timeout(Some(IO_TIMEOUT)).map_err(ConnectError::Connect)?;
+    let mut tcp = connect_timeout(host, port, options.connect_timeout)?;
+    tcp.set_read_timeout(Some(options.io_timeout)).map_err(ConnectError::Connect)?;
+    tcp.set_write_timeout(Some(options.io_timeout)).map_err(ConnectError::Connect)?;
 
     session.complete_io(&mut tcp).map_err(handshake_error)?;
 
@@ -229,12 +286,12 @@ fn handshake_error(error: std::io::Error) -> ConnectError {
     }
 }
 
-fn connect_timeout(host: &str, port: u16) -> Result<TcpStream, ConnectError> {
+fn connect_timeout(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, ConnectError> {
     use std::net::ToSocketAddrs as _;
 
     let mut last = None;
     for addr in (host, port).to_socket_addrs().map_err(ConnectError::Connect)? {
-        match TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT) {
+        match TcpStream::connect_timeout(&addr, timeout) {
             Ok(stream) => return Ok(stream),
             Err(error) => last = Some(error),
         }

@@ -160,11 +160,12 @@ act-zero = { version = "0.4.0", features = ["default-tokio"] }
 act-zero-ext = "0.2.0"
 
 # async 
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["net", "rt"] }
 tokio-util = "0.7.18"
 async-trait = { workspace = true }
 futures = "0.3.32"
 backon = "1.6.0"
+if-addrs = "0.15"
 
 # crypto
 age = { workspace = true }
