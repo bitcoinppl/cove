@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, str::FromStr as _};
 use bip39::Mnemonic;
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_types::network::Network;
+use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -260,16 +261,17 @@ async fn restore_wallet(
         // and consumes it. WalletSecret::Mnemonic(String) is zeroized on drop
         WalletSecret::Mnemonic(words) => {
             let mnemonic = Mnemonic::from_str(words)
-                .map_err(|e| BackupError::Restore(format!("invalid mnemonic for {name}: {e}")))?;
+                .map_err_prefix(&format!("invalid mnemonic for {name}"), BackupError::Restore)?;
 
             restore_mnemonic_wallet(&metadata, mnemonic)
                 .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?;
         }
 
         WalletSecret::Xprv(value) => {
-            let xpriv = WalletXprv::parse(value.as_str()).map_err(|error| {
-                BackupError::Restore(format!("invalid extended private key for {name}: {error}"))
-            })?;
+            let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
+                &format!("invalid extended private key for {name}"),
+                BackupError::Restore,
+            )?;
 
             restore_xpriv_wallet(&metadata, xpriv)
                 .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?;

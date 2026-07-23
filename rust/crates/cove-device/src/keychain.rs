@@ -48,8 +48,7 @@ impl WalletXprv {
     /// Returns an error when `value` is invalid or contains child-key metadata
     pub fn parse(value: impl Into<String>) -> Result<Self, WalletXprvError> {
         let value = Self(value.into());
-        let xprv = Xpriv::from_str(&value.0)
-            .map_err(|error| WalletXprvError::Invalid(error.to_string()))?;
+        let xprv = Xpriv::from_str(&value.0).map_err_str(WalletXprvError::Invalid)?;
         validate_master_xprv(&xprv)?;
 
         Ok(value)
@@ -144,19 +143,19 @@ impl WalletSecret {
             // wallet secrets saved before typed storage were untagged mnemonics
             return Mnemonic::from_str(value)
                 .map(Self::Mnemonic)
-                .map_err(|error| KeychainError::ParseSavedValue(error.to_string()));
+                .map_err_str(KeychainError::ParseSavedValue);
         };
 
         if let Some(mnemonic) = tagged_value.strip_prefix(WALLET_SECRET_MNEMONIC_TAG) {
             return Mnemonic::from_str(mnemonic)
                 .map(Self::Mnemonic)
-                .map_err(|error| KeychainError::ParseSavedValue(error.to_string()));
+                .map_err_str(KeychainError::ParseSavedValue);
         }
 
         if let Some(xpriv) = tagged_value.strip_prefix(WALLET_SECRET_XPRIV_TAG) {
             return WalletXprv::parse(xpriv)
                 .map(Self::Xpriv)
-                .map_err(|error| KeychainError::ParseSavedValue(error.to_string()));
+                .map_err_str(KeychainError::ParseSavedValue);
         }
 
         Err(KeychainError::ParseSavedValue("unknown wallet secret type".to_string()))

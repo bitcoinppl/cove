@@ -346,14 +346,14 @@ impl WalletActor {
         &mut self,
         address_type: WalletAddressType,
     ) -> ActorResult<Result<(), Error>> {
-        debug!("actor switch mnemonic wallet");
+        debug!("actor switch private wallet");
 
         let connection = self.deferred_node_connection();
         let (reply, receiver) = futures::channel::oneshot::channel();
 
         self.addr.send_fut_with(|addr| async move {
             let result = match connection.await {
-                Ok(Ok(())) => call!(addr.apply_mnemonic_address_type_switch(address_type))
+                Ok(Ok(())) => call!(addr.apply_private_wallet_address_type_switch(address_type))
                     .await
                     .unwrap_or(Err(Error::ActorNotFound)),
                 Ok(Err(error)) => Err(error),
@@ -366,16 +366,16 @@ impl WalletActor {
         Ok(Produces::Deferred(receiver))
     }
 
-    async fn apply_mnemonic_address_type_switch(
+    async fn apply_private_wallet_address_type_switch(
         &mut self,
         address_type: WalletAddressType,
     ) -> ActorResult<Result<(), Error>> {
-        let result = self.apply_mnemonic_address_type_switch_inner(address_type).await;
+        let result = self.apply_private_wallet_address_type_switch_inner(address_type).await;
 
         Produces::ok(result)
     }
 
-    async fn apply_mnemonic_address_type_switch_inner(
+    async fn apply_private_wallet_address_type_switch_inner(
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {

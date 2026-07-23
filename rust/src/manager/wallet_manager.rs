@@ -882,13 +882,7 @@ impl RustWalletManager {
         };
 
         if wallet_type == WalletType::Hot && !verified {
-            let has_recovery_words = Keychain::global()
-                .get_wallet_secret(&self.metadata.read().id)
-                .ok()
-                .flatten()
-                .is_some_and(|secret| secret.as_mnemonic().is_some());
-
-            return if has_recovery_words {
+            return if self.has_recovery_words() {
                 "This wallet is not backed up. Make sure you have your secret words saved before deleting."
                     .to_string()
             } else {
