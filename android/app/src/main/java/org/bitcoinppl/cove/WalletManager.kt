@@ -93,7 +93,10 @@ class WalletManager :
     var unsignedTransactions by mutableStateOf<List<UnsignedTransaction>>(emptyList())
         private set
 
-    fun hasRecoveryWords(): Boolean = rust.hasRecoveryWords()
+    fun hasRecoveryWords(): Boolean =
+        withRustOr(false) {
+            hasRecoveryWords()
+        }
 
     fun hasXprvSecret(): Boolean =
         withRustOr(false) {

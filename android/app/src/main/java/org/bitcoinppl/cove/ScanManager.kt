@@ -124,7 +124,10 @@ class ScanManager private constructor() {
                         true
                     }
 
-                    else -> false
+                    else -> {
+                        multiFormat.destroy()
+                        false
+                    }
                 }
 
             KeyTeleportTextParseResult.UnsupportedPsbt -> {
