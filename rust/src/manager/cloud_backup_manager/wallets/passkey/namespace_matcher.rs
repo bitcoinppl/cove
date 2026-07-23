@@ -8,7 +8,9 @@ use cove_device::passkey::{PasskeyAccess, PasskeyError};
 use sha2::{Digest as _, Sha256};
 use tracing::{info, warn};
 
-use super::authorization_retry::PlatformAuthorizationRetrier;
+use super::authorization_retry::{
+    PlatformAuthorizationRetrier, is_pre_presentation_platform_authorization_failure,
+};
 use super::prf_output_to_key;
 use crate::manager::cloud_backup_manager::{CloudBackupError, master_key_wrapper_revision_hash};
 
@@ -157,7 +159,7 @@ impl NamespacePasskeyMatchSession {
 
         let mut matches = Vec::new();
         for candidate in candidates {
-            if !self.attempted_candidates.insert(candidate.identity.clone()) {
+            if self.attempted_candidates.contains(&candidate.identity) {
                 continue;
             }
 
@@ -183,6 +185,9 @@ impl NamespacePasskeyMatchSession {
                             warn!(
                                 "Failed targeted passkey auth for new or changed cloud backup wrapper: {error}"
                             );
+                            if !is_pre_presentation_platform_authorization_failure(&error) {
+                                self.attempted_candidates.insert(candidate.identity.clone());
+                            }
                             self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                             continue;
                         }
@@ -202,6 +207,7 @@ impl NamespacePasskeyMatchSession {
                         }
                         Err(PasskeyError::NoCredentialFound) => {
                             self.credential_selection = CredentialSelection::NoCredentialFound;
+                            self.attempted_candidates.insert(candidate.identity.clone());
                             self.candidate_outcomes
                                 .push(NamespaceCandidateOutcome::PasskeyMismatch);
                             continue;
@@ -221,9 +227,13 @@ impl NamespacePasskeyMatchSession {
 
                     (discovered.credential_id, discovered.prf_output)
                 }
-                CredentialSelection::NoCredentialFound => continue,
+                CredentialSelection::NoCredentialFound => {
+                    self.attempted_candidates.insert(candidate.identity.clone());
+                    continue;
+                }
             };
 
+            self.attempted_candidates.insert(candidate.identity.clone());
             let prf_key = prf_output_to_key(prf_output)?;
             if let Ok(master_key) =
                 cove_cspp::master_key_crypto::decrypt_master_key(&candidate.encrypted, &prf_key)
@@ -247,15 +257,13 @@ impl NamespacePasskeyMatchSession {
     }
 
     pub(crate) fn finish(self) -> NamespaceMatchOutcome {
+        if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PendingUpload) {
+            return NamespaceMatchOutcome::Inconclusive;
+        }
         if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::PasskeyMismatch) {
             return NamespaceMatchOutcome::NoMatch;
         }
-        if self.candidate_outcomes.iter().any(|outcome| {
-            matches!(
-                outcome,
-                NamespaceCandidateOutcome::PendingUpload | NamespaceCandidateOutcome::Inconclusive
-            )
-        }) {
+        if self.candidate_outcomes.contains(&NamespaceCandidateOutcome::Inconclusive) {
             return NamespaceMatchOutcome::Inconclusive;
         }
         if self.supported_candidates.is_empty()
