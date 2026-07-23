@@ -774,16 +774,17 @@ final class ICloudDriveHelper: @unchecked Sendable {
         guard !candidateURLs.isEmpty else { throw CloudStorageError.NotFound(recordId) }
 
         let localURLs = candidateURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
-        let metadataURLs: [URL] = if localURLs.isEmpty {
+        let metadataURLs: [URL]
+        if localURLs.isEmpty {
             let lateMatch = try await waitForMetadataItems(
                 matching: candidateURLs,
                 timeout: defaultTimeout,
                 operation: "delete backup \(recordId)"
             )
             let cleanupItems = await visibleMetadataItems(matching: candidateURLs)
-            lateMatch.records.map(\.url) + cleanupItems.map(\.url)
+            metadataURLs = lateMatch.records.map(\.url) + cleanupItems.map(\.url)
         } else {
-            try await metadataItemsIfPresent(matching: candidateURLs).map(\.url)
+            metadataURLs = try await metadataItemsIfPresent(matching: candidateURLs).map(\.url)
         }
 
         var seenPaths = Set<String>()

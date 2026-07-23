@@ -244,7 +244,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let first = Task { try await index.currentOrInitialRecords(timeout: 1) }
         let second = Task { try await index.currentOrInitialRecords(timeout: 1) }
 
-        await Task.yield()
+        await source.waitUntilStarted()
         XCTAssertEqual(source.startCount, 1)
 
         source.send(.finishedGathering([record]))
@@ -270,7 +270,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await source.waitUntilStarted()
         source.send(.finishedGathering([]))
         source.send(.updated([record]))
 
@@ -294,7 +294,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
         let retry = Task { try await index.currentOrInitialRecords(timeout: 1) }
 
-        await Task.yield()
+        await source.waitUntilStarted(count: 2)
         XCTAssertEqual(source.startCount, 2)
         source.send(.finishedGathering([record]))
 
@@ -321,7 +321,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await fixture.source.waitUntilStarted()
         fixture.source.send(.finishedGathering([]))
         fixture.source.send(.updated([
             metadataRecord(
@@ -358,7 +358,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await fixture.source.waitUntilStarted()
         fixture.source.send(.finishedGathering([
             metadataRecord(
                 name: legacyURL.lastPathComponent,
@@ -397,7 +397,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await fixture.source.waitUntilStarted()
         fixture.source.send(.finishedGathering([]))
         try writeTestBackup(at: currentURL)
         try writeTestBackup(at: legacyURL)
@@ -451,7 +451,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await timeoutFixture.source.waitUntilStarted()
         timeoutFixture.source.send(.finishedGathering([]))
 
         do {
@@ -475,7 +475,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await fixture.source.waitUntilStarted()
         fixture.source.send(.finishedGathering([]))
 
         let status = try await request.value
@@ -532,7 +532,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             )
         }
 
-        await Task.yield()
+        await fixture.source.waitUntilStarted()
         fixture.source.send(.finishedGathering([]))
         let startedAt = Date()
         request.cancel()
@@ -838,6 +838,8 @@ private struct ICloudMetadataFixture {
     let helper: ICloudDriveHelper
 
     func removeContainer() {
+        guard FileManager.default.fileExists(atPath: containerURL.path) else { return }
+
         try? FileManager.default.removeItem(at: containerURL)
     }
 }
@@ -856,15 +858,40 @@ private final class MetadataQuerySourceSpy: ICloudMetadataQuerySource {
     func start(onEvent: @escaping @MainActor (ICloudMetadataQueryEvent) -> Void) -> Bool {
         let result = startResults[min(startCount, startResults.count - 1)]
         startCount += 1
+        startWaiters
+            .filter { $0.count <= startCount }
+            .forEach { $0.expectation.fulfill() }
+        startWaiters.removeAll { $0.count <= startCount }
+
         guard result else { return false }
 
         self.onEvent = onEvent
         return true
     }
 
+    func waitUntilStarted(count: Int = 1, timeout: TimeInterval = 1) async {
+        guard startCount < count else { return }
+
+        let expectation = XCTestExpectation(
+            description: "metadata query source starts \(count) time(s)"
+        )
+        startWaiters.append((count, expectation))
+
+        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: timeout)
+        startWaiters.removeAll { $0.expectation === expectation }
+
+        XCTAssertEqual(
+            result,
+            .completed,
+            "metadata query source started \(startCount) of \(count) expected time(s)"
+        )
+    }
+
     func send(_ event: ICloudMetadataQueryEvent) {
         onEvent?(event)
     }
+
+    private var startWaiters: [(count: Int, expectation: XCTestExpectation)] = []
 }
 
 private final class SilentNamespaceProbeTestState: @unchecked Sendable {
