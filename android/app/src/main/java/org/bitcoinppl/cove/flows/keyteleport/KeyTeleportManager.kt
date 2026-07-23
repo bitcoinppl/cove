@@ -13,13 +13,11 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
 import org.bitcoinppl.cove_core.KeyTeleportAlert
-import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerReconcileMessage
 import org.bitcoinppl.cove_core.KeyTeleportManagerReconciler
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 import org.bitcoinppl.cove_core.RustKeyTeleportManager
-import org.bitcoinppl.cove_core.StringOrData
 import org.bitcoinppl.cove_core.types.WalletId
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
@@ -66,18 +64,6 @@ class KeyTeleportManager internal constructor(
                 Log.e(tag, "Unable to dispatch Key Teleport action", it)
             }
         }
-    }
-
-    fun ingest(input: StringOrData) {
-        dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.MultiFormat(input)))
-    }
-
-    fun ingest(packet: org.bitcoinppl.cove_core.KeyTeleportReceiverPacket) {
-        dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Receiver(packet)))
-    }
-
-    fun ingest(packet: org.bitcoinppl.cove_core.KeyTeleportSenderPacket) {
-        dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Sender(packet)))
     }
 
     fun clearAlertForDisplay() {
