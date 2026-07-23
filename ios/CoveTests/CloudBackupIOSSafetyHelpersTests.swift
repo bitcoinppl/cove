@@ -317,7 +317,8 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             try await fixture.helper.existingBackupFileReadURL(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
-                locations: locations
+                locations: locations,
+                lookupMode: .waitForSync
             )
         }
 
@@ -333,6 +334,33 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let resolvedURL = try await request.value
 
         XCTAssertEqual(resolvedURL, legacyURL)
+        XCTAssertEqual(fixture.source.startCount, 1)
+    }
+
+    @MainActor
+    func testSilentBackupReadReturnsNotFoundFromCompletedSnapshot() async throws {
+        let fixture = makeICloudMetadataFixture(defaultTimeout: 60)
+        defer { fixture.removeContainer() }
+        let request = Task {
+            try await fixture.helper.existingBackupFileReadURL(
+                namespace: self.testNamespace,
+                recordId: "wallet-record",
+                locations: self.backupLocations(),
+                lookupMode: .currentSnapshot
+            )
+        }
+
+        await fixture.source.waitUntilStarted()
+        fixture.source.send(.finishedGathering([]))
+
+        do {
+            _ = try await request.value
+            XCTFail("expected missing snapshot item")
+        } catch CloudStorageError.NotFound {
+        } catch {
+            XCTFail("expected NotFound, got \(error)")
+        }
+
         XCTAssertEqual(fixture.source.startCount, 1)
     }
 

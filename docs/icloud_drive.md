@@ -141,7 +141,11 @@ Read the shared metadata index and filter its snapshot by resolved parent path a
 
 ### Waiting for a specific file
 
-Wait on the shared metadata index for a matching `didUpdate` snapshot. Timeouts are app-level policy, not Apple API behavior, so pick them based on the user flow.
+For consent-allowed, user-facing reads, wait on the shared metadata index for a
+matching `didUpdate` snapshot. Silent background reads use only the current or
+initial metadata snapshot and return `NotFound` when the item is absent; they do
+not hold a worker open waiting for later metadata updates. Timeouts are
+app-level policy, not Apple API behavior, so pick them based on the user flow.
 
 ### Uploading files
 
@@ -159,8 +163,10 @@ visibility; provider confirmation belongs to that retryable background flow.
 
 These numbers are project heuristics, not Apple guidance:
 
-- `60s` for operations that need to find one specific file, such as downloads
+- `60s` for consent-allowed operations that need to find one specific file
 - `5s` for a normal metadata listing while FileManager supplies the fast local snapshot
+- silent downloads use the bounded current-or-initial metadata snapshot and
+  return `NotFound` when it contains no candidate
 - silent onboarding namespace discovery has one outer `15s` deadline, performs at most four inspections, and uses retry delays of `1s`, `2s`, and `4s`
 - each silent inspection caps its metadata query at `5s` and leaves cleanup time inside the outer deadline
 - cancellation stops queued silent work; an expired deadline is unavailable or incomplete, never confirmed empty

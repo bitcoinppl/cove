@@ -190,6 +190,15 @@ enum ICloudEventuallyConsistentListing {
     }
 }
 
+private extension CloudAccessPolicy {
+    var backupLookupMode: ICloudBackupLookupMode {
+        switch self {
+        case .consentAllowed: .waitForSync
+        case .silent: .currentSnapshot
+        }
+    }
+}
+
 final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     private let helper = ICloudDriveHelper.shared
     private let queue = DispatchQueue(
@@ -301,13 +310,14 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     func downloadMasterKeyBackup(
         namespace: String,
         locations: [RemoteBackupLocation],
-        policy _: CloudAccessPolicy
+        policy: CloudAccessPolicy
     ) async throws -> Data {
         let recordId = csppMasterKeyRecordId()
         let url = try await helper.existingBackupFileReadURL(
             namespace: namespace,
             recordId: recordId,
-            locations: locations
+            locations: locations,
+            lookupMode: policy.backupLookupMode
         )
         return try await helper.downloadFile(url: url, recordId: recordId)
     }
@@ -316,12 +326,13 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation],
-        policy _: CloudAccessPolicy
+        policy: CloudAccessPolicy
     ) async throws -> Data {
         let url = try await helper.existingBackupFileReadURL(
             namespace: namespace,
             recordId: recordId,
-            locations: locations
+            locations: locations,
+            lookupMode: policy.backupLookupMode
         )
         return try await helper.downloadFile(url: url, recordId: recordId)
     }

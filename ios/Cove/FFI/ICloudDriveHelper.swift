@@ -1,6 +1,11 @@
 import CoveCore
 import Foundation
 
+enum ICloudBackupLookupMode {
+    case waitForSync
+    case currentSnapshot
+}
+
 final class ICloudDriveHelper: @unchecked Sendable {
     static let shared = ICloudDriveHelper()
 
@@ -207,7 +212,8 @@ final class ICloudDriveHelper: @unchecked Sendable {
     func existingBackupFileReadURL(
         namespace: String,
         recordId: String,
-        locations: [RemoteBackupLocation]
+        locations: [RemoteBackupLocation],
+        lookupMode: ICloudBackupLookupMode = .waitForSync
     ) async throws -> URL {
         let urls = try backupCandidateURLs(namespace: namespace, locations: locations)
 
@@ -217,12 +223,20 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         guard !urls.isEmpty else { throw CloudStorageError.NotFound(recordId) }
 
-        let match = try await waitForMetadataItems(
-            matching: urls,
-            timeout: defaultTimeout,
-            operation: "find backup \(recordId)"
-        )
-        return match.preferred.url
+        switch lookupMode {
+        case .waitForSync:
+            let match = try await waitForMetadataItems(
+                matching: urls,
+                timeout: defaultTimeout,
+                operation: "find backup \(recordId)"
+            )
+            return match.preferred.url
+        case .currentSnapshot:
+            guard let match = try await metadataItemsIfPresent(matching: urls).first else {
+                throw CloudStorageError.NotFound(recordId)
+            }
+            return match.url
+        }
     }
 
     private func backupCandidateURLs(
