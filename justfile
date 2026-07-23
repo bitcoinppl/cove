@@ -452,7 +452,7 @@ update pkg="":
     cargo update {{ pkg }}
 
 # [external] Run Android app
-# device alias: -D main (default physical) or -D sim (emulator)
+# repeat targets as needed: -D main -D sim
 [group('util')]
 run-android *args:
     just xtask run-android {{ args }} && just notf "done run android"
@@ -460,7 +460,7 @@ run-android *args:
 alias ra := run-android
 
 # [long, external] Rebuild Android bindings, then install and run the Android app
-# device alias: -D main (default physical) or -D sim (emulator)
+# repeat targets as needed: -D main -D sim
 [group('util')]
 build-run-android *args:
     just ba && just ra {{ args }}
@@ -512,6 +512,7 @@ install-android-clean:
 alias iac := install-android-clean
 
 # [external] Run iOS app with existing generated bindings
+# repeat targets as needed: -d main -d se
 [group('util')]
 run-ios *args:
     just xtask run-ios {{ args }} && just notf "done run ios"
@@ -519,6 +520,7 @@ run-ios *args:
 alias ri := run-ios
 
 # [long, external] Rebuild iOS bindings, then install and run the iOS app
+# repeat targets as needed: -d main -d se
 [group('util')]
 build-run-ios *args:
     just xtask build-run-ios {{ args }} && just notf "done build run ios"

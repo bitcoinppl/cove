@@ -105,10 +105,6 @@ pub struct IosRunOptions {
 }
 
 impl IosRunOptions {
-    pub fn new(simulator: bool, device_name: Option<String>, udid: Option<String>) -> Self {
-        Self::new_multiple(simulator, device_name.into_iter().collect(), udid)
-    }
-
     pub fn new_multiple(simulator: bool, device_names: Vec<String>, udid: Option<String>) -> Self {
         Self {
             simulator,
