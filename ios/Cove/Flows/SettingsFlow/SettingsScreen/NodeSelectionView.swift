@@ -24,9 +24,70 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
+    /// A certificate accepted in this session, which belongs to the url it was
+    /// accepted for. A saved node's settings are not held here: `parseCustomNode`
+    /// carries those forward, so an edited url cannot inherit the old pin.
+    @State private var customTls: TlsTrust?
+    /// The url `customTls` was accepted for, so editing the url does not check
+    /// a different server against it.
+    @State private var customTlsUrl: String?
+    @State private var certificateAlert: CertificateDecision?
+    @State private var showCertificateAlert = false
+
     init() {
-        selectedNodeName = nodeSelector.selectedNode().name
+        let selectedNode = nodeSelector.selectedNode()
+
+        selectedNodeName = selectedNode.name
         nodeList = nodeSelector.nodeList()
+
+        // These have defaults, so they must be set through their storage rather
+        // than assigned, or SwiftUI discards the value when it installs them.
+        if case let .custom(node) = selectedNode {
+            _customUrl = State(initialValue: node.url)
+            _customNodeName = State(initialValue: node.name)
+        }
+    }
+
+    /// Whether the custom fields differ from the node that is already saved.
+    var hasUnsavedCustomNode: Bool {
+        guard case let .custom(saved) = nodeSelector.selectedNode() else { return !customUrl.isEmpty }
+        return saved.url != customUrl || saved.name != customNodeName
+    }
+
+    var certificateAlertTitle: String {
+        switch certificateAlert {
+        case .changed: "Certificate changed"
+        default: "Unrecognized certificate"
+        }
+    }
+
+    @ViewBuilder
+    private func certificateAlertActions(_ alert: CertificateDecision) -> some View {
+        switch alert {
+        case let .unrecognized(certificate):
+            Button("Trust this certificate") {
+                certificateAlert = nil
+                customTls = .pinnedFingerprint(sha256: certificate.sha256)
+                customTlsUrl = customUrl
+                checkAndSaveNode()
+            }
+            Button("Cancel", role: .cancel) {
+                certificateAlert = nil
+                Task { await dismissAllPopups() }
+            }
+        case .changed:
+            Button("OK", role: .cancel) { certificateAlert = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func certificateAlertMessage(_ alert: CertificateDecision) -> some View {
+        switch alert {
+        case let .unrecognized(certificate):
+            Text("This server uses a certificate Cove cannot verify. Only continue if this fingerprint matches the one your server reports.\n\n\(certificate.display)")
+        case .changed:
+            Text("This server is presenting a different certificate to the one you trusted. It may have been reissued, or something may be intercepting the connection. Cove will not connect until it presents the certificate you trusted.")
+        }
     }
 
     var showCustomUrlField: Bool {
@@ -106,38 +167,66 @@ struct NodeSelectionView: View {
     }
 
     func checkAndSaveNode() {
-        var node: Node? = nil
-
+        let node: Node
         do {
-            node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
-            customUrl = node?.url ?? customUrl
-            customNodeName = node?.name ?? customNodeName
+            node = try nodeSelector.parseCustomNode(
+                url: customUrl,
+                name: selectedNodeName,
+                enteredName: customNodeName,
+                tls: customTlsUrl == customUrl ? customTls : nil
+            )
+            customUrl = node.url
+            customNodeName = node.name
+
+            // The url has just been normalized, so follow it, otherwise a retry
+            // after a failed save would ask about the same certificate again.
+            if node.tls != nil { customTlsUrl = node.url }
+        } catch let NodeSelectorError.ParseNodeUrlError(errorString) {
+            showParseUrlAlert = true
+            parseUrlMessage = errorString
+            return
         } catch {
             showParseUrlAlert = true
-            switch error {
-            case let NodeSelectorError.ParseNodeUrlError(errorString):
-                parseUrlMessage = errorString
-            default:
-                parseUrlMessage = "Unknown error \(error.localizedDescription)"
-            }
+            parseUrlMessage = "Unknown error \(error.localizedDescription)"
+            return
         }
 
-        if let node {
-            Task {
-                showLoadingPopup()
-                let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
+        Task {
+            showLoadingPopup()
 
-                switch result {
-                case .success:
-                    refreshNodeState()
-                    completeLoading(.success("Connected to node successfully"))
-                case let .failure(error):
-                    let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
-                    let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
+            do {
+                try await nodeSelector.checkAndSaveNode(node: node)
+                refreshNodeState()
+                completeLoading(.success("Connected to node successfully"))
+            } catch NodeSelectorError.CertificateNotTrusted {
+                // The server is reachable but its certificate was rejected.
+                await offerCertificate()
+            } catch {
+                let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
+                let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
 
-                    completeLoading(.failure(formattedMessage))
-                }
+                completeLoading(.failure(formattedMessage))
             }
+        }
+    }
+
+    /// Whether the certificate can be offered for confirmation is decided in the
+    /// core, so both apps apply the same rule.
+    func offerCertificate() async {
+        checkUrlTask = nil
+
+        do {
+            let decision = try await nodeSelector.certificateDecision(url: customUrl)
+
+            await dismissAllPopups()
+            // The popup dismissal is animated, so let it finish before
+            // presenting the alert, as the other flows here do.
+            try? await Task.sleep(for: .seconds(1))
+
+            certificateAlert = decision
+            showCertificateAlert = true
+        } catch {
+            completeLoading(.failure("Could not read the server's certificate\n \(error.localizedDescription)"))
         }
     }
 
@@ -246,6 +335,13 @@ struct NodeSelectionView: View {
                 }
             )
         }
+        .alert(
+            certificateAlertTitle,
+            isPresented: $showCertificateAlert,
+            presenting: certificateAlert,
+            actions: certificateAlertActions,
+            message: certificateAlertMessage
+        )
     }
 }
 
