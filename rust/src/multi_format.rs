@@ -15,7 +15,10 @@ use tracing::{debug, warn};
 
 use crate::{
     hardware_export::HardwareExport,
-    key_teleport::{KeyTeleportReceiverPacket, KeyTeleportSenderPacket, parse_key_teleport_string},
+    key_teleport::{
+        KeyTeleportReceiverPacket, KeyTeleportSenderPacket, ParsedKeyTeleport,
+        parse_key_teleport_string,
+    },
     mnemonic::ParseMnemonic as _,
     signed_import::SignedImportError,
     transaction::ffi::BitcoinTransaction,
@@ -76,6 +79,20 @@ pub enum MultiFormatError {
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 
+impl TryFrom<ParsedKeyTeleport> for MultiFormat {
+    type Error = MultiFormatError;
+
+    fn try_from(value: ParsedKeyTeleport) -> Result<Self> {
+        match value {
+            ParsedKeyTeleport::Receiver(packet) => Ok(Self::KeyTeleportReceiver(packet)),
+            ParsedKeyTeleport::Sender(packet) => Ok(Self::KeyTeleportSender(packet)),
+            ParsedKeyTeleport::UnsupportedPsbt => {
+                Err(MultiFormatError::KeyTeleportPsbtNotSupported)
+            }
+        }
+    }
+}
+
 impl MultiFormat {
     pub fn try_from_data(data: &[u8]) -> Result<Self> {
         debug!("MultiFormat::try_from_data");
@@ -120,15 +137,7 @@ impl MultiFormat {
         }
 
         match parse_key_teleport_string(string) {
-            Ok(crate::key_teleport::ParsedKeyTeleport::Receiver(packet)) => {
-                return Ok(Self::KeyTeleportReceiver(packet));
-            }
-            Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
-                return Ok(Self::KeyTeleportSender(packet));
-            }
-            Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt) => {
-                return Err(MultiFormatError::KeyTeleportPsbtNotSupported);
-            }
+            Ok(parsed) => return parsed.try_into(),
             Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {}
         }
 

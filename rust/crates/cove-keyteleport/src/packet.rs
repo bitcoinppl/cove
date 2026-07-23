@@ -29,6 +29,11 @@ impl Packet {
     }
 
     pub fn from_url(value: &str) -> Result<Self> {
+        let value = value.trim();
+        if value.to_ascii_uppercase().starts_with("B$") {
+            return Self::from_bbqr_part(value);
+        }
+
         let url = parse_keyteleport_url(value)?;
         let fragment = url.fragment().ok_or(Error::InvalidUrl)?;
 
