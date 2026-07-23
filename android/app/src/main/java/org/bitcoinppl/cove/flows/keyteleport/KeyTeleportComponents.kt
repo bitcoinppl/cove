@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -159,10 +160,11 @@ internal fun LoadingText(text: String) {
 }
 
 @Composable
-internal fun SecretCode(value: String) {
+internal fun KeyTeleportCodeText(value: String) {
     Text(
         text = value,
         color = Color.White,
+        fontFamily = FontFamily.Monospace,
         fontSize = 28.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.fillMaxWidth(),

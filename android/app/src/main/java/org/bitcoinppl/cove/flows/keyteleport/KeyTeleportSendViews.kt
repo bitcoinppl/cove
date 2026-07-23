@@ -111,14 +111,22 @@ internal fun SendReadyView(
     SecureScreenEffect()
     TextBlock(
         title = "Sending ${ready.selectedWallet.name}",
-        body = "Show this QR to the receiver, then read the password to complete the transfer.",
+        body =
+            "Show the QR code to the receiver in person or over video, and send the password through a " +
+                "different channel, like a call or message. Only one is visible at a time — tap the hidden " +
+                "one to reveal it.",
     )
     if (packetText == null) {
         Text("Unable to render this sender response.", color = MaterialTheme.colorScheme.error)
+        KeyTeleportCodeText(password)
     } else {
-        PacketQr(packetText)
+        KeyTeleportRevealPair(
+            qrHint = "Tap to show QR code",
+            codeHint = "Tap to show password",
+            qr = { PacketQr(packetText) },
+            code = { KeyTeleportCodeText(password) },
+        )
     }
-    SecretCode(password)
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
         Text("Done")
     }
