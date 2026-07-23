@@ -289,6 +289,12 @@ Route-level `DisposableEffect` cleanup should only close objects owned by that r
 
 For cached managers, put cleanup at the owner/session boundary instead: clear the manager when the app route stack no longer contains the owning flow or wallet. Keep generated `manager.rust.*` calls behind platform manager wrapper methods so post-close calls become guarded no-ops or controlled failures instead of destroyed-handle crashes.
 
+### Screen Capture Protection
+
+iOS does not provide a public API for preventing screenshots of an individual view. Cove does not place sensitive views inside secure text fields, inspect private UIKit view hierarchies, or use similar workarounds to redact screenshots. Sensitive iOS screens should instead minimize automatic disclosure and require explicit user action before revealing secrets.
+
+Android may use the platform-supported `FLAG_SECURE` window flag for sensitive screens. This platform difference is intentional.
+
 ### Reactive Value Changes
 
 | iOS (SwiftUI) | Android (Compose) | Notes |

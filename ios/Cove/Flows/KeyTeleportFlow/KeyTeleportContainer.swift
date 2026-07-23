@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import UniformTypeIdentifiers
 
 struct KeyTeleportContainer: View {
@@ -142,7 +141,6 @@ private struct KeyTeleportLoadedView: View {
                     mnemonicDisclosure = .hidden
                     finishReview()
                 }
-                .protectedFromScreenCapture()
             case let .receiveXprvReview(review):
                 KeyTeleportXprvReviewView(review: review, xprv: $xprv) {
                     xprv = manager.revealXprv()
@@ -156,10 +154,8 @@ private struct KeyTeleportLoadedView: View {
                     xprv = nil
                     finishReview()
                 }
-                .protectedFromScreenCapture()
             case let .receiveMessageReview(review):
                 KeyTeleportMessageReviewView(review: review, finish: finishReview)
-                    .protectedFromScreenCapture()
             case let .receiveImportedWallet(wallet):
                 KeyTeleportImportedWalletView(wallet: wallet) {
                     manager.dispatch(.clear)
@@ -196,7 +192,6 @@ private struct KeyTeleportLoadedView: View {
                     manager.dispatch(.clear)
                     app.popRoute()
                 }
-                .protectedFromScreenCapture()
             }
         }
         .keyTeleportCard()
@@ -805,115 +800,6 @@ private struct KeyTeleportMnemonicReviewView: View {
                 .background(Color.midnightBlue.opacity(0.48))
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-        }
-    }
-}
-
-private extension View {
-    func protectedFromScreenCapture() -> some View {
-        ScreenCaptureProtectedView {
-            self
-        }
-    }
-}
-
-private struct ScreenCaptureProtectedView<Content: View>: UIViewControllerRepresentable {
-    @ViewBuilder let content: Content
-
-    func makeUIViewController(context _: Context) -> ScreenCaptureProtectedHostingController<Content> {
-        ScreenCaptureProtectedHostingController(rootView: content)
-    }
-
-    func updateUIViewController(
-        _ uiViewController: ScreenCaptureProtectedHostingController<Content>,
-        context _: Context
-    ) {
-        uiViewController.rootView = content
-    }
-
-    func sizeThatFits(
-        _ proposal: ProposedViewSize,
-        uiViewController: ScreenCaptureProtectedHostingController<Content>,
-        context _: Context
-    ) -> CGSize? {
-        uiViewController.sizeThatFits(proposal)
-    }
-}
-
-private final class ScreenCaptureProtectedHostingController<Content: View>: UIViewController {
-    private let secureTextField = UITextField()
-    private let hostingController: UIHostingController<Content>
-
-    var rootView: Content {
-        get { hostingController.rootView }
-        set { hostingController.rootView = newValue }
-    }
-
-    init(rootView: Content) {
-        hostingController = UIHostingController(rootView: rootView)
-
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        view.backgroundColor = .clear
-        configureSecureContainer()
-    }
-
-    private func configureSecureContainer() {
-        secureTextField.isSecureTextEntry = true
-        secureTextField.backgroundColor = .clear
-        secureTextField.borderStyle = .none
-        secureTextField.tintColor = .clear
-        secureTextField.translatesAutoresizingMaskIntoConstraints = false
-
-        view.addSubview(secureTextField)
-
-        NSLayoutConstraint.activate([
-            secureTextField.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            secureTextField.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            secureTextField.topAnchor.constraint(equalTo: view.topAnchor),
-            secureTextField.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
-
-        secureTextField.layoutIfNeeded()
-
-        let secureContainer = secureTextField.secureContentContainer ?? secureTextField
-        addChild(hostingController)
-        hostingController.view.backgroundColor = .clear
-        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-        secureContainer.addSubview(hostingController.view)
-
-        NSLayoutConstraint.activate([
-            hostingController.view.leadingAnchor.constraint(equalTo: secureContainer.leadingAnchor),
-            hostingController.view.trailingAnchor.constraint(equalTo: secureContainer.trailingAnchor),
-            hostingController.view.topAnchor.constraint(equalTo: secureContainer.topAnchor),
-            hostingController.view.bottomAnchor.constraint(equalTo: secureContainer.bottomAnchor),
-        ])
-
-        hostingController.didMove(toParent: self)
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize) -> CGSize {
-        let fallbackWidth = view.bounds.width > 0 ? view.bounds.width : UIScreen.main.bounds.width
-        let width = proposal.width ?? fallbackWidth
-        let height = proposal.height ?? 10000
-
-        return hostingController.sizeThatFits(in: CGSize(width: width, height: height))
-    }
-}
-
-private extension UITextField {
-    var secureContentContainer: UIView? {
-        subviews.first { view in
-            String(describing: type(of: view)).contains("Canvas")
         }
     }
 }
