@@ -31,7 +31,6 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
-    @State private var customTls: TlsTrust?
     @State private var certificateAlert: CertificateDecision?
     @State private var showCertificateAlert = false
     @State private var trustRequiredCandidate: TrustRequiredEndpoint?
@@ -49,21 +48,12 @@ struct NodeSelectionView: View {
         selectedNodeName = selectedNode.name
         nodeList = nodeSelector.nodeList()
 
-        // Carry the saved node's certificate settings, so saving it again does
-        // not fall back to default trust and ask about the certificate afresh.
         // These have defaults, so they must be set through their storage rather
         // than assigned, or SwiftUI discards the value when it installs them.
         if case let .custom(node) = selectedNode {
             _customUrl = State(initialValue: node.url)
             _customNodeName = State(initialValue: node.name)
-            _customTls = State(initialValue: node.tls)
         }
-    }
-
-    /// Whether the custom fields differ from the node that is already saved.
-    var hasUnsavedCustomNode: Bool {
-        guard case let .custom(saved) = nodeSelector.selectedNode() else { return !customUrl.isEmpty }
-        return saved.url != customUrl || saved.name != customNodeName
     }
 
     var certificateAlertTitle: String {
@@ -88,8 +78,7 @@ struct NodeSelectionView: View {
                     return
                 }
 
-                customTls = .pinnedFingerprint(sha256: certificate.sha256)
-                checkAndSaveNode()
+                checkAndSaveNode(acceptedTls: .pinnedFingerprint(sha256: certificate.sha256))
             }
             Button("Cancel", role: .cancel) {
                 certificateAlert = nil
@@ -378,8 +367,10 @@ struct NodeSelectionView: View {
                 }
                 .font(.subheadline)
 
-                Button("Save Custom Node", action: checkAndSaveNode)
-                    .disabled(customUrl.isEmpty)
+                Button("Save Custom Node") {
+                    checkAndSaveNode()
+                }
+                .disabled(customUrl.isEmpty)
             }
         }
     }
@@ -568,14 +559,18 @@ struct NodeSelectionView: View {
         .accessibilityHint("Review the certificate fingerprint before connecting")
     }
 
-    func checkAndSaveNode() {
+    func checkAndSaveNode(acceptedTls: TlsTrust? = nil) {
+        let tls = acceptedTls
+            ?? (selectedNodeName.contains("Electrum")
+                ? nodeSelector.trustedCertificate(url: customUrl) : nil)
+
         let node: Node
         do {
             node = try nodeSelector.parseCustomNode(
                 url: customUrl,
                 name: selectedNodeName,
                 enteredName: customNodeName,
-                tls: customTls
+                tls: tls
             )
             customUrl = node.url
             customNodeName = node.name
@@ -708,13 +703,11 @@ struct NodeSelectionView: View {
                     if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
-                        customTls = savedSelectedNode.tls
                     }
 
                     if savedSelectedNode.apiType == .esplora, selectedNodeName.contains("Esplora") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
-                        customTls = savedSelectedNode.tls
                     }
                 }
 

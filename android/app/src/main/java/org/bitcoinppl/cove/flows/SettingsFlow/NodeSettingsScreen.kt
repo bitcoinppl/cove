@@ -133,7 +133,6 @@ fun NodeSettingsScreen(
     var showErrorDialog by remember { mutableStateOf(false) }
     var pendingCertificate by remember { mutableStateOf<PendingNodeCertificate?>(null) }
     var discoveredNodeAttempt by remember { mutableStateOf<DiscoveredNodeAttempt?>(null) }
-    var customTls by remember { mutableStateOf<TlsTrust?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
 
@@ -203,7 +202,6 @@ fun NodeSettingsScreen(
                 if (matchesType) {
                     customUrl = node.url
                     customNodeName = node.name
-                    customTls = node.tls
                 }
             }
         }
@@ -283,7 +281,7 @@ fun NodeSettingsScreen(
         }
     }
 
-    fun checkAndSaveCustomNode() {
+    fun checkAndSaveCustomNode(acceptedTls: TlsTrust? = null) {
         if (customUrl.isEmpty()) {
             errorTitle = errorTitleDefault
             errorMessage = errorUrlEmpty
@@ -294,13 +292,28 @@ fun NodeSettingsScreen(
         scope.launch {
             isLoading = true
             try {
+                // the saved node's display name stays selected on re-entry, so the
+                // localized label alone cannot tell an electrum node from esplora
+                val savedCustomNode = (selectedNodeSelection as? NodeSelection.Custom)?.toNode()
+                val savingElectrum =
+                    selectedNodeName == customElectrum ||
+                        (savedCustomNode?.apiType == ApiType.ELECTRUM && savedCustomNode.name == selectedNodeName)
+
                 val node =
                     withContext(Dispatchers.IO) {
+                        val tls =
+                            acceptedTls
+                                ?: if (savingElectrum) {
+                                    nodeSelector.trustedCertificate(customUrl)
+                                } else {
+                                    null
+                                }
+
                         nodeSelector.parseCustomNode(
                             customUrl,
                             selectedNodeName,
                             customNodeName,
-                            customTls,
+                            tls,
                         )
                     }
 
@@ -440,8 +453,7 @@ fun NodeSettingsScreen(
 
                     when (pending) {
                         is PendingNodeCertificate.Custom -> {
-                            customTls = TlsTrust.PinnedFingerprint(certificate.sha256)
-                            checkAndSaveCustomNode()
+                            checkAndSaveCustomNode(TlsTrust.PinnedFingerprint(certificate.sha256))
                         }
 
                         is PendingNodeCertificate.Discovered -> {
