@@ -1617,7 +1617,7 @@ fn devicectl_device_connection_can_refresh(device: &DevicectlDevice) -> bool {
     device.hardware_properties.platform.as_deref() == Some("iOS")
         && device.connection_properties.pairing_state == Some(DevicectlPairingState::Paired)
         && matches!(
-            device.connection_properties.tunnel_state,
+            device.connection_properties.tunnel_state.as_ref(),
             Some(DevicectlTunnelState::Connected | DevicectlTunnelState::Disconnected)
         )
 }
