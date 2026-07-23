@@ -184,6 +184,17 @@ private fun ApiException.cloudStorageMessage(prefix: String): String {
     return if (details == null) "$prefix: $status" else "$prefix: $status: $details"
 }
 
+private fun ApiException.isMissingMatchingCredential(): Boolean =
+    statusCode == CommonStatusCodes.CANCELED &&
+        message?.contains("matching credential", ignoreCase = true) == true
+
+private fun ApiException.authorizationRequiredMessage(): String =
+    if (isMissingMatchingCredential()) {
+        "the selected Google account is no longer available; switch Google accounts to continue"
+    } else {
+        "google drive authorization was cancelled"
+    }
+
 private fun driveIdentityLookupFailedMessage(error: Throwable): String =
     "google drive identity verification failed: ${error.message ?: "unknown error"}"
 
@@ -263,7 +274,7 @@ internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorage
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
             if (error.statusCode == CommonStatusCodes.CANCELED) {
-                CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
+                CloudStorageException.AuthorizationRequired(error.authorizationRequiredMessage())
             } else {
                 CloudStorageException.NotAvailable(error.cloudStorageMessage("google drive is unavailable"))
             }
@@ -308,7 +319,7 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
             if (error.statusCode == CommonStatusCodes.CANCELED) {
-                CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
+                CloudStorageException.AuthorizationRequired(error.authorizationRequiredMessage())
             } else {
                 CloudStorageException.NotAvailable(error.cloudStorageMessage("google drive is unavailable"))
             }
@@ -330,6 +341,9 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
             CloudStorageException.Offline(error.message ?: "offline")
         else -> CloudStorageException.NotAvailable(error.message ?: "drive listing failed")
     }
+
+internal fun driveAccountSelectionErrorMessage(error: Throwable): String =
+    mapDriveListError(error).message ?: "google drive account selection failed"
 
 internal class DriveHttpException(
     val statusCode: Int,
@@ -410,6 +424,10 @@ private fun driveQueryParameter(value: String): String =
 
 private object UnboundDriveAccountTokenCacheKey
 
+internal enum class DriveAccountSelectionOutcome {
+    Changed,
+    Unchanged,
+}
+
 internal fun driveAccountTokenCacheKey(store: DriveAccountBindingStore): Any =
     store.selectedIdentity() ?: UnboundDriveAccountTokenCacheKey
-

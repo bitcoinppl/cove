@@ -78,8 +78,8 @@ struct CloudRestoreOfferView: View {
             .padding(.top, 12)
             .padding(.bottom, 26)
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical, alignment: .center)
         }
+        .defaultScrollAnchor(.center, for: .alignment)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: warningMessage)

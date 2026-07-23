@@ -10,7 +10,7 @@ private extension CloudBackupVerificationState? {
 
     var hasResult: Bool {
         switch self {
-        case .verified, .awaitingUploadConfirmation, .failed: true
+        case .verified, .awaitingUploadConfirmation, .cancelled, .failed: true
         default: false
         }
     }
@@ -65,8 +65,35 @@ struct VerificationSection: View {
             }
         case .awaitingUploadConfirmation:
             CloudBackupUploadConfirmationPendingSection()
+        case .cancelled:
+            cancelledSection
         case let .failed(failure):
             failureSection(failure)
+        }
+    }
+
+    private var cancelledSection: some View {
+        Section {
+            Label(
+                "Cloud Backup Not Verified",
+                systemImage: "exclamationmark.shield.fill"
+            )
+            .foregroundStyle(Color.statusWarning)
+
+            Text(
+                "If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Button {
+                manager.startVerification()
+            } label: {
+                Label("Verify Now", systemImage: "checkmark.shield")
+            }
+            .disabled(isBusy)
+
+            CloudBackupRepairPasskeyButton(manager: manager, isBusy: isBusy)
         }
     }
 
@@ -344,7 +371,7 @@ private struct CloudBackupRepairPasskeyButton: View {
                     Text("Creating Passkey...")
                 }
             } else {
-                Label("Create New Passkey", systemImage: "person.badge.key")
+                Label("Add New Passkey", systemImage: "person.badge.key")
             }
         }
         .disabled(isBusy)

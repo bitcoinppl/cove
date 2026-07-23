@@ -409,10 +409,5 @@ async fn run_restore_all_queue(
 }
 
 fn restore_all_must_stop(error: &CloudBackupError) -> bool {
-    matches!(
-        CloudStorageIssue::from(error),
-        CloudStorageIssue::AuthorizationRequired
-            | CloudStorageIssue::Offline
-            | CloudStorageIssue::Unavailable
-    )
+    is_provider_wide_interruption(error)
 }

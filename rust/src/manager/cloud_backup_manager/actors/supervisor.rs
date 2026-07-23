@@ -25,9 +25,9 @@ use super::write::{
     CloudBackupWriteClient, CloudBackupWriteCompletion, CloudBackupWriteSupervisor,
 };
 use crate::database::Database;
-use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudStorageIssue, PersistedDisablingCloudBackup,
+    CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
+    PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
@@ -49,29 +49,32 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailInventorySnapshot,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome, CloudBackupDetailResult,
-    CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupEnableContext,
-    CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
-    CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
-    CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
-    CloudBackupInventoryIncompleteReason, CloudBackupKeepEnabledPreparation,
-    CloudBackupNoDiscoveryEnablePreparation, CloudBackupOtherBackupsOutcome,
-    CloudBackupPasskeyChoiceIntent, CloudBackupPendingEnableCleanupState,
-    CloudBackupPendingEnableRecovery, CloudBackupPreparedCloudWalletDelete,
-    CloudBackupPreparedRestoreAll, CloudBackupReadyEnableUpload,
-    CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
-    CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
-    CloudBackupStatus, CloudBackupStore, CloudBackupUploadedEnableBackup,
-    CloudBackupVerificationPresentation, CloudBackupVerificationSource, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
-    OtherBackupsOperation, PendingEnableJournal, PendingEnableJournalPhase,
-    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
-    PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
-    RecoveryAction, RecoveryState, RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState,
-    VerificationState, WalletId, blocking_cloud_error,
+    CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupDriveAccountSwitchError,
+    CloudBackupEnableContext, CloudBackupEnablePasskeyPreparation,
+    CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
+    CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
+    CloudBackupEnableState, CloudBackupError, CloudBackupInventoryIncompleteReason,
+    CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
+    CloudBackupOtherBackupsOutcome, CloudBackupPasskeyChoiceIntent,
+    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
+    CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
+    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState,
+    CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupReuploadedWallets,
+    CloudBackupSavedPasskeyConfirmation, CloudBackupStatus, CloudBackupStore,
+    CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
+    CloudBackupVerificationSource, CloudBackupWalletItem, CloudBackupWalletStatus,
+    CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
+    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
+    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
+    blocking_cloud_error, is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
+mod account_switch;
 mod cloud_only;
 mod detail_workflow;
 mod disable;
@@ -92,6 +95,13 @@ mod tests {
 }
 
 static NEXT_SUPERVISOR_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DriveAccountSwitchReinitializationCompletion {
+    NotDriveAccountSwitch,
+    Stale,
+    Handled,
+}
 
 /// Passkey proof cached only for the current supervisor session
 ///

@@ -12,7 +12,7 @@ use crate::manager::cloud_backup_manager::wallets::{
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     CloudBackupError, CloudBackupRestoreReport, RustCloudBackupManager,
-    current_namespace_wallet_record_ids, is_connectivity_related_issue,
+    current_namespace_wallet_record_ids, is_provider_wide_interruption,
 };
 
 impl RustCloudBackupManager {
@@ -91,7 +91,7 @@ impl RustCloudBackupManager {
                     }
 
                     Err(error) => {
-                        if is_connectivity_related_issue(&error) {
+                        if is_provider_wide_interruption(&error) {
                             return Err(blocking_cloud_error(
                                 BlockingCloudStep::RecoverOtherBackups,
                                 error,
@@ -119,7 +119,7 @@ impl RustCloudBackupManager {
                     Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
 
                     Err(error) => {
-                        if is_connectivity_related_issue(&error) {
+                        if is_provider_wide_interruption(&error) {
                             return Err(blocking_cloud_error(
                                 BlockingCloudStep::RecoverOtherBackups,
                                 error,

@@ -8,6 +8,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
@@ -83,24 +86,6 @@ class AppManager private constructor() : FfiReconcile {
             override fun onRoutesChanged() {
                 clearInactiveSendFlowManager()
             }
-
-            override suspend fun startWalletScanIfNeeded(
-                walletId: WalletId,
-                isCurrent: () -> Boolean,
-            ): Result<Unit> =
-                runCatching {
-                    val manager = getWalletManagerLoaded(walletId, isCurrent)
-                    if (!isCurrent()) {
-                        throw CancellationException("wallet manager load for $walletId was superseded")
-                    }
-
-                    manager.startWalletScanIfNeeded()
-                }.also { result ->
-                    val error = result.exceptionOrNull()
-                    if (error is CancellationException) {
-                        throw error
-                    }
-                }
         }
 
     var router: RouterManager = RouterManager(rust.state().router, mainScope, routerHost)
@@ -286,13 +271,15 @@ class AppManager private constructor() : FfiReconcile {
         clearWalletManager()
 
         database = Database()
-        needsOnboarding = withRustOr(needsOnboarding) {
-            needsOnboarding()
-        }
+        needsOnboarding =
+            withRustOr(needsOnboarding) {
+                needsOnboarding()
+            }
 
-        val routerState = withRustOr(null) {
-            state()
-        }
+        val routerState =
+            withRustOr(null) {
+                state()
+            }
         router.reset(routerState?.router)
     }
 
@@ -432,9 +419,7 @@ class AppManager private constructor() : FfiReconcile {
      *
      * @return `true` only when a route was removed
      */
-    fun popRoute(): Boolean {
-        return router.popRoute()
-    }
+    fun popRoute(): Boolean = router.popRoute()
 
     internal fun popRouteForRecovery(): RoutePopResult = router.popRouteForRecovery()
 
@@ -443,12 +428,10 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun scanQr() {
-        router.advanceNavigationGeneration()
         sheetState = TaggedItem(AppSheetState.Qr)
     }
 
     fun scanNfc() {
-        router.advanceNavigationGeneration()
         scanNfcWithoutNavigationGeneration()
     }
 
@@ -476,18 +459,151 @@ class AppManager private constructor() : FfiReconcile {
 
     fun captureLoadAndResetGeneration(): GenerationToken = router.captureLoadAndResetGeneration()
 
-    fun startLoadAndResetTargetPrewarm(
-        generation: GenerationToken,
-        nextRoutes: List<Route>,
-    ) {
-        router.startLoadAndResetTargetPrewarm(generation, nextRoutes)
+    suspend fun completeLoadAndReset(route: Route.LoadAndReset) {
+        runCatchingCancellable(tag, "Unable to prepare load-and-reset target") {
+            completeLoadAndResetOrThrow(route)
+        }
     }
 
-    suspend fun prewarmLoadAndResetTargetIfCurrent(
+    private suspend fun completeLoadAndResetOrThrow(route: Route.LoadAndReset) =
+        coroutineScope {
+            val generation = captureLoadAndResetGeneration()
+            val nextRoutes = route.resetTo.map { it.route() }
+            val selectedWalletId = (nextRoutes.firstOrNull() as? Route.SelectedWallet)?.v1
+            val preparation =
+                async {
+                    when (selectedWalletId?.let { prepareWalletRoute(it, generation) }) {
+                        is WalletRoutePreparation.Ready, null -> LoadAndResetPreparation.ReadyToReset
+                        WalletRoutePreparation.RouteRedirected -> LoadAndResetPreparation.RouteRedirected
+                    }
+                }
+            val minimumDelay = async { delay(route.afterMillis.toLong()) }
+
+            val preparationResult = preparation.await()
+            minimumDelay.await()
+
+            if (preparationResult == LoadAndResetPreparation.ReadyToReset) {
+                resetAfterLoadingIfCurrent(generation, route, nextRoutes)
+            }
+        }
+
+    internal suspend fun prepareWalletRoute(
+        walletId: WalletId,
         generation: GenerationToken,
-        nextRoutes: List<Route>,
+    ): WalletRoutePreparation {
+        val recovery = walletTransitionRecovery(walletId)
+
+        var candidateId = recovery.nextCandidate()
+        while (candidateId != null) {
+            val manager = loadWalletRouteCandidate(candidateId, generation)
+            if (manager != null) {
+                ensureWalletRouteGenerationIsCurrent(generation, candidateId)
+
+                prepareLoadedWalletRoute(manager, candidateId, recovery)?.let { return it }
+            }
+
+            candidateId = recovery.nextCandidate()
+        }
+
+        return recoverMissingWalletRoute(generation)
+    }
+
+    private suspend fun walletTransitionRecovery(walletId: WalletId): WalletTransitionRecovery {
+        val cachedId = withContext(Dispatchers.Main.immediate) { walletManager?.id }
+        val displayedIds =
+            withContext(Dispatchers.IO) {
+                runCatchingCancellable(tag, "Unable to read wallets for wallet route recovery") {
+                    database.wallets().all()
+                }.getOrElse { emptyList() }
+                    .map(WalletMetadata::id)
+            }
+
+        return WalletTransitionRecovery.create(
+            requestedId = walletId,
+            cachedId = cachedId,
+            displayedIds = displayedIds,
+        )
+    }
+
+    private suspend fun loadWalletRouteCandidate(
+        candidateId: WalletId,
+        generation: GenerationToken,
+    ): WalletManager? {
+        val result =
+            runCatchingCancellable(tag, "Unable to prepare wallet $candidateId") {
+                getWalletManagerLoaded(candidateId) {
+                    router.isNavigationGenerationCurrent(generation)
+                }
+            }
+
+        return result.getOrElse { error ->
+            when (val disposition = WalletPreparationFailureDisposition.classify(error)) {
+                WalletPreparationFailureDisposition.MissingWallet -> null
+
+                is WalletPreparationFailureDisposition.CorruptedWallet -> {
+                    withContext(Dispatchers.Main.immediate) {
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.WalletDatabaseCorrupted(
+                                    walletId = disposition.error.`id`,
+                                    error = disposition.error.`error`,
+                                ),
+                            )
+                    }
+
+                    null
+                }
+
+                is WalletPreparationFailureDisposition.Rethrow -> throw disposition.error
+            }
+        }
+    }
+
+    private fun ensureWalletRouteGenerationIsCurrent(
+        generation: GenerationToken,
+        candidateId: WalletId,
     ) {
-        router.prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes)
+        if (!router.isNavigationGenerationCurrent(generation)) {
+            throw CancellationException("Wallet route changed while loading $candidateId")
+        }
+    }
+
+    private suspend fun prepareLoadedWalletRoute(
+        manager: WalletManager,
+        candidateId: WalletId,
+        recovery: WalletTransitionRecovery,
+    ): WalletRoutePreparation? {
+        if (!recovery.isFallback(candidateId)) {
+            return WalletRoutePreparation.Ready(manager)
+        }
+
+        val selected =
+            runCatchingCancellable(tag, "Unable to select fallback wallet $candidateId") {
+                withContext(Dispatchers.Main.immediate) {
+                    selectWalletWithoutNavigationGeneration(candidateId)
+                }
+            }.isSuccess
+
+        return if (selected) WalletRoutePreparation.RouteRedirected else null
+    }
+
+    private suspend fun recoverMissingWalletRoute(
+        generation: GenerationToken,
+    ): WalletRoutePreparation {
+        if (!router.isNavigationGenerationCurrent(generation)) {
+            throw CancellationException("Wallet route changed while recovering wallet selection")
+        }
+
+        withContext(Dispatchers.IO) {
+            runCatching { database.globalConfig().clearSelectedWallet() }
+                .onFailure { Log.e(tag, "Unable to clear selected wallet", it) }
+        }
+        withContext(Dispatchers.Main.immediate) {
+            clearWalletManager()
+            resetRoute(RouteFactory().newWalletSelect())
+        }
+
+        return WalletRoutePreparation.RouteRedirected
     }
 
     fun resetAfterLoadingIfCurrent(
@@ -608,8 +724,7 @@ class AppManager private constructor() : FfiReconcile {
             withRust {
                 dispatch(action)
             }
-        }
-            .onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
+        }.onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
     }
 
     companion object {

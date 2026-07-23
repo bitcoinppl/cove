@@ -1,4 +1,5 @@
 import AuthenticationServices
+import CryptoKit
 
 @_exported import CoveCore
 import Foundation
@@ -61,8 +62,11 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
     }
 
     private func credentialSummary(_ credentialId: Data) -> String {
-        let prefix = credentialId.prefix(4).map { String(format: "%02x", $0) }.joined()
-        return "len=\(credentialId.count) prefix=\(prefix)"
+        let fingerprint = SHA256.hash(data: credentialId)
+            .prefix(6)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "len=\(credentialId.count) fingerprint=\(fingerprint)"
     }
 
     /// PRF is guaranteed on iOS 18.4+ (our minimum deployment target)
@@ -209,6 +213,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
                 name: user.name,
                 userID: user.id
             )
+
+            // keep registration and PRF assertions on the same verified-user policy
+            request.userVerificationPreference = .required
             request.displayName = user.displayName
             request.prf = .checkForSupport
 
@@ -312,6 +319,8 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
                 request.allowedCredentials = []
             }
 
+            // PRF derives different secrets for verified and unverified requests
+            request.userVerificationPreference = .required
             request.prf = .inputValues(.init(saltInput1: prfSalt))
 
             let ctrl = ASAuthorizationController(authorizationRequests: [request])

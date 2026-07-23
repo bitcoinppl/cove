@@ -58,7 +58,11 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_recovery_operation(&mut self, action: RecoveryAction) {
         match action {
             RecoveryAction::RecreateManifest => self.start_recreate_manifest_recovery(),
-            RecoveryAction::ReinitializeBackup => self.start_reinitialize_backup_operation(),
+            RecoveryAction::ReinitializeBackup => {
+                if !self.retry_drive_account_switch_reinitialization() {
+                    self.start_reinitialize_backup_operation();
+                }
+            }
             RecoveryAction::RepairPasskey => self.begin_repair_passkey_operation(false),
         }
     }

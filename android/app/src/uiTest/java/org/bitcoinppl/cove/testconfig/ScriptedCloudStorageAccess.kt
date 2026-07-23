@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Process
 import kotlinx.coroutines.CompletableDeferred
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
+import org.bitcoinppl.cove_core.device.CloudBackupUploadStatus
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.device.CloudStorageInventorySnapshot
@@ -345,19 +346,31 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         recordId: String,
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
-    ): Boolean {
+    ): CloudBackupUploadStatus {
         if (fixtureRestoreEnabled) {
-            return namespace == ScriptedCloudBackupFixture.NAMESPACE &&
-                (recordId == MASTER_KEY_RECORD_ID || recordId in fixtureWalletRecordIds)
+            return if (
+                namespace == ScriptedCloudBackupFixture.NAMESPACE &&
+                    (recordId == MASTER_KEY_RECORD_ID || recordId in fixtureWalletRecordIds)
+            ) {
+                CloudBackupUploadStatus.UPLOADED
+            } else {
+                CloudBackupUploadStatus.NOT_FOUND
+            }
         }
 
-        val scenario = freshEnableScenario ?: return false
-        if (!scenario.isVisibilityReleased()) return false
+        val scenario = freshEnableScenario ?: return CloudBackupUploadStatus.NOT_FOUND
+        if (!scenario.isVisibilityReleased()) return CloudBackupUploadStatus.PENDING
 
-        return if (recordId == MASTER_KEY_RECORD_ID) {
+        val exists = if (recordId == MASTER_KEY_RECORD_ID) {
             scenario.masterBackup(namespace) != null
         } else {
             scenario.walletBackup(namespace, recordId) != null
+        }
+
+        return if (exists) {
+            CloudBackupUploadStatus.UPLOADED
+        } else {
+            CloudBackupUploadStatus.NOT_FOUND
         }
     }
 

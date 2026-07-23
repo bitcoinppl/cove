@@ -520,7 +520,10 @@ impl CloudBackupReducerState {
             return CloudBackupSettingsRowStatus::Confirming;
         }
 
-        if matches!(self.configured.verification, CloudBackupVerificationState::Required) {
+        if matches!(
+            self.configured.verification,
+            CloudBackupVerificationState::Required | CloudBackupVerificationState::Cancelled
+        ) {
             return CloudBackupSettingsRowStatus::Unverified;
         }
 
@@ -596,6 +599,7 @@ impl CloudBackupReducerState {
                 VerificationState::PasskeyConfirmed
             }
             CloudBackupVerificationState::Running => VerificationState::Verifying,
+            CloudBackupVerificationState::Cancelled => VerificationState::Cancelled,
             CloudBackupVerificationState::Failed(failure) => {
                 VerificationState::Failed(failure.clone())
             }
@@ -956,9 +960,8 @@ impl CloudBackupReducerState {
 
     fn resolve_verification(&mut self, verification: VerificationState) {
         self.configured.verification = match verification {
-            VerificationState::Idle | VerificationState::Cancelled => {
-                self.idle_verification_state()
-            }
+            VerificationState::Idle => self.idle_verification_state(),
+            VerificationState::Cancelled => CloudBackupVerificationState::Cancelled,
             VerificationState::Verifying => CloudBackupVerificationState::Running,
             VerificationState::Verified(report) => CloudBackupVerificationState::Verified {
                 report: Some(report),

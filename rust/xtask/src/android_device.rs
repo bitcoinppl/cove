@@ -1,6 +1,6 @@
-use crate::common::command_exists;
+use crate::common::{command_exists, print_info};
 use color_eyre::{
-    eyre::{Context, ContextCompat},
+    eyre::{eyre, Context, ContextCompat},
     Result,
 };
 use std::{
@@ -16,26 +16,55 @@ pub(crate) struct AndroidDevice {
 }
 
 impl AndroidDevice {
+    pub(crate) fn serial(&self) -> &str {
+        &self.serial
+    }
+
+    pub(crate) fn description(&self) -> String {
+        if self.details.is_empty() {
+            self.serial.clone()
+        } else {
+            format!("{} ({})", self.serial, self.details)
+        }
+    }
+
+    /// Select a connected Android device.
+    ///
+    /// `device` accepts:
+    /// - `main` (default) — physical phone via `ANDROID_DEVICE_MAIN`, else first non-emulator
+    /// - `sim` — emulator via `ANDROID_DEVICE_SIM`, else first `emulator-*`
+    /// - an exact adb serial
+    pub(crate) fn select(device: Option<&str>) -> Result<Self> {
+        let devices = list_connected()?;
+        let selector = AndroidDeviceSelector::from_arg(device)?;
+        selector.resolve(&devices)
+    }
+
+    pub(crate) fn select_many(device_args: &[String]) -> Result<Vec<Self>> {
+        let devices = list_connected()?;
+        let selectors = if device_args.is_empty() {
+            vec![AndroidDeviceSelector::from_arg(None)?]
+        } else {
+            device_args
+                .iter()
+                .map(|device| AndroidDeviceSelector::from_arg(Some(device)))
+                .collect::<Result<Vec<_>>>()?
+        };
+        let mut selected = Vec::with_capacity(selectors.len());
+
+        for selector in selectors {
+            let device = selector.resolve(&devices)?;
+
+            if !selected.iter().any(|selected: &Self| selected.serial == device.serial) {
+                selected.push(device);
+            }
+        }
+
+        Ok(selected)
+    }
+
     pub(crate) fn select_connected() -> Result<Self> {
-        let output = Command::new("adb")
-            .args(["devices", "-l"])
-            .output()
-            .wrap_err("Failed to list connected Android devices")?;
-
-        if !output.status.success() {
-            color_eyre::eyre::bail!(
-                "Failed to list connected Android devices: {}",
-                command_error(&output)
-            );
-        }
-
-        let devices = parse_connected(&adb_stdout(&output));
-
-        match devices.as_slice() {
-            [] => color_eyre::eyre::bail!("No connected Android device found"),
-            [device] => Ok(device.clone()),
-            _ => select_with_fzf(&devices),
-        }
+        Self::select(None)
     }
 
     pub(crate) fn ensure_ready(&self) -> Result<()> {
@@ -137,6 +166,149 @@ impl AndroidDevice {
 
         Ok(adb_stdout(&output))
     }
+
+    fn is_emulator(&self) -> bool {
+        serial_is_emulator(&self.serial)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AndroidDeviceSelector {
+    Main,
+    Sim,
+    Serial(String),
+}
+
+impl AndroidDeviceSelector {
+    fn from_arg(device: Option<&str>) -> Result<Self> {
+        let Some(device) = device.map(str::trim).filter(|value| !value.is_empty()) else {
+            print_info("No Android device specified; defaulting to alias 'main'");
+            return Ok(Self::Main);
+        };
+
+        match device.to_ascii_lowercase().as_str() {
+            "main" => Ok(Self::Main),
+            "sim" => Ok(Self::Sim),
+            _ => Ok(Self::Serial(device.to_string())),
+        }
+    }
+
+    fn resolve(&self, devices: &[AndroidDevice]) -> Result<AndroidDevice> {
+        if devices.is_empty() {
+            color_eyre::eyre::bail!("No connected Android device found");
+        }
+
+        match self {
+            Self::Main => resolve_main(devices),
+            Self::Sim => resolve_sim(devices),
+            Self::Serial(serial) => resolve_serial(devices, serial),
+        }
+    }
+}
+
+fn resolve_main(devices: &[AndroidDevice]) -> Result<AndroidDevice> {
+    if let Some(serial) = env_device_serial("ANDROID_DEVICE_MAIN") {
+        print_info(&format!("Resolved Android alias 'main' from ANDROID_DEVICE_MAIN={serial}"));
+        return resolve_serial(devices, &serial);
+    }
+
+    let physical =
+        devices.iter().filter(|device| !device.is_emulator()).cloned().collect::<Vec<_>>();
+
+    match physical.as_slice() {
+        [] => {
+            print_info(
+                "Android alias 'main' has no physical device; using first available Android device",
+            );
+            select_from_devices(devices)
+        }
+        [device] => {
+            print_info(&format!("Using Android main device {}", device.description()));
+            Ok(device.clone())
+        }
+        _ => {
+            print_info("Multiple physical Android devices connected; choose main device");
+            select_from_devices(&physical)
+        }
+    }
+}
+
+fn resolve_sim(devices: &[AndroidDevice]) -> Result<AndroidDevice> {
+    if let Some(serial) = env_device_serial("ANDROID_DEVICE_SIM") {
+        print_info(&format!("Resolved Android alias 'sim' from ANDROID_DEVICE_SIM={serial}"));
+        return resolve_serial(devices, &serial);
+    }
+
+    let emulators =
+        devices.iter().filter(|device| device.is_emulator()).cloned().collect::<Vec<_>>();
+
+    match emulators.as_slice() {
+        [] => Err(eyre!(
+            "Android alias 'sim' found no emulator. Start an AVD, or set ANDROID_DEVICE_SIM to an adb serial (list devices with: adb devices -l)"
+        )),
+        [device] => {
+            print_info(&format!("Using Android sim device {}", device.description()));
+            Ok(device.clone())
+        }
+        _ => {
+            print_info("Multiple Android emulators connected; choose sim device");
+            select_from_devices(&emulators)
+        }
+    }
+}
+
+fn resolve_serial(devices: &[AndroidDevice], serial: &str) -> Result<AndroidDevice> {
+    devices.iter().find(|device| device.serial == serial).cloned().ok_or_else(|| {
+        eyre!(
+            "No connected Android device with serial '{serial}'. {}",
+            available_android_device_context(devices)
+        )
+    })
+}
+
+fn select_from_devices(devices: &[AndroidDevice]) -> Result<AndroidDevice> {
+    match devices {
+        [] => color_eyre::eyre::bail!("No connected Android device found"),
+        [device] => Ok(device.clone()),
+        _ => select_with_fzf(devices),
+    }
+}
+
+fn list_connected() -> Result<Vec<AndroidDevice>> {
+    let output = Command::new("adb")
+        .args(["devices", "-l"])
+        .output()
+        .wrap_err("Failed to list connected Android devices")?;
+
+    if !output.status.success() {
+        color_eyre::eyre::bail!(
+            "Failed to list connected Android devices: {}",
+            command_error(&output)
+        );
+    }
+
+    Ok(parse_connected(&adb_stdout(&output)))
+}
+
+fn env_device_serial(key: &str) -> Option<String> {
+    std::env::var(key).ok().and_then(|value| {
+        let value = value.trim();
+        (!value.is_empty()).then(|| value.to_string())
+    })
+}
+
+fn serial_is_emulator(serial: &str) -> bool {
+    serial.starts_with("emulator-")
+}
+
+fn available_android_device_context(devices: &[AndroidDevice]) -> String {
+    if devices.is_empty() {
+        return "No available Android devices found".to_string();
+    }
+
+    let devices = devices.iter().map(AndroidDevice::description).collect::<Vec<_>>().join(", ");
+
+    format!("Available Android devices: {devices}")
 }
 
 fn parse_connected(output: &str) -> Vec<AndroidDevice> {
@@ -231,7 +403,10 @@ fn remote_shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_connected, remote_shell_quote, AndroidDevice};
+    use super::{
+        parse_connected, remote_shell_quote, serial_is_emulator, AndroidDevice,
+        AndroidDeviceSelector,
+    };
 
     #[test]
     fn parses_only_ready_connected_android_devices() {
@@ -278,5 +453,63 @@ mod tests {
             remote_shell_quote("/sdcard/Pictures/Screenshots/it's.png"),
             "'/sdcard/Pictures/Screenshots/it'\\''s.png'"
         );
+    }
+
+    #[test]
+    fn serial_is_emulator_detects_avd_serials() {
+        assert!(serial_is_emulator("emulator-5554"));
+        assert!(!serial_is_emulator("RFCN4002AKK"));
+        assert!(!serial_is_emulator("192.0.2.1:5555"));
+    }
+
+    #[test]
+    fn android_device_selector_parses_aliases_and_serials() {
+        assert_eq!(
+            AndroidDeviceSelector::from_arg(None).expect("default"),
+            AndroidDeviceSelector::Main
+        );
+        assert_eq!(
+            AndroidDeviceSelector::from_arg(Some("main")).expect("main"),
+            AndroidDeviceSelector::Main
+        );
+        assert_eq!(
+            AndroidDeviceSelector::from_arg(Some("SIM")).expect("sim"),
+            AndroidDeviceSelector::Sim
+        );
+        assert_eq!(
+            AndroidDeviceSelector::from_arg(Some("emulator-5554")).expect("serial"),
+            AndroidDeviceSelector::Serial("emulator-5554".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_prefers_physical_for_main_and_emulator_for_sim() {
+        let devices = vec![
+            AndroidDevice {
+                serial: "emulator-5554".to_string(),
+                details: "model:Pixel_9".to_string(),
+            },
+            AndroidDevice {
+                serial: "RFCN4002AKK".to_string(),
+                details: "model:SM_G981W".to_string(),
+            },
+        ];
+
+        let main = AndroidDeviceSelector::Main.resolve(&devices).expect("main");
+        assert_eq!(main.serial, "RFCN4002AKK");
+
+        let sim = AndroidDeviceSelector::Sim.resolve(&devices).expect("sim");
+        assert_eq!(sim.serial, "emulator-5554");
+    }
+
+    #[test]
+    fn resolve_sim_errors_without_emulator() {
+        let devices = vec![AndroidDevice {
+            serial: "RFCN4002AKK".to_string(),
+            details: "model:SM_G981W".to_string(),
+        }];
+
+        let err = AndroidDeviceSelector::Sim.resolve(&devices).expect_err("sim needs emulator");
+        assert!(err.to_string().contains("ANDROID_DEVICE_SIM"));
     }
 }

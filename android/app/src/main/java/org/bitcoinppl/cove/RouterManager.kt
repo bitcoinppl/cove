@@ -31,10 +31,6 @@ internal interface RouterManagerHost {
 
     fun onRoutesChanged()
 
-    suspend fun startWalletScanIfNeeded(
-        walletId: WalletId,
-        isCurrent: () -> Boolean,
-    ): Result<Unit>
 }
 
 /**
@@ -217,30 +213,6 @@ class RouterManager internal constructor(
 
     fun captureLoadAndResetGeneration(): GenerationToken = navigationGenerations.capture()
 
-    fun startLoadAndResetTargetPrewarm(
-        generation: GenerationToken,
-        nextRoutes: List<Route>,
-    ) {
-        mainScope.launch {
-            prewarmLoadAndResetTargetIfCurrent(generation, nextRoutes)
-        }
-    }
-
-    suspend fun prewarmLoadAndResetTargetIfCurrent(
-        generation: GenerationToken,
-        nextRoutes: List<Route>,
-    ) {
-        if (!isNavigationGenerationCurrent(generation)) return
-        val selectedWalletRoute = nextRoutes.firstOrNull() as? Route.SelectedWallet ?: return
-
-        host.startWalletScanIfNeeded(selectedWalletRoute.v1) {
-            isNavigationGenerationCurrent(generation)
-        }
-            .onFailure { e ->
-                Log.e(tag, "Unable to prewarm selected wallet ${selectedWalletRoute.v1}", e)
-            }
-    }
-
     fun resetAfterLoadingIfCurrent(
         generation: GenerationToken,
         route: Route.LoadAndReset,
@@ -333,7 +305,7 @@ class RouterManager internal constructor(
             }
     }
 
-    private fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
+    internal fun isNavigationGenerationCurrent(generation: GenerationToken): Boolean =
         navigationGenerations.isCurrent(generation)
 
     private companion object {

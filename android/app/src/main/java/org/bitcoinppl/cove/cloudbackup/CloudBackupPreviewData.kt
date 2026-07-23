@@ -64,9 +64,12 @@ internal fun CloudBackupScreenPreviewContent(darkTheme: Boolean = isSystemInDark
     CoveTheme(darkTheme = darkTheme, dynamicColor = false) {
         CloudBackupScreenFrame(
             manager = manager,
-            onBack = {},
-            onRecreate = {},
-            onReinitialize = {},
+            actions =
+                CloudBackupScreenActions(
+                    onBack = {},
+                    onRecreate = {},
+                    onReinitialize = {},
+                ),
         )
     }
 }

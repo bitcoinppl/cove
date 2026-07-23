@@ -58,15 +58,18 @@ impl PlatformAuthorizationRetryPolicy {
             ),
         };
 
-        operation_is_in_scope
-            && matches!(
-                error,
-                PasskeyError::RequestFailed {
-                    reason: PasskeyFailureReason::PlatformAuthorizationFailed,
-                    ..
-                }
-            )
+        operation_is_in_scope && is_pre_presentation_platform_authorization_failure(error)
     }
+}
+
+pub(super) fn is_pre_presentation_platform_authorization_failure(error: &PasskeyError) -> bool {
+    matches!(
+        error,
+        PasskeyError::RequestFailed {
+            reason: PasskeyFailureReason::PlatformAuthorizationFailed,
+            ..
+        }
+    )
 }
 
 pub(crate) struct PlatformAuthorizationRetrier {

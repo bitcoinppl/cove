@@ -17,8 +17,7 @@ use crate::manager::cloud_backup_manager::wallets::{
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
-    CloudBackupWalletStatus, CloudStorageIssue, RustCloudBackupManager,
-    is_connectivity_related_issue,
+    CloudBackupWalletStatus, RustCloudBackupManager, is_provider_wide_interruption,
 };
 
 pub(crate) struct CloudBackupPreparedCloudWalletDelete {
@@ -165,7 +164,7 @@ impl RustCloudBackupManager {
                     continue;
                 }
                 Err(error) => {
-                    if is_connectivity_related_issue(CloudStorageIssue::from(&error)) {
+                    if is_provider_wide_interruption(&error) {
                         return Err(blocking_cloud_error(BlockingCloudStep::FetchCloudOnly, error));
                     }
                     warn!("Failed to load cloud-only wallet backup: {error}");

@@ -10,6 +10,35 @@ internal class DriveTokenProvider(
     private val accountBindingStore: DriveAccountBindingStore,
     private val httpClient: DriveHttpClient,
 ) {
+    suspend fun clearToken(token: String) {
+        driveAuthorization.clearToken(token)
+    }
+
+    suspend fun selectAccount(): SelectedDriveAccessToken {
+        val unresolvedAccess = driveAuthorization.selectAccount()
+        val access =
+            try {
+                unresolvedAccess.withResolvedAccountIdentity()
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                clearFailedIdentityLookupToken(unresolvedAccess.token, error)
+
+                throw error
+            }
+        val identity = access.account
+        if (identity != null) {
+            return SelectedDriveAccessToken(access.token, identity)
+        }
+
+        runCatching {
+            driveAuthorization.clearToken(access.token)
+        }.onFailure { error ->
+            logDriveWarning("failed to clear unidentified drive token", error)
+        }
+
+        throw DriveAccountBindingException.MissingIdentity()
+    }
+
     suspend fun <T> runDriveOperation(
         interactive: Boolean,
         onError: (Throwable) -> CloudStorageException,
@@ -71,12 +100,9 @@ internal class DriveTokenProvider(
         }
     }
 
-    private suspend fun verifiedDriveAccessToken(interactive: Boolean): DriveAccessToken =
-        verifiedDriveAccessToken(interactive, retryIdentityLookup = true)
-
     private suspend fun verifiedDriveAccessToken(
         interactive: Boolean,
-        retryIdentityLookup: Boolean,
+        retryIdentityLookup: Boolean = true,
     ): DriveAccessToken {
         val unresolvedAccess = driveAuthorization.accessToken(interactive)
         val access =

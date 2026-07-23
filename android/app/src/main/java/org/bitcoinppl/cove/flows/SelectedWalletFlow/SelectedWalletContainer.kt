@@ -45,6 +45,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.WalletRoutePreparation
 import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.ui.theme.CoveColor
@@ -55,14 +56,11 @@ import org.bitcoinppl.cove.wallet.rememberWalletExportLaunchers
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.AppAlertState
-import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.DiscoveryState
 import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.Route
-import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.WalletLoadState
-import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.WalletType
 import org.bitcoinppl.cove_core.balancePresentationProvisional
@@ -88,50 +86,28 @@ fun SelectedWalletContainer(
 
     // load manager on appear
     LaunchedEffect(id) {
-        // capture the wallet ID we're loading to detect if it changes mid-load
         val requestedId = id
+        val generation = app.captureLoadAndResetGeneration()
 
         manager = app.cachedWalletManager(requestedId)
 
         try {
             android.util.Log.d(tag, "getting wallet $requestedId")
-            val wm = app.getWalletManagerLoaded(requestedId)
+            val preparation = app.prepareWalletRoute(requestedId, generation)
+            val wm = (preparation as? WalletRoutePreparation.Ready)?.manager ?: return@LaunchedEffect
 
-            // only set manager if we're still loading the same wallet (not stale)
             if (isActive && requestedId == id) {
                 manager = wm
 
-                // small delay then update balance
                 delay(BALANCE_UPDATE_DELAY_MS)
                 wm.updateWalletBalance()
             } else {
-                // app-owned managers stay alive here so an in-flight initial scan can continue
-                // until AppManager replaces it for another wallet
                 android.util.Log.d(tag, "discarding stale wallet load for $requestedId, now loading $id")
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
-            app.alertState = TaggedItem(
-                AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`)
-            )
         } catch (e: Exception) {
-            android.util.Log.e(tag, "something went very wrong", e)
-
-            // try to select another wallet or go to add wallet
-            try {
-                val wallets = Database().wallets().all()
-                val otherWallet = wallets.firstOrNull { it.id != id }
-
-                if (otherWallet != null) {
-                    app.selectWalletOrThrow(otherWallet.id)
-                } else {
-                    app.loadAndReset(RouteFactory().newWalletSelect())
-                }
-            } catch (ex: Exception) {
-                app.loadAndReset(RouteFactory().newWalletSelect())
-            }
+            android.util.Log.e(tag, "unable to prepare wallet route", e)
         }
     }
 

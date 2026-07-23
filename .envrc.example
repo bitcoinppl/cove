@@ -13,3 +13,13 @@ export COVE_KEYSTORE_PATH="$HOME/.secrets/cove-upload.keystore"
 export COVE_KEYSTORE_PASSWORD="your-keystore-password-here"
 export COVE_KEY_ALIAS="upload"
 export COVE_KEY_PASSWORD="your-key-password-here"
+
+# iOS device aliases for: just brall --device main|se
+# export IOS_DEVICE_MAIN="00008120-0006243420214032"
+# export IOS_DEVICE_SE="00008xxx-xxxxxxxxxxxxxxxx"
+# default device when no --device is passed (optional)
+# export IOS_DEVICE_UDID="00008120-0006243420214032"
+
+# Android device aliases for: just bra -D main|sim  /  just brall -D sim
+# export ANDROID_DEVICE_MAIN="RFCN4002AKK"
+# export ANDROID_DEVICE_SIM="emulator-5554"

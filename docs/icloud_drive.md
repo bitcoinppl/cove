@@ -35,6 +35,10 @@ If you need one subdirectory, start with the appropriate iCloud scope and narrow
 - Do not block the same run loop you expect to deliver query notifications
 - Keep `url(forUbiquityContainerIdentifier:)` off the main thread; Apple says it may take a nontrivial amount of time
 
+Cove owns one main-actor metadata query for the lifetime of the process. The query searches the ubiquitous data scope, publishes value snapshots to async consumers, and remains running so later `didUpdate` events can satisfy upload-confirmation checks, downloads, listings, and sync-health checks. Do not create short-lived queries for individual operations or call `stop()` during normal app operation. Tearing down a query while CloudDocs is delivering progress notifications can race inside `NSMetadataQuery` cleanup.
+
+The initial result is authoritative only after `NSMetadataQueryDidFinishGathering`. Updates received while gathering may reveal an item early, but an empty partial snapshot must not be interpreted as proof that an item is absent. A transient `start()` failure is not process-fatal: the shared index surfaces it to the operation that attempted startup and permits a later consumer to retry.
+
 ### Cold start timing
 
 The iCloud daemon needs time after app launch to initialize its metadata index. On a fresh launch, `NSMetadataQuery` may return 0 results even though `FileManager` can see files in the ubiquity container. On subsequent launches the daemon is already warm and metadata queries work immediately.
@@ -106,9 +110,11 @@ Apple documents placeholder behavior and download-status keys, but not the exact
 ### Listing files or directories
 
 For user-facing inventory, take a fast FileManager snapshot and always run the
-normalized metadata query. The completed result is the sorted union. If the
-metadata query fails or times out, keep any local rows as retained provisional
-data but report the inventory as incomplete; do not report confirmed zero.
+normalized metadata query before treating an inventory as complete. The complete
+result is the sorted union. If the metadata query fails or times out, the complete
+listing throws instead of returning its local rows or reporting confirmed zero.
+A caller may continue showing a separately retained local snapshot as provisional
+data, but that snapshot remains explicitly incomplete.
 
 ```swift
 func listItems(parentPath: String) throws -> [String] {
@@ -122,26 +128,45 @@ func listItems(parentPath: String) throws -> [String] {
 }
 ```
 
-`ICloudDriveHelper.listSubdirectories` and `listFiles` implement this union for
-complete listings. Their fast local snapshot is best effort, while metadata
-failure makes the union incomplete. `listWalletFilesSnapshot` deliberately
-returns only the fast local result with `isComplete = false`; Rust may publish
-it while the mandatory complete listing continues.
+The private `CloudStorageAccessImpl.listSubdirectories` and `listFiles` methods
+implement this union for complete namespace and wallet-file listings. A metadata
+failure makes those operations throw, so they do not return a partial union.
+`CloudStorageAccessImpl.listWalletFilesSnapshot` deliberately returns only the
+best-effort local result with `isComplete = false`; Rust may publish or retain it
+while the mandatory complete listing continues.
 
 ### Checking whether a file exists
 
-Use `NSMetadataQuery` with the right ubiquitous scope and a narrow predicate. That is the safer choice when local download state should not affect the answer.
+Read the shared metadata index and filter its snapshot by resolved parent path and filename. This is safer than checking only the local filesystem when download state should not affect the answer.
 
 ### Waiting for a specific file
 
-Use `NSMetadataQuery` with a name predicate and leave it running long enough to receive `didUpdate` events. Timeouts are app-level policy, not Apple API behavior, so pick them based on the user flow.
+For consent-allowed, user-facing reads, wait on the shared metadata index for a
+matching `didUpdate` snapshot. Silent background reads use only the current or
+initial metadata snapshot and return `NotFound` when the item is absent; they do
+not hold a worker open waiting for later metadata updates. Timeouts are
+app-level policy, not Apple API behavior, so pick them based on the user flow.
+
+### Uploading files
+
+`CloudStorageAccessImpl.uploadMasterKeyBackup` and `uploadWalletBackup` return
+after `ICloudDriveHelper.writeForUpload` validates the bytes staged in the local
+iCloud container. That handoff is intentionally asynchronous: it does not prove
+that the provider can see the file or that the remote revision is current.
+
+Rust owns upload confirmation. Its pending-upload worker later calls
+`isBackupUploaded`, then downloads the backup and verifies its revision before
+marking the blob confirmed. Do not make the upload methods wait for metadata
+visibility; provider confirmation belongs to that retryable background flow.
 
 ### Timeouts and retries in this app
 
 These numbers are project heuristics, not Apple guidance:
 
-- `60s` for operations that need to find one specific file, like upload or download flows
+- `60s` for consent-allowed operations that need to find one specific file
 - `5s` for a normal metadata listing while FileManager supplies the fast local snapshot
+- silent downloads use the bounded current-or-initial metadata snapshot and
+  return `NotFound` when it contains no candidate
 - silent onboarding namespace discovery has one outer `15s` deadline, performs at most four inspections, and uses retry delays of `1s`, `2s`, and `4s`
 - each silent inspection caps its metadata query at `5s` and leaves cleanup time inside the outer deadline
 - cancellation stops queued silent work; an expired deadline is unavailable or incomplete, never confirmed empty
@@ -149,7 +174,9 @@ These numbers are project heuristics, not Apple guidance:
 The outer deadline applies to silent discovery, not to interactive passkey or
 provider sheets. Rust does not restart silent discovery after that deadline or
 another storage failure; its bounded retries apply only after namespace
-metadata is visible while recovery files are still pending.
+metadata is visible while recovery files are still pending. Interactive passkey
+restore separately re-polls namespace discovery while user-authorized work
+remains active.
 
 ## Common mistakes
 
@@ -158,7 +185,7 @@ metadata is visible while recovery files are still pending.
 3. Blocking the same run loop that should deliver query notifications
 4. Calling `url(forUbiquityContainerIdentifier:)` on the main thread. It can block UI work
 5. Treating placeholder filenames or file contents as stable API
-6. Using a broad predicate when you already know the filename or subdirectory you want
+6. Creating and tearing down a metadata query for every filename or subdirectory lookup
 7. Assuming metadata is available immediately at app launch. The daemon needs time to warm up, especially on first launch
 8. Debugging metadata queries on a dev build with stale credentials. Bump the build number or re-sign iCloud on the device if queries return 0 results
 9. Returning a nonempty FileManager snapshot without running the mandatory metadata union

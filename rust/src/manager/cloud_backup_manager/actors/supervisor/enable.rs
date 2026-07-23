@@ -129,16 +129,28 @@ impl CloudBackupSupervisor {
             }
         }
 
+        match self.drive_account_switch_reinitialization_finished(manager, claim, false) {
+            DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
+            DriveAccountSwitchReinitializationCompletion::Stale
+            | DriveAccountSwitchReinitializationCompletion::Handled => return,
+        }
+
         self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
-    fn finish_enable_operation(
+    pub(crate) fn finish_enable_operation(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
+            match self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
+                DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
+                DriveAccountSwitchReinitializationCompletion::Stale
+                | DriveAccountSwitchReinitializationCompletion::Handled => return,
+            }
+
             manager.apply_recovery_state(RecoveryState::Idle);
             let runtime_status = RustCloudBackupManager::runtime_status_for(
                 &RustCloudBackupManager::load_persisted_state(),
