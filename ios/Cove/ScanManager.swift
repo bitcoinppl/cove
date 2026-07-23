@@ -39,6 +39,10 @@ import SwiftUI
 
                 try manager.importLabels(labels: labels)
                 app.alertState = .init(.importedLabelsSuccessfully)
+            case let .keyTeleportReceiver(packet):
+                handleKeyTeleportReceiver(packet)
+            case let .keyTeleportSender(packet):
+                handleKeyTeleportSender(packet)
             }
         } catch {
             switch error {
@@ -52,6 +56,42 @@ import SwiftUI
                 Log.error("Unable to handle scanned code, error: \(error)")
                 app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
             }
+        }
+    }
+
+    @MainActor
+    func handleKeyTeleportText(_ text: String) -> Bool {
+        do {
+            let multiFormat = try StringOrData(text).toMultiFormat()
+            switch multiFormat {
+            case .keyTeleportReceiver, .keyTeleportSender:
+                handleMultiFormat(multiFormat)
+                return true
+            default:
+                return false
+            }
+        } catch let error as MultiFormatError {
+            if case .KeyTeleportPsbtNotSupported = error {
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: "KeyTeleport PSBT packets are not supported yet.")
+                )
+                return true
+            }
+
+            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let looksLikeKeyTeleport = normalized.contains("keyteleport.com")
+                || normalized.hasPrefix("b$2r")
+                || normalized.hasPrefix("b$2s")
+                || normalized.hasPrefix("b$2p")
+            if looksLikeKeyTeleport {
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: "This KeyTeleport packet could not be read.")
+                )
+            }
+
+            return looksLikeKeyTeleport
+        } catch {
+            return false
         }
     }
 
@@ -77,6 +117,10 @@ import SwiftUI
 
     @MainActor
     func handleFileOpen(_ url: URL) {
+        if handleKeyTeleportUrl(url) {
+            return
+        }
+
         let fileHandler = FileHandler(filePath: url.absoluteString)
 
         do {
@@ -107,6 +151,10 @@ import SwiftUI
                 return try manager.importLabels(labels: labels)
             case let .signedPsbt(psbt):
                 handleSignedPsbt(psbt)
+            case let .keyTeleportReceiver(packet):
+                handleKeyTeleportReceiver(packet)
+            case let .keyTeleportSender(packet):
+                handleKeyTeleportSender(packet)
             }
         } catch {
             switch error {
@@ -133,6 +181,47 @@ import SwiftUI
 }
 
 extension ScanManager {
+    @MainActor
+    private func handleKeyTeleportUrl(_ url: URL) -> Bool {
+        guard isKeyTeleportHost(url.host) else {
+            return false
+        }
+
+        do {
+            let multiFormat = try StringOrData(url.absoluteString).toMultiFormat()
+            handleMultiFormat(multiFormat)
+            return true
+        } catch {
+            app.alertState = .init(
+                .invalidFormat(message: "This KeyTeleport link is not supported.")
+            )
+            return true
+        }
+    }
+
+    private func isKeyTeleportHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        else {
+            return false
+        }
+
+        return host == "keyteleport.com" || host.hasSuffix(".keyteleport.com")
+    }
+
+    @MainActor
+    private func handleKeyTeleportReceiver(_ packet: KeyTeleportReceiverPacket) {
+        let manager = app.ensureKeyTeleportManager()
+        manager.ingest(packet)
+        app.pushRoute(RouteFactory().keyTeleportSend())
+    }
+
+    @MainActor
+    private func handleKeyTeleportSender(_ packet: KeyTeleportSenderPacket) {
+        let manager = app.ensureKeyTeleportManager()
+        manager.ingest(packet)
+        app.pushRoute(RouteFactory().keyTeleportReceive())
+    }
+
     @MainActor
     private func importHotWallet(_ words: [String]) {
         do {
@@ -169,7 +258,9 @@ extension ScanManager {
             Log.debug("Imported Wallet: \(id)")
             app.alertState = TaggedItem(.importedSuccessfully)
 
-            if app.walletManager?.id != id { try app.selectWalletOrThrow(id) }
+            if app.walletManager?.id != id {
+                try app.selectWalletOrThrow(id)
+            }
 
             if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
                 try app.walletManager?.rust.setWalletType(walletType: .cold)

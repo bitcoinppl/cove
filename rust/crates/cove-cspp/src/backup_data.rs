@@ -137,6 +137,8 @@ impl WalletEntry {
 #[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub enum WalletSecret {
     Mnemonic(String),
+    /// A BIP32 extended private key
+    Xprv(String),
     TapSignerBackup(Vec<u8>),
     Descriptor(String),
     WatchOnly,
@@ -146,6 +148,7 @@ impl std::fmt::Debug for WalletSecret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Mnemonic(_) => write!(f, "Mnemonic(****)"),
+            Self::Xprv(_) => write!(f, "Xprv(****)"),
             Self::TapSignerBackup(_) => write!(f, "TapSignerBackup(****)"),
             Self::Descriptor(_) => write!(f, "Descriptor(****)"),
             Self::WatchOnly => write!(f, "WatchOnly"),
@@ -430,6 +433,7 @@ mod tests {
     fn wallet_secret_variants_roundtrip() {
         for (secret, tag) in [
             (WalletSecret::Mnemonic("test words".to_string()), "Mnemonic"),
+            (WalletSecret::Xprv("xprv-test".to_string()), "Xprv"),
             (WalletSecret::TapSignerBackup(vec![1, 2, 3]), "TapSignerBackup"),
             (WalletSecret::Descriptor("wpkh(...)".to_string()), "Descriptor"),
             (WalletSecret::WatchOnly, "WatchOnly"),

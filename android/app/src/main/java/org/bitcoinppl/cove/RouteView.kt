@@ -9,6 +9,7 @@ import org.bitcoinppl.cove.flows.CoinControlFlow.CoinControlContainer
 import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.SelectedWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails.TransactionDetailsContainer
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportContainer
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowContainer
 import org.bitcoinppl.cove.flows.SettingsFlow.SettingsContainer
 import org.bitcoinppl.cove.secret_words.SecretWordsScreen
@@ -65,6 +66,13 @@ fun RouteView(app: AppManager, route: Route) {
 
             is Route.CoinControl -> {
                 CoinControlContainer(
+                    app = app,
+                    route = route.v1,
+                )
+            }
+
+            is Route.KeyTeleport -> {
+                KeyTeleportContainer(
                     app = app,
                     route = route.v1,
                 )

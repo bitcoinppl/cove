@@ -87,6 +87,7 @@ class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
     private var privacyCoverView: View? = null
     private var isBootstrapped = false
+    private var handledExternalIntentSignature: String? = null
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var isPrivacyCoverVisible by mutableStateOf(false)
     private val onboardingManagerViewModel by viewModels<OnboardingManagerViewModel>()
@@ -353,6 +354,7 @@ class MainActivity : FragmentActivity() {
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
+                            handleExternalKeyTeleportIntent(intent)
 
                             // non-blocking — initData preloads caches and prices but is not
                             // required for core functionality, failures are logged but not surfaced to the user
@@ -463,6 +465,36 @@ class MainActivity : FragmentActivity() {
 
         // create view-based privacy cover overlay (synchronous updates, no Compose race condition)
         privacyCoverView = setupPrivacyCover()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (isBootstrapped) {
+            handleExternalKeyTeleportIntent(intent)
+        }
+    }
+
+    private fun handleExternalKeyTeleportIntent(intent: Intent?) {
+        val text =
+            when (intent?.action) {
+                Intent.ACTION_VIEW -> intent.dataString
+                Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+                else -> null
+            }?.trim()
+
+        if (text.isNullOrEmpty()) {
+            return
+        }
+
+        val signature = "${intent?.action}:$text"
+        if (signature == handledExternalIntentSignature) {
+            return
+        }
+
+        if (Scanner.handleKeyTeleportText(text)) {
+            handledExternalIntentSignature = signature
+        }
     }
 
     private fun resetLocalDataForUiTestsIfRequested() {

@@ -8,8 +8,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
+import org.bitcoinppl.cove_core.RustKeyTeleportManager
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException
@@ -29,6 +31,9 @@ internal class AndroidManagerCache(
         private set
 
     internal var coinControlManager: CoinControlManager? by mutableStateOf(null)
+        private set
+
+    internal var keyTeleportManager: KeyTeleportManager? by mutableStateOf(null)
         private set
 
     internal fun setWalletManager(manager: WalletManager) {
@@ -207,6 +212,17 @@ internal class AndroidManagerCache(
         coinControlManager = manager
     }
 
+    internal fun getKeyTeleportManager(
+        createRustManager: () -> RustKeyTeleportManager,
+    ): KeyTeleportManager {
+        keyTeleportManager?.let { return it }
+
+        Log.d(tag, "creating KeyTeleportManager")
+        val manager = KeyTeleportManager(createRustManager())
+        keyTeleportManager = manager
+        return manager
+    }
+
     internal fun clearCoinControlManager(manager: CoinControlManager) {
         if (coinControlManager === manager) {
             coinControlManager = null
@@ -302,11 +318,28 @@ internal class AndroidManagerCache(
         coinControlManager = null
     }
 
+    internal fun clearKeyTeleportManager() {
+        try {
+            keyTeleportManager?.close()
+        } catch (e: Exception) {
+            Log.w(tag, "Error closing KeyTeleportManager: ${e.message}")
+        }
+        keyTeleportManager = null
+    }
+
     internal fun clearInactiveSendFlowManager(router: RouterManager) {
         val manager = sendFlowManager ?: return
         if (routeStackContainsSendWallet(router.default, router.routes, manager.id)) return
 
         clearSendFlowManager()
+    }
+
+    internal fun clearInactiveRouteManagers(router: RouterManager) {
+        clearInactiveSendFlowManager(router)
+
+        if (keyTeleportManager != null && !routeStackContainsKeyTeleport(router.default, router.routes)) {
+            clearKeyTeleportManager()
+        }
     }
 
     internal fun refreshFiatValuesForCachedWallet(scope: CoroutineScope) {

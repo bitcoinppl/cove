@@ -783,6 +783,12 @@ internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod0 : 
 internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceOnboardingManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -888,6 +894,28 @@ internal open class UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
     ): UniffiVTableCallbackInterfaceCoinControlManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,`reconcileMany`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceCoinControlManagerReconciler) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `reconcile` = other.`reconcile`
+        `reconcileMany` = other.`reconcileMany`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "reconcile", "reconcileMany")
+internal open class UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `reconcile`: UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod0? = null,
+    @JvmField internal var `reconcileMany`: UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod1? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `reconcile`: UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod0? = null,
+        `reconcileMany`: UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod1? = null,
+    ): UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,`reconcileMany`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler) {
         `uniffiFree` = other.`uniffiFree`
         `uniffiClone` = other.`uniffiClone`
         `reconcile` = other.`reconcile`
@@ -1183,6 +1211,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_can_go_back(
     ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_can_key_teleport_send(
+    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_debug_or_release(
@@ -1220,6 +1250,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_ffiapp_needs_onboarding(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_network(
+    ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_new_key_teleport_manager(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_num_wallets(
     ): Short
@@ -1407,6 +1439,14 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_filehandler_read(
     ): Short
+    external fun uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part(
+    ): Short
+    external fun uniffi_cove_checksum_method_keyteleportreceiverpacket_url(
+    ): Short
+    external fun uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part(
+    ): Short
+    external fun uniffi_cove_checksum_method_keyteleportsenderpacket_url(
+    ): Short
     external fun uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn(
     ): Short
     external fun uniffi_cove_checksum_method_labelmanager_export(
@@ -1537,6 +1577,22 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet(
     ): Short
+    external fun uniffi_cove_checksum_method_keyteleportpassword_display_text(
+    ): Short
+    external fun uniffi_cove_checksum_method_keyteleportpassword_grouped_text(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustkeyteleportmanager_dispatch(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustkeyteleportmanager_is_send_eligible(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustkeyteleportmanager_listen_for_updates(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustkeyteleportmanager_reveal_mnemonic_words(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustkeyteleportmanager_reveal_xprv(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustkeyteleportmanager_state(
+    ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id(
     ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_dispatch(
@@ -1629,6 +1685,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_dispatch(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_expose_xprv(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_fees(
@@ -1646,6 +1704,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_transactions(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_initial_state(
     ): Short
@@ -1774,6 +1836,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_routefactory_hot_wallet_import_from_scan(
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_is_same_parent_route(
+    ): Short
+    external fun uniffi_cove_checksum_method_routefactory_key_teleport_receive(
+    ): Short
+    external fun uniffi_cove_checksum_method_routefactory_key_teleport_send(
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to(
     ): Short
@@ -2011,6 +2077,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_rustimportwalletmanager_new(
     ): Short
+    external fun uniffi_cove_checksum_constructor_rustkeyteleportmanager_new(
+    ): Short
     external fun uniffi_cove_checksum_constructor_rustonboardingmanager_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustpendingwalletmanager_new(
@@ -2101,6 +2169,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many(
     ): Short
+    external fun uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile(
+    ): Short
+    external fun uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile_many(
+    ): Short
     external fun uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile(
     ): Short
     external fun uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile(
@@ -2140,6 +2212,7 @@ internal object UniffiLib {
         uniffiCallbackInterfaceCloudBackupManagerReconciler.register(this)
         uniffiCallbackInterfaceCoinControlManagerReconciler.register(this)
         uniffiCallbackInterfaceFfiReconcile.register(this)
+        uniffiCallbackInterfaceKeyTeleportManagerReconciler.register(this)
         uniffiCallbackInterfaceOnboardingManagerReconciler.register(this)
         uniffiCallbackInterfacePendingWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
@@ -2161,6 +2234,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_ffiapp_auth_type(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_can_go_back(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_ffiapp_can_key_teleport_send(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -2200,6 +2275,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_ffiapp_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBufferNetwork.ByValue
+    external fun uniffi_cove_fn_method_ffiapp_new_key_teleport_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
     external fun uniffi_cove_fn_method_ffiapp_num_wallets(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Short
     external fun uniffi_cove_fn_method_ffiapp_prices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2498,6 +2575,22 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_hardwareexport(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_clone_keyteleportreceiverpacket(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_keyteleportreceiverpacket(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_keyteleportreceiverpacket_bbqr_part(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportreceiverpacket_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_clone_keyteleportsenderpacket(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_keyteleportsenderpacket(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_keyteleportsenderpacket_bbqr_part(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportsenderpacket_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_addressargs(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2680,6 +2773,32 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(`ptr`: Long,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_clone_keyteleportpassword(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_keyteleportpassword(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_keyteleportpassword_display_text(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportpassword_grouped_text(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_clone_rustkeyteleportmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_rustkeyteleportmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_constructor_rustkeyteleportmanager_new(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_rustkeyteleportmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustkeyteleportmanager_is_send_eligible(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_rustkeyteleportmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustkeyteleportmanager_reveal_mnemonic_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustkeyteleportmanager_reveal_xprv(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustkeyteleportmanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2806,6 +2925,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_expose_xprv(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_fee_rate_options(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_fees(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2824,6 +2945,10 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustwalletmanager_has_recovery_words(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_rustwalletmanager_has_xprv_secret(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_rustwalletmanager_initial_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_initiate_payment(`ptr`: Long,`psbt`: Long,`payjoinEndpoint`: RustBuffer.ByValue,
@@ -2996,6 +3121,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_is_same_parent_route(`ptr`: Long,`route`: RustBuffer.ByValue,`routeToCheck`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_routefactory_key_teleport_receive(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_routefactory_key_teleport_send(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_load_and_reset_nested_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_load_and_reset_to(`ptr`: Long,`resetTo`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3334,6 +3463,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCoinControlManagerReconciler,
     ): Unit
+    external fun uniffi_cove_fn_init_callback_vtable_keyteleportmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler,
+    ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_onboardingmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceOnboardingManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfacePendingWalletManagerReconciler,
@@ -3404,6 +3535,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_filehandlererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportpacketencodingerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportparseerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_labelmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_authmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3417,6 +3552,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_importwalleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_keyteleportalert_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_pendingwalletmanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3977,6 +4114,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_can_go_back() != 19459.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_ffiapp_can_key_teleport_send() != 8307.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 40843.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4032,6 +4172,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_network() != 44430.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_new_key_teleport_manager() != 19902.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_num_wallets() != 1649.toShort()) {
@@ -4313,6 +4456,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_filehandler_read() != 12343.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_keyteleportreceiverpacket_bbqr_part() != 45199.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_keyteleportreceiverpacket_url() != 17039.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_keyteleportsenderpacket_bbqr_part() != 49372.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_keyteleportsenderpacket_url() != 49444.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 18479.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4508,6 +4663,30 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_keyteleportpassword_display_text() != 62935.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_keyteleportpassword_grouped_text() != 59764.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_dispatch() != 32250.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_is_send_eligible() != 52659.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_listen_for_updates() != 16752.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_reveal_mnemonic_words() != 47268.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_reveal_xprv() != 13239.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_state() != 37488.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4646,6 +4825,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 57298.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 36145.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4671,6 +4853,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 35895.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words() != 23756.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret() != 29721.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436.toShort()) {
@@ -4863,6 +5051,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 17637.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_key_teleport_receive() != 8004.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_key_teleport_send() != 23216.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_load_and_reset_nested_to() != 57827.toShort()) {
@@ -5219,6 +5413,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 12433.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_rustkeyteleportmanager_new() != 10345.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5352,6 +5549,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile() != 42843.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile_many() != 45107.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875.toShort()) {
@@ -11036,6 +11239,8 @@ public interface FfiAppInterface {
      */
     fun `canGoBack`(): kotlin.Boolean
 
+    fun `canKeyTeleportSend`(`walletId`: WalletId): kotlin.Boolean
+
     /**
      * DANGER: This will wipe all wallet data on this device
      */
@@ -11111,6 +11316,8 @@ public interface FfiAppInterface {
     fun `needsOnboarding`(): kotlin.Boolean
 
     fun `network`(): Network
+
+    fun `newKeyTeleportManager`(): RustKeyTeleportManager
 
     /**
      * Number of wallets
@@ -11292,6 +11499,20 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     UniffiLib.uniffi_cove_fn_method_ffiapp_can_go_back(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+    override fun `canKeyTeleportSend`(`walletId`: WalletId): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_can_key_teleport_send(
+        it,
+
+        FfiConverterTypeWalletId.lower(`walletId`),_status)
 }
     }
     )
@@ -11589,6 +11810,19 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_network(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `newKeyTeleportManager`(): RustKeyTeleportManager {
+            return FfiConverterTypeRustKeyTeleportManager.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_new_key_teleport_manager(
         it,
         _status)
 }
@@ -15152,6 +15386,820 @@ public object FfiConverterTypeHistoricalPricesResponse: FfiConverter<HistoricalP
 //
 
 
+public interface KeyTeleportPasswordInterface {
+
+    fun `displayText`(): kotlin.String
+
+    fun `groupedText`(): kotlin.String
+
+    companion object
+}
+
+open class KeyTeleportPassword: Disposable, AutoCloseable, KeyTeleportPasswordInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_keyteleportpassword(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_keyteleportpassword(handle, status)
+        }
+    }
+
+    override fun `displayText`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportpassword_display_text(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `groupedText`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportpassword_grouped_text(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportPassword: FfiConverter<KeyTeleportPassword, Long> {
+    override fun lower(value: KeyTeleportPassword): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): KeyTeleportPassword {
+        return KeyTeleportPassword(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): KeyTeleportPassword {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: KeyTeleportPassword) = 8UL
+
+    override fun write(value: KeyTeleportPassword, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface KeyTeleportReceiverPacketInterface {
+
+    fun `bbqrPart`(): kotlin.String
+
+    fun `url`(): kotlin.String
+
+    companion object
+}
+
+open class KeyTeleportReceiverPacket: Disposable, AutoCloseable, KeyTeleportReceiverPacketInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_keyteleportreceiverpacket(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_keyteleportreceiverpacket(handle, status)
+        }
+    }
+
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `bbqrPart`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportreceiverpacket_bbqr_part(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `url`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportreceiverpacket_url(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportReceiverPacket: FfiConverter<KeyTeleportReceiverPacket, Long> {
+    override fun lower(value: KeyTeleportReceiverPacket): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): KeyTeleportReceiverPacket {
+        return KeyTeleportReceiverPacket(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): KeyTeleportReceiverPacket {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: KeyTeleportReceiverPacket) = 8UL
+
+    override fun write(value: KeyTeleportReceiverPacket, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface KeyTeleportSenderPacketInterface {
+
+    fun `bbqrPart`(): kotlin.String
+
+    fun `url`(): kotlin.String
+
+    companion object
+}
+
+open class KeyTeleportSenderPacket: Disposable, AutoCloseable, KeyTeleportSenderPacketInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_keyteleportsenderpacket(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_keyteleportsenderpacket(handle, status)
+        }
+    }
+
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `bbqrPart`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportsenderpacket_bbqr_part(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(KeyTeleportPacketEncodingException::class)override fun `url`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KeyTeleportPacketEncodingException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportsenderpacket_url(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportSenderPacket: FfiConverter<KeyTeleportSenderPacket, Long> {
+    override fun lower(value: KeyTeleportSenderPacket): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): KeyTeleportSenderPacket {
+        return KeyTeleportSenderPacket(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): KeyTeleportSenderPacket {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: KeyTeleportSenderPacket) = 8UL
+
+    override fun write(value: KeyTeleportSenderPacket, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface LabelManagerInterface {
 
     fun `deleteLabelsForTxn`(`txId`: TxId)
@@ -17851,6 +18899,10 @@ public interface RouteFactoryInterface {
 
     fun `isSameParentRoute`(`route`: Route, `routeToCheck`: Route): kotlin.Boolean
 
+    fun `keyTeleportReceive`(): Route
+
+    fun `keyTeleportSend`(): Route
+
     fun `loadAndResetNestedTo`(`defaultRoute`: Route, `nestedRoutes`: List<Route>): Route
 
     fun `loadAndResetTo`(`resetTo`: Route): Route
@@ -18062,6 +19114,32 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
 
         FfiConverterTypeRoute.lower(`route`),
         FfiConverterTypeRoute.lower(`routeToCheck`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `keyTeleportReceive`(): Route {
+            return FfiConverterTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_key_teleport_receive(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `keyTeleportSend`(): Route {
+            return FfiConverterTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_key_teleport_send(
+        it,
+        _status)
 }
     }
     )
@@ -20826,6 +21904,345 @@ public object FfiConverterTypeRustImportWalletManager: FfiConverter<RustImportWa
 //
 
 
+public interface RustKeyTeleportManagerInterface {
+
+    fun `dispatch`(`action`: KeyTeleportManagerAction)
+
+    fun `isSendEligible`(`walletId`: WalletId): kotlin.Boolean
+
+    fun `listenForUpdates`(`reconciler`: KeyTeleportManagerReconciler)
+
+    fun `revealMnemonicWords`(): List<kotlin.String>
+
+    fun `revealXprv`(): kotlin.String?
+
+    fun `state`(): KeyTeleportManagerState
+
+    companion object
+}
+
+open class RustKeyTeleportManager: Disposable, AutoCloseable, RustKeyTeleportManagerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle,
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_rustkeyteleportmanager_new(
+
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_rustkeyteleportmanager(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_rustkeyteleportmanager(handle, status)
+        }
+    }
+
+    override fun `dispatch`(`action`: KeyTeleportManagerAction)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustkeyteleportmanager_dispatch(
+        it,
+
+        FfiConverterTypeKeyTeleportManagerAction.lower(`action`),_status)
+}
+    }
+
+
+
+    override fun `isSendEligible`(`walletId`: WalletId): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustkeyteleportmanager_is_send_eligible(
+        it,
+
+        FfiConverterTypeWalletId.lower(`walletId`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `listenForUpdates`(`reconciler`: KeyTeleportManagerReconciler)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustkeyteleportmanager_listen_for_updates(
+        it,
+
+        FfiConverterTypeKeyTeleportManagerReconciler.lower(`reconciler`),_status)
+}
+    }
+
+
+
+    override fun `revealMnemonicWords`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustkeyteleportmanager_reveal_mnemonic_words(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `revealXprv`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustkeyteleportmanager_reveal_xprv(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `state`(): KeyTeleportManagerState {
+            return FfiConverterTypeKeyTeleportManagerState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustkeyteleportmanager_state(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRustKeyTeleportManager: FfiConverter<RustKeyTeleportManager, Long> {
+    override fun lower(value: RustKeyTeleportManager): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RustKeyTeleportManager {
+        return RustKeyTeleportManager(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RustKeyTeleportManager {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RustKeyTeleportManager) = 8UL
+
+    override fun write(value: RustKeyTeleportManager, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface RustOnboardingManagerInterface {
 
     fun `currentWalletId`(): WalletId?
@@ -22177,6 +23594,14 @@ public interface RustWalletManagerInterface {
      */
     fun `dispatch`(`action`: WalletManagerAction)
 
+    /**
+     * Returns the wallet's master extended private key string for export
+     *
+     * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+     * zeroized; same limitation as displaying the mnemonic words
+     */
+    fun `exposeXprv`(): kotlin.String
+
     suspend fun `feeRateOptions`(): FeeRateOptions
 
     fun `fees`(): FeeResponse?
@@ -22197,6 +23622,16 @@ public interface RustWalletManagerInterface {
     suspend fun `getTransactions`()
 
     fun `getUnsignedTransactions`(): List<UnsignedTransaction>
+
+    /**
+     * Returns whether this hot wallet is backed by BIP39 recovery words
+     */
+    fun `hasRecoveryWords`(): kotlin.Boolean
+
+    /**
+     * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+     */
+    fun `hasXprvSecret`(): kotlin.Boolean
 
     /**
      * Returns the bootstrap wallet snapshot used before reconcile messages arrive
@@ -22662,6 +24097,26 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
 
+    /**
+     * Returns the wallet's master extended private key string for export
+     *
+     * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+     * zeroized; same limitation as displaying the mnemonic words
+     */
+    @Throws(WalletManagerException::class)override fun `exposeXprv`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(WalletManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_expose_xprv(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `feeRateOptions`() : FeeRateOptions {
@@ -22831,6 +24286,38 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     callWithHandle {
     uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Returns whether this hot wallet is backed by BIP39 recovery words
+     */override fun `hasRecoveryWords`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_has_recovery_words(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+     */override fun `hasXprvSecret`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_has_xprv_secret(
         it,
         _status)
 }
@@ -31407,6 +32894,332 @@ public object FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer<Inter
             FfiConverterOptionalTypeBlockSizeLast.write(value.`lastHeightFetched`, buf)
             FfiConverterOptionalULong.write(value.`performedFullScanAt`, buf)
             FfiConverterTypeStoreType.write(value.`storeType`, buf)
+    }
+}
+
+
+
+/**
+ * Display-ready Secure Notes & Passwords content received through KeyTeleport
+ */
+data class KeyTeleportMessageReview (
+    /**
+     * Records in their transmitted order
+     */
+    var `items`: List<KeyTeleportMessageItem>
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportMessageReview: FfiConverterRustBuffer<KeyTeleportMessageReview> {
+    override fun read(buf: ByteBuffer): KeyTeleportMessageReview {
+        return KeyTeleportMessageReview(
+            FfiConverterSequenceTypeKeyTeleportMessageItem.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportMessageReview) = (
+            FfiConverterSequenceTypeKeyTeleportMessageItem.allocationSize(value.`items`)
+    )
+
+    override fun write(value: KeyTeleportMessageReview, buf: ByteBuffer) {
+            FfiConverterSequenceTypeKeyTeleportMessageItem.write(value.`items`, buf)
+    }
+}
+
+
+
+data class KeyTeleportMnemonicReview (
+    var `wordCount`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportMnemonicReview: FfiConverterRustBuffer<KeyTeleportMnemonicReview> {
+    override fun read(buf: ByteBuffer): KeyTeleportMnemonicReview {
+        return KeyTeleportMnemonicReview(
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportMnemonicReview) = (
+            FfiConverterUInt.allocationSize(value.`wordCount`)
+    )
+
+    override fun write(value: KeyTeleportMnemonicReview, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`wordCount`, buf)
+    }
+}
+
+
+
+data class KeyTeleportReceiveState (
+    var `packet`: KeyTeleportReceiverPacket
+    ,
+    var `numericCode`: kotlin.String
+    ,
+    var `groupedNumericCode`: kotlin.String
+    ,
+    var `createdAtSecs`: kotlin.ULong
+    ,
+    var `network`: Network
+    ,
+    var `walletMode`: WalletMode
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`packet`,
+        this.`numericCode`,
+        this.`groupedNumericCode`,
+        this.`createdAtSecs`,
+        this.`network`,
+        this.`walletMode`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportReceiveState: FfiConverterRustBuffer<KeyTeleportReceiveState> {
+    override fun read(buf: ByteBuffer): KeyTeleportReceiveState {
+        return KeyTeleportReceiveState(
+            FfiConverterTypeKeyTeleportReceiverPacket.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeNetwork.read(buf),
+            FfiConverterTypeWalletMode.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportReceiveState) = (
+            FfiConverterTypeKeyTeleportReceiverPacket.allocationSize(value.`packet`) +
+            FfiConverterString.allocationSize(value.`numericCode`) +
+            FfiConverterString.allocationSize(value.`groupedNumericCode`) +
+            FfiConverterULong.allocationSize(value.`createdAtSecs`) +
+            FfiConverterTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterTypeWalletMode.allocationSize(value.`walletMode`)
+    )
+
+    override fun write(value: KeyTeleportReceiveState, buf: ByteBuffer) {
+            FfiConverterTypeKeyTeleportReceiverPacket.write(value.`packet`, buf)
+            FfiConverterString.write(value.`numericCode`, buf)
+            FfiConverterString.write(value.`groupedNumericCode`, buf)
+            FfiConverterULong.write(value.`createdAtSecs`, buf)
+            FfiConverterTypeNetwork.write(value.`network`, buf)
+            FfiConverterTypeWalletMode.write(value.`walletMode`, buf)
+    }
+}
+
+
+
+data class KeyTeleportSendChooseWallet (
+    /**
+     * Wallets available for the pending receiver request
+     */
+    var `eligibleWallets`: List<WalletMetadata>
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`eligibleWallets`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportSendChooseWallet: FfiConverterRustBuffer<KeyTeleportSendChooseWallet> {
+    override fun read(buf: ByteBuffer): KeyTeleportSendChooseWallet {
+        return KeyTeleportSendChooseWallet(
+            FfiConverterSequenceTypeWalletMetadata.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportSendChooseWallet) = (
+            FfiConverterSequenceTypeWalletMetadata.allocationSize(value.`eligibleWallets`)
+    )
+
+    override fun write(value: KeyTeleportSendChooseWallet, buf: ByteBuffer) {
+            FfiConverterSequenceTypeWalletMetadata.write(value.`eligibleWallets`, buf)
+    }
+}
+
+
+
+data class KeyTeleportSendEnterCode (
+    var `selectedWallet`: WalletMetadata
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`selectedWallet`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportSendEnterCode: FfiConverterRustBuffer<KeyTeleportSendEnterCode> {
+    override fun read(buf: ByteBuffer): KeyTeleportSendEnterCode {
+        return KeyTeleportSendEnterCode(
+            FfiConverterTypeWalletMetadata.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportSendEnterCode) = (
+            FfiConverterTypeWalletMetadata.allocationSize(value.`selectedWallet`)
+    )
+
+    override fun write(value: KeyTeleportSendEnterCode, buf: ByteBuffer) {
+            FfiConverterTypeWalletMetadata.write(value.`selectedWallet`, buf)
+    }
+}
+
+
+
+/**
+ * An encrypted sender response ready to share with the receiver
+ */
+data class KeyTeleportSendReady (
+    /**
+     * The wallet whose private key material is in the encrypted response
+     */
+    var `selectedWallet`: WalletMetadata
+    ,
+    /**
+     * The encoded sender response
+     */
+    var `packet`: KeyTeleportSenderPacket
+    ,
+    /**
+     * The password needed to decrypt the sender response
+     */
+    var `password`: KeyTeleportPassword
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`selectedWallet`,
+        this.`packet`,
+        this.`password`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportSendReady: FfiConverterRustBuffer<KeyTeleportSendReady> {
+    override fun read(buf: ByteBuffer): KeyTeleportSendReady {
+        return KeyTeleportSendReady(
+            FfiConverterTypeWalletMetadata.read(buf),
+            FfiConverterTypeKeyTeleportSenderPacket.read(buf),
+            FfiConverterTypeKeyTeleportPassword.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportSendReady) = (
+            FfiConverterTypeWalletMetadata.allocationSize(value.`selectedWallet`) +
+            FfiConverterTypeKeyTeleportSenderPacket.allocationSize(value.`packet`) +
+            FfiConverterTypeKeyTeleportPassword.allocationSize(value.`password`)
+    )
+
+    override fun write(value: KeyTeleportSendReady, buf: ByteBuffer) {
+            FfiConverterTypeWalletMetadata.write(value.`selectedWallet`, buf)
+            FfiConverterTypeKeyTeleportSenderPacket.write(value.`packet`, buf)
+            FfiConverterTypeKeyTeleportPassword.write(value.`password`, buf)
+    }
+}
+
+
+
+data class KeyTeleportXprvReview (
+    var `revealed`: kotlin.Boolean
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportXprvReview: FfiConverterRustBuffer<KeyTeleportXprvReview> {
+    override fun read(buf: ByteBuffer): KeyTeleportXprvReview {
+        return KeyTeleportXprvReview(
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: KeyTeleportXprvReview) = (
+            FfiConverterBoolean.allocationSize(value.`revealed`)
+    )
+
+    override fun write(value: KeyTeleportXprvReview, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`revealed`, buf)
     }
 }
 
@@ -42876,6 +44689,12 @@ sealed class DiscoveryState: Disposable  {
     object StartedMnemonic : DiscoveryState()
 
 
+    /**
+     * Discover alternate script types for an imported master extended private key
+     */
+    object StartedXprv : DiscoveryState()
+
+
     data class FoundAddressesFromJson(
         val v1: List<org.bitcoinppl.cove_core.FoundAddress>,
         val v2: org.bitcoinppl.cove_core.FoundJson) : DiscoveryState()
@@ -42935,6 +44754,38 @@ sealed class DiscoveryState: Disposable  {
         companion object
     }
 
+    /**
+     * Alternate script types with history derived from an imported master xprv
+     */
+    data class FoundAddressesFromXprv(
+        val v1: List<org.bitcoinppl.cove_core.FoundAddress>) : DiscoveryState()
+
+    {
+
+
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is DiscoveryState) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_eq_eq(FfiConverterTypeDiscoveryState.lower(this),
+
+        FfiConverterTypeDiscoveryState.lower(`other`),_status)
+}
+    )
+    }
+    // The local Rust `Hash` implementation
+    override fun hashCode(): Int {
+        return FfiConverterULong.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_discoverystate_uniffi_trait_hash(FfiConverterTypeDiscoveryState.lower(this),
+        _status)
+}
+    ).toInt()
+    }
+        companion object
+    }
+
     object NoneFound : DiscoveryState()
 
 
@@ -42957,6 +44808,8 @@ sealed class DiscoveryState: Disposable  {
             }
             is DiscoveryState.StartedMnemonic -> {// Nothing to destroy
             }
+            is DiscoveryState.StartedXprv -> {// Nothing to destroy
+            }
             is DiscoveryState.FoundAddressesFromJson -> {
 
     Disposable.destroy(
@@ -42966,6 +44819,13 @@ sealed class DiscoveryState: Disposable  {
 
             }
             is DiscoveryState.FoundAddressesFromMnemonic -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is DiscoveryState.FoundAddressesFromXprv -> {
 
     Disposable.destroy(
         this.v1
@@ -43018,15 +44878,19 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
                 FfiConverterTypeFoundJson.read(buf),
                 )
             3 -> DiscoveryState.StartedMnemonic
-            4 -> DiscoveryState.FoundAddressesFromJson(
+            4 -> DiscoveryState.StartedXprv
+            5 -> DiscoveryState.FoundAddressesFromJson(
                 FfiConverterSequenceTypeFoundAddress.read(buf),
                 FfiConverterTypeFoundJson.read(buf),
                 )
-            5 -> DiscoveryState.FoundAddressesFromMnemonic(
+            6 -> DiscoveryState.FoundAddressesFromMnemonic(
                 FfiConverterSequenceTypeFoundAddress.read(buf),
                 )
-            6 -> DiscoveryState.NoneFound
-            7 -> DiscoveryState.ChoseAdressType
+            7 -> DiscoveryState.FoundAddressesFromXprv(
+                FfiConverterSequenceTypeFoundAddress.read(buf),
+                )
+            8 -> DiscoveryState.NoneFound
+            9 -> DiscoveryState.ChoseAdressType
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -43051,6 +44915,12 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
                 4UL
             )
         }
+        is DiscoveryState.StartedXprv -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is DiscoveryState.FoundAddressesFromJson -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -43060,6 +44930,13 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
             )
         }
         is DiscoveryState.FoundAddressesFromMnemonic -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeFoundAddress.allocationSize(value.v1)
+            )
+        }
+        is DiscoveryState.FoundAddressesFromXprv -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -43095,23 +44972,32 @@ public object FfiConverterTypeDiscoveryState : FfiConverterRustBuffer<DiscoveryS
                 buf.putInt(3)
                 Unit
             }
-            is DiscoveryState.FoundAddressesFromJson -> {
+            is DiscoveryState.StartedXprv -> {
                 buf.putInt(4)
+                Unit
+            }
+            is DiscoveryState.FoundAddressesFromJson -> {
+                buf.putInt(5)
                 FfiConverterSequenceTypeFoundAddress.write(value.v1, buf)
                 FfiConverterTypeFoundJson.write(value.v2, buf)
                 Unit
             }
             is DiscoveryState.FoundAddressesFromMnemonic -> {
-                buf.putInt(5)
+                buf.putInt(6)
+                FfiConverterSequenceTypeFoundAddress.write(value.v1, buf)
+                Unit
+            }
+            is DiscoveryState.FoundAddressesFromXprv -> {
+                buf.putInt(7)
                 FfiConverterSequenceTypeFoundAddress.write(value.v1, buf)
                 Unit
             }
             is DiscoveryState.NoneFound -> {
-                buf.putInt(6)
+                buf.putInt(8)
                 Unit
             }
             is DiscoveryState.ChoseAdressType -> {
-                buf.putInt(7)
+                buf.putInt(9)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -45177,6 +47063,1634 @@ public object FfiConverterTypeInsertOrUpdate : FfiConverterRustBuffer<InsertOrUp
 
 
 
+sealed class KeyTeleportAlert: kotlin.Exception() {
+
+    class NoActiveReceiveSession(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class ReceiveSessionExpired(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class ReceiveSessionReset(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class ParseFailed(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class UnsupportedPsbt(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The payload uses a valid but unsupported protocol type
+     */
+    class UnsupportedPayload(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The password was valid but the decrypted typed payload was malformed
+     */
+    class InvalidPayload(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class WrongReceiverCode(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class WrongTeleportPassword(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class NoEligibleWallets(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class IneligibleWallet(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class NoPendingSend(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class NoPendingReceiveSecret(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class ImportFailed(
+
+        val v1: kotlin.String
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class Keychain(
+
+        val v1: kotlin.String
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class Protocol(
+
+        val v1: kotlin.String
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class Database(
+
+        val v1: kotlin.String
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportalert_uniffi_trait_display(FfiConverterTypeKeyTeleportAlert.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<KeyTeleportAlert> {
+        override fun lift(error_buf: RustBuffer.ByValue): KeyTeleportAlert = FfiConverterTypeKeyTeleportAlert.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTeleportAlert> {
+    override fun read(buf: ByteBuffer): KeyTeleportAlert {
+
+
+        return when(buf.getInt()) {
+            1 -> KeyTeleportAlert.NoActiveReceiveSession()
+            2 -> KeyTeleportAlert.ReceiveSessionExpired()
+            3 -> KeyTeleportAlert.ReceiveSessionReset()
+            4 -> KeyTeleportAlert.ParseFailed()
+            5 -> KeyTeleportAlert.UnsupportedPsbt()
+            6 -> KeyTeleportAlert.UnsupportedPayload()
+            7 -> KeyTeleportAlert.InvalidPayload()
+            8 -> KeyTeleportAlert.WrongReceiverCode()
+            9 -> KeyTeleportAlert.WrongTeleportPassword()
+            10 -> KeyTeleportAlert.NoEligibleWallets()
+            11 -> KeyTeleportAlert.IneligibleWallet()
+            12 -> KeyTeleportAlert.NoPendingSend()
+            13 -> KeyTeleportAlert.NoPendingReceiveSecret()
+            14 -> KeyTeleportAlert.ImportFailed(
+                FfiConverterString.read(buf),
+                )
+            15 -> KeyTeleportAlert.Keychain(
+                FfiConverterString.read(buf),
+                )
+            16 -> KeyTeleportAlert.Protocol(
+                FfiConverterString.read(buf),
+                )
+            17 -> KeyTeleportAlert.Database(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportAlert): ULong {
+        return when(value) {
+            is KeyTeleportAlert.NoActiveReceiveSession -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ReceiveSessionExpired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ReceiveSessionReset -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ParseFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.UnsupportedPsbt -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.UnsupportedPayload -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.InvalidPayload -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.WrongReceiverCode -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.WrongTeleportPassword -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.NoEligibleWallets -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.IneligibleWallet -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.NoPendingSend -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.NoPendingReceiveSecret -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ImportFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is KeyTeleportAlert.Keychain -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is KeyTeleportAlert.Protocol -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is KeyTeleportAlert.Database -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportAlert, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportAlert.NoActiveReceiveSession -> {
+                buf.putInt(1)
+                Unit
+            }
+            is KeyTeleportAlert.ReceiveSessionExpired -> {
+                buf.putInt(2)
+                Unit
+            }
+            is KeyTeleportAlert.ReceiveSessionReset -> {
+                buf.putInt(3)
+                Unit
+            }
+            is KeyTeleportAlert.ParseFailed -> {
+                buf.putInt(4)
+                Unit
+            }
+            is KeyTeleportAlert.UnsupportedPsbt -> {
+                buf.putInt(5)
+                Unit
+            }
+            is KeyTeleportAlert.UnsupportedPayload -> {
+                buf.putInt(6)
+                Unit
+            }
+            is KeyTeleportAlert.InvalidPayload -> {
+                buf.putInt(7)
+                Unit
+            }
+            is KeyTeleportAlert.WrongReceiverCode -> {
+                buf.putInt(8)
+                Unit
+            }
+            is KeyTeleportAlert.WrongTeleportPassword -> {
+                buf.putInt(9)
+                Unit
+            }
+            is KeyTeleportAlert.NoEligibleWallets -> {
+                buf.putInt(10)
+                Unit
+            }
+            is KeyTeleportAlert.IneligibleWallet -> {
+                buf.putInt(11)
+                Unit
+            }
+            is KeyTeleportAlert.NoPendingSend -> {
+                buf.putInt(12)
+                Unit
+            }
+            is KeyTeleportAlert.NoPendingReceiveSecret -> {
+                buf.putInt(13)
+                Unit
+            }
+            is KeyTeleportAlert.ImportFailed -> {
+                buf.putInt(14)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportAlert.Keychain -> {
+                buf.putInt(15)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportAlert.Protocol -> {
+                buf.putInt(16)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportAlert.Database -> {
+                buf.putInt(17)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+/**
+ * Validated or unparsed input for a KeyTeleport flow
+ */
+sealed class KeyTeleportInput: Disposable  {
+
+    /**
+     * Text or bytes that still need protocol parsing
+     */
+    data class MultiFormat(
+        val v1: org.bitcoinppl.cove_core.StringOrData) : KeyTeleportInput()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A receiver request already validated by the shared scanner
+     */
+    data class Receiver(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportReceiverPacket) : KeyTeleportInput()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A sender response already validated by the shared scanner
+     */
+    data class Sender(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportSenderPacket) : KeyTeleportInput()
+
+    {
+
+
+        companion object
+    }
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is KeyTeleportInput.MultiFormat -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportInput.Receiver -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportInput.Sender -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportInput : FfiConverterRustBuffer<KeyTeleportInput>{
+    override fun read(buf: ByteBuffer): KeyTeleportInput {
+        return when(buf.getInt()) {
+            1 -> KeyTeleportInput.MultiFormat(
+                FfiConverterTypeStringOrData.read(buf),
+                )
+            2 -> KeyTeleportInput.Receiver(
+                FfiConverterTypeKeyTeleportReceiverPacket.read(buf),
+                )
+            3 -> KeyTeleportInput.Sender(
+                FfiConverterTypeKeyTeleportSenderPacket.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportInput): ULong = when(value) {
+        is KeyTeleportInput.MultiFormat -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeStringOrData.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportInput.Receiver -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportReceiverPacket.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportInput.Sender -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportSenderPacket.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportInput, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportInput.MultiFormat -> {
+                buf.putInt(1)
+                FfiConverterTypeStringOrData.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportInput.Receiver -> {
+                buf.putInt(2)
+                FfiConverterTypeKeyTeleportReceiverPacket.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportInput.Sender -> {
+                buf.putInt(3)
+                FfiConverterTypeKeyTeleportSenderPacket.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class KeyTeleportManagerAction: Disposable  {
+
+    object StartReceive : KeyTeleportManagerAction()
+
+
+    /**
+     * Invalidates the active receive request and creates a new one
+     */
+    object RestartReceive : KeyTeleportManagerAction()
+
+
+    /**
+     * Deletes the active receive request
+     */
+    object EndReceive : KeyTeleportManagerAction()
+
+
+    data class Ingest(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportInput) : KeyTeleportManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    data class StartSendFromWallet(
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : KeyTeleportManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    data class SelectSendWallet(
+        val v1: org.bitcoinppl.cove_core.types.WalletId) : KeyTeleportManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    data class EnterReceiverCode(
+        val v1: kotlin.String) : KeyTeleportManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    data class EnterSenderPassword(
+        val v1: kotlin.String) : KeyTeleportManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Imports the received mnemonic or extended private key as a hot wallet
+     */
+    object ImportReceivedWallet : KeyTeleportManagerAction()
+
+
+    object RevealXprv : KeyTeleportManagerAction()
+
+
+    object HideXprv : KeyTeleportManagerAction()
+
+
+    object FinishReview : KeyTeleportManagerAction()
+
+
+    object Clear : KeyTeleportManagerAction()
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is KeyTeleportManagerAction.StartReceive -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.RestartReceive -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.EndReceive -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.Ingest -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerAction.StartSendFromWallet -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerAction.SelectSendWallet -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerAction.EnterReceiverCode -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerAction.EnterSenderPassword -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerAction.ImportReceivedWallet -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.RevealXprv -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.HideXprv -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.FinishReview -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerAction.Clear -> {// Nothing to destroy
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportManagerAction : FfiConverterRustBuffer<KeyTeleportManagerAction>{
+    override fun read(buf: ByteBuffer): KeyTeleportManagerAction {
+        return when(buf.getInt()) {
+            1 -> KeyTeleportManagerAction.StartReceive
+            2 -> KeyTeleportManagerAction.RestartReceive
+            3 -> KeyTeleportManagerAction.EndReceive
+            4 -> KeyTeleportManagerAction.Ingest(
+                FfiConverterTypeKeyTeleportInput.read(buf),
+                )
+            5 -> KeyTeleportManagerAction.StartSendFromWallet(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            6 -> KeyTeleportManagerAction.SelectSendWallet(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            7 -> KeyTeleportManagerAction.EnterReceiverCode(
+                FfiConverterString.read(buf),
+                )
+            8 -> KeyTeleportManagerAction.EnterSenderPassword(
+                FfiConverterString.read(buf),
+                )
+            9 -> KeyTeleportManagerAction.ImportReceivedWallet
+            10 -> KeyTeleportManagerAction.RevealXprv
+            11 -> KeyTeleportManagerAction.HideXprv
+            12 -> KeyTeleportManagerAction.FinishReview
+            13 -> KeyTeleportManagerAction.Clear
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportManagerAction): ULong = when(value) {
+        is KeyTeleportManagerAction.StartReceive -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.RestartReceive -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.EndReceive -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.Ingest -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportInput.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerAction.StartSendFromWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerAction.SelectSendWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerAction.EnterReceiverCode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerAction.EnterSenderPassword -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerAction.ImportReceivedWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.RevealXprv -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.HideXprv -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.FinishReview -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerAction.Clear -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportManagerAction, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportManagerAction.StartReceive -> {
+                buf.putInt(1)
+                Unit
+            }
+            is KeyTeleportManagerAction.RestartReceive -> {
+                buf.putInt(2)
+                Unit
+            }
+            is KeyTeleportManagerAction.EndReceive -> {
+                buf.putInt(3)
+                Unit
+            }
+            is KeyTeleportManagerAction.Ingest -> {
+                buf.putInt(4)
+                FfiConverterTypeKeyTeleportInput.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerAction.StartSendFromWallet -> {
+                buf.putInt(5)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerAction.SelectSendWallet -> {
+                buf.putInt(6)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerAction.EnterReceiverCode -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerAction.EnterSenderPassword -> {
+                buf.putInt(8)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerAction.ImportReceivedWallet -> {
+                buf.putInt(9)
+                Unit
+            }
+            is KeyTeleportManagerAction.RevealXprv -> {
+                buf.putInt(10)
+                Unit
+            }
+            is KeyTeleportManagerAction.HideXprv -> {
+                buf.putInt(11)
+                Unit
+            }
+            is KeyTeleportManagerAction.FinishReview -> {
+                buf.putInt(12)
+                Unit
+            }
+            is KeyTeleportManagerAction.Clear -> {
+                buf.putInt(13)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class KeyTeleportManagerReconcileMessage: Disposable  {
+
+    data class UpdateState(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportManagerState) : KeyTeleportManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    data class SetAlert(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportAlert) : KeyTeleportManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    object ClearAlert : KeyTeleportManagerReconcileMessage()
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is KeyTeleportManagerReconcileMessage.UpdateState -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerReconcileMessage.SetAlert -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerReconcileMessage.ClearAlert -> {// Nothing to destroy
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportManagerReconcileMessage : FfiConverterRustBuffer<KeyTeleportManagerReconcileMessage>{
+    override fun read(buf: ByteBuffer): KeyTeleportManagerReconcileMessage {
+        return when(buf.getInt()) {
+            1 -> KeyTeleportManagerReconcileMessage.UpdateState(
+                FfiConverterTypeKeyTeleportManagerState.read(buf),
+                )
+            2 -> KeyTeleportManagerReconcileMessage.SetAlert(
+                FfiConverterTypeKeyTeleportAlert.read(buf),
+                )
+            3 -> KeyTeleportManagerReconcileMessage.ClearAlert
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportManagerReconcileMessage): ULong = when(value) {
+        is KeyTeleportManagerReconcileMessage.UpdateState -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportManagerState.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerReconcileMessage.SetAlert -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportAlert.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerReconcileMessage.ClearAlert -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportManagerReconcileMessage, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportManagerReconcileMessage.UpdateState -> {
+                buf.putInt(1)
+                FfiConverterTypeKeyTeleportManagerState.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerReconcileMessage.SetAlert -> {
+                buf.putInt(2)
+                FfiConverterTypeKeyTeleportAlert.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerReconcileMessage.ClearAlert -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class KeyTeleportManagerState: Disposable  {
+
+    object Idle : KeyTeleportManagerState()
+
+
+    data class ReceiveReady(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportReceiveState) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Receive-session setup failed and can be retried
+     */
+    object ReceiveError : KeyTeleportManagerState()
+
+
+    object ReceiveEnterPassword : KeyTeleportManagerState()
+
+
+    data class ReceiveMnemonicReview(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportMnemonicReview) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    data class ReceiveXprvReview(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportXprvReview) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Displays received Secure Notes & Passwords content without treating it as a wallet
+     */
+    data class ReceiveMessageReview(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportMessageReview) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Reports the wallet created from received private key material
+     */
+    data class ReceiveImportedWallet(
+        val v1: org.bitcoinppl.cove_core.WalletMetadata) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Reports that the received wallet already exists on this device
+     */
+    data class ReceiveAlreadyImportedWallet(
+        val v1: org.bitcoinppl.cove_core.WalletMetadata) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Waits for the receiver request after a sending wallet has been fixed
+     */
+    object SendAwaitReceiver : KeyTeleportManagerState()
+
+
+    data class SendChooseWallet(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportSendChooseWallet) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    data class SendEnterCode(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportSendEnterCode) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+    data class SendReady(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportSendReady) : KeyTeleportManagerState()
+
+    {
+
+
+        companion object
+    }
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is KeyTeleportManagerState.Idle -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerState.ReceiveReady -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.ReceiveError -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerState.ReceiveEnterPassword -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerState.ReceiveMnemonicReview -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.ReceiveXprvReview -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.ReceiveMessageReview -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.ReceiveImportedWallet -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.SendAwaitReceiver -> {// Nothing to destroy
+            }
+            is KeyTeleportManagerState.SendChooseWallet -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.SendEnterCode -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is KeyTeleportManagerState.SendReady -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportManagerState : FfiConverterRustBuffer<KeyTeleportManagerState>{
+    override fun read(buf: ByteBuffer): KeyTeleportManagerState {
+        return when(buf.getInt()) {
+            1 -> KeyTeleportManagerState.Idle
+            2 -> KeyTeleportManagerState.ReceiveReady(
+                FfiConverterTypeKeyTeleportReceiveState.read(buf),
+                )
+            3 -> KeyTeleportManagerState.ReceiveError
+            4 -> KeyTeleportManagerState.ReceiveEnterPassword
+            5 -> KeyTeleportManagerState.ReceiveMnemonicReview(
+                FfiConverterTypeKeyTeleportMnemonicReview.read(buf),
+                )
+            6 -> KeyTeleportManagerState.ReceiveXprvReview(
+                FfiConverterTypeKeyTeleportXprvReview.read(buf),
+                )
+            7 -> KeyTeleportManagerState.ReceiveMessageReview(
+                FfiConverterTypeKeyTeleportMessageReview.read(buf),
+                )
+            8 -> KeyTeleportManagerState.ReceiveImportedWallet(
+                FfiConverterTypeWalletMetadata.read(buf),
+                )
+            9 -> KeyTeleportManagerState.ReceiveAlreadyImportedWallet(
+                FfiConverterTypeWalletMetadata.read(buf),
+                )
+            10 -> KeyTeleportManagerState.SendAwaitReceiver
+            11 -> KeyTeleportManagerState.SendChooseWallet(
+                FfiConverterTypeKeyTeleportSendChooseWallet.read(buf),
+                )
+            12 -> KeyTeleportManagerState.SendEnterCode(
+                FfiConverterTypeKeyTeleportSendEnterCode.read(buf),
+                )
+            13 -> KeyTeleportManagerState.SendReady(
+                FfiConverterTypeKeyTeleportSendReady.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportManagerState): ULong = when(value) {
+        is KeyTeleportManagerState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerState.ReceiveReady -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportReceiveState.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveError -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerState.ReceiveEnterPassword -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerState.ReceiveMnemonicReview -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportMnemonicReview.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveXprvReview -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportXprvReview.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveMessageReview -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportMessageReview.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveImportedWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletMetadata.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletMetadata.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.SendAwaitReceiver -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is KeyTeleportManagerState.SendChooseWallet -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportSendChooseWallet.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.SendEnterCode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportSendEnterCode.allocationSize(value.v1)
+            )
+        }
+        is KeyTeleportManagerState.SendReady -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportSendReady.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportManagerState, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportManagerState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveReady -> {
+                buf.putInt(2)
+                FfiConverterTypeKeyTeleportReceiveState.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveError -> {
+                buf.putInt(3)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveEnterPassword -> {
+                buf.putInt(4)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveMnemonicReview -> {
+                buf.putInt(5)
+                FfiConverterTypeKeyTeleportMnemonicReview.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveXprvReview -> {
+                buf.putInt(6)
+                FfiConverterTypeKeyTeleportXprvReview.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveMessageReview -> {
+                buf.putInt(7)
+                FfiConverterTypeKeyTeleportMessageReview.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveImportedWallet -> {
+                buf.putInt(8)
+                FfiConverterTypeWalletMetadata.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
+                buf.putInt(9)
+                FfiConverterTypeWalletMetadata.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.SendAwaitReceiver -> {
+                buf.putInt(10)
+                Unit
+            }
+            is KeyTeleportManagerState.SendChooseWallet -> {
+                buf.putInt(11)
+                FfiConverterTypeKeyTeleportSendChooseWallet.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.SendEnterCode -> {
+                buf.putInt(12)
+                FfiConverterTypeKeyTeleportSendEnterCode.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportManagerState.SendReady -> {
+                buf.putInt(13)
+                FfiConverterTypeKeyTeleportSendReady.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Display-ready content for one received secure note or password record
+ */
+sealed class KeyTeleportMessageItem {
+
+    /**
+     * A free-form note
+     */
+    data class Note(
+        val `title`: kotlin.String,
+        val `text`: kotlin.String,
+        val `group`: kotlin.String) : KeyTeleportMessageItem()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A structured password record
+     */
+    data class Password(
+        val `title`: kotlin.String,
+        val `username`: kotlin.String,
+        val `password`: kotlin.String,
+        val `site`: kotlin.String,
+        val `notes`: kotlin.String,
+        val `group`: kotlin.String) : KeyTeleportMessageItem()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportMessageItem : FfiConverterRustBuffer<KeyTeleportMessageItem>{
+    override fun read(buf: ByteBuffer): KeyTeleportMessageItem {
+        return when(buf.getInt()) {
+            1 -> KeyTeleportMessageItem.Note(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            2 -> KeyTeleportMessageItem.Password(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportMessageItem): ULong = when(value) {
+        is KeyTeleportMessageItem.Note -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`title`)
+                + FfiConverterString.allocationSize(value.`text`)
+                + FfiConverterString.allocationSize(value.`group`)
+            )
+        }
+        is KeyTeleportMessageItem.Password -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`title`)
+                + FfiConverterString.allocationSize(value.`username`)
+                + FfiConverterString.allocationSize(value.`password`)
+                + FfiConverterString.allocationSize(value.`site`)
+                + FfiConverterString.allocationSize(value.`notes`)
+                + FfiConverterString.allocationSize(value.`group`)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportMessageItem, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportMessageItem.Note -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`title`, buf)
+                FfiConverterString.write(value.`text`, buf)
+                FfiConverterString.write(value.`group`, buf)
+                Unit
+            }
+            is KeyTeleportMessageItem.Password -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`title`, buf)
+                FfiConverterString.write(value.`username`, buf)
+                FfiConverterString.write(value.`password`, buf)
+                FfiConverterString.write(value.`site`, buf)
+                FfiConverterString.write(value.`notes`, buf)
+                FfiConverterString.write(value.`group`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+/**
+ * A failure while rendering a validated KeyTeleport packet
+ */
+sealed class KeyTeleportPacketEncodingException: kotlin.Exception() {
+
+    /**
+     * The packet could not be encoded as a single-part BBQr value
+     */
+    class Encoding(
+
+        val v1: kotlin.String
+        ) : KeyTeleportPacketEncodingException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportpacketencodingerror_uniffi_trait_display(FfiConverterTypeKeyTeleportPacketEncodingError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<KeyTeleportPacketEncodingException> {
+        override fun lift(error_buf: RustBuffer.ByValue): KeyTeleportPacketEncodingException = FfiConverterTypeKeyTeleportPacketEncodingError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportPacketEncodingError : FfiConverterRustBuffer<KeyTeleportPacketEncodingException> {
+    override fun read(buf: ByteBuffer): KeyTeleportPacketEncodingException {
+
+
+        return when(buf.getInt()) {
+            1 -> KeyTeleportPacketEncodingException.Encoding(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportPacketEncodingException): ULong {
+        return when(value) {
+            is KeyTeleportPacketEncodingException.Encoding -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportPacketEncodingException, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportPacketEncodingException.Encoding -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+
+
+sealed class KeyTeleportParseException: kotlin.Exception() {
+
+    class Unrecognized(
+        ) : KeyTeleportParseException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_keyteleportparseerror_uniffi_trait_display(FfiConverterTypeKeyTeleportParseError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<KeyTeleportParseException> {
+        override fun lift(error_buf: RustBuffer.ByValue): KeyTeleportParseException = FfiConverterTypeKeyTeleportParseError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportParseError : FfiConverterRustBuffer<KeyTeleportParseException> {
+    override fun read(buf: ByteBuffer): KeyTeleportParseException {
+
+
+        return when(buf.getInt()) {
+            1 -> KeyTeleportParseException.Unrecognized()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: KeyTeleportParseException): ULong {
+        return when(value) {
+            is KeyTeleportParseException.Unrecognized -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: KeyTeleportParseException, buf: ByteBuffer) {
+        when(value) {
+            is KeyTeleportParseException.Unrecognized -> {
+                buf.putInt(1)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+
+enum class KeyTeleportRoute {
+
+    RECEIVE,
+    SEND;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportRoute: FfiConverterRustBuffer<KeyTeleportRoute> {
+    override fun read(buf: ByteBuffer) = try {
+        KeyTeleportRoute.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: KeyTeleportRoute) = 4UL
+
+    override fun write(value: KeyTeleportRoute, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+
 sealed class LabelDbException: kotlin.Exception() {
 
     class Database(
@@ -45936,6 +49450,46 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
 
+    data class KeyTeleportReceiver(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportReceiverPacket) : MultiFormat()
+
+    {
+
+
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
+        companion object
+    }
+
+    data class KeyTeleportSender(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportSenderPacket) : MultiFormat()
+
+    {
+
+
+    // The local Rust `Eq` implementation - only `eq` is used.
+    override fun equals(other: Any?): Boolean {
+        if (other !is MultiFormat) return false
+        return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_multiformat_uniffi_trait_eq_eq(FfiConverterTypeMultiFormat.lower(this),
+
+        FfiConverterTypeMultiFormat.lower(`other`),_status)
+}
+    )
+    }
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -45997,6 +49551,20 @@ sealed class MultiFormat: Disposable  {
     )
 
             }
+            is MultiFormat.KeyTeleportReceiver -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is MultiFormat.KeyTeleportSender -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
@@ -46048,6 +49616,12 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 )
             8 -> MultiFormat.SignedPsbt(
                 FfiConverterTypePsbt.read(buf),
+                )
+            9 -> MultiFormat.KeyTeleportReceiver(
+                FfiConverterTypeKeyTeleportReceiverPacket.read(buf),
+                )
+            10 -> MultiFormat.KeyTeleportSender(
+                FfiConverterTypeKeyTeleportSenderPacket.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -46110,6 +49684,20 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypePsbt.allocationSize(value.v1)
             )
         }
+        is MultiFormat.KeyTeleportReceiver -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportReceiverPacket.allocationSize(value.v1)
+            )
+        }
+        is MultiFormat.KeyTeleportSender -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportSenderPacket.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: MultiFormat, buf: ByteBuffer) {
@@ -46152,6 +49740,16 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
             is MultiFormat.SignedPsbt -> {
                 buf.putInt(8)
                 FfiConverterTypePsbt.write(value.v1, buf)
+                Unit
+            }
+            is MultiFormat.KeyTeleportReceiver -> {
+                buf.putInt(9)
+                FfiConverterTypeKeyTeleportReceiverPacket.write(value.v1, buf)
+                Unit
+            }
+            is MultiFormat.KeyTeleportSender -> {
+                buf.putInt(10)
+                FfiConverterTypeKeyTeleportSenderPacket.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -46206,6 +49804,12 @@ sealed class MultiFormatException: kotlin.Exception() {
             get() = ""
     }
 
+    class KeyTeleportPsbtNotSupported(
+        ) : MultiFormatException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -46244,6 +49848,7 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 )
             5 -> MultiFormatException.TaprootNotSupported()
             6 -> MultiFormatException.PsbtNotSigned()
+            7 -> MultiFormatException.KeyTeleportPsbtNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -46276,6 +49881,10 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is MultiFormatException.KeyTeleportPsbtNotSupported -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -46305,6 +49914,10 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
             }
             is MultiFormatException.PsbtNotSigned -> {
                 buf.putInt(6)
+                Unit
+            }
+            is MultiFormatException.KeyTeleportPsbtNotSupported -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -48514,6 +52127,15 @@ sealed class Route: Disposable  {
         companion object
     }
 
+    data class KeyTeleport(
+        val v1: org.bitcoinppl.cove_core.KeyTeleportRoute) : Route()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -48571,6 +52193,13 @@ sealed class Route: Disposable  {
 
             }
             is Route.CoinControl -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is Route.KeyTeleport -> {
 
     Disposable.destroy(
         this.v1
@@ -48652,6 +52281,9 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             8 -> Route.CoinControl(
                 FfiConverterTypeCoinControlRoute.read(buf),
                 )
+            9 -> Route.KeyTeleport(
+                FfiConverterTypeKeyTeleportRoute.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48715,6 +52347,13 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 + FfiConverterTypeCoinControlRoute.allocationSize(value.v1)
             )
         }
+        is Route.KeyTeleport -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeKeyTeleportRoute.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: Route, buf: ByteBuffer) {
@@ -48759,6 +52398,11 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             is Route.CoinControl -> {
                 buf.putInt(8)
                 FfiConverterTypeCoinControlRoute.write(value.v1, buf)
+                Unit
+            }
+            is Route.KeyTeleport -> {
+                buf.putInt(9)
+                FfiConverterTypeKeyTeleportRoute.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -58307,7 +61951,7 @@ sealed class WalletScannerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
-    class NoMnemonicAvailable(
+    class NoWalletSecretAvailable(
 
         val v1: WalletId
         ) : WalletScannerException() {
@@ -58347,7 +61991,7 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
             2 -> WalletScannerException.WalletCreationException(
                 FfiConverterTypeWalletError.read(buf),
                 )
-            3 -> WalletScannerException.NoMnemonicAvailable(
+            3 -> WalletScannerException.NoWalletSecretAvailable(
                 FfiConverterTypeWalletId.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -58365,7 +62009,7 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterTypeWalletError.allocationSize(value.v1)
             )
-            is WalletScannerException.NoMnemonicAvailable -> (
+            is WalletScannerException.NoWalletSecretAvailable -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
@@ -58384,7 +62028,7 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
                 FfiConverterTypeWalletError.write(value.v1, buf)
                 Unit
             }
-            is WalletScannerException.NoMnemonicAvailable -> {
+            is WalletScannerException.NoWalletSecretAvailable -> {
                 buf.putInt(3)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
@@ -58400,6 +62044,10 @@ public object FfiConverterTypeWalletScannerError : FfiConverterRustBuffer<Wallet
 enum class WalletSecretType {
 
     MNEMONIC,
+    /**
+     * A BIP32 extended private key
+     */
+    XPRV,
     TAP_SIGNER_BACKUP,
     NONE,
     UNKNOWN;
@@ -59211,6 +62859,81 @@ internal object uniffiCallbackInterfaceFfiReconcile {
  * @suppress
  */
 public object FfiConverterTypeFfiReconcile: FfiConverterCallbackInterface<FfiReconcile>()
+
+
+
+
+
+public interface KeyTeleportManagerReconciler {
+
+    fun `reconcile`(`message`: KeyTeleportManagerReconcileMessage)
+
+    fun `reconcileMany`(`messages`: List<KeyTeleportManagerReconcileMessage>)
+
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceKeyTeleportManagerReconciler {
+    internal object `reconcile`: UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod0 {
+        override fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeKeyTeleportManagerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcile`(
+                    FfiConverterTypeKeyTeleportManagerReconcileMessage.lift(`message`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `reconcileMany`: UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod1 {
+        override fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeKeyTeleportManagerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcileMany`(
+                    FfiConverterSequenceTypeKeyTeleportManagerReconcileMessage.lift(`messages`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeKeyTeleportManagerReconciler.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeKeyTeleportManagerReconciler.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `reconcile`,
+        `reconcileMany`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_fn_init_callback_vtable_keyteleportmanagerreconciler(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeKeyTeleportManagerReconciler: FfiConverterCallbackInterface<KeyTeleportManagerReconciler>()
 
 
 
@@ -61448,6 +65171,62 @@ public object FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer<List<
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFiatCurrency.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeKeyTeleportManagerReconcileMessage: FfiConverterRustBuffer<List<KeyTeleportManagerReconcileMessage>> {
+    override fun read(buf: ByteBuffer): List<KeyTeleportManagerReconcileMessage> {
+        val len = buf.getInt()
+        return List<KeyTeleportManagerReconcileMessage>(len) {
+            FfiConverterTypeKeyTeleportManagerReconcileMessage.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<KeyTeleportManagerReconcileMessage>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeKeyTeleportManagerReconcileMessage.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<KeyTeleportManagerReconcileMessage>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeKeyTeleportManagerReconcileMessage.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeKeyTeleportMessageItem: FfiConverterRustBuffer<List<KeyTeleportMessageItem>> {
+    override fun read(buf: ByteBuffer): List<KeyTeleportMessageItem> {
+        val len = buf.getInt()
+        return List<KeyTeleportMessageItem>(len) {
+            FfiConverterTypeKeyTeleportMessageItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<KeyTeleportMessageItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeKeyTeleportMessageItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<KeyTeleportMessageItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeKeyTeleportMessageItem.write(it, buf)
         }
     }
 }

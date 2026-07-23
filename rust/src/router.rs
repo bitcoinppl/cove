@@ -29,6 +29,7 @@ pub enum Route {
     TransactionDetails { id: WalletId, tx_id: Arc<TxId> },
     Send(SendRoute),
     CoinControl(CoinControlRoute),
+    KeyTeleport(KeyTeleportRoute),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -100,6 +101,12 @@ pub enum SendRoute {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum CoinControlRoute {
     List(WalletId),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum KeyTeleportRoute {
+    Receive,
+    Send,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -332,6 +339,14 @@ impl RouteFactory {
 
     pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {
         reset_to.load_and_reset_after(time)
+    }
+
+    pub const fn key_teleport_receive(&self) -> Route {
+        Route::KeyTeleport(KeyTeleportRoute::Receive)
+    }
+
+    pub const fn key_teleport_send(&self) -> Route {
+        Route::KeyTeleport(KeyTeleportRoute::Send)
     }
 
     #[uniffi::method(default(address = None, amount = None))]

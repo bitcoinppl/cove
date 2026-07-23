@@ -53,7 +53,7 @@ struct HotWalletSelectScreen: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(height: screenHeight * 0.75, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
-                .brightness(0.05)
+                .opacity(0.5)
         )
         .background(Color.midnightBlue)
         .navigationTitle("Add New Wallet")

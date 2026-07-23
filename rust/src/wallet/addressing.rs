@@ -2,6 +2,7 @@ use bdk_wallet::KeychainKind;
 use bdk_wallet::chain::spk_client::FullScanRequest;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_common::consts::GAP_LIMIT;
+use cove_device::keychain::WalletSecret;
 use cove_types::address::AddressInfoWithDerivation;
 use cove_util::result_ext::ResultExt as _;
 use tracing::debug;
@@ -57,30 +58,35 @@ impl Wallet {
     }
 
     /// The user imported a hot wallet and wants to switch from native segwit to a different address type
-    pub fn switch_mnemonic_to_new_address_type(
+    pub fn switch_private_wallet_to_new_address_type(
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), WalletError> {
-        debug!("switching mnemonic wallet to new address type");
+        debug!("switching private wallet to new address type");
 
         // delete the bdk wallet filestore
         BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
             WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
         })?;
 
-        let mnemonic = Keychain::global()
-            .get_wallet_key(&self.id)
+        let secret = Keychain::global()
+            .get_wallet_secret(&self.id)
             .ok()
             .flatten()
             .ok_or(WalletError::WalletNotFound)?;
 
         let metadata_for_new_wallet = self.current_database_metadata()?;
-        let mut me = Self::try_new_persisted_from_mnemonic(
-            metadata_for_new_wallet,
-            mnemonic,
-            None,
-            address_type,
-        )?;
+        let mut me = match secret {
+            WalletSecret::Mnemonic(mnemonic) => Self::try_new_persisted_from_mnemonic(
+                metadata_for_new_wallet,
+                mnemonic,
+                None,
+                address_type,
+            )?,
+            WalletSecret::Xpriv(xpriv) => {
+                Self::try_new_persisted_from_xpriv(metadata_for_new_wallet, xpriv, address_type)?
+            }
+        };
         let current_metadata = self.current_database_metadata()?;
         let metadata =
             metadata_for_mnemonic_address_type_switch(current_metadata, &me.metadata, address_type);

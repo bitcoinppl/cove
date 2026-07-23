@@ -23,6 +23,7 @@ use crate::{
     manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     manager::deferred_sender::SingleOrMany,
+    manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
     network::Network,
     node::{Node, client::NodeClient},
@@ -528,6 +529,14 @@ impl FfiApp {
 
     pub fn network(&self) -> Network {
         Database::global().global_config.selected_network()
+    }
+
+    pub fn new_key_teleport_manager(&self) -> Arc<RustKeyTeleportManager> {
+        RustKeyTeleportManager::new()
+    }
+
+    pub fn can_key_teleport_send(&self, wallet_id: WalletId) -> bool {
+        crate::manager::key_teleport_manager::is_send_eligible_wallet_id(&wallet_id)
     }
 
     #[uniffi::method]

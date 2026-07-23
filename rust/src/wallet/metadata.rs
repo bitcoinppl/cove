@@ -136,8 +136,12 @@ pub enum DiscoveryState {
     Single,
     StartedJson(Arc<FoundJson>),
     StartedMnemonic,
+    /// Discover alternate script types for an imported master extended private key
+    StartedXprv,
     FoundAddressesFromJson(Vec<FoundAddress>, Arc<FoundJson>),
     FoundAddressesFromMnemonic(Vec<FoundAddress>),
+    /// Alternate script types with history derived from an imported master xprv
+    FoundAddressesFromXprv(Vec<FoundAddress>),
     NoneFound,
     ChoseAdressType,
 }
@@ -268,6 +272,18 @@ impl WalletMetadata {
     ) -> Self {
         let mut me = Self::new(name, Some(fingerprint));
         me.discovery_state = DiscoveryState::StartedMnemonic;
+
+        Self { network, verified: true, ..me }
+    }
+
+    /// Creates metadata for an imported extended-private-key wallet
+    pub fn new_imported_from_xpriv(
+        name: impl Into<String>,
+        network: Network,
+        fingerprint: impl Into<Arc<Fingerprint>>,
+    ) -> Self {
+        let mut me = Self::new(name, Some(fingerprint));
+        me.discovery_state = DiscoveryState::StartedXprv;
 
         Self { network, verified: true, ..me }
     }

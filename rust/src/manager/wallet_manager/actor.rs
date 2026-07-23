@@ -342,18 +342,18 @@ impl WalletActor {
         });
     }
 
-    pub async fn switch_mnemonic_to_new_address_type(
+    pub async fn switch_private_wallet_to_new_address_type(
         &mut self,
         address_type: WalletAddressType,
     ) -> ActorResult<Result<(), Error>> {
-        debug!("actor switch mnemonic wallet");
+        debug!("actor switch private wallet");
 
         let connection = self.deferred_node_connection();
         let (reply, receiver) = futures::channel::oneshot::channel();
 
         self.addr.send_fut_with(|addr| async move {
             let result = match connection.await {
-                Ok(Ok(())) => call!(addr.apply_mnemonic_address_type_switch(address_type))
+                Ok(Ok(())) => call!(addr.apply_private_wallet_address_type_switch(address_type))
                     .await
                     .unwrap_or(Err(Error::ActorNotFound)),
                 Ok(Err(error)) => Err(error),
@@ -366,20 +366,20 @@ impl WalletActor {
         Ok(Produces::Deferred(receiver))
     }
 
-    async fn apply_mnemonic_address_type_switch(
+    async fn apply_private_wallet_address_type_switch(
         &mut self,
         address_type: WalletAddressType,
     ) -> ActorResult<Result<(), Error>> {
-        let result = self.apply_mnemonic_address_type_switch_inner(address_type).await;
+        let result = self.apply_private_wallet_address_type_switch_inner(address_type).await;
 
         Produces::ok(result)
     }
 
-    async fn apply_mnemonic_address_type_switch_inner(
+    async fn apply_private_wallet_address_type_switch_inner(
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
-        self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
+        self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
         self.restart_scan_after_address_type_switch()
             .await
             .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
@@ -2793,7 +2793,7 @@ mod tests {
         let (addr, receiver) = spawn_test_wallet_actor(wallet);
         drain_reconcile_messages(&receiver);
 
-        call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
+        call!(addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
             .await
             .expect("address type switch actor responds")
             .expect("address type switches");
@@ -2819,10 +2819,11 @@ mod tests {
         let (addr, receiver) = spawn_test_wallet_actor(wallet);
         drain_reconcile_messages(&receiver);
 
-        let _error = call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
-            .await
-            .expect("address type switch actor responds")
-            .expect_err("address-type switch fails when scan startup fails");
+        let _error =
+            call!(addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
+                .await
+                .expect("address type switch actor responds")
+                .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
         let actor_metadata =
             call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");

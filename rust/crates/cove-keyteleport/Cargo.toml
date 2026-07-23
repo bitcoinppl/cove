@@ -1,0 +1,20 @@
+[package]
+name = "cove-keyteleport"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aes = { workspace = true }
+bbqr = { workspace = true }
+bip39 = { workspace = true }
+bitcoin = { workspace = true }
+ctr = { workspace = true }
+data-encoding = { workspace = true }
+pbkdf2 = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }

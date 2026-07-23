@@ -44,8 +44,8 @@ struct NewWalletSelectScreen: View {
             Group {
                 if scrollableLayout {
                     ScrollView {
-                        mainContent(usesFlexibleTopSpacer: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .bottom)
+                        bottomActionLayout()
+                            .frame(minHeight: proxy.size.height)
                     }
                     .scrollIndicators(.hidden)
                 } else {
@@ -84,44 +84,38 @@ struct NewWalletSelectScreen: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(height: screenHeight * 0.75, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
-                .brightness(0.05)
+                .opacity(0.5)
         )
         .background(Color.midnightBlue)
         .navigationTitle("Add New Wallet")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                HStack(spacing: 6) {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
                     Button(action: app.scanQr) {
-                        Image(systemName: "qrcode")
-                            .foregroundColor(.white)
+                        Label("QR", systemImage: "qrcode")
                     }
 
-                    Button(action: app.nfcReader.scan) {
-                        Image(systemName: "wave.3.right")
-                            .foregroundColor(.white)
+                    Button(action: scanNfc) {
+                        Label("NFC", systemImage: "wave.3.right")
                     }
+
+                    Button {
+                        app.pushRoute(RouteFactory().keyTeleportReceive())
+                    } label: {
+                        Label(
+                            "KeyTeleport",
+                            systemImage: "arrow.down.left.and.arrow.up.right"
+                        )
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundColor(.white)
                 }
+                .accessibilityLabel("More wallet import options")
             }
         }
-    }
-
-    private func mainContent(usesFlexibleTopSpacer: Bool) -> some View {
-        VStack(spacing: 28) {
-            if usesFlexibleTopSpacer {
-                Spacer()
-            }
-
-            promptContent
-
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
-
-            walletTypeActions
-        }
-        .padding()
-        .frame(maxHeight: .infinity)
     }
 
     private func bottomActionLayout() -> some View {
@@ -263,6 +257,10 @@ struct NewWalletSelectScreen: View {
             alert = AlertItem(
                 type: .error("No text found on the clipboard.")
             )
+            return
+        }
+
+        if ScanManager.shared.handleKeyTeleportText(text) {
             return
         }
 

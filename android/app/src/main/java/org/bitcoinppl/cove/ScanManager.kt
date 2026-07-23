@@ -6,6 +6,18 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 
+private sealed interface KeyTeleportTextParseResult {
+    data class Parsed(
+        val multiFormat: MultiFormat,
+    ) : KeyTeleportTextParseResult
+
+    data object UnsupportedPsbt : KeyTeleportTextParseResult
+
+    data object InvalidPacket : KeyTeleportTextParseResult
+
+    data object NotKeyTeleport : KeyTeleportTextParseResult
+}
+
 @Stable
 class ScanManager private constructor() {
     private val tag = "ScanManager"
@@ -14,46 +26,7 @@ class ScanManager private constructor() {
 
     fun handleMultiFormat(multiFormat: MultiFormat) {
         try {
-            when (multiFormat) {
-                is MultiFormat.Mnemonic -> {
-                    multiFormat.v1.use { mnemonic ->
-                        importHotWallet(mnemonic.words())
-                    }
-                }
-
-                is MultiFormat.HardwareExport -> {
-                    importColdWallet(multiFormat.v1)
-                }
-
-                is MultiFormat.Address -> {
-                    handleAddress(multiFormat.v1)
-                }
-
-                is MultiFormat.Transaction -> {
-                    handleTransaction(multiFormat.v1)
-                }
-
-                is MultiFormat.SignedPsbt -> {
-                    handleSignedPsbt(multiFormat.v1)
-                }
-
-                is MultiFormat.TapSignerUnused -> {
-                    app.alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
-                }
-
-                is MultiFormat.TapSignerReady -> {
-                    val wallet = app.findTapSignerWallet(multiFormat.v1)
-                    if (wallet != null) {
-                        app.alertState = TaggedItem(AppAlertState.TapSignerWalletFound(wallet.id))
-                    } else {
-                        app.alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
-                    }
-                }
-
-                is MultiFormat.Bip329Labels -> {
-                    importLabels(multiFormat.v1)
-                }
-            }
+            routeMultiFormat(multiFormat)
         } catch (e: Exception) {
             Log.e(tag, "Unable to handle scanned code", e)
             app.alertState =
@@ -61,6 +34,136 @@ class ScanManager private constructor() {
                     AppAlertState.InvalidFileFormat(e.message ?: "Unknown error"),
                 )
         }
+    }
+
+    private fun routeMultiFormat(multiFormat: MultiFormat) {
+        when (multiFormat) {
+            is MultiFormat.Mnemonic -> {
+                multiFormat.v1.use { mnemonic ->
+                    importHotWallet(mnemonic.words())
+                }
+            }
+
+            is MultiFormat.HardwareExport -> {
+                importColdWallet(multiFormat.v1)
+            }
+
+            is MultiFormat.Address -> {
+                handleAddress(multiFormat.v1)
+            }
+
+            is MultiFormat.Transaction -> {
+                handleTransaction(multiFormat.v1)
+            }
+
+            is MultiFormat.SignedPsbt -> {
+                handleSignedPsbt(multiFormat.v1)
+            }
+
+            is MultiFormat.TapSignerUnused -> {
+                app.alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
+            }
+
+            is MultiFormat.TapSignerReady -> {
+                val wallet = app.findTapSignerWallet(multiFormat.v1)
+                if (wallet != null) {
+                    app.alertState = TaggedItem(AppAlertState.TapSignerWalletFound(wallet.id))
+                } else {
+                    app.alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
+                }
+            }
+
+            is MultiFormat.Bip329Labels -> {
+                importLabels(multiFormat.v1)
+            }
+
+            is MultiFormat.KeyTeleportReceiver -> {
+                handleKeyTeleportReceiver(multiFormat.v1)
+            }
+
+            is MultiFormat.KeyTeleportSender -> {
+                handleKeyTeleportSender(multiFormat.v1)
+            }
+        }
+    }
+
+    fun handleKeyTeleportText(input: String): Boolean {
+        val text = input.trim()
+        val parseResult =
+            try {
+                KeyTeleportTextParseResult.Parsed(
+                    StringOrData.String(text).tryIntoMultiFormat(),
+                )
+            } catch (_: MultiFormatException.KeyTeleportPsbtNotSupported) {
+                KeyTeleportTextParseResult.UnsupportedPsbt
+            } catch (_: Exception) {
+                val normalized = text.lowercase()
+                val looksLikeKeyTeleport =
+                    normalized.contains("keyteleport.com") ||
+                        normalized.startsWith("b\$2r") ||
+                        normalized.startsWith("b\$2s") ||
+                        normalized.startsWith("b\$2p")
+
+                if (looksLikeKeyTeleport) {
+                    KeyTeleportTextParseResult.InvalidPacket
+                } else {
+                    KeyTeleportTextParseResult.NotKeyTeleport
+                }
+            }
+
+        return when (parseResult) {
+            is KeyTeleportTextParseResult.Parsed ->
+                when (val multiFormat = parseResult.multiFormat) {
+                    is MultiFormat.KeyTeleportReceiver -> {
+                        handleKeyTeleportReceiver(multiFormat.v1)
+                        true
+                    }
+
+                    is MultiFormat.KeyTeleportSender -> {
+                        handleKeyTeleportSender(multiFormat.v1)
+                        true
+                    }
+
+                    else -> {
+                        multiFormat.destroy()
+                        false
+                    }
+                }
+
+            KeyTeleportTextParseResult.UnsupportedPsbt -> {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.InvalidFileFormat(
+                            "KeyTeleport PSBT packets are not supported yet.",
+                        ),
+                    )
+                true
+            }
+
+            KeyTeleportTextParseResult.InvalidPacket -> {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.InvalidFileFormat(
+                            "This KeyTeleport packet could not be read.",
+                        ),
+                    )
+                true
+            }
+
+            KeyTeleportTextParseResult.NotKeyTeleport -> false
+        }
+    }
+
+    private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket) {
+        val manager = app.getKeyTeleportManager()
+        manager.dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Receiver(packet)))
+        app.pushRoute(RouteFactory().keyTeleportSend())
+    }
+
+    private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket) {
+        val manager = app.getKeyTeleportManager()
+        manager.dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Sender(packet)))
+        app.pushRoute(RouteFactory().keyTeleportReceive())
     }
 
     private fun importLabels(labels: Bip329Labels) {

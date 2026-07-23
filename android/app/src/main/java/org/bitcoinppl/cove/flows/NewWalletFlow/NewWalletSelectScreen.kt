@@ -20,8 +20,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -59,6 +62,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
@@ -66,6 +70,7 @@ import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Wallet
 import org.bitcoinppl.cove_core.WalletException
 
@@ -97,6 +102,7 @@ fun NewWalletSelectScreen(
 ) {
     var showHardwareWalletSheet by remember { mutableStateOf(false) }
     var showNfcHelpSheet by remember { mutableStateOf(false) }
+    var isOverflowMenuOpen by remember { mutableStateOf(false) }
     var nfcCalled by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -111,6 +117,10 @@ fun NewWalletSelectScreen(
     }
 
     fun importWallet(content: String) {
+        if (Scanner.handleKeyTeleportText(content)) {
+            return
+        }
+
         try {
             Wallet.newFromXpub(xpub = content.trim()).use { wallet ->
                 val id = wallet.id()
@@ -202,16 +212,37 @@ fun NewWalletSelectScreen(
                 }
             },
             actions = {
-                IconButton(onClick = onOpenQrScan) {
+                IconButton(onClick = { isOverflowMenuOpen = true }) {
                     Icon(
-                        painter = painterResource(id = R.drawable.icon_qr_code),
-                        contentDescription = "Scan QR",
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More wallet options",
                     )
                 }
-                IconButton(onClick = { triggerNfcScan() }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.icon_contactless),
-                        contentDescription = "NFC",
+
+                DropdownMenu(
+                    expanded = isOverflowMenuOpen,
+                    onDismissRequest = { isOverflowMenuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("QR") },
+                        onClick = {
+                            isOverflowMenuOpen = false
+                            onOpenQrScan()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("NFC") },
+                        onClick = {
+                            isOverflowMenuOpen = false
+                            triggerNfcScan()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("KeyTeleport") },
+                        onClick = {
+                            isOverflowMenuOpen = false
+                            app.pushRoute(RouteFactory().keyTeleportReceive())
+                        },
                     )
                 }
             },

@@ -42,14 +42,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.keyteleport.shareText
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.toComposeColor
@@ -59,7 +62,9 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletBirthday
 import org.bitcoinppl.cove_core.WalletColor
@@ -71,6 +76,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private enum class XprvExportAction {
+    SHARE,
+    KEY_TELEPORT,
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletSettingsScreen(
@@ -79,9 +89,14 @@ fun WalletSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val metadata = manager.walletMetadata
+    val context = LocalContext.current
+    val auth = remember { Auth }
     var showFirstDeleteConfirmation by remember { mutableStateOf(false) }
     var showSecondDeleteConfirmation by remember { mutableStateOf(false) }
     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
+    var showXprvExportWarning by remember { mutableStateOf(false) }
+    var showXprvExportOptions by remember { mutableStateOf(false) }
+    var pendingXprvExportAction by remember { mutableStateOf<XprvExportAction?>(null) }
     var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
@@ -141,6 +156,43 @@ fun WalletSettingsScreen(
             }
         }
         return
+    }
+
+    fun performXprvExport(action: XprvExportAction) {
+        when (action) {
+            XprvExportAction.SHARE -> {
+                try {
+                    shareText(context, "Export Private Key", manager.exposeXprv())
+                } catch (e: Exception) {
+                    Log.e("WalletSettingsScreen", "failed to export private key", e)
+                }
+            }
+
+            XprvExportAction.KEY_TELEPORT -> {
+                val keyTeleportManager = app.getKeyTeleportManager()
+                keyTeleportManager.dispatch(KeyTeleportManagerAction.StartSendFromWallet(metadata.id))
+                app.pushRoute(RouteFactory().keyTeleportSend())
+            }
+        }
+    }
+
+    fun startXprvExport(action: XprvExportAction) {
+        showXprvExportOptions = false
+        if (auth.isAuthEnabled) {
+            pendingXprvExportAction = action
+            auth.lock()
+        } else {
+            performXprvExport(action)
+        }
+    }
+
+    LaunchedEffect(auth.isLocked) {
+        if (!auth.isLocked) {
+            pendingXprvExportAction?.let { action ->
+                pendingXprvExportAction = null
+                performXprvExport(action)
+            }
+        }
     }
 
     Scaffold(
@@ -275,16 +327,24 @@ fun WalletSettingsScreen(
                 MaterialSection {
                     Column {
                         var dangerItemCount = 0
-                        // only show for hot wallets that have a mnemonic
                         if (metadata.walletType == WalletType.HOT) {
-                            MaterialSettingsItem(
-                                title = stringResource(R.string.label_wallet_view_secrets),
-                                titleColor = CoveColor.WarningOrange,
-                                onClick = {
-                                    app.pushRoute(Route.SecretWords(metadata.id))
-                                },
-                            )
-                            dangerItemCount++
+                            if (manager.hasRecoveryWords()) {
+                                MaterialSettingsItem(
+                                    title = stringResource(R.string.label_wallet_view_secrets),
+                                    titleColor = CoveColor.WarningOrange,
+                                    onClick = {
+                                        app.pushRoute(Route.SecretWords(metadata.id))
+                                    },
+                                )
+                                dangerItemCount++
+                            } else if (manager.hasXprvSecret()) {
+                                MaterialSettingsItem(
+                                    title = stringResource(R.string.label_wallet_export_private_key),
+                                    titleColor = CoveColor.WarningOrange,
+                                    onClick = { showXprvExportWarning = true },
+                                )
+                                dangerItemCount++
+                            }
                         }
                         if (dangerItemCount > 0) MaterialDivider()
                         MaterialSettingsItem(
@@ -308,6 +368,63 @@ fun WalletSettingsScreen(
             }
         },
     )
+
+    if (showXprvExportWarning) {
+        AlertDialog(
+            onDismissRequest = { showXprvExportWarning = false },
+            title = { Text("Are you sure?") },
+            text = {
+                Text(
+                    "Whoever has access to your extended private key, has access to your bitcoin. " +
+                        "Please keep it safe, don't show it to anyone.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showXprvExportWarning = false
+                        showXprvExportOptions = true
+                    },
+                ) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showXprvExportWarning = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showXprvExportOptions) {
+        AlertDialog(
+            onDismissRequest = { showXprvExportOptions = false },
+            title = { Text("Export Private Key") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = { startXprvExport(XprvExportAction.SHARE) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Share…")
+                    }
+                    TextButton(
+                        onClick = { startXprvExport(XprvExportAction.KEY_TELEPORT) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("KeyTeleport")
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showXprvExportOptions = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     // first confirmation dialog for wallet deletion
     if (showFirstDeleteConfirmation) {

@@ -1,20 +1,21 @@
 use std::{collections::BTreeMap, str::FromStr as _};
 
 use bip39::Mnemonic;
-use cove_device::keychain::Keychain;
+use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_types::network::Network;
+use cove_util::ResultExt as _;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use crate::database::global_config::{GlobalConfigKey, GlobalConfigTable, GlobalConfigTableError};
 use crate::database::{Database, Error as DatabaseError};
 use crate::label_manager::LabelManager;
-use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
     fallback_identity_key_for_backup, identity_key_for_backup,
 };
+use crate::wallet_secret::WalletSecretExt as _;
 
 use super::crypto;
 use super::error::BackupError;
@@ -143,7 +144,7 @@ pub(crate) fn validate_wallet_type_secret(
     name: &str,
 ) -> Result<WalletTypeSecretValidation, BackupError> {
     match (wallet_type, secret) {
-        (WalletType::Hot, WalletSecret::Mnemonic(_))
+        (WalletType::Hot, WalletSecret::Mnemonic(_) | WalletSecret::Xprv(_))
         | (WalletType::Cold, WalletSecret::TapSignerBackup(_))
         | (WalletType::XpubOnly | WalletType::WatchOnly, WalletSecret::None) => {
             Ok(WalletTypeSecretValidation::Valid)
@@ -256,13 +257,23 @@ async fn restore_wallet(
 
     match &backup.secret {
         // NOTE: Mnemonic doesn't implement Zeroize (upstream), so the parsed
-        // mnemonic lives as a plain heap allocation until save_wallet_key encrypts
+        // mnemonic lives as a plain heap allocation until keychain storage encrypts
         // and consumes it. WalletSecret::Mnemonic(String) is zeroized on drop
         WalletSecret::Mnemonic(words) => {
             let mnemonic = Mnemonic::from_str(words)
-                .map_err(|e| BackupError::Restore(format!("invalid mnemonic for {name}: {e}")))?;
+                .map_err_prefix(&format!("invalid mnemonic for {name}"), BackupError::Restore)?;
 
             restore_mnemonic_wallet(&metadata, mnemonic)
+                .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?;
+        }
+
+        WalletSecret::Xprv(value) => {
+            let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
+                &format!("invalid extended private key for {name}"),
+                BackupError::Restore,
+            )?;
+
+            restore_xpriv_wallet(&metadata, xpriv)
                 .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?;
         }
 
@@ -323,9 +334,43 @@ pub(crate) fn restore_cloud_mnemonic_wallet(
     })
 }
 
+pub(crate) fn restore_xpriv_wallet(
+    metadata: &WalletMetadata,
+    xpriv: WalletXprv,
+) -> Result<(), (BackupError, Vec<String>)> {
+    with_cleanup(metadata, || {
+        restore_hot_wallet_inner(
+            metadata,
+            KeychainWalletSecret::Xpriv(xpriv),
+            RestoreSaveBehavior::BackupAsNewWallet,
+        )
+    })
+}
+
+pub(crate) fn restore_cloud_xpriv_wallet(
+    metadata: &WalletMetadata,
+    xpriv: WalletXprv,
+) -> Result<(), (BackupError, Vec<String>)> {
+    with_cleanup(metadata, || {
+        restore_hot_wallet_inner(
+            metadata,
+            KeychainWalletSecret::Xpriv(xpriv),
+            RestoreSaveBehavior::SkipCloudBackup,
+        )
+    })
+}
+
 fn restore_mnemonic_wallet_inner(
     metadata: &WalletMetadata,
     mnemonic: Mnemonic,
+    save_behavior: RestoreSaveBehavior,
+) -> Result<(), BackupError> {
+    restore_hot_wallet_inner(metadata, KeychainWalletSecret::Mnemonic(mnemonic), save_behavior)
+}
+
+fn restore_hot_wallet_inner(
+    metadata: &WalletMetadata,
+    secret: KeychainWalletSecret,
     save_behavior: RestoreSaveBehavior,
 ) -> Result<(), BackupError> {
     let keychain = Keychain::global();
@@ -336,9 +381,8 @@ fn restore_mnemonic_wallet_inner(
     let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, network)
         .map_err(|e| BackupError::Restore(format!("BDK store for {name}: {e}")))?;
 
-    // extract xpub before consuming mnemonic
-    let xpub = mnemonic.xpub(network.into());
-    let descriptors = mnemonic.clone().into_descriptors(None, network, metadata.address_type);
+    let xpub = secret.xpub(network);
+    let descriptors = secret.clone().into_descriptors(network, metadata.address_type);
 
     let ext_descriptor = descriptors.external.extended_descriptor.clone();
     let int_descriptor = descriptors.internal.extended_descriptor.clone();
@@ -353,8 +397,8 @@ fn restore_mnemonic_wallet_inner(
     .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
 
     keychain
-        .save_wallet_key(&metadata.id, mnemonic)
-        .map_err(|e| BackupError::Keychain(format!("mnemonic for {name}: {e}")))?;
+        .save_wallet_secret(&metadata.id, secret)
+        .map_err(|e| BackupError::Keychain(format!("private key for {name}: {e}")))?;
 
     keychain
         .save_wallet_xpub(&metadata.id, xpub)

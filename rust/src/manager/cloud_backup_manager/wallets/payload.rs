@@ -3,7 +3,7 @@ use std::str::FromStr as _;
 use cove_cspp::backup_data::{
     DescriptorPair, WalletEntry, WalletMode, WalletSecret as CloudWalletSecret,
 };
-use cove_device::keychain::Keychain;
+use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tracing::warn;
@@ -17,6 +17,7 @@ use crate::wallet::{
     WalletAddressType,
     metadata::{WalletBirthday, WalletColor, WalletMetadata, WalletType},
 };
+use crate::wallet_secret::WalletSecretExt as _;
 
 #[derive(Debug)]
 struct PreparedCloudLabels {
@@ -113,14 +114,23 @@ async fn build_wallet_entry(
 
     let secret = match metadata.wallet_type {
         WalletType::Hot => {
-            let mnemonic = keychain.get_wallet_key(id).map_err(|error| {
-                CloudBackupError::Internal(format!("failed to get wallet mnemonic: {error}").into())
+            let secret = keychain.get_wallet_secret(id).map_err(|error| {
+                CloudBackupError::Internal(
+                    format!("failed to get wallet private key: {error}").into(),
+                )
             })?;
-            let Some(mnemonic) = mnemonic else {
-                return Err(CloudBackupError::Internal("hot wallet has no mnemonic".into()));
+            let Some(secret) = secret else {
+                return Err(CloudBackupError::Internal("hot wallet has no private key".into()));
             };
 
-            CloudWalletSecret::Mnemonic(mnemonic.to_string())
+            match secret {
+                KeychainWalletSecret::Mnemonic(mnemonic) => {
+                    CloudWalletSecret::Mnemonic(mnemonic.to_string())
+                }
+                KeychainWalletSecret::Xpriv(xpriv) => {
+                    CloudWalletSecret::Xprv(xpriv.expose().to_string())
+                }
+            }
         }
         WalletType::Cold => build_cold_wallet_secret(keychain, metadata, id)?,
         WalletType::XpubOnly | WalletType::WatchOnly => CloudWalletSecret::WatchOnly,
@@ -197,6 +207,18 @@ fn backup_descriptors(
             })?;
             let descriptors =
                 mnemonic.into_descriptors(None, metadata.network, metadata.address_type);
+
+            Ok(Some(DescriptorPair {
+                external: descriptors.external.extended_descriptor.to_string(),
+                internal: descriptors.internal.extended_descriptor.to_string(),
+            }))
+        }
+        CloudWalletSecret::Xprv(value) => {
+            let xpriv = WalletXprv::parse(value.as_str()).map_err(|error| {
+                CloudBackupError::Internal(format!("failed to parse xprv: {error}").into())
+            })?;
+            let descriptors = KeychainWalletSecret::Xpriv(xpriv)
+                .into_descriptors(metadata.network, metadata.address_type);
 
             Ok(Some(DescriptorPair {
                 external: descriptors.external.extended_descriptor.to_string(),
@@ -333,6 +355,7 @@ fn ensure_cloud_labels_size(size: usize, label_state: &str) -> Result<(), CloudB
 pub(crate) fn convert_cloud_secret(secret: &CloudWalletSecret) -> LocalWalletSecret {
     match secret {
         CloudWalletSecret::Mnemonic(mnemonic) => LocalWalletSecret::Mnemonic(mnemonic.clone()),
+        CloudWalletSecret::Xprv(xprv) => LocalWalletSecret::Xprv(xprv.clone()),
         CloudWalletSecret::TapSignerBackup(backup) => {
             LocalWalletSecret::TapSignerBackup(backup.clone())
         }

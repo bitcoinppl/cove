@@ -881,12 +881,17 @@ impl RustWalletManager {
             (metadata.wallet_type, metadata.verified)
         };
 
-        match (wallet_type, verified) {
-            (WalletType::Hot, false) => {
-                "This wallet is not backed up. Make sure you have your secret words saved before deleting.".to_string()
-            }
-            _ => "This action cannot be undone.".to_string(),
+        if wallet_type == WalletType::Hot && !verified {
+            return if self.has_recovery_words() {
+                "This wallet is not backed up. Make sure you have your secret words saved before deleting."
+                    .to_string()
+            } else {
+                "This wallet is not backed up. Make sure you have your extended private key saved before deleting."
+                    .to_string()
+            };
         }
+
+        "This action cannot be undone.".to_string()
     }
 
     // only called from the frontend, to make sure all metadata places are up to date,
@@ -917,6 +922,42 @@ impl RustWalletManager {
         let validator = WordValidator::new(mnemonic);
 
         Ok(validator)
+    }
+
+    /// Returns whether this hot wallet is backed by BIP39 recovery words
+    #[uniffi::method]
+    pub fn has_recovery_words(&self) -> bool {
+        Keychain::global()
+            .get_wallet_secret(&self.metadata.read().id)
+            .ok()
+            .flatten()
+            .is_some_and(|secret| secret.as_mnemonic().is_some())
+    }
+
+    /// Returns whether this hot wallet is backed by an extended private key (no mnemonic)
+    #[uniffi::method]
+    pub fn has_xprv_secret(&self) -> bool {
+        Keychain::global()
+            .get_wallet_secret(&self.metadata.read().id)
+            .ok()
+            .flatten()
+            .is_some_and(|secret| secret.as_xprv().is_some())
+    }
+
+    /// Returns the wallet's master extended private key string for export
+    ///
+    /// Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
+    /// zeroized; same limitation as displaying the mnemonic words
+    #[uniffi::method]
+    pub fn expose_xprv(&self) -> Result<String, Error> {
+        let secret = Keychain::global()
+            .get_wallet_secret(&self.metadata.read().id)?
+            .ok_or(Error::WalletDoesNotExist)?;
+        let xprv = secret
+            .as_xprv()
+            .ok_or(Error::SecretRetrievalError(KeychainError::WalletSecretTypeMismatch))?;
+
+        Ok(xprv.expose().to_string())
     }
 
     pub fn fees(&self) -> Option<FeeResponse> {
@@ -1012,10 +1053,11 @@ impl RustWalletManager {
                 FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
             }
 
-            DiscoveryState::FoundAddressesFromMnemonic(_) => {
+            DiscoveryState::FoundAddressesFromMnemonic(_)
+            | DiscoveryState::FoundAddressesFromXprv(_) => {
                 let id = self.id.clone();
                 let actor = self.actor.clone();
-                call!(actor.switch_mnemonic_to_new_address_type(wallet_address_type))
+                call!(actor.switch_private_wallet_to_new_address_type(wallet_address_type))
                     .await
                     .map_err(|source| {
                         WalletManagerUnableToSwitchError::new(wallet_address_type, source)
@@ -1031,6 +1073,7 @@ impl RustWalletManager {
 
             DiscoveryState::Single
             | DiscoveryState::StartedMnemonic
+            | DiscoveryState::StartedXprv
             | DiscoveryState::NoneFound
             | DiscoveryState::ChoseAdressType
             | DiscoveryState::StartedJson(_) => {
@@ -1283,7 +1326,7 @@ fn downgrade_and_notify_if_needed(
         return Ok(metadata);
     }
 
-    let has_private_key = match Keychain::global().get_wallet_key(&metadata.id) {
+    let has_private_key = match Keychain::global().get_wallet_secret(&metadata.id) {
         Ok(Some(_)) => true,
         Ok(None) => false,
         Err(error) => {

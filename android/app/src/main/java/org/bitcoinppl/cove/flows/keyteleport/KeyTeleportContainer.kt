@@ -1,0 +1,372 @@
+package org.bitcoinppl.cove.flows.keyteleport
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.QrCodeScanView
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingBackground
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
+import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
+import org.bitcoinppl.cove_core.KeyTeleportInput
+import org.bitcoinppl.cove_core.KeyTeleportManagerAction
+import org.bitcoinppl.cove_core.KeyTeleportManagerState
+import org.bitcoinppl.cove_core.KeyTeleportRoute
+import org.bitcoinppl.cove_core.StringOrData
+
+@Composable
+fun KeyTeleportContainer(
+    app: AppManager,
+    route: KeyTeleportRoute,
+) {
+    val manager = remember { app.getKeyTeleportManager() }
+    var showScanner by remember { mutableStateOf(false) }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(route) {
+        if (route == KeyTeleportRoute.RECEIVE && manager.state is KeyTeleportManagerState.Idle) {
+            manager.dispatch(KeyTeleportManagerAction.StartReceive)
+        }
+    }
+
+    KeyTeleportScreen(
+        app = app,
+        manager = manager,
+        route = route,
+        onScan = { showScanner = true },
+    )
+    KeyTeleportOverlays(
+        app = app,
+        manager = manager,
+        showScanner = showScanner,
+        localError = localError,
+        actions =
+            KeyTeleportOverlayActions(
+                onScannerDismiss = { showScanner = false },
+                onScanError = { localError = it },
+                onErrorDismiss = { localError = null },
+            ),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KeyTeleportScreen(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    route: KeyTeleportRoute,
+    onScan: () -> Unit,
+) {
+    OnboardingBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            titleContentColor = Color.White,
+                            navigationIconContentColor = Color.White,
+                            actionIconContentColor = Color.White,
+                        ),
+                    title = { Text("KeyTeleport", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = { app.popRoute() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        KeyTeleportToolbarMenu(manager) { app.popRoute() }
+                    },
+                )
+            },
+        ) { padding ->
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                KeyTeleportRouteHeader(route)
+                KeyTeleportStateCard(app, manager, route, onScan)
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyTeleportStateCard(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    route: KeyTeleportRoute,
+    onScan: () -> Unit,
+) {
+    val context = LocalContext.current
+    val onPaste = {
+        readClipboardText(context)?.trim()?.takeIf(String::isNotEmpty)?.let {
+            manager.dispatch(
+                KeyTeleportManagerAction.Ingest(
+                    KeyTeleportInput.MultiFormat(StringOrData.String(it)),
+                ),
+            )
+        }
+        Unit
+    }
+
+    Surface(
+        color = OnboardingCardFill,
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, OnboardingCardBorder),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            KeyTeleportStateContent(app, manager, route, onScan, onPaste)
+        }
+    }
+}
+
+@Composable
+private fun KeyTeleportStateContent(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    route: KeyTeleportRoute,
+    onScan: () -> Unit,
+    onPaste: () -> Unit,
+) {
+    when (val state = manager.state) {
+        is KeyTeleportManagerState.Idle -> {
+            KeyTeleportIdleContent(app, manager, route, onScan, onPaste)
+        }
+
+        is KeyTeleportManagerState.ReceiveReady,
+        is KeyTeleportManagerState.ReceiveError,
+        is KeyTeleportManagerState.ReceiveEnterPassword,
+        is KeyTeleportManagerState.ReceiveMnemonicReview,
+        is KeyTeleportManagerState.ReceiveXprvReview,
+        is KeyTeleportManagerState.ReceiveMessageReview,
+        is KeyTeleportManagerState.ReceiveImportedWallet,
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet,
+        -> {
+            KeyTeleportReceiveContent(app, manager, state, onScan)
+        }
+
+        is KeyTeleportManagerState.SendAwaitReceiver,
+        is KeyTeleportManagerState.SendChooseWallet,
+        is KeyTeleportManagerState.SendEnterCode,
+        is KeyTeleportManagerState.SendReady,
+        -> {
+            KeyTeleportSendContent(app, manager, state, onScan, onPaste)
+        }
+    }
+}
+
+@Composable
+private fun KeyTeleportIdleContent(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    route: KeyTeleportRoute,
+    onScan: () -> Unit,
+    onPaste: () -> Unit,
+) {
+    if (route == KeyTeleportRoute.SEND) {
+        SendIdleView(manager, app, onScan, onPaste)
+    } else {
+        LoadingText("Preparing receive session")
+    }
+}
+
+@Composable
+private fun KeyTeleportReceiveContent(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    state: KeyTeleportManagerState,
+    onScan: () -> Unit,
+) {
+    when (state) {
+        is KeyTeleportManagerState.ReceiveError -> {
+            Text("Cove couldn’t prepare a receive request.", color = Color.White)
+            Button(
+                onClick = { manager.dispatch(KeyTeleportManagerAction.StartReceive) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Try Again")
+            }
+        }
+
+        is KeyTeleportManagerState.ReceiveReady -> {
+            ReceiveReadyView(state.v1, onScan)
+        }
+
+        is KeyTeleportManagerState.ReceiveEnterPassword -> {
+            ReceivePasswordView(manager)
+        }
+
+        is KeyTeleportManagerState.ReceiveMnemonicReview -> {
+            ReceiveMnemonicReviewView(manager, state.v1.wordCount.toInt()) { app.popRoute() }
+        }
+
+        is KeyTeleportManagerState.ReceiveXprvReview -> {
+            ReceiveXprvReviewView(manager, state.v1) { app.popRoute() }
+        }
+
+        is KeyTeleportManagerState.ReceiveMessageReview -> {
+            ReceiveMessageReviewView(manager, state.v1) { app.popRoute() }
+        }
+
+        is KeyTeleportManagerState.ReceiveImportedWallet -> {
+            ReceiveImportedWalletView(
+                manager = manager,
+                wallet = state.v1,
+                status = ImportedWalletStatus.IMPORTED,
+            ) { app.selectWallet(state.v1.id) }
+        }
+
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
+            ReceiveImportedWalletView(
+                manager = manager,
+                wallet = state.v1,
+                status = ImportedWalletStatus.ALREADY_IMPORTED,
+            ) { app.selectWallet(state.v1.id) }
+        }
+
+        else -> {
+            Unit
+        }
+    }
+}
+
+@Composable
+private fun KeyTeleportSendContent(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    state: KeyTeleportManagerState,
+    onScan: () -> Unit,
+    onPaste: () -> Unit,
+) {
+    when (state) {
+        KeyTeleportManagerState.SendAwaitReceiver -> {
+            SendAwaitReceiverView(onScan, onPaste)
+        }
+
+        is KeyTeleportManagerState.SendChooseWallet -> {
+            SendChooseWalletView(manager, state.v1)
+        }
+
+        is KeyTeleportManagerState.SendEnterCode -> {
+            SendEnterCodeView(manager, state.v1)
+        }
+
+        is KeyTeleportManagerState.SendReady -> {
+            SendReadyView(state.v1) {
+                manager.dispatch(KeyTeleportManagerAction.Clear)
+                app.popRoute()
+            }
+        }
+
+        else -> {
+            Unit
+        }
+    }
+}
+
+@Composable
+private fun KeyTeleportRouteHeader(route: KeyTeleportRoute) {
+    val receiving = route == KeyTeleportRoute.RECEIVE
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = if (receiving) "Receive by KeyTeleport" else "Send by KeyTeleport",
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text =
+                if (receiving) {
+                    "Show this request to the sending wallet, then scan the sender response."
+                } else {
+                    "Scan or paste the receiver request, confirm the wallet, then share the response."
+                },
+            color = OnboardingTextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun KeyTeleportOverlays(
+    app: AppManager,
+    manager: KeyTeleportManager,
+    showScanner: Boolean,
+    localError: String?,
+    actions: KeyTeleportOverlayActions,
+) {
+    if (showScanner) {
+        QrCodeScanView(
+            onScanned = { multiFormat ->
+                actions.onScannerDismiss()
+                if (!manager.ingestKeyTeleportMultiFormat(multiFormat)) {
+                    actions.onScanError("Scan a KeyTeleport QR code.")
+                }
+            },
+            onDismiss = actions.onScannerDismiss,
+            app = app,
+        )
+    }
+    manager.alert?.let { alert ->
+        KeyTeleportMessageDialog(alert.messageForDisplay()) {
+            manager.clearAlertForDisplay()
+        }
+    }
+    if (manager.alert == null) {
+        localError?.let { message ->
+            KeyTeleportMessageDialog(message, actions.onErrorDismiss)
+        }
+    }
+}
+
+private data class KeyTeleportOverlayActions(
+    val onScannerDismiss: () -> Unit,
+    val onScanError: (String) -> Unit,
+    val onErrorDismiss: () -> Unit,
+)

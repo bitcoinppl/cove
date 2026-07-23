@@ -6,7 +6,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::wallet::metadata::WalletType;
 use cove_types::network::Network;
 
-pub const PAYLOAD_VERSION: u32 = 1;
+pub const PAYLOAD_VERSION: u32 = 2;
 
 /// Top-level backup payload, serialized to JSON before compression and encryption
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,6 +96,8 @@ impl Drop for WalletBackup {
 pub enum WalletSecret {
     /// Hot wallet BIP-39 mnemonic
     Mnemonic(String),
+    /// Hot wallet BIP-32 extended private key
+    Xprv(String),
     /// TapSigner encrypted backup bytes
     TapSignerBackup(Vec<u8>),
     /// No secret material (xpub-only / watch-only)
@@ -109,6 +111,7 @@ impl std::fmt::Debug for WalletSecret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Mnemonic(_) => write!(f, "Mnemonic(****)"),
+            Self::Xprv(_) => write!(f, "Xprv(****)"),
             Self::TapSignerBackup(_) => write!(f, "TapSignerBackup(****)"),
             Self::None => write!(f, "None"),
             Self::Unknown => write!(f, "Unknown"),
@@ -172,6 +175,8 @@ impl BackupImportReport {
 #[derive(Debug, uniffi::Enum)]
 pub enum WalletSecretType {
     Mnemonic,
+    /// A BIP32 extended private key
+    Xprv,
     TapSignerBackup,
     None,
     Unknown,
@@ -182,6 +187,7 @@ impl WalletSecretType {
     pub fn display_name(&self) -> String {
         match self {
             Self::Mnemonic => "Mnemonic",
+            Self::Xprv => "Extended Private Key",
             Self::TapSignerBackup => "TapSigner",
             Self::None => "Xpub Only",
             Self::Unknown => "Unknown",
@@ -194,6 +200,7 @@ impl From<&WalletSecret> for WalletSecretType {
     fn from(secret: &WalletSecret) -> Self {
         match secret {
             WalletSecret::Mnemonic(_) => Self::Mnemonic,
+            WalletSecret::Xprv(_) => Self::Xprv,
             WalletSecret::TapSignerBackup(_) => Self::TapSignerBackup,
             WalletSecret::None => Self::None,
             WalletSecret::Unknown => Self::Unknown,
@@ -268,7 +275,7 @@ mod tests {
         let json = serde_json::to_vec(&payload).unwrap();
         let decoded: BackupPayload = serde_json::from_slice(&json).unwrap();
 
-        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.version, PAYLOAD_VERSION);
         assert_eq!(decoded.created_at, 1700000000);
         assert_eq!(decoded.wallets.len(), 1);
         assert_eq!(decoded.settings.selected_network.as_deref(), Some("bitcoin"));
@@ -276,6 +283,33 @@ mod tests {
             decoded.settings.custom_block_explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+    }
+
+    #[test]
+    fn version_one_mnemonic_payload_remains_readable() {
+        let mut payload = sample_payload();
+        payload.version = 1;
+        let json = serde_json::to_vec(&payload).unwrap();
+
+        let decoded = BackupPayload::decode(&json).unwrap();
+
+        assert_eq!(decoded.version, 1);
+        assert!(matches!(&decoded.wallets[0].secret, WalletSecret::Mnemonic(_)));
+    }
+
+    #[test]
+    fn current_payload_roundtrips_xprv_secret_shape() {
+        let mut payload = sample_payload();
+        payload.wallets[0].secret = WalletSecret::Xprv(
+            "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa"
+                .to_string(),
+        );
+        let json = serde_json::to_vec(&payload).unwrap();
+
+        let decoded = BackupPayload::decode(&json).unwrap();
+
+        assert_eq!(decoded.version, PAYLOAD_VERSION);
+        assert!(matches!(&decoded.wallets[0].secret, WalletSecret::Xprv(_)));
     }
 
     #[test]
@@ -402,7 +436,7 @@ mod tests {
         let decompressed = crate::backup::crypto::decompress(&compressed).unwrap();
         let decoded: BackupPayload = serde_json::from_slice(&decompressed).unwrap();
 
-        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.version, PAYLOAD_VERSION);
         assert_eq!(decoded.wallets.len(), 1);
 
         match &decoded.wallets[0].secret {

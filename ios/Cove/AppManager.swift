@@ -89,6 +89,10 @@ struct WalletTransitionRecoveryPlan {
         managerCache.coinControlManager
     }
 
+    var keyTeleportManager: KeyTeleportManager? {
+        managerCache.keyTeleportManager
+    }
+
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
         case .light:
@@ -193,6 +197,18 @@ struct WalletTransitionRecoveryPlan {
 
     public func clearCoinControlManager(_ manager: CoinControlManager) {
         managerCache.clearCoinControlManager(manager)
+    }
+
+    func ensureKeyTeleportManager() -> KeyTeleportManager {
+        managerCache.ensureKeyTeleportManager(app: rust)
+    }
+
+    func clearKeyTeleportManager() {
+        managerCache.clearKeyTeleportManager()
+    }
+
+    func canKeyTeleportSend(walletId: WalletId) -> Bool {
+        rust.canKeyTeleportSend(walletId: walletId)
     }
 
     @MainActor
@@ -334,7 +350,7 @@ struct WalletTransitionRecoveryPlan {
             router: &router,
             isSidebarVisible: &isSidebarVisible
         ) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
@@ -344,19 +360,19 @@ struct WalletTransitionRecoveryPlan {
             router: &router,
             isSidebarVisible: &isSidebarVisible
         ) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
     func popRoute() {
         navigationCoordinator.popRoute(router: &router) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
     func setRoute(_ routes: [Route]) {
         navigationCoordinator.setRoute(routes, router: &router) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
@@ -409,7 +425,7 @@ struct WalletTransitionRecoveryPlan {
                     isSidebarVisible: &self.isSidebarVisible,
                     advancesGeneration: false
                 ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                    self.managerCache.reconcileRouteOwnedManagers(router: router)
                 }
             } else {
                 self.navigationCoordinator.resetRoute(
@@ -428,7 +444,7 @@ struct WalletTransitionRecoveryPlan {
                 isSidebarVisible: &self.isSidebarVisible,
                 advancesGeneration: false
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
         }
     }
@@ -441,7 +457,7 @@ struct WalletTransitionRecoveryPlan {
                 isSidebarVisible: &self.isSidebarVisible,
                 advancesGeneration: false
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
         }
     }
@@ -596,7 +612,7 @@ struct WalletTransitionRecoveryPlan {
                     routes: routes,
                     router: &router
                 ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                    self.managerCache.reconcileRouteOwnedManagers(router: router)
                 }
 
             case let .pushedRoute(route):
@@ -605,7 +621,7 @@ struct WalletTransitionRecoveryPlan {
                     router: &router,
                     isSidebarVisible: &isSidebarVisible
                 ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                    self.managerCache.reconcileRouteOwnedManagers(router: router)
                 }
 
             case .databaseUpdated:
@@ -629,7 +645,7 @@ struct WalletTransitionRecoveryPlan {
                     router: &router,
                     routeId: &routeId
                 ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                    self.managerCache.reconcileRouteOwnedManagers(router: router)
                 }
 
             case let .fiatPricesChanged(prices):
