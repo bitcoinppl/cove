@@ -272,22 +272,10 @@ fn parse_bbqr_data(
         FileType::Cbor => Err(MultiQrError::BbqrCborNotSupported),
 
         FileType::KeyTeleportReceiver | FileType::KeyTeleportSender | FileType::KeyTeleportPsbt => {
-            match crate::key_teleport::parse_key_teleport_bbqr_payload(data, file_type) {
-                Ok(crate::key_teleport::ParsedKeyTeleport::Receiver(packet)) => {
-                    Ok(MultiFormat::KeyTeleportReceiver(packet))
-                }
-                Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
-                    Ok(MultiFormat::KeyTeleportSender(packet))
-                }
-                Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt) => {
-                    Err(MultiQrError::ParseError(
-                        "KeyTeleport PSBT packets are not supported yet".into(),
-                    ))
-                }
-                Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {
-                    Err(MultiQrError::ParseError("Invalid KeyTeleport packet".into()))
-                }
-            }
+            let parsed = crate::key_teleport::parse_key_teleport_bbqr_payload(data, file_type)
+                .map_err_str(MultiQrError::ParseError)?;
+
+            MultiFormat::try_from(parsed).map_err_str(MultiQrError::ParseError)
         }
 
         FileType::UnicodeText | FileType::Json => {

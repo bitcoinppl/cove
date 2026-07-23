@@ -161,6 +161,8 @@ fn url_parse_build_handles_case_and_rejects_invalid_fragments() {
 
     let mixed_case_url = KEYTELEPORT_DOC_EXAMPLE.replace("keyteleport.com", "KeyTeleport.com");
     assert!(Packet::from_url(&mixed_case_url).is_ok());
+    let raw_fragment = KEYTELEPORT_DOC_EXAMPLE.split_once('#').unwrap().1;
+    assert!(Packet::from_url(raw_fragment).is_ok());
     assert!(Packet::from_url("https://keyteleport.com/#not-bbqr").is_err());
     assert!(Packet::from_url("https://example.com/#B$2R0100").is_err());
 }
