@@ -186,7 +186,7 @@ impl NodeSelector {
         let url_string = url.to_string();
 
         let name = if entered_name.is_empty() {
-            url.domain().unwrap_or(url_string.as_str()).to_string()
+            url.host_str().unwrap_or(url_string.as_str()).to_string()
         } else {
             entered_name
         };
@@ -361,14 +361,9 @@ fn normalized_url(url: &str) -> Result<String, Error> {
     Ok(url.strip_suffix('/').unwrap_or(&url).to_string())
 }
 
-/// A url is usable when it names a host we can actually reach: a dotted domain
-/// or a literal IP address, which is how self hosted servers are often reached.
+/// A url is usable when it names a host we can actually reach.
 fn has_usable_host(url: &Url) -> bool {
-    match url.host() {
-        Some(url::Host::Domain(domain)) => domain.contains('.'),
-        Some(_) => true,
-        None => false,
-    }
+    url.host_str().is_some_and(|host| !host.is_empty())
 }
 
 fn parse_node_url(url: &str) -> eyre::Result<Url> {
@@ -485,6 +480,27 @@ mod tests {
     }
 
     #[test]
+    fn nodes_can_be_reached_by_single_label_and_local_names() {
+        assert_eq!(parse("fulcrum:50001").unwrap().url, "tcp://fulcrum:50001/");
+        assert_eq!(parse("ssl://fulcrum.local").unwrap().url, "ssl://fulcrum.local:50002");
+        assert_eq!(parse("electrum.example.com").unwrap().url, "tcp://electrum.example.com:50001/");
+    }
+
+    #[test]
+    fn scheme_and_port_normalization_is_unchanged() {
+        assert_eq!(parse("http://fulcrum:50001").unwrap().url, "tcp://fulcrum:50001");
+        assert_eq!(parse("https://fulcrum").unwrap().url, "ssl://fulcrum:50002");
+        assert_eq!(parse("fulcrum:50002").unwrap().url, "ssl://fulcrum:50002/");
+    }
+
+    #[test]
+    fn the_host_is_the_fallback_name() {
+        assert_eq!(parse("ssl://192.168.1.50:50002").unwrap().name, "192.168.1.50");
+        assert_eq!(parse("ssl://[fd00::1]:50002").unwrap().name, "[fd00::1]");
+        assert_eq!(parse("ssl://fulcrum:50002").unwrap().name, "fulcrum");
+    }
+
+    #[test]
     fn esplora_nodes_reject_certificate_settings() {
         let error = selector()
             .parse_custom_node(
@@ -554,6 +570,6 @@ mod tests {
 
     #[test]
     fn a_url_without_a_host_is_rejected() {
-        assert!(parse("ssl://nodomain:50002").is_err());
+        assert!(parse("ssl://:50002").is_err());
     }
 }
