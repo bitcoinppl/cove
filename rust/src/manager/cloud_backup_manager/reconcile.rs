@@ -24,6 +24,19 @@ pub enum DriveAccountSwitchPlatformState {
     Committed(u64),
 }
 
+/// Platform action required to reconcile a persisted Google Drive account switch
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DriveAccountSwitchReconcileAction {
+    /// Rust and platform state require no immediate platform mutation
+    None,
+    /// Atomically commit the staged Google Drive identity
+    Commit(u64),
+    /// Atomically discard the staged Google Drive identity
+    Rollback(u64),
+    /// Remove the completed transition marker without changing identity
+    Finalize(u64),
+}
+
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {

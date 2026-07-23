@@ -112,7 +112,7 @@ pub(crate) use self::pending_verification::{
     PendingVerificationCompletion, PendingVerificationUpload,
 };
 use self::reconcile::CloudBackupReconcileMessage;
-pub use self::reconcile::DriveAccountSwitchPlatformState;
+pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
@@ -928,10 +928,12 @@ impl RustCloudBackupManager {
     }
 
     /// Reconcile persisted Rust and Android transition state after process startup
+    ///
+    /// Android must complete the returned action before starting its initial cloud refresh
     pub async fn reconcile_drive_account_switch(
         &self,
         platform_state: DriveAccountSwitchPlatformState,
-    ) -> Result<(), CloudBackupDriveAccountSwitchError> {
+    ) -> Result<DriveAccountSwitchReconcileAction, CloudBackupDriveAccountSwitchError> {
         call!(self.supervisor.reconcile_drive_account_switch(platform_state))
             .await
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?

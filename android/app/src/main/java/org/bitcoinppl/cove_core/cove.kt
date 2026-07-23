@@ -4442,7 +4442,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 29464.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 63487.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590.toShort()) {
@@ -19178,8 +19178,10 @@ public interface RustCloudBackupManagerInterface {
 
     /**
      * Reconcile persisted Rust and Android transition state after process startup
+     *
+     * Android must complete the returned action before starting its initial cloud refresh
      */
-    suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState)
+    suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState): DriveAccountSwitchReconcileAction
 
     fun `resumePendingCloudUploadVerification`()
 
@@ -19568,10 +19570,12 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
 
     /**
      * Reconcile persisted Rust and Android transition state after process startup
+     *
+     * Android must complete the returned action before starting its initial cloud refresh
      */
     @Throws(CloudBackupDriveAccountSwitchException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState) {
+    override suspend fun `reconcileDriveAccountSwitch`(`platformState`: DriveAccountSwitchPlatformState) : DriveAccountSwitchReconcileAction {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(
@@ -19580,12 +19584,11 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
         FfiConverterTypeDriveAccountSwitchPlatformState.lower(`platformState`),
             )
         },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
-        { Unit },
-
+        { FfiConverterTypeDriveAccountSwitchReconcileAction.lift(it) },
         // Error FFI converter
         CloudBackupDriveAccountSwitchException.ErrorHandler,
     )
@@ -43217,6 +43220,142 @@ public object FfiConverterTypeDriveAccountSwitchPlatformState : FfiConverterRust
             }
             is DriveAccountSwitchPlatformState.Committed -> {
                 buf.putInt(3)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Platform action required to reconcile a persisted Google Drive account switch
+ */
+sealed class DriveAccountSwitchReconcileAction {
+
+    /**
+     * Rust and platform state require no immediate platform mutation
+     */
+    object None : DriveAccountSwitchReconcileAction()
+
+
+    /**
+     * Atomically commit the staged Google Drive identity
+     */
+    data class Commit(
+        val v1: kotlin.ULong) : DriveAccountSwitchReconcileAction()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Atomically discard the staged Google Drive identity
+     */
+    data class Rollback(
+        val v1: kotlin.ULong) : DriveAccountSwitchReconcileAction()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Remove the completed transition marker without changing identity
+     */
+    data class Finalize(
+        val v1: kotlin.ULong) : DriveAccountSwitchReconcileAction()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDriveAccountSwitchReconcileAction : FfiConverterRustBuffer<DriveAccountSwitchReconcileAction>{
+    override fun read(buf: ByteBuffer): DriveAccountSwitchReconcileAction {
+        return when(buf.getInt()) {
+            1 -> DriveAccountSwitchReconcileAction.None
+            2 -> DriveAccountSwitchReconcileAction.Commit(
+                FfiConverterULong.read(buf),
+                )
+            3 -> DriveAccountSwitchReconcileAction.Rollback(
+                FfiConverterULong.read(buf),
+                )
+            4 -> DriveAccountSwitchReconcileAction.Finalize(
+                FfiConverterULong.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: DriveAccountSwitchReconcileAction): ULong = when(value) {
+        is DriveAccountSwitchReconcileAction.None -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is DriveAccountSwitchReconcileAction.Commit -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchReconcileAction.Rollback -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is DriveAccountSwitchReconcileAction.Finalize -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: DriveAccountSwitchReconcileAction, buf: ByteBuffer) {
+        when(value) {
+            is DriveAccountSwitchReconcileAction.None -> {
+                buf.putInt(1)
+                Unit
+            }
+            is DriveAccountSwitchReconcileAction.Commit -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchReconcileAction.Rollback -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.v1, buf)
+                Unit
+            }
+            is DriveAccountSwitchReconcileAction.Finalize -> {
+                buf.putInt(4)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }

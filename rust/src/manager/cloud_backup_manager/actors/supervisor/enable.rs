@@ -129,8 +129,10 @@ impl CloudBackupSupervisor {
             }
         }
 
-        if self.drive_account_switch_reinitialization_finished(manager, claim, false) {
-            return;
+        match self.drive_account_switch_reinitialization_finished(manager, claim, false) {
+            DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
+            DriveAccountSwitchReinitializationCompletion::Stale
+            | DriveAccountSwitchReinitializationCompletion::Handled => return,
         }
 
         self.active_operation.clear();
@@ -143,8 +145,10 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
-            if self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
-                return;
+            match self.drive_account_switch_reinitialization_finished(&manager, claim, true) {
+                DriveAccountSwitchReinitializationCompletion::NotDriveAccountSwitch => {}
+                DriveAccountSwitchReinitializationCompletion::Stale
+                | DriveAccountSwitchReinitializationCompletion::Handled => return,
             }
 
             manager.apply_recovery_state(RecoveryState::Idle);

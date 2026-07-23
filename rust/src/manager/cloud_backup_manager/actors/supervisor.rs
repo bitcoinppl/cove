@@ -64,13 +64,13 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudBackupWalletStatus,
     CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    DriveAccountSwitchPlatformState, EnablePasskeyRegistrationFlow,
-    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation, PendingEnableJournal,
-    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
-    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
-    PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
-    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
-    is_provider_wide_interruption,
+    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
+    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
+    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
+    blocking_cloud_error, is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -95,6 +95,13 @@ mod tests {
 }
 
 static NEXT_SUPERVISOR_OPERATION_ID: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DriveAccountSwitchReinitializationCompletion {
+    NotDriveAccountSwitch,
+    Stale,
+    Handled,
+}
 
 /// Passkey proof cached only for the current supervisor session
 ///

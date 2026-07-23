@@ -40,6 +40,7 @@ import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DriveAccountSwitchPlatformState
+import org.bitcoinppl.cove_core.DriveAccountSwitchReconcileAction
 import org.bitcoinppl.cove_core.LoadedCloudBackupDetail
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 import org.bitcoinppl.cove_core.RustCloudBackupManager
@@ -98,16 +99,23 @@ class CloudBackupManager private constructor(
         if (startLiveUpdates && rust != null) {
             rust.listenForUpdates(this)
             rustScope.launch {
-                runCatching {
-                    rustGuard.withHandleSuspend(rust) {
-                        reconcileDriveAccountSwitch(
-                            driveAccountSwitchCallbacks?.platformState?.invoke()
-                                ?: DriveAccountSwitchPlatformState.NoTransition,
-                        )
+                val reconciled =
+                    runCatching {
+                        val action = rustGuard.withHandleSuspend(rust) {
+                            reconcileDriveAccountSwitch(
+                                driveAccountSwitchCallbacks?.platformState?.invoke()
+                                    ?: DriveAccountSwitchPlatformState.NoTransition,
+                            )
+                        }
+
+                        reconcileDriveAccountSwitchAction(action)
                     }
-                }.onFailure { error ->
-                    Log.e(TAG, "failed to reconcile drive account switch", error)
-                }
+                        .onFailure { error ->
+                            Log.e(TAG, "failed to reconcile drive account switch", error)
+                        }
+                        .getOrDefault(false)
+                if (!reconciled) return@launch
+
                 runCatching {
                     withRust {
                         cloudStorageDidChange()
@@ -521,9 +529,10 @@ class CloudBackupManager private constructor(
             }
 
             runCatching {
-                withRustSuspend {
+                val action = withRustSuspend {
                     reconcileDriveAccountSwitch(callbacks.platformState())
                 }
+                reconcileDriveAccountSwitchAction(action)
             }.onFailure { error ->
                 Log.e(TAG, "failed to retry drive account recovery", error)
                 reportDriveAccountSwitchRecovery(recovery.transitionId, recovery.message)
@@ -531,14 +540,25 @@ class CloudBackupManager private constructor(
         }
     }
 
-    private suspend fun commitDriveAccountSwitch(transitionId: ULong) {
+    private suspend fun reconcileDriveAccountSwitchAction(
+        action: DriveAccountSwitchReconcileAction,
+    ): Boolean =
+        when (action) {
+            is DriveAccountSwitchReconcileAction.None -> true
+            is DriveAccountSwitchReconcileAction.Commit -> commitDriveAccountSwitch(action.v1)
+            is DriveAccountSwitchReconcileAction.Rollback ->
+                rollBackReconciledDriveAccountSwitch(action.v1)
+            is DriveAccountSwitchReconcileAction.Finalize -> finalizeDriveAccountSwitch(action.v1)
+        }
+
+    private suspend fun commitDriveAccountSwitch(transitionId: ULong): Boolean {
         val receipt = driveAccountSwitchCallbacks?.commit?.invoke(transitionId)
         if (receipt?.confirmsCommitted(transitionId) != true) {
             reportDriveAccountSwitchRecovery(
                 transitionId,
                 "Cove couldn't save the selected Google Drive account; try again",
             )
-            return
+            return false
         }
 
         val confirmed = runCatching {
@@ -546,18 +566,18 @@ class CloudBackupManager private constructor(
         }.onFailure { error ->
             Log.e(TAG, "failed to confirm drive account commit", error)
         }.isSuccess
-        if (!confirmed) {
+        return if (confirmed) {
+            finalizeDriveAccountSwitch(transitionId)
+        } else {
             reportDriveAccountSwitchRecovery(
                 transitionId,
                 "Cove couldn't finish changing Google Drive accounts; try again",
             )
-            return
+            false
         }
-
-        finalizeDriveAccountSwitch(transitionId)
     }
 
-    private suspend fun finalizeDriveAccountSwitch(transitionId: ULong) {
+    private suspend fun finalizeDriveAccountSwitch(transitionId: ULong): Boolean {
         if (
             driveAccountSwitchCallbacks?.finalizeCommit?.invoke(transitionId)
                 ?.confirmsNoTransition() != true
@@ -566,13 +586,14 @@ class CloudBackupManager private constructor(
                 transitionId,
                 "Cove couldn't finish saving the selected Google Drive account; try again",
             )
-            return
+            return false
         }
 
         clearDriveAccountSwitchRecovery(transitionId)
+        return true
     }
 
-    private suspend fun rollBackReconciledDriveAccountSwitch(transitionId: ULong) {
+    private suspend fun rollBackReconciledDriveAccountSwitch(transitionId: ULong): Boolean {
         if (
             driveAccountSwitchCallbacks?.rollback?.invoke(transitionId)
                 ?.confirmsNoTransition() != true
@@ -581,10 +602,10 @@ class CloudBackupManager private constructor(
                 transitionId,
                 "Cove couldn't restore the previous Google Drive account; try again",
             )
-            return
+            return false
         }
 
-        runCatching {
+        return runCatching {
             withRustSuspend { confirmDriveAccountSwitchRolledBack(transitionId) }
         }.onSuccess {
             clearDriveAccountSwitchRecovery(transitionId)
@@ -594,7 +615,7 @@ class CloudBackupManager private constructor(
                 transitionId,
                 "Cove couldn't finish restoring the previous Google Drive account; try again",
             )
-        }
+        }.isSuccess
     }
 
     private fun reportDriveAccountSwitchRecovery(

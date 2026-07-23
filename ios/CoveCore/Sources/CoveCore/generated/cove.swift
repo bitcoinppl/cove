@@ -7779,8 +7779,10 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
 
     /**
      * Reconcile persisted Rust and Android transition state after process startup
+     *
+     * Android must complete the returned action before starting its initial cloud refresh
      */
-    func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformState) async throws
+    func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformState) async throws  -> DriveAccountSwitchReconcileAction
 
     func resumePendingCloudUploadVerification()
 
@@ -8058,8 +8060,10 @@ open func onboardingEnableCompletionReadiness() -> CloudBackupOnboardingCompleti
 
     /**
      * Reconcile persisted Rust and Android transition state after process startup
+     *
+     * Android must complete the returned action before starting its initial cloud refresh
      */
-open func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformState)async throws   {
+open func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformState)async throws  -> DriveAccountSwitchReconcileAction  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -8068,10 +8072,10 @@ open func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformS
                     FfiConverterTypeDriveAccountSwitchPlatformState_lower(platformState)
                 )
             },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDriveAccountSwitchReconcileAction_lift,
             errorHandler: FfiConverterTypeCloudBackupDriveAccountSwitchError_lift
         )
 }
@@ -25778,6 +25782,110 @@ public func FfiConverterTypeDriveAccountSwitchPlatformState_lower(_ value: Drive
 
 
 
+/**
+ * Platform action required to reconcile a persisted Google Drive account switch
+ */
+
+public enum DriveAccountSwitchReconcileAction: Equatable, Hashable {
+
+    /**
+     * Rust and platform state require no immediate platform mutation
+     */
+    case none
+    /**
+     * Atomically commit the staged Google Drive identity
+     */
+    case commit(UInt64
+    )
+    /**
+     * Atomically discard the staged Google Drive identity
+     */
+    case rollback(UInt64
+    )
+    /**
+     * Remove the completed transition marker without changing identity
+     */
+    case finalize(UInt64
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DriveAccountSwitchReconcileAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDriveAccountSwitchReconcileAction: FfiConverterRustBuffer {
+    typealias SwiftType = DriveAccountSwitchReconcileAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DriveAccountSwitchReconcileAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .none
+
+        case 2: return .commit(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 3: return .rollback(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 4: return .finalize(try FfiConverterUInt64.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DriveAccountSwitchReconcileAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .none:
+            writeInt(&buf, Int32(1))
+
+
+        case let .commit(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .rollback(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+
+        case let .finalize(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt64.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDriveAccountSwitchReconcileAction_lift(_ buf: RustBuffer) throws -> DriveAccountSwitchReconcileAction {
+    return try FfiConverterTypeDriveAccountSwitchReconcileAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDriveAccountSwitchReconcileAction_lower(_ value: DriveAccountSwitchReconcileAction) -> RustBuffer {
+    return FfiConverterTypeDriveAccountSwitchReconcileAction.lower(value)
+}
+
+
+
 public
 enum FiatAmountError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -42527,7 +42635,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_onboarding_enable_completion_readiness() != 42328) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 29464) {
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_reconcile_drive_account_switch() != 63487) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590) {
