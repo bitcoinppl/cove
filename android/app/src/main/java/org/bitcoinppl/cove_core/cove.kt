@@ -1359,6 +1359,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_url(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_urls(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
@@ -1384,6 +1386,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_url(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_urls(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_network(
     ): Short
@@ -2443,6 +2447,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_globalconfigtable_ohttp_relay_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_ohttp_relay_urls(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2468,6 +2474,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(`ptr`: Long,`hashedPinCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_url(`ptr`: Long,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_urls(`ptr`: Long,`urls`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_network(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -4348,6 +4356,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_url() != 61876.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_urls() != 44564.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4385,6 +4396,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_url() != 7011.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_urls() != 64715.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578.toShort()) {
@@ -13419,6 +13433,8 @@ public interface GlobalConfigTableInterface {
 
     fun `ohttpRelayUrl`(): kotlin.String?
 
+    fun `ohttpRelayUrls`(): List<kotlin.String>
+
     fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
     fun `selectWallet`(`id`: WalletId)
@@ -13444,6 +13460,8 @@ public interface GlobalConfigTableInterface {
     fun `setHashedPinCode`(`hashedPinCode`: kotlin.String)
 
     fun `setOhttpRelayUrl`(`url`: kotlin.String): kotlin.String?
+
+    fun `setOhttpRelayUrls`(`urls`: List<kotlin.String>): List<kotlin.String>
 
     fun `setSelectedNetwork`(`network`: Network)
 
@@ -13744,6 +13762,19 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     }
 
 
+    override fun `ohttpRelayUrls`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_ohttp_relay_urls(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
 
     @Throws(DatabaseException::class)override fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
@@ -13924,6 +13955,21 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         it,
 
         FfiConverterString.lower(`url`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(DatabaseException::class)override fun `setOhttpRelayUrls`(`urls`: List<kotlin.String>): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_urls(
+        it,
+
+        FfiConverterSequenceString.lower(`urls`),_status)
 }
     }
     )
@@ -45845,6 +45891,9 @@ sealed class GlobalConfigKey {
     object OhttpRelayUrl : GlobalConfigKey()
 
 
+    object OhttpRelayUrls : GlobalConfigKey()
+
+
 
 
 
@@ -45881,6 +45930,7 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 FfiConverterTypeNetwork.read(buf),
                 )
             16 -> GlobalConfigKey.OhttpRelayUrl
+            17 -> GlobalConfigKey.OhttpRelayUrls
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -45984,6 +46034,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 4UL
             )
         }
+        is GlobalConfigKey.OhttpRelayUrls -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -46052,6 +46108,10 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             }
             is GlobalConfigKey.OhttpRelayUrl -> {
                 buf.putInt(16)
+                Unit
+            }
+            is GlobalConfigKey.OhttpRelayUrls -> {
+                buf.putInt(17)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

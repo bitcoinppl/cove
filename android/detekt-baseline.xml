@@ -281,6 +281,8 @@
     <ID>FunctionNaming:NodeSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NodeSettingsScreen</ID>
     <ID>FunctionNaming:NumberPadPinView.kt:@Composable fun NumberPadPinView</ID>
     <ID>FunctionNaming:NumberPadPinView.kt:@Composable private fun NumberButton</ID>
+    <ID>FunctionNaming:OhttpRelaySettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun OhttpRelaySettingsScreen</ID>
+    <ID>FunctionNaming:OhttpRelaySettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun RelayItem</ID>
     <ID>FunctionNaming:OnboardingBackupViews.kt:@Composable internal fun OnboardingBackupWalletView</ID>
     <ID>FunctionNaming:OnboardingBackupViews.kt:@Composable internal fun OnboardingCreatingWalletView</ID>
     <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable internal fun OnboardingCloudBackupStepView</ID>
