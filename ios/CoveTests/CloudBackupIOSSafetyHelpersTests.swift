@@ -464,6 +464,62 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
     }
 
     @MainActor
+    func testBackupUploadStatusReturnsNotFoundAfterSuccessfulMetadataLookup() async throws {
+        let fixture = makeICloudMetadataFixture()
+        defer { fixture.removeContainer() }
+        let request = Task {
+            try await fixture.helper.isBackupUploaded(
+                namespace: self.testNamespace,
+                recordId: "wallet-record",
+                locations: self.backupLocations()
+            )
+        }
+
+        await Task.yield()
+        fixture.source.send(.finishedGathering([]))
+
+        let status = try await request.value
+
+        XCTAssertEqual(status, .notFound)
+    }
+
+    @MainActor
+    func testBackupUploadStatusPropagatesMetadataStartupFailure() async throws {
+        let fixture = makeICloudMetadataFixture(startResults: [false])
+        defer { fixture.removeContainer() }
+
+        do {
+            _ = try await fixture.helper.isBackupUploaded(
+                namespace: testNamespace,
+                recordId: "wallet-record",
+                locations: backupLocations()
+            )
+            XCTFail("expected metadata startup failure")
+        } catch CloudStorageError.NotAvailable {
+        } catch {
+            XCTFail("expected NotAvailable, got \(error)")
+        }
+    }
+
+    @MainActor
+    func testBackupUploadStatusPropagatesMetadataTimeout() async throws {
+        let fixture = makeICloudMetadataFixture(metadataListingTimeout: 0.01)
+        defer { fixture.removeContainer() }
+
+        do {
+            _ = try await fixture.helper.isBackupUploaded(
+                namespace: testNamespace,
+                recordId: "wallet-record",
+                locations: backupLocations()
+            )
+            XCTFail("expected metadata timeout")
+        } catch CloudStorageError.Offline {
+        } catch {
+            XCTFail("expected Offline, got \(error)")
+        }
+    }
+
+    @MainActor
     func testBackupReadCancellationDoesNotWaitForMetadataTimeout() async throws {
         let fixture = makeICloudMetadataFixture(defaultTimeout: 1)
         defer { fixture.removeContainer() }
@@ -744,7 +800,8 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
     @MainActor
     private func makeICloudMetadataFixture(
         startResults: [Bool] = [true],
-        defaultTimeout: TimeInterval = 1
+        defaultTimeout: TimeInterval = 1,
+        metadataListingTimeout: TimeInterval = 5
     ) -> ICloudMetadataFixture {
         let containerURL = FileManager.default.temporaryDirectory.appendingPathComponent(
             "icloud-metadata-tests-\(UUID().uuidString)",
@@ -755,7 +812,8 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let helper = ICloudDriveHelper(
             containerURLProvider: { containerURL },
             metadataIndexProvider: { index },
-            defaultTimeout: defaultTimeout
+            defaultTimeout: defaultTimeout,
+            metadataListingTimeout: metadataListingTimeout
         )
         return ICloudMetadataFixture(
             containerURL: containerURL,

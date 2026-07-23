@@ -11,9 +11,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let containerURLProvider: @Sendable () -> URL?
     let metadataIndexProvider: @MainActor @Sendable () -> ICloudMetadataIndex
     let defaultTimeout: TimeInterval
+    let metadataListingTimeout: TimeInterval
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
-    let metadataListingTimeout: TimeInterval = 5
     private let progressLogInterval: TimeInterval = 1
     private let coordinatedReadQueue = DispatchQueue(
         label: "cove.ICloudDriveHelper.coordinatedRead",
@@ -31,11 +31,13 @@ final class ICloudDriveHelper: @unchecked Sendable {
         metadataIndexProvider: @escaping @MainActor @Sendable () -> ICloudMetadataIndex = {
             ICloudMetadataIndex.shared
         },
-        defaultTimeout: TimeInterval = 60
+        defaultTimeout: TimeInterval = 60,
+        metadataListingTimeout: TimeInterval = 5
     ) {
         self.containerURLProvider = containerURLProvider
         self.metadataIndexProvider = metadataIndexProvider
         self.defaultTimeout = defaultTimeout
+        self.metadataListingTimeout = metadataListingTimeout
     }
 
     struct ResolvedMetadataItem {
@@ -739,7 +741,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         var foundPendingItem = false
 
         for url in urls {
-            let metadataItem = try await resolvedMetadataItemIfPresent(
+            let metadataItem = try await metadataItemIfPresent(
                 named: url.lastPathComponent,
                 parentDirectoryURL: url.deletingLastPathComponent()
             )

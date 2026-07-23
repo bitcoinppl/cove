@@ -531,25 +531,6 @@ extension ICloudDriveHelper {
         }
     }
 
-    func resolvedMetadataItemIfPresent(
-        named name: String,
-        parentDirectoryURL: URL
-    ) async throws -> ResolvedMetadataItem? {
-        do {
-            return try await metadataItemIfPresent(
-                named: name,
-                parentDirectoryURL: parentDirectoryURL
-            )
-        } catch let error as CancellationError {
-            throw error
-        } catch {
-            Log.error(
-                "metadataLookup: failed name=\(name) parent=\(parentDirectoryURL.path) error=\(error.localizedDescription)"
-            )
-            return nil
-        }
-    }
-
     func metadataItemIfPresent(
         named name: String,
         parentDirectoryURL: URL
