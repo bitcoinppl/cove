@@ -6193,6 +6193,12 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
 
     func selectedNode()  -> NodeSelection
 
+    /**
+     * The certificate settings the saved node trusts for `url`, compared on
+     * canonical urls so formatting differences do not drop a pin.
+     */
+    func trustedCertificate(url: String)  -> TlsTrust?
+
 }
 open class NodeSelector: NodeSelectorProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -6378,6 +6384,20 @@ open func selectedNode() -> NodeSelection  {
         uniffiCallStatus in
     uniffi_cove_fn_method_nodeselector_selected_node(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The certificate settings the saved node trusts for `url`, compared on
+     * canonical urls so formatting differences do not drop a pin.
+     */
+open func trustedCertificate(url: String) -> TlsTrust?  {
+    return try!  FfiConverterOptionTypeTlsTrust.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_nodeselector_trusted_certificate(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(url),uniffiCallStatus
     )
 })
 }
@@ -44218,6 +44238,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_selected_node() != 20791) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nodeselector_trusted_certificate() != 44900) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_qrscanner_reset() != 17017) {

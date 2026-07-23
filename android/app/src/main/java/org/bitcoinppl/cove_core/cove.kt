@@ -1791,6 +1791,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_selected_node(
     ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_trusted_certificate(
+    ): Short
     external fun uniffi_cove_checksum_method_qrscanner_reset(
     ): Short
     external fun uniffi_cove_checksum_method_qrscanner_scan(
@@ -3002,6 +3004,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodeselector_trusted_certificate(`ptr`: Long,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_pendingwallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4894,6 +4898,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_selected_node() != 20791.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodeselector_trusted_certificate() != 44900.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_qrscanner_reset() != 17017.toShort()) {
@@ -16495,6 +16502,12 @@ public interface NodeSelectorInterface {
 
     fun `selectedNode`(): NodeSelection
 
+    /**
+     * The certificate settings the saved node trusts for `url`, compared on
+     * canonical urls so formatting differences do not drop a pin.
+     */
+    fun `trustedCertificate`(`url`: kotlin.String): TlsTrust?
+
     companion object
 }
 
@@ -16768,6 +16781,24 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     UniffiLib.uniffi_cove_fn_method_nodeselector_selected_node(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The certificate settings the saved node trusts for `url`, compared on
+     * canonical urls so formatting differences do not drop a pin.
+     */override fun `trustedCertificate`(`url`: kotlin.String): TlsTrust? {
+            return FfiConverterOptionalTypeTlsTrust.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_nodeselector_trusted_certificate(
+        it,
+
+        FfiConverterString.lower(`url`),_status)
 }
     }
     )
