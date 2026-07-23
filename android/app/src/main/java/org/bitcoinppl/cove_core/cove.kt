@@ -783,6 +783,12 @@ internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod0 : 
 internal interface UniffiCallbackInterfaceCoinControlManagerReconcilerMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceNodeScannerReconcilerMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceNodeScannerReconcilerMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceOnboardingManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -888,6 +894,28 @@ internal open class UniffiVTableCallbackInterfaceCoinControlManagerReconciler(
     ): UniffiVTableCallbackInterfaceCoinControlManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,`reconcileMany`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceCoinControlManagerReconciler) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `reconcile` = other.`reconcile`
+        `reconcileMany` = other.`reconcileMany`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "reconcile", "reconcileMany")
+internal open class UniffiVTableCallbackInterfaceNodeScannerReconciler(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `reconcile`: UniffiCallbackInterfaceNodeScannerReconcilerMethod0? = null,
+    @JvmField internal var `reconcileMany`: UniffiCallbackInterfaceNodeScannerReconcilerMethod1? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `reconcile`: UniffiCallbackInterfaceNodeScannerReconcilerMethod0? = null,
+        `reconcileMany`: UniffiCallbackInterfaceNodeScannerReconcilerMethod1? = null,
+    ): UniffiVTableCallbackInterfaceNodeScannerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,`reconcileMany`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceNodeScannerReconciler) {
         `uniffiFree` = other.`uniffiFree`
         `uniffiClone` = other.`uniffiClone`
         `reconcile` = other.`reconcile`
@@ -1525,6 +1553,18 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet(
     ): Short
+    external fun uniffi_cove_checksum_method_rustnodescannermanager_create_node(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodescannermanager_listen_for_updates(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodescannermanager_start_scan(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodescannermanager_state(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodescannermanager_stop_scan(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodescannermanager_trust_and_create_node(
+    ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id(
     ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_dispatch(
@@ -2003,6 +2043,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_rustimportwalletmanager_new(
     ): Short
+    external fun uniffi_cove_checksum_constructor_rustnodescannermanager_new(
+    ): Short
     external fun uniffi_cove_checksum_constructor_rustonboardingmanager_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustpendingwalletmanager_new(
@@ -2093,6 +2135,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many(
     ): Short
+    external fun uniffi_cove_checksum_method_nodescannerreconciler_reconcile(
+    ): Short
+    external fun uniffi_cove_checksum_method_nodescannerreconciler_reconcile_many(
+    ): Short
     external fun uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile(
     ): Short
     external fun uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile(
@@ -2132,6 +2178,7 @@ internal object UniffiLib {
         uniffiCallbackInterfaceCloudBackupManagerReconciler.register(this)
         uniffiCallbackInterfaceCoinControlManagerReconciler.register(this)
         uniffiCallbackInterfaceFfiReconcile.register(this)
+        uniffiCallbackInterfaceNodeScannerReconciler.register(this)
         uniffiCallbackInterfaceOnboardingManagerReconciler.register(this)
         uniffiCallbackInterfacePendingWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
@@ -2660,6 +2707,24 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(`ptr`: Long,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_clone_rustnodescannermanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_rustnodescannermanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_constructor_rustnodescannermanager_new(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_rustnodescannermanager_create_node(`ptr`: Long,`found`: RustBuffer.ByValue,
+    ): Long
+    external fun uniffi_cove_fn_method_rustnodescannermanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustnodescannermanager_start_scan(`ptr`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustnodescannermanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustnodescannermanager_stop_scan(`ptr`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustnodescannermanager_trust_and_create_node(`ptr`: Long,`candidate`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_clone_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3317,6 +3382,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_init_callback_vtable_cloudbackupmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCloudBackupManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_coincontrolmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceCoinControlManagerReconciler,
+    ): Unit
+    external fun uniffi_cove_fn_init_callback_vtable_nodescannerreconciler(`vtable`: UniffiVTableCallbackInterfaceNodeScannerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_onboardingmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceOnboardingManagerReconciler,
     ): Unit
@@ -4472,6 +4539,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustnodescannermanager_create_node() != 2855.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodescannermanager_listen_for_updates() != 10111.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodescannermanager_start_scan() != 11377.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodescannermanager_state() != 63996.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodescannermanager_stop_scan() != 48721.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodescannermanager_trust_and_create_node() != 12231.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5189,6 +5274,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 12433.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_rustnodescannermanager_new() != 557.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5322,6 +5410,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodescannerreconciler_reconcile() != 50610.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodescannerreconciler_reconcile_many() != 57709.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875.toShort()) {
@@ -20682,6 +20776,420 @@ public object FfiConverterTypeRustImportWalletManager: FfiConverter<RustImportWa
 //
 
 
+/**
+ * Actor-backed owner of one local-node discovery lifecycle
+ */
+public interface RustNodeScannerManagerInterface {
+
+    /**
+     * Creates an unpersisted node from an exact verified result member
+     */
+    suspend fun `createNode`(`found`: FoundNode): Node
+
+    /**
+     * Starts forwarding typed scanner deltas to the frontend
+     */
+    fun `listenForUpdates`(`reconciler`: NodeScannerReconciler)
+
+    /**
+     * Starts a new generation unless a scan is already active
+     */
+    suspend fun `startScan`()
+
+    /**
+     * Returns the atomic bootstrap snapshot
+     */
+    fun `state`(): NodeScannerState
+
+    /**
+     * Stops the active scan while retaining its current results
+     */
+    suspend fun `stopScan`()
+
+    /**
+     * Pins, re-verifies, and creates an unpersisted node from an exact pending member
+     */
+    suspend fun `trustAndCreateNode`(`candidate`: TrustRequiredEndpoint): Node
+
+    companion object
+}
+
+/**
+ * Actor-backed owner of one local-node discovery lifecycle
+ */
+open class RustNodeScannerManager: Disposable, AutoCloseable, RustNodeScannerManagerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle,
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_rustnodescannermanager_new(
+
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_rustnodescannermanager(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_rustnodescannermanager(handle, status)
+        }
+    }
+
+
+    /**
+     * Creates an unpersisted node from an exact verified result member
+     */
+    @Throws(NodeScannerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `createNode`(`found`: FoundNode) : Node {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustnodescannermanager_create_node(
+                uniffiHandle,
+
+        FfiConverterTypeFoundNode.lower(`found`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNode.lift(it) },
+        // Error FFI converter
+        NodeScannerException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * Starts forwarding typed scanner deltas to the frontend
+     */override fun `listenForUpdates`(`reconciler`: NodeScannerReconciler)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustnodescannermanager_listen_for_updates(
+        it,
+
+        FfiConverterTypeNodeScannerReconciler.lower(`reconciler`),_status)
+}
+    }
+
+
+
+
+    /**
+     * Starts a new generation unless a scan is already active
+     */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `startScan`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustnodescannermanager_start_scan(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    /**
+     * Returns the atomic bootstrap snapshot
+     */override fun `state`(): NodeScannerState {
+            return FfiConverterTypeNodeScannerState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustnodescannermanager_state(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Stops the active scan while retaining its current results
+     */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `stopScan`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustnodescannermanager_stop_scan(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
+
+
+    /**
+     * Pins, re-verifies, and creates an unpersisted node from an exact pending member
+     */
+    @Throws(NodeScannerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `trustAndCreateNode`(`candidate`: TrustRequiredEndpoint) : Node {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustnodescannermanager_trust_and_create_node(
+                uniffiHandle,
+
+        FfiConverterTypeTrustRequiredEndpoint.lower(`candidate`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNode.lift(it) },
+        // Error FFI converter
+        NodeScannerException.ErrorHandler,
+    )
+    }
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRustNodeScannerManager: FfiConverter<RustNodeScannerManager, Long> {
+    override fun lower(value: RustNodeScannerManager): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RustNodeScannerManager {
+        return RustNodeScannerManager(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RustNodeScannerManager {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RustNodeScannerManager) = 8UL
+
+    override fun write(value: RustNodeScannerManager, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface RustOnboardingManagerInterface {
 
     fun `currentWalletId`(): WalletId?
@@ -31099,6 +31607,93 @@ public object FfiConverterTypeFoundAddress: FfiConverterRustBuffer<FoundAddress>
 
 
 
+/**
+ * A discovered Electrum server whose network has been verified
+ */
+data class FoundNode (
+    /**
+     * Scan generation that proved this result
+     */
+    var `scanGeneration`: kotlin.ULong
+    ,
+    /**
+     * Discovered IPv4 address
+     */
+    var `ip`: kotlin.String
+    ,
+    /**
+     * Discovered Electrum port
+     */
+    var `port`: kotlin.UShort
+    ,
+    /**
+     * Verified connection transport
+     */
+    var `transport`: FoundNodeTransport
+    ,
+    /**
+     * Software label reported by the server
+     */
+    var `serverSoftware`: kotlin.String
+    ,
+    /**
+     * Electrum protocol version reported or negotiated by the server
+     */
+    var `protocolVersion`: kotlin.String
+    ,
+    /**
+     * Confirmed custom trust required to reconnect, when applicable
+     */
+    var `tls`: TlsTrust?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFoundNode: FfiConverterRustBuffer<FoundNode> {
+    override fun read(buf: ByteBuffer): FoundNode {
+        return FoundNode(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterTypeFoundNodeTransport.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalTypeTlsTrust.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FoundNode) = (
+            FfiConverterULong.allocationSize(value.`scanGeneration`) +
+            FfiConverterString.allocationSize(value.`ip`) +
+            FfiConverterUShort.allocationSize(value.`port`) +
+            FfiConverterTypeFoundNodeTransport.allocationSize(value.`transport`) +
+            FfiConverterString.allocationSize(value.`serverSoftware`) +
+            FfiConverterString.allocationSize(value.`protocolVersion`) +
+            FfiConverterOptionalTypeTlsTrust.allocationSize(value.`tls`)
+    )
+
+    override fun write(value: FoundNode, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`scanGeneration`, buf)
+            FfiConverterString.write(value.`ip`, buf)
+            FfiConverterUShort.write(value.`port`, buf)
+            FfiConverterTypeFoundNodeTransport.write(value.`transport`, buf)
+            FfiConverterString.write(value.`serverSoftware`, buf)
+            FfiConverterString.write(value.`protocolVersion`, buf)
+            FfiConverterOptionalTypeTlsTrust.write(value.`tls`, buf)
+    }
+}
+
+
+
 data class GroupedWord (
     var `number`: kotlin.UByte
     ,
@@ -31495,6 +32090,53 @@ public object FfiConverterTypeNodeCertificate: FfiConverterRustBuffer<NodeCertif
     override fun write(value: NodeCertificate, buf: ByteBuffer) {
             FfiConverterByteArray.write(value.`sha256`, buf)
             FfiConverterString.write(value.`display`, buf)
+    }
+}
+
+
+
+/**
+ * Host-level progress for a local-node scan
+ */
+data class NodeScanProgress (
+    /**
+     * Hosts whose dual-port work item has completed
+     */
+    var `checkedHosts`: kotlin.UInt
+    ,
+    /**
+     * Hosts selected for this bounded generation
+     */
+    var `totalHosts`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeScanProgress: FfiConverterRustBuffer<NodeScanProgress> {
+    override fun read(buf: ByteBuffer): NodeScanProgress {
+        return NodeScanProgress(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NodeScanProgress) = (
+            FfiConverterUInt.allocationSize(value.`checkedHosts`) +
+            FfiConverterUInt.allocationSize(value.`totalHosts`)
+    )
+
+    override fun write(value: NodeScanProgress, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`checkedHosts`, buf)
+            FfiConverterUInt.write(value.`totalHosts`, buf)
     }
 }
 
@@ -32270,6 +32912,69 @@ public object FfiConverterTypeTransactionExportResult: FfiConverterRustBuffer<Tr
     override fun write(value: TransactionExportResult, buf: ByteBuffer) {
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`filename`, buf)
+    }
+}
+
+
+
+/**
+ * A TLS endpoint awaiting explicit fingerprint confirmation
+ */
+data class TrustRequiredEndpoint (
+    /**
+     * Scan generation that captured this endpoint
+     */
+    var `scanGeneration`: kotlin.ULong
+    ,
+    /**
+     * Discovered IPv4 address
+     */
+    var `ip`: kotlin.String
+    ,
+    /**
+     * TLS port that presented the certificate
+     */
+    var `port`: kotlin.UShort
+    ,
+    /**
+     * Untrusted leaf certificate shown for explicit confirmation
+     */
+    var `certificate`: NodeCertificate
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTrustRequiredEndpoint: FfiConverterRustBuffer<TrustRequiredEndpoint> {
+    override fun read(buf: ByteBuffer): TrustRequiredEndpoint {
+        return TrustRequiredEndpoint(
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterTypeNodeCertificate.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TrustRequiredEndpoint) = (
+            FfiConverterULong.allocationSize(value.`scanGeneration`) +
+            FfiConverterString.allocationSize(value.`ip`) +
+            FfiConverterUShort.allocationSize(value.`port`) +
+            FfiConverterTypeNodeCertificate.allocationSize(value.`certificate`)
+    )
+
+    override fun write(value: TrustRequiredEndpoint, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`scanGeneration`, buf)
+            FfiConverterString.write(value.`ip`, buf)
+            FfiConverterUShort.write(value.`port`, buf)
+            FfiConverterTypeNodeCertificate.write(value.`certificate`, buf)
     }
 }
 
@@ -43233,6 +43938,49 @@ public object FfiConverterTypeFingerprintError : FfiConverterRustBuffer<Fingerpr
 
 
 
+/**
+ * Transport used by a verified discovered node
+ */
+
+enum class FoundNodeTransport {
+
+    /**
+     * Unencrypted Electrum TCP
+     */
+    TCP,
+    /**
+     * Certificate-verified Electrum TLS
+     */
+    TLS;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFoundNodeTransport: FfiConverterRustBuffer<FoundNodeTransport> {
+    override fun read(buf: ByteBuffer) = try {
+        FoundNodeTransport.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: FoundNodeTransport) = 4UL
+
+    override fun write(value: FoundNodeTransport, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 
 sealed class GlobalCacheTableException: kotlin.Exception() {
@@ -46055,6 +46803,734 @@ public object FfiConverterTypeNewWalletRoute : FfiConverterRustBuffer<NewWalletR
             is NewWalletRoute.ColdWallet -> {
                 buf.putInt(3)
                 FfiConverterTypeColdWalletRoute.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+/**
+ * Failure reported by local-node discovery or result creation
+ */
+sealed class NodeScannerException: kotlin.Exception() {
+
+    /**
+     * No eligible RFC1918 interface or fallback address exists
+     */
+    class NoLocalNetwork(
+        ) : NodeScannerException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * iOS denied local-network access
+     */
+    class LocalNetworkPermissionDenied(
+        ) : NodeScannerException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * An unexpected scan or verification failure
+     */
+    class ScanFailed(
+
+        val v1: kotlin.String
+        ) : NodeScannerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * The supplied value is not an exact current result member
+     */
+    class ResultUnavailable(
+        ) : NodeScannerException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The selected Bitcoin network differs from the scan network
+     */
+    class NetworkChanged(
+        ) : NodeScannerException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NodeScannerException> {
+        override fun lift(error_buf: RustBuffer.ByValue): NodeScannerException = FfiConverterTypeNodeScannerError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeScannerError : FfiConverterRustBuffer<NodeScannerException> {
+    override fun read(buf: ByteBuffer): NodeScannerException {
+
+
+        return when(buf.getInt()) {
+            1 -> NodeScannerException.NoLocalNetwork()
+            2 -> NodeScannerException.LocalNetworkPermissionDenied()
+            3 -> NodeScannerException.ScanFailed(
+                FfiConverterString.read(buf),
+                )
+            4 -> NodeScannerException.ResultUnavailable()
+            5 -> NodeScannerException.NetworkChanged()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeScannerException): ULong {
+        return when(value) {
+            is NodeScannerException.NoLocalNetwork -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeScannerException.LocalNetworkPermissionDenied -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeScannerException.ScanFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is NodeScannerException.ResultUnavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeScannerException.NetworkChanged -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: NodeScannerException, buf: ByteBuffer) {
+        when(value) {
+            is NodeScannerException.NoLocalNetwork -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NodeScannerException.LocalNetworkPermissionDenied -> {
+                buf.putInt(2)
+                Unit
+            }
+            is NodeScannerException.ScanFailed -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is NodeScannerException.ResultUnavailable -> {
+                buf.putInt(4)
+                Unit
+            }
+            is NodeScannerException.NetworkChanged -> {
+                buf.putInt(5)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+/**
+ * Typed delta emitted after the scanner snapshot has been updated
+ */
+sealed class NodeScannerReconcileMessage {
+
+    /**
+     * A new generation replaced all previous results
+     */
+    data class ScanStarted(
+        val `generation`: kotlin.ULong,
+        val `network`: org.bitcoinppl.cove_core.types.Network,
+        val `progress`: org.bitcoinppl.cove_core.NodeScanProgress) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Host progress advanced
+     */
+    data class ScanProgress(
+        val `generation`: kotlin.ULong,
+        val `progress`: org.bitcoinppl.cove_core.NodeScanProgress) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * One host result was inserted or replaced
+     */
+    data class ResultUpserted(
+        val `generation`: kotlin.ULong,
+        val `result`: org.bitcoinppl.cove_core.NodeScannerResult) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * One host result became unusable and was removed
+     */
+    data class ResultRemoved(
+        val `generation`: kotlin.ULong,
+        val `ip`: kotlin.String) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The user stopped the generation
+     */
+    data class ScanStopped(
+        val `generation`: kotlin.ULong) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The generation completed
+     */
+    data class ScanFinished(
+        val `generation`: kotlin.ULong) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The generation failed
+     */
+    data class ScanFailed(
+        val `generation`: kotlin.ULong,
+        val `error`: org.bitcoinppl.cove_core.NodeScannerException) : NodeScannerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeScannerReconcileMessage : FfiConverterRustBuffer<NodeScannerReconcileMessage>{
+    override fun read(buf: ByteBuffer): NodeScannerReconcileMessage {
+        return when(buf.getInt()) {
+            1 -> NodeScannerReconcileMessage.ScanStarted(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                FfiConverterTypeNodeScanProgress.read(buf),
+                )
+            2 -> NodeScannerReconcileMessage.ScanProgress(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNodeScanProgress.read(buf),
+                )
+            3 -> NodeScannerReconcileMessage.ResultUpserted(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNodeScannerResult.read(buf),
+                )
+            4 -> NodeScannerReconcileMessage.ResultRemoved(
+                FfiConverterULong.read(buf),
+                FfiConverterString.read(buf),
+                )
+            5 -> NodeScannerReconcileMessage.ScanStopped(
+                FfiConverterULong.read(buf),
+                )
+            6 -> NodeScannerReconcileMessage.ScanFinished(
+                FfiConverterULong.read(buf),
+                )
+            7 -> NodeScannerReconcileMessage.ScanFailed(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNodeScannerError.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeScannerReconcileMessage): ULong = when(value) {
+        is NodeScannerReconcileMessage.ScanStarted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNetwork.allocationSize(value.`network`)
+                + FfiConverterTypeNodeScanProgress.allocationSize(value.`progress`)
+            )
+        }
+        is NodeScannerReconcileMessage.ScanProgress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNodeScanProgress.allocationSize(value.`progress`)
+            )
+        }
+        is NodeScannerReconcileMessage.ResultUpserted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNodeScannerResult.allocationSize(value.`result`)
+            )
+        }
+        is NodeScannerReconcileMessage.ResultRemoved -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterString.allocationSize(value.`ip`)
+            )
+        }
+        is NodeScannerReconcileMessage.ScanStopped -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+            )
+        }
+        is NodeScannerReconcileMessage.ScanFinished -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+            )
+        }
+        is NodeScannerReconcileMessage.ScanFailed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNodeScannerError.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: NodeScannerReconcileMessage, buf: ByteBuffer) {
+        when(value) {
+            is NodeScannerReconcileMessage.ScanStarted -> {
+                buf.putInt(1)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNetwork.write(value.`network`, buf)
+                FfiConverterTypeNodeScanProgress.write(value.`progress`, buf)
+                Unit
+            }
+            is NodeScannerReconcileMessage.ScanProgress -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNodeScanProgress.write(value.`progress`, buf)
+                Unit
+            }
+            is NodeScannerReconcileMessage.ResultUpserted -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNodeScannerResult.write(value.`result`, buf)
+                Unit
+            }
+            is NodeScannerReconcileMessage.ResultRemoved -> {
+                buf.putInt(4)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterString.write(value.`ip`, buf)
+                Unit
+            }
+            is NodeScannerReconcileMessage.ScanStopped -> {
+                buf.putInt(5)
+                FfiConverterULong.write(value.`generation`, buf)
+                Unit
+            }
+            is NodeScannerReconcileMessage.ScanFinished -> {
+                buf.putInt(6)
+                FfiConverterULong.write(value.`generation`, buf)
+                Unit
+            }
+            is NodeScannerReconcileMessage.ScanFailed -> {
+                buf.putInt(7)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNodeScannerError.write(value.`error`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Result produced for one scanned host
+ */
+sealed class NodeScannerResult {
+
+    /**
+     * Network-verified selectable result
+     */
+    data class Verified(
+        val v1: org.bitcoinppl.cove_core.FoundNode) : NodeScannerResult()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Unverified TLS endpoint awaiting fingerprint confirmation
+     */
+    data class TrustRequired(
+        val v1: org.bitcoinppl.cove_core.TrustRequiredEndpoint) : NodeScannerResult()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeScannerResult : FfiConverterRustBuffer<NodeScannerResult>{
+    override fun read(buf: ByteBuffer): NodeScannerResult {
+        return when(buf.getInt()) {
+            1 -> NodeScannerResult.Verified(
+                FfiConverterTypeFoundNode.read(buf),
+                )
+            2 -> NodeScannerResult.TrustRequired(
+                FfiConverterTypeTrustRequiredEndpoint.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeScannerResult): ULong = when(value) {
+        is NodeScannerResult.Verified -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeFoundNode.allocationSize(value.v1)
+            )
+        }
+        is NodeScannerResult.TrustRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTrustRequiredEndpoint.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: NodeScannerResult, buf: ByteBuffer) {
+        when(value) {
+            is NodeScannerResult.Verified -> {
+                buf.putInt(1)
+                FfiConverterTypeFoundNode.write(value.v1, buf)
+                Unit
+            }
+            is NodeScannerResult.TrustRequired -> {
+                buf.putInt(2)
+                FfiConverterTypeTrustRequiredEndpoint.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Atomic snapshot of the local-node scanner lifecycle
+ */
+sealed class NodeScannerState {
+
+    /**
+     * No generation has started
+     */
+    object Idle : NodeScannerState()
+
+
+    /**
+     * A generation is actively scanning
+     */
+    data class Scanning(
+        /**
+         * Active scan generation
+         */
+        val `generation`: kotlin.ULong,
+        /**
+         * Network every result must prove
+         */
+        val `network`: org.bitcoinppl.cove_core.types.Network,
+        /**
+         * Current bounded host progress
+         */
+        val `progress`: org.bitcoinppl.cove_core.NodeScanProgress,
+        /**
+         * Current one-per-host results
+         */
+        val `results`: List<org.bitcoinppl.cove_core.NodeScannerResult>) : NodeScannerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A user-stopped generation with retained results
+     */
+    data class Stopped(
+        /**
+         * Retained scan generation
+         */
+        val `generation`: kotlin.ULong,
+        /**
+         * Network every retained result proved or awaits proving
+         */
+        val `network`: org.bitcoinppl.cove_core.types.Network,
+        /**
+         * Results retained when scanning stopped
+         */
+        val `results`: List<org.bitcoinppl.cove_core.NodeScannerResult>) : NodeScannerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A successfully completed generation
+     */
+    data class Finished(
+        /**
+         * Completed scan generation
+         */
+        val `generation`: kotlin.ULong,
+        /**
+         * Network every result proved or awaits proving
+         */
+        val `network`: org.bitcoinppl.cove_core.types.Network,
+        /**
+         * Final one-per-host results
+         */
+        val `results`: List<org.bitcoinppl.cove_core.NodeScannerResult>) : NodeScannerState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A failed generation with any results found before failure
+     */
+    data class Failed(
+        /**
+         * Failed scan generation
+         */
+        val `generation`: kotlin.ULong,
+        /**
+         * Network the failed generation scanned
+         */
+        val `network`: org.bitcoinppl.cove_core.types.Network,
+        /**
+         * Terminal failure
+         */
+        val `error`: org.bitcoinppl.cove_core.NodeScannerException,
+        /**
+         * Results found before the failure
+         */
+        val `results`: List<org.bitcoinppl.cove_core.NodeScannerResult>) : NodeScannerState()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeScannerState : FfiConverterRustBuffer<NodeScannerState>{
+    override fun read(buf: ByteBuffer): NodeScannerState {
+        return when(buf.getInt()) {
+            1 -> NodeScannerState.Idle
+            2 -> NodeScannerState.Scanning(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                FfiConverterTypeNodeScanProgress.read(buf),
+                FfiConverterSequenceTypeNodeScannerResult.read(buf),
+                )
+            3 -> NodeScannerState.Stopped(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                FfiConverterSequenceTypeNodeScannerResult.read(buf),
+                )
+            4 -> NodeScannerState.Finished(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                FfiConverterSequenceTypeNodeScannerResult.read(buf),
+                )
+            5 -> NodeScannerState.Failed(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeNetwork.read(buf),
+                FfiConverterTypeNodeScannerError.read(buf),
+                FfiConverterSequenceTypeNodeScannerResult.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeScannerState): ULong = when(value) {
+        is NodeScannerState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is NodeScannerState.Scanning -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNetwork.allocationSize(value.`network`)
+                + FfiConverterTypeNodeScanProgress.allocationSize(value.`progress`)
+                + FfiConverterSequenceTypeNodeScannerResult.allocationSize(value.`results`)
+            )
+        }
+        is NodeScannerState.Stopped -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNetwork.allocationSize(value.`network`)
+                + FfiConverterSequenceTypeNodeScannerResult.allocationSize(value.`results`)
+            )
+        }
+        is NodeScannerState.Finished -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNetwork.allocationSize(value.`network`)
+                + FfiConverterSequenceTypeNodeScannerResult.allocationSize(value.`results`)
+            )
+        }
+        is NodeScannerState.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`generation`)
+                + FfiConverterTypeNetwork.allocationSize(value.`network`)
+                + FfiConverterTypeNodeScannerError.allocationSize(value.`error`)
+                + FfiConverterSequenceTypeNodeScannerResult.allocationSize(value.`results`)
+            )
+        }
+    }
+
+    override fun write(value: NodeScannerState, buf: ByteBuffer) {
+        when(value) {
+            is NodeScannerState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NodeScannerState.Scanning -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNetwork.write(value.`network`, buf)
+                FfiConverterTypeNodeScanProgress.write(value.`progress`, buf)
+                FfiConverterSequenceTypeNodeScannerResult.write(value.`results`, buf)
+                Unit
+            }
+            is NodeScannerState.Stopped -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNetwork.write(value.`network`, buf)
+                FfiConverterSequenceTypeNodeScannerResult.write(value.`results`, buf)
+                Unit
+            }
+            is NodeScannerState.Finished -> {
+                buf.putInt(4)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNetwork.write(value.`network`, buf)
+                FfiConverterSequenceTypeNodeScannerResult.write(value.`results`, buf)
+                Unit
+            }
+            is NodeScannerState.Failed -> {
+                buf.putInt(5)
+                FfiConverterULong.write(value.`generation`, buf)
+                FfiConverterTypeNetwork.write(value.`network`, buf)
+                FfiConverterTypeNodeScannerError.write(value.`error`, buf)
+                FfiConverterSequenceTypeNodeScannerResult.write(value.`results`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -58866,6 +60342,90 @@ public object FfiConverterTypeFfiReconcile: FfiConverterCallbackInterface<FfiRec
 
 
 
+/**
+ * Receives ordered local-node scanner deltas
+ */
+public interface NodeScannerReconciler {
+
+    /**
+     * Applies one scanner delta
+     */
+    fun `reconcile`(`message`: NodeScannerReconcileMessage)
+
+    /**
+     * Applies an ordered batch of scanner deltas
+     */
+    fun `reconcileMany`(`messages`: List<NodeScannerReconcileMessage>)
+
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceNodeScannerReconciler {
+    internal object `reconcile`: UniffiCallbackInterfaceNodeScannerReconcilerMethod0 {
+        override fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeNodeScannerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcile`(
+                    FfiConverterTypeNodeScannerReconcileMessage.lift(`message`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `reconcileMany`: UniffiCallbackInterfaceNodeScannerReconcilerMethod1 {
+        override fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeNodeScannerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcileMany`(
+                    FfiConverterSequenceTypeNodeScannerReconcileMessage.lift(`messages`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeNodeScannerReconciler.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeNodeScannerReconciler.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceNodeScannerReconciler.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `reconcile`,
+        `reconcileMany`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_fn_init_callback_vtable_nodescannerreconciler(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeNodeScannerReconciler: FfiConverterCallbackInterface<NodeScannerReconciler>()
+
+
+
+
+
 public interface OnboardingManagerReconciler {
 
     fun `reconcile`(`message`: OnboardingReconcileMessage)
@@ -61130,6 +62690,62 @@ public object FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer<List<
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeFiatCurrency.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeNodeScannerReconcileMessage: FfiConverterRustBuffer<List<NodeScannerReconcileMessage>> {
+    override fun read(buf: ByteBuffer): List<NodeScannerReconcileMessage> {
+        val len = buf.getInt()
+        return List<NodeScannerReconcileMessage>(len) {
+            FfiConverterTypeNodeScannerReconcileMessage.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NodeScannerReconcileMessage>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNodeScannerReconcileMessage.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NodeScannerReconcileMessage>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNodeScannerReconcileMessage.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeNodeScannerResult: FfiConverterRustBuffer<List<NodeScannerResult>> {
+    override fun read(buf: ByteBuffer): List<NodeScannerResult> {
+        val len = buf.getInt()
+        return List<NodeScannerResult>(len) {
+            FfiConverterTypeNodeScannerResult.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NodeScannerResult>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNodeScannerResult.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NodeScannerResult>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNodeScannerResult.write(it, buf)
         }
     }
 }

@@ -8649,6 +8649,262 @@ public func FfiConverterTypeRustImportWalletManager_lower(_ value: RustImportWal
 
 
 
+/**
+ * Actor-backed owner of one local-node discovery lifecycle
+ */
+public protocol RustNodeScannerManagerProtocol: AnyObject, Sendable {
+
+    /**
+     * Creates an unpersisted node from an exact verified result member
+     */
+    func createNode(found: FoundNode) async throws  -> Node
+
+    /**
+     * Starts forwarding typed scanner deltas to the frontend
+     */
+    func listenForUpdates(reconciler: NodeScannerReconciler)
+
+    /**
+     * Starts a new generation unless a scan is already active
+     */
+    func startScan() async
+
+    /**
+     * Returns the atomic bootstrap snapshot
+     */
+    func state()  -> NodeScannerState
+
+    /**
+     * Stops the active scan while retaining its current results
+     */
+    func stopScan() async
+
+    /**
+     * Pins, re-verifies, and creates an unpersisted node from an exact pending member
+     */
+    func trustAndCreateNode(candidate: TrustRequiredEndpoint) async throws  -> Node
+
+}
+/**
+ * Actor-backed owner of one local-node discovery lifecycle
+ */
+open class RustNodeScannerManager: RustNodeScannerManagerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_rustnodescannermanager(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_rustnodescannermanager_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustnodescannermanager(handle, $0) }
+    }
+
+
+
+
+    /**
+     * Creates an unpersisted node from an exact verified result member
+     */
+open func createNode(found: FoundNode)async throws  -> Node  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustnodescannermanager_create_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeFoundNode_lower(found)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNode_lift,
+            errorHandler: FfiConverterTypeNodeScannerError_lift
+        )
+}
+
+    /**
+     * Starts forwarding typed scanner deltas to the frontend
+     */
+open func listenForUpdates(reconciler: NodeScannerReconciler)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustnodescannermanager_listen_for_updates(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceNodeScannerReconciler_lower(reconciler),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Starts a new generation unless a scan is already active
+     */
+open func startScan()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustnodescannermanager_start_scan(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Returns the atomic bootstrap snapshot
+     */
+open func state() -> NodeScannerState  {
+    return try!  FfiConverterTypeNodeScannerState_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustnodescannermanager_state(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Stops the active scan while retaining its current results
+     */
+open func stopScan()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustnodescannermanager_stop_scan(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Pins, re-verifies, and creates an unpersisted node from an exact pending member
+     */
+open func trustAndCreateNode(candidate: TrustRequiredEndpoint)async throws  -> Node  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustnodescannermanager_trust_and_create_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeTrustRequiredEndpoint_lower(candidate)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNode_lift,
+            errorHandler: FfiConverterTypeNodeScannerError_lift
+        )
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustNodeScannerManager: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RustNodeScannerManager
+
+    public static func lift(_ handle: UInt64) throws -> RustNodeScannerManager {
+        return RustNodeScannerManager(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RustNodeScannerManager) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustNodeScannerManager {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RustNodeScannerManager, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustNodeScannerManager_lift(_ handle: UInt64) throws -> RustNodeScannerManager {
+    return try FfiConverterTypeRustNodeScannerManager.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustNodeScannerManager_lower(_ value: RustNodeScannerManager) -> UInt64 {
+    return FfiConverterTypeRustNodeScannerManager.lower(value)
+}
+
+
+
+
+
+
 public protocol RustOnboardingManagerProtocol: AnyObject, Sendable {
 
     func currentWalletId()  -> WalletId?
@@ -15978,6 +16234,125 @@ public func FfiConverterTypeFoundAddress_lower(_ value: FoundAddress) -> RustBuf
 }
 
 
+/**
+ * A discovered Electrum server whose network has been verified
+ */
+public struct FoundNode: Equatable, Hashable {
+    /**
+     * Scan generation that proved this result
+     */
+    public var scanGeneration: UInt64
+    /**
+     * Discovered IPv4 address
+     */
+    public var ip: String
+    /**
+     * Discovered Electrum port
+     */
+    public var port: UInt16
+    /**
+     * Verified connection transport
+     */
+    public var transport: FoundNodeTransport
+    /**
+     * Software label reported by the server
+     */
+    public var serverSoftware: String
+    /**
+     * Electrum protocol version reported or negotiated by the server
+     */
+    public var protocolVersion: String
+    /**
+     * Confirmed custom trust required to reconnect, when applicable
+     */
+    public var tls: TlsTrust?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Scan generation that proved this result
+         */scanGeneration: UInt64,
+        /**
+         * Discovered IPv4 address
+         */ip: String,
+        /**
+         * Discovered Electrum port
+         */port: UInt16,
+        /**
+         * Verified connection transport
+         */transport: FoundNodeTransport,
+        /**
+         * Software label reported by the server
+         */serverSoftware: String,
+        /**
+         * Electrum protocol version reported or negotiated by the server
+         */protocolVersion: String,
+        /**
+         * Confirmed custom trust required to reconnect, when applicable
+         */tls: TlsTrust?) {
+        self.scanGeneration = scanGeneration
+        self.ip = ip
+        self.port = port
+        self.transport = transport
+        self.serverSoftware = serverSoftware
+        self.protocolVersion = protocolVersion
+        self.tls = tls
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FoundNode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFoundNode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FoundNode {
+        return
+            try FoundNode(
+                scanGeneration: FfiConverterUInt64.read(from: &buf),
+                ip: FfiConverterString.read(from: &buf),
+                port: FfiConverterUInt16.read(from: &buf),
+                transport: FfiConverterTypeFoundNodeTransport.read(from: &buf),
+                serverSoftware: FfiConverterString.read(from: &buf),
+                protocolVersion: FfiConverterString.read(from: &buf),
+                tls: FfiConverterOptionTypeTlsTrust.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FoundNode, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.scanGeneration, into: &buf)
+        FfiConverterString.write(value.ip, into: &buf)
+        FfiConverterUInt16.write(value.port, into: &buf)
+        FfiConverterTypeFoundNodeTransport.write(value.transport, into: &buf)
+        FfiConverterString.write(value.serverSoftware, into: &buf)
+        FfiConverterString.write(value.protocolVersion, into: &buf)
+        FfiConverterOptionTypeTlsTrust.write(value.tls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFoundNode_lift(_ buf: RustBuffer) throws -> FoundNode {
+    return try FfiConverterTypeFoundNode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFoundNode_lower(_ value: FoundNode) -> RustBuffer {
+    return FfiConverterTypeFoundNode.lower(value)
+}
+
+
 public struct GroupedWord: Equatable, Hashable {
     public var number: UInt8
     public var word: String
@@ -16507,6 +16882,75 @@ public func FfiConverterTypeNodeCertificate_lift(_ buf: RustBuffer) throws -> No
 #endif
 public func FfiConverterTypeNodeCertificate_lower(_ value: NodeCertificate) -> RustBuffer {
     return FfiConverterTypeNodeCertificate.lower(value)
+}
+
+
+/**
+ * Host-level progress for a local-node scan
+ */
+public struct NodeScanProgress: Equatable, Hashable {
+    /**
+     * Hosts whose dual-port work item has completed
+     */
+    public var checkedHosts: UInt32
+    /**
+     * Hosts selected for this bounded generation
+     */
+    public var totalHosts: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Hosts whose dual-port work item has completed
+         */checkedHosts: UInt32,
+        /**
+         * Hosts selected for this bounded generation
+         */totalHosts: UInt32) {
+        self.checkedHosts = checkedHosts
+        self.totalHosts = totalHosts
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeScanProgress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeScanProgress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeScanProgress {
+        return
+            try NodeScanProgress(
+                checkedHosts: FfiConverterUInt32.read(from: &buf),
+                totalHosts: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NodeScanProgress, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.checkedHosts, into: &buf)
+        FfiConverterUInt32.write(value.totalHosts, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScanProgress_lift(_ buf: RustBuffer) throws -> NodeScanProgress {
+    return try FfiConverterTypeNodeScanProgress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScanProgress_lower(_ value: NodeScanProgress) -> RustBuffer {
+    return FfiConverterTypeNodeScanProgress.lower(value)
 }
 
 
@@ -17426,6 +17870,95 @@ public func FfiConverterTypeTransactionExportResult_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeTransactionExportResult_lower(_ value: TransactionExportResult) -> RustBuffer {
     return FfiConverterTypeTransactionExportResult.lower(value)
+}
+
+
+/**
+ * A TLS endpoint awaiting explicit fingerprint confirmation
+ */
+public struct TrustRequiredEndpoint: Equatable, Hashable {
+    /**
+     * Scan generation that captured this endpoint
+     */
+    public var scanGeneration: UInt64
+    /**
+     * Discovered IPv4 address
+     */
+    public var ip: String
+    /**
+     * TLS port that presented the certificate
+     */
+    public var port: UInt16
+    /**
+     * Untrusted leaf certificate shown for explicit confirmation
+     */
+    public var certificate: NodeCertificate
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Scan generation that captured this endpoint
+         */scanGeneration: UInt64,
+        /**
+         * Discovered IPv4 address
+         */ip: String,
+        /**
+         * TLS port that presented the certificate
+         */port: UInt16,
+        /**
+         * Untrusted leaf certificate shown for explicit confirmation
+         */certificate: NodeCertificate) {
+        self.scanGeneration = scanGeneration
+        self.ip = ip
+        self.port = port
+        self.certificate = certificate
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TrustRequiredEndpoint: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrustRequiredEndpoint: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrustRequiredEndpoint {
+        return
+            try TrustRequiredEndpoint(
+                scanGeneration: FfiConverterUInt64.read(from: &buf),
+                ip: FfiConverterString.read(from: &buf),
+                port: FfiConverterUInt16.read(from: &buf),
+                certificate: FfiConverterTypeNodeCertificate.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TrustRequiredEndpoint, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.scanGeneration, into: &buf)
+        FfiConverterString.write(value.ip, into: &buf)
+        FfiConverterUInt16.write(value.port, into: &buf)
+        FfiConverterTypeNodeCertificate.write(value.certificate, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustRequiredEndpoint_lift(_ buf: RustBuffer) throws -> TrustRequiredEndpoint {
+    return try FfiConverterTypeTrustRequiredEndpoint.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustRequiredEndpoint_lower(_ value: TrustRequiredEndpoint) -> RustBuffer {
+    return FfiConverterTypeTrustRequiredEndpoint.lower(value)
 }
 
 
@@ -26062,6 +26595,81 @@ public func FfiConverterTypeFingerprintError_lower(_ value: FingerprintError) ->
 }
 
 
+/**
+ * Transport used by a verified discovered node
+ */
+
+public enum FoundNodeTransport: Equatable, Hashable {
+
+    /**
+     * Unencrypted Electrum TCP
+     */
+    case tcp
+    /**
+     * Certificate-verified Electrum TLS
+     */
+    case tls
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FoundNodeTransport: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFoundNodeTransport: FfiConverterRustBuffer {
+    typealias SwiftType = FoundNodeTransport
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FoundNodeTransport {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .tcp
+
+        case 2: return .tls
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FoundNodeTransport, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .tcp:
+            writeInt(&buf, Int32(1))
+
+
+        case .tls:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFoundNodeTransport_lift(_ buf: RustBuffer) throws -> FoundNodeTransport {
+    return try FfiConverterTypeFoundNodeTransport.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFoundNodeTransport_lower(_ value: FoundNodeTransport) -> RustBuffer {
+    return FfiConverterTypeFoundNodeTransport.lower(value)
+}
+
+
+
 public
 enum GlobalCacheTableError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
@@ -28481,6 +29089,525 @@ public func FfiConverterTypeNewWalletRoute_lift(_ buf: RustBuffer) throws -> New
 #endif
 public func FfiConverterTypeNewWalletRoute_lower(_ value: NewWalletRoute) -> RustBuffer {
     return FfiConverterTypeNewWalletRoute.lower(value)
+}
+
+
+
+/**
+ * Failure reported by local-node discovery or result creation
+ */
+public
+enum NodeScannerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    /**
+     * No eligible RFC1918 interface or fallback address exists
+     */
+    case NoLocalNetwork
+    /**
+     * iOS denied local-network access
+     */
+    case LocalNetworkPermissionDenied
+    /**
+     * An unexpected scan or verification failure
+     */
+    case ScanFailed(String
+    )
+    /**
+     * The supplied value is not an exact current result member
+     */
+    case ResultUnavailable
+    /**
+     * The selected Bitcoin network differs from the scan network
+     */
+    case NetworkChanged
+
+
+
+
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension NodeScannerError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeScannerError: FfiConverterRustBuffer {
+    typealias SwiftType = NodeScannerError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeScannerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .NoLocalNetwork
+        case 2: return .LocalNetworkPermissionDenied
+        case 3: return .ScanFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .ResultUnavailable
+        case 5: return .NetworkChanged
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeScannerError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case .NoLocalNetwork:
+            writeInt(&buf, Int32(1))
+
+
+        case .LocalNetworkPermissionDenied:
+            writeInt(&buf, Int32(2))
+
+
+        case let .ScanFailed(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .ResultUnavailable:
+            writeInt(&buf, Int32(4))
+
+
+        case .NetworkChanged:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerError_lift(_ buf: RustBuffer) throws -> NodeScannerError {
+    return try FfiConverterTypeNodeScannerError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerError_lower(_ value: NodeScannerError) -> RustBuffer {
+    return FfiConverterTypeNodeScannerError.lower(value)
+}
+
+
+/**
+ * Typed delta emitted after the scanner snapshot has been updated
+ */
+
+public enum NodeScannerReconcileMessage: Equatable, Hashable {
+
+    /**
+     * A new generation replaced all previous results
+     */
+    case scanStarted(generation: UInt64, network: Network, progress: NodeScanProgress
+    )
+    /**
+     * Host progress advanced
+     */
+    case scanProgress(generation: UInt64, progress: NodeScanProgress
+    )
+    /**
+     * One host result was inserted or replaced
+     */
+    case resultUpserted(generation: UInt64, result: NodeScannerResult
+    )
+    /**
+     * One host result became unusable and was removed
+     */
+    case resultRemoved(generation: UInt64, ip: String
+    )
+    /**
+     * The user stopped the generation
+     */
+    case scanStopped(generation: UInt64
+    )
+    /**
+     * The generation completed
+     */
+    case scanFinished(generation: UInt64
+    )
+    /**
+     * The generation failed
+     */
+    case scanFailed(generation: UInt64, error: NodeScannerError
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeScannerReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeScannerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = NodeScannerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeScannerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .scanStarted(generation: try FfiConverterUInt64.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), progress: try FfiConverterTypeNodeScanProgress.read(from: &buf)
+        )
+
+        case 2: return .scanProgress(generation: try FfiConverterUInt64.read(from: &buf), progress: try FfiConverterTypeNodeScanProgress.read(from: &buf)
+        )
+
+        case 3: return .resultUpserted(generation: try FfiConverterUInt64.read(from: &buf), result: try FfiConverterTypeNodeScannerResult.read(from: &buf)
+        )
+
+        case 4: return .resultRemoved(generation: try FfiConverterUInt64.read(from: &buf), ip: try FfiConverterString.read(from: &buf)
+        )
+
+        case 5: return .scanStopped(generation: try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 6: return .scanFinished(generation: try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 7: return .scanFailed(generation: try FfiConverterUInt64.read(from: &buf), error: try FfiConverterTypeNodeScannerError.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeScannerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .scanStarted(generation,network,progress):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNetwork.write(network, into: &buf)
+            FfiConverterTypeNodeScanProgress.write(progress, into: &buf)
+
+
+        case let .scanProgress(generation,progress):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNodeScanProgress.write(progress, into: &buf)
+
+
+        case let .resultUpserted(generation,result):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNodeScannerResult.write(result, into: &buf)
+
+
+        case let .resultRemoved(generation,ip):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterString.write(ip, into: &buf)
+
+
+        case let .scanStopped(generation):
+            writeInt(&buf, Int32(5))
+            FfiConverterUInt64.write(generation, into: &buf)
+
+
+        case let .scanFinished(generation):
+            writeInt(&buf, Int32(6))
+            FfiConverterUInt64.write(generation, into: &buf)
+
+
+        case let .scanFailed(generation,error):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNodeScannerError.write(error, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerReconcileMessage_lift(_ buf: RustBuffer) throws -> NodeScannerReconcileMessage {
+    return try FfiConverterTypeNodeScannerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerReconcileMessage_lower(_ value: NodeScannerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeNodeScannerReconcileMessage.lower(value)
+}
+
+
+
+/**
+ * Result produced for one scanned host
+ */
+
+public enum NodeScannerResult: Equatable, Hashable {
+
+    /**
+     * Network-verified selectable result
+     */
+    case verified(FoundNode
+    )
+    /**
+     * Unverified TLS endpoint awaiting fingerprint confirmation
+     */
+    case trustRequired(TrustRequiredEndpoint
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeScannerResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeScannerResult: FfiConverterRustBuffer {
+    typealias SwiftType = NodeScannerResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeScannerResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .verified(try FfiConverterTypeFoundNode.read(from: &buf)
+        )
+
+        case 2: return .trustRequired(try FfiConverterTypeTrustRequiredEndpoint.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeScannerResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .verified(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeFoundNode.write(v1, into: &buf)
+
+
+        case let .trustRequired(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeTrustRequiredEndpoint.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerResult_lift(_ buf: RustBuffer) throws -> NodeScannerResult {
+    return try FfiConverterTypeNodeScannerResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerResult_lower(_ value: NodeScannerResult) -> RustBuffer {
+    return FfiConverterTypeNodeScannerResult.lower(value)
+}
+
+
+
+/**
+ * Atomic snapshot of the local-node scanner lifecycle
+ */
+
+public enum NodeScannerState: Equatable, Hashable {
+
+    /**
+     * No generation has started
+     */
+    case idle
+    /**
+     * A generation is actively scanning
+     */
+    case scanning(
+        /**
+         * Active scan generation
+         */generation: UInt64,
+        /**
+         * Network every result must prove
+         */network: Network,
+        /**
+         * Current bounded host progress
+         */progress: NodeScanProgress,
+        /**
+         * Current one-per-host results
+         */results: [NodeScannerResult]
+    )
+    /**
+     * A user-stopped generation with retained results
+     */
+    case stopped(
+        /**
+         * Retained scan generation
+         */generation: UInt64,
+        /**
+         * Network every retained result proved or awaits proving
+         */network: Network,
+        /**
+         * Results retained when scanning stopped
+         */results: [NodeScannerResult]
+    )
+    /**
+     * A successfully completed generation
+     */
+    case finished(
+        /**
+         * Completed scan generation
+         */generation: UInt64,
+        /**
+         * Network every result proved or awaits proving
+         */network: Network,
+        /**
+         * Final one-per-host results
+         */results: [NodeScannerResult]
+    )
+    /**
+     * A failed generation with any results found before failure
+     */
+    case failed(
+        /**
+         * Failed scan generation
+         */generation: UInt64,
+        /**
+         * Network the failed generation scanned
+         */network: Network,
+        /**
+         * Terminal failure
+         */error: NodeScannerError,
+        /**
+         * Results found before the failure
+         */results: [NodeScannerResult]
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeScannerState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeScannerState: FfiConverterRustBuffer {
+    typealias SwiftType = NodeScannerState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeScannerState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .scanning(generation: try FfiConverterUInt64.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), progress: try FfiConverterTypeNodeScanProgress.read(from: &buf), results: try FfiConverterSequenceTypeNodeScannerResult.read(from: &buf)
+        )
+
+        case 3: return .stopped(generation: try FfiConverterUInt64.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), results: try FfiConverterSequenceTypeNodeScannerResult.read(from: &buf)
+        )
+
+        case 4: return .finished(generation: try FfiConverterUInt64.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), results: try FfiConverterSequenceTypeNodeScannerResult.read(from: &buf)
+        )
+
+        case 5: return .failed(generation: try FfiConverterUInt64.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), error: try FfiConverterTypeNodeScannerError.read(from: &buf), results: try FfiConverterSequenceTypeNodeScannerResult.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeScannerState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case let .scanning(generation,network,progress,results):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNetwork.write(network, into: &buf)
+            FfiConverterTypeNodeScanProgress.write(progress, into: &buf)
+            FfiConverterSequenceTypeNodeScannerResult.write(results, into: &buf)
+
+
+        case let .stopped(generation,network,results):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNetwork.write(network, into: &buf)
+            FfiConverterSequenceTypeNodeScannerResult.write(results, into: &buf)
+
+
+        case let .finished(generation,network,results):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNetwork.write(network, into: &buf)
+            FfiConverterSequenceTypeNodeScannerResult.write(results, into: &buf)
+
+
+        case let .failed(generation,network,error,results):
+            writeInt(&buf, Int32(5))
+            FfiConverterUInt64.write(generation, into: &buf)
+            FfiConverterTypeNetwork.write(network, into: &buf)
+            FfiConverterTypeNodeScannerError.write(error, into: &buf)
+            FfiConverterSequenceTypeNodeScannerResult.write(results, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerState_lift(_ buf: RustBuffer) throws -> NodeScannerState {
+    return try FfiConverterTypeNodeScannerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeScannerState_lower(_ value: NodeScannerState) -> RustBuffer {
+    return FfiConverterTypeNodeScannerState.lower(value)
 }
 
 
@@ -38469,6 +39596,172 @@ public func FfiConverterCallbackInterfaceFfiReconcile_lower(_ v: FfiReconcile) -
 
 
 
+/**
+ * Receives ordered local-node scanner deltas
+ */
+public protocol NodeScannerReconciler: AnyObject, Sendable {
+
+    /**
+     * Applies one scanner delta
+     */
+    func reconcile(message: NodeScannerReconcileMessage)
+
+    /**
+     * Applies an ordered batch of scanner deltas
+     */
+    func reconcileMany(messages: [NodeScannerReconcileMessage])
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceNodeScannerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceNodeScannerReconciler = UniffiVTableCallbackInterfaceNodeScannerReconciler(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceNodeScannerReconciler.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface NodeScannerReconciler: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceNodeScannerReconciler.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface NodeScannerReconciler: handle missing in uniffiClone")
+            }
+        },
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceNodeScannerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeNodeScannerReconcileMessage_lift(message)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceNodeScannerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeNodeScannerReconcileMessage.lift(messages)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceNodeScannerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceNodeScannerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitNodeScannerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_nodescannerreconciler(UniffiCallbackInterfaceNodeScannerReconciler.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceNodeScannerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<NodeScannerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceNodeScannerReconciler : FfiConverter {
+    typealias SwiftType = NodeScannerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceNodeScannerReconciler_lift(_ handle: UInt64) throws -> NodeScannerReconciler {
+    return try FfiConverterCallbackInterfaceNodeScannerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceNodeScannerReconciler_lower(_ v: NodeScannerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceNodeScannerReconciler.lower(v)
+}
+
+
+
+
 public protocol OnboardingManagerReconciler: AnyObject, Sendable {
 
     func reconcile(message: OnboardingReconcileMessage)
@@ -40734,6 +42027,56 @@ fileprivate struct FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNodeScannerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeScannerReconcileMessage]
+
+    public static func write(_ value: [NodeScannerReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeScannerReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeScannerReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeScannerReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeScannerReconcileMessage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeNodeScannerResult: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeScannerResult]
+
+    public static func write(_ value: [NodeScannerResult], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeScannerResult.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeScannerResult] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeScannerResult]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeScannerResult.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNodeSelection: FfiConverterRustBuffer {
     typealias SwiftType = [NodeSelection]
 
@@ -42520,6 +43863,24 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustimportwalletmanager_import_wallet() != 59354) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustnodescannermanager_create_node() != 2855) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodescannermanager_listen_for_updates() != 10111) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodescannermanager_start_scan() != 11377) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodescannermanager_state() != 63996) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodescannermanager_stop_scan() != 48721) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodescannermanager_trust_and_create_node() != 12231) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -43237,6 +44598,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 12433) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rustnodescannermanager_new() != 557) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -43372,6 +44736,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 55187) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nodescannerreconciler_reconcile() != 50610) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nodescannerreconciler_reconcile_many() != 57709) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -43405,6 +44775,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitCloudBackupManagerReconciler()
     uniffiCallbackInitCoinControlManagerReconciler()
     uniffiCallbackInitFfiReconcile()
+    uniffiCallbackInitNodeScannerReconciler()
     uniffiCallbackInitOnboardingManagerReconciler()
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitSendFlowManagerReconciler()
