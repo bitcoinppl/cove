@@ -4817,6 +4817,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func ohttpRelayUrl()  -> String?
 
+    func ohttpRelayUrls()  -> [String]
+
     func previewCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func selectWallet(id: WalletId) throws
@@ -4843,6 +4845,8 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     func setHashedPinCode(hashedPinCode: String) throws
 
     func setOhttpRelayUrl(url: String) throws  -> String?
+
+    func setOhttpRelayUrls(urls: [String]) throws  -> [String]
 
     func setSelectedNetwork(network: Network) throws
 
@@ -5030,6 +5034,15 @@ open func ohttpRelayUrl() -> String?  {
 })
 }
 
+open func ohttpRelayUrls() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_ohttp_relay_urls(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func previewCustomBlockExplorer(network: Network, input: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
@@ -5146,6 +5159,16 @@ open func setOhttpRelayUrl(url: String)throws  -> String?  {
     uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_url(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+
+open func setOhttpRelayUrls(urls: [String])throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_urls(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(urls),uniffiCallStatus
     )
 })
 }
@@ -29009,6 +29032,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case customBlockExplorer(Network
     )
     case ohttpRelayUrl
+    case ohttpRelayUrls
 
 
 
@@ -29063,6 +29087,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         )
 
         case 16: return .ohttpRelayUrl
+
+        case 17: return .ohttpRelayUrls
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -29136,6 +29162,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case .ohttpRelayUrl:
             writeInt(&buf, Int32(16))
+
+
+        case .ohttpRelayUrls:
+            writeInt(&buf, Int32(17))
 
         }
     }
@@ -47380,6 +47410,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_url() != 61876) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_urls() != 44564) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -47414,6 +47447,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_url() != 7011) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_urls() != 64715) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578) {

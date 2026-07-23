@@ -4,15 +4,16 @@ import SwiftUI
 struct OhttpRelaySettingsView: View {
     private let config = Database().globalConfig()
 
-    @State private var input: String
-    @State private var isSaving = false
+    @State private var relays: [String]
+    @State private var newInput: String = ""
+    @State private var isAdding: Bool = false
     @State private var showInvalidUrlAlert = false
     @State private var showUpdateFailedAlert = false
     @FocusState private var isInputFocused: Bool
 
     init() {
         let config = Database().globalConfig()
-        _input = State(initialValue: config.ohttpRelayUrl() ?? "")
+        _relays = State(initialValue: config.ohttpRelayUrls())
     }
 
     private var defaultRelays: [String] {
@@ -27,7 +28,7 @@ struct OhttpRelaySettingsView: View {
         Form {
             Section {
                 Text(
-                    "PayJoin uses an OHTTP relay to send transactions privately. By default Cove rotates between three public relays. You can specify your own relay for extra privacy."
+                    "PayJoin uses an OHTTP relay to send transactions privately. By default Cove rotates between three public relays. Adding custom relays replaces the defaults."
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -44,20 +45,44 @@ struct OhttpRelaySettingsView: View {
                 }
             }
 
-            Section("Custom Relay") {
-                TextField("https://your-relay.example.com", text: $input)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .lineLimit(1)
-                    .submitLabel(.done)
-                    .focused($isInputFocused)
-                    .onSubmit(save)
+            Section {
+                ForEach(relays, id: \.self) { relay in
+                    Text(relay)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                }
+                .onDelete(perform: deleteRelay)
 
-                Button("Save", action: save)
-                    .disabled(isSaving || input == (config.ohttpRelayUrl() ?? ""))
+                if isAdding {
+                    HStack {
+                        TextField("https://your-relay.example.com", text: $newInput)
+                            .focused($isInputFocused)
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .onSubmit(addRelay)
 
-                Button("Reset to Default", role: .destructive, action: reset)
+                        Button("Add", action: addRelay)
+                            .disabled(newInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                } else {
+                    Button {
+                        isAdding = true
+                        isInputFocused = true
+                    } label: {
+                        Label("Add Relay", systemImage: "plus")
+                    }
+                }
+            } header: {
+                Text("Custom Relays")
+            } footer: {
+                if relays.isEmpty {
+                    Text(
+                        "No custom relays set. Using the three default relays, chosen randomly per send."
+                    )
+                    .font(.footnote)
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -74,38 +99,38 @@ struct OhttpRelaySettingsView: View {
         }
     }
 
-    private func save() {
-        guard !isSaving else { return }
+    private func deleteRelay(at offsets: IndexSet) {
+        var updated = relays
+        updated.remove(atOffsets: offsets)
+        save(relays: updated, showSuccess: false)
+    }
 
-        let inputToSave = input
+    private func addRelay() {
+        let url = newInput.trimmingCharacters(in: .whitespaces)
+        guard !url.isEmpty else { return }
+        save(relays: relays + [url])
+    }
 
-        isSaving = true
+    private func save(relays newRelays: [String], showSuccess: Bool = true) {
         isInputFocused = false
 
         do {
-            let normalized = try config.setOhttpRelayUrl(url: inputToSave)
-            input = normalized ?? ""
+            let saved = try config.setOhttpRelayUrls(urls: newRelays)
+            relays = saved
+            newInput = ""
+            isAdding = false
 
-            Task { @MainActor in
-                await dismissAllPopups()
-                try? await Task.sleep(for: .milliseconds(250))
-                await MiddlePopup(state: .success("Relay saved successfully"))
-                    .dismissAfter(2)
-                    .present()
+            if showSuccess {
+                Task { @MainActor in
+                    await dismissAllPopups()
+                    try? await Task.sleep(for: .milliseconds(250))
+                    await MiddlePopup(state: .success("Relay saved successfully"))
+                        .dismissAfter(2)
+                        .present()
+                }
             }
         } catch DatabaseError.GlobalConfig(.InvalidOhttpRelayUrl) {
             showInvalidUrlAlert = true
-        } catch {
-            showUpdateFailedAlert = true
-        }
-
-        isSaving = false
-    }
-
-    private func reset() {
-        do {
-            try config.clearOhttpRelayUrl()
-            input = ""
         } catch {
             showUpdateFailedAlert = true
         }

@@ -23,6 +23,13 @@ struct MainSettingsGeneralSection: View {
                 symbol: "safari"
             )
             SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
+        }
+    }
+}
+
+struct MainSettingsAdvancedSection: View {
+    var body: some View {
+        Section(header: Text("Advanced")) {
             SettingsRow(
                 title: "PayJoin Relay",
                 route: .ohttpRelay,
