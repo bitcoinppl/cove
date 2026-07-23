@@ -92,7 +92,7 @@ internal fun SendEnterCodeView(
         modifier = Modifier.fillMaxWidth(),
     )
     Button(
-        enabled = code.isNotBlank(),
+        enabled = code.length == RECEIVER_CODE_LENGTH,
         onClick = { manager.dispatch(KeyTeleportManagerAction.EnterReceiverCode(code)) },
         modifier = Modifier.fillMaxWidth(),
     ) {

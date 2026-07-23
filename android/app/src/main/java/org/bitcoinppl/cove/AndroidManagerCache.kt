@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
-import org.bitcoinppl.cove_core.FfiApp
+import org.bitcoinppl.cove_core.RustKeyTeleportManager
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.WalletId
 import kotlin.coroutines.cancellation.CancellationException
@@ -212,11 +212,13 @@ internal class AndroidManagerCache(
         coinControlManager = manager
     }
 
-    internal fun getKeyTeleportManager(app: FfiApp): KeyTeleportManager {
+    internal fun getKeyTeleportManager(
+        createRustManager: () -> RustKeyTeleportManager,
+    ): KeyTeleportManager {
         keyTeleportManager?.let { return it }
 
         Log.d(tag, "creating KeyTeleportManager")
-        val manager = KeyTeleportManager(app.newKeyTeleportManager())
+        val manager = KeyTeleportManager(createRustManager())
         keyTeleportManager = manager
         return manager
     }

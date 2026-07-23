@@ -187,7 +187,11 @@ private fun KeyTeleportStateContent(
             KeyTeleportReceiveContent(app, manager, state, onScan)
         }
 
-        else -> {
+        is KeyTeleportManagerState.SendAwaitReceiver,
+        is KeyTeleportManagerState.SendChooseWallet,
+        is KeyTeleportManagerState.SendEnterCode,
+        is KeyTeleportManagerState.SendReady,
+        -> {
             KeyTeleportSendContent(app, manager, state, onScan, onPaste)
         }
     }
@@ -350,10 +354,14 @@ private fun KeyTeleportOverlays(
         )
     }
     manager.alert?.let { alert ->
-        KeyTeleportAlertDialog(alert) { manager.clearAlertForDisplay() }
+        KeyTeleportMessageDialog(alert.messageForDisplay()) {
+            manager.clearAlertForDisplay()
+        }
     }
-    localError?.let { message ->
-        KeyTeleportErrorDialog(message, actions.onErrorDismiss)
+    if (manager.alert == null) {
+        localError?.let { message ->
+            KeyTeleportMessageDialog(message, actions.onErrorDismiss)
+        }
     }
 }
 

@@ -45,7 +45,6 @@ import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.RecoveryWordChip
-import org.bitcoinppl.cove_core.KeyTeleportAlert
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.WalletId
 
@@ -190,20 +189,7 @@ internal fun SecureScreenEffect() {
 }
 
 @Composable
-internal fun KeyTeleportAlertDialog(
-    alert: KeyTeleportAlert,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("KeyTeleport") },
-        text = { Text(alert.messageForDisplay()) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
-    )
-}
-
-@Composable
-internal fun KeyTeleportErrorDialog(
+internal fun KeyTeleportMessageDialog(
     message: String,
     onDismiss: () -> Unit,
 ) {

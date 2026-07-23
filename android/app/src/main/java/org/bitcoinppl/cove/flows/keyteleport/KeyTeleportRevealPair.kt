@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.keyteleport
 
+import android.os.Build
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -84,6 +86,8 @@ internal fun KeyTeleportRevealable(
             animationSpec = tween(durationMillis = REVEAL_ANIMATION_DURATION_MILLIS),
             label = "KeyTeleport reveal blur",
         )
+    val requiresOpaqueCover = isHidden && Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+    val opaqueCoverColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f)
     val revealModifier =
         if (isHidden) {
             Modifier
@@ -108,6 +112,15 @@ internal fun KeyTeleportRevealable(
                 Modifier
                     .fillMaxWidth()
                     .blur(animatedBlurRadius)
+                    .then(
+                        if (requiresOpaqueCover) {
+                            Modifier.drawWithContent {
+                                drawRect(opaqueCoverColor)
+                            }
+                        } else {
+                            Modifier
+                        },
+                    )
                     .then(hiddenSemanticsModifier(isHidden)),
         ) {
             content()

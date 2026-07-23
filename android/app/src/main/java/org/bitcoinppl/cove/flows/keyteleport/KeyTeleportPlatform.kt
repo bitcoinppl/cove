@@ -56,7 +56,7 @@ private fun KeyTeleportAlert.nonReceiveMessageForDisplay(): String =
         is KeyTeleportAlert.Keychain -> v1
         is KeyTeleportAlert.Protocol -> v1
         is KeyTeleportAlert.Database -> v1
-        else -> error("Receive alert must have a display message")
+        else -> "Something went wrong with KeyTeleport."
     }
 
 internal fun readClipboardText(context: Context): String? {

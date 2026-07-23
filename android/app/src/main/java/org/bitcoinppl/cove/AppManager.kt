@@ -222,7 +222,11 @@ class AppManager private constructor() : FfiReconcile {
     fun clearCoinControlManager(manager: CoinControlManager) = managerCache.clearCoinControlManager(manager)
 
     fun getKeyTeleportManager(): KeyTeleportManager =
-        managerCache.getKeyTeleportManager(rust)
+        managerCache.getKeyTeleportManager {
+            withRust {
+                newKeyTeleportManager()
+            }
+        }
 
     fun clearKeyTeleportManager() = managerCache.clearKeyTeleportManager()
 
