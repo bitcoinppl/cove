@@ -40,11 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
@@ -70,9 +68,33 @@ internal fun ReceiveReadyView(
 
     if (packetText == null) {
         Text("Unable to render this receive request.", color = MaterialTheme.colorScheme.error)
+        ReceiverCode(receive.groupedNumericCode)
     } else {
-        PacketQr(packetText)
+        KeyTeleportRevealPair(
+            qrHint = "Tap to show QR code",
+            codeHint = "Tap to show receiver code",
+            qr = { PacketQr(packetText) },
+            code = { ReceiverCode(receive.groupedNumericCode) },
+        )
     }
+    Text(
+        text =
+            "Have the sending wallet scan the QR code, then send the receiver code through a different " +
+                "channel, such as a call or message.\n\n" +
+                "If the sending wallet cannot scan this screen, tap Share and open the link on another " +
+                "device. The link shows the same QR code.",
+        color = OnboardingTextSecondary,
+        style = MaterialTheme.typography.bodySmall,
+    )
+    OnboardingPrimaryButton(
+        text = "Scan Sender Response",
+        onClick = onScan,
+        icon = Icons.Default.QrCodeScanner,
+    )
+}
+
+@Composable
+private fun ReceiverCode(code: String) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -83,28 +105,8 @@ internal fun ReceiveReadyView(
             color = OnboardingTextSecondary,
             style = MaterialTheme.typography.labelMedium,
         )
-        Text(
-            text = receive.groupedNumericCode,
-            color = Color.White,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-        )
+        KeyTeleportCodeText(code)
     }
-    Text(
-        text =
-            "If you can't show the QR code directly, use Share at the top to send the link to another " +
-                "KeyTeleport-compatible wallet. " +
-                "Send the receiver code separately.",
-        color = OnboardingTextSecondary,
-        style = MaterialTheme.typography.bodySmall,
-    )
-    OnboardingPrimaryButton(
-        text = "Scan Sender Response",
-        onClick = onScan,
-        icon = Icons.Default.QrCodeScanner,
-    )
 }
 
 @Composable

@@ -499,27 +499,33 @@ private struct KeyTeleportReceiveReadyView: View {
     var body: some View {
         VStack(spacing: 18) {
             if let packet = try? state.packet.bbqrPart() {
-                QrCodeView(text: packet)
-                    .frame(maxWidth: 280)
-                    .frame(maxWidth: .infinity)
+                KeyTeleportRevealPair(
+                    qrHint: "Tap to show QR code",
+                    codeHint: "Tap to show receiver code"
+                ) {
+                    QrCodeView(text: packet)
+                        .frame(maxWidth: 280)
+                        .frame(maxWidth: .infinity)
+                } code: {
+                    receiverCode
+                }
             } else {
                 Text("Unable to render this receive request.")
                     .foregroundStyle(.red)
+
+                receiverCode
             }
 
-            VStack(spacing: 4) {
-                Text("Receiver Code")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(state.groupedNumericCode)
-                    .font(.system(.title2, design: .monospaced))
-                    .fontWeight(.semibold)
-            }
+            Text(
+                """
+                Have the sending wallet scan the QR code, then send the receiver code through a different channel, such as a call or message.
 
-            Text("If you can't show the QR code directly, use Share at the top to send the link to another KeyTeleport-compatible wallet. Send the receiver code separately.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                If the sending wallet cannot scan this screen, tap Share and open the link on another device. The link shows the same QR code.
+                """
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             Button(action: scan) {
                 Label("Scan Sender Response", systemImage: "qrcode.viewfinder")
@@ -527,6 +533,16 @@ private struct KeyTeleportReceiveReadyView: View {
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
         }
+    }
+
+    private var receiverCode: some View {
+        VStack(spacing: 4) {
+            Text("Receiver Code")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            KeyTeleportCodeText(state.groupedNumericCode)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -544,6 +560,91 @@ private struct KeyTeleportPasswordEntryView: View {
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
         }
+    }
+}
+
+private enum KeyTeleportRevealedElement {
+    case qrCode
+    case textCode
+}
+
+private struct KeyTeleportRevealPair<QR: View, Code: View>: View {
+    let qrHint: String
+    let codeHint: String
+    let qr: QR
+    let code: Code
+
+    @State private var revealed: KeyTeleportRevealedElement = .qrCode
+
+    init(
+        qrHint: String,
+        codeHint: String,
+        @ViewBuilder qr: () -> QR,
+        @ViewBuilder code: () -> Code
+    ) {
+        self.qrHint = qrHint
+        self.codeHint = codeHint
+        self.qr = qr()
+        self.code = code()
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            revealable(
+                qr,
+                element: .qrCode,
+                hint: qrHint,
+                blurRadius: 14
+            )
+
+            revealable(
+                code,
+                element: .textCode,
+                hint: codeHint,
+                blurRadius: 10
+            )
+        }
+    }
+
+    private func revealable(
+        _ content: some View,
+        element: KeyTeleportRevealedElement,
+        hint: String,
+        blurRadius: CGFloat
+    ) -> some View {
+        let isHidden = revealed != element
+
+        return content
+            .blur(radius: isHidden ? blurRadius : 0)
+            .accessibilityHidden(isHidden)
+            .allowsHitTesting(!isHidden)
+            .overlay {
+                if isHidden {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            revealed = element
+                        }
+                    } label: {
+                        ZStack {
+                            Color.clear
+
+                            Label(hint, systemImage: "eye")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.midnightBlue.opacity(0.88))
+                                )
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(hint)
+                }
+            }
     }
 }
 
@@ -592,6 +693,19 @@ private struct KeyTeleportSecureInput: View {
             .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
         }
         .keyTeleportInputChrome()
+    }
+}
+
+private struct KeyTeleportCodeText: View {
+    let value: String
+
+    init(_ value: String) {
+        self.value = value
+    }
+
+    var body: some View {
+        Text(value)
+            .font(.system(.title, design: .monospaced, weight: .semibold))
     }
 }
 
@@ -1027,25 +1141,39 @@ private struct KeyTeleportSendReadyView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let packet = try? state.packet.bbqrPart() {
-                QrCodeView(text: packet)
-                    .frame(maxWidth: 280)
-                    .frame(maxWidth: .infinity)
+                KeyTeleportRevealPair(
+                    qrHint: "Tap to show QR code",
+                    codeHint: "Tap to show password"
+                ) {
+                    QrCodeView(text: packet)
+                        .frame(maxWidth: 280)
+                        .frame(maxWidth: .infinity)
+                } code: {
+                    teleportPassword
+                }
             } else {
                 Text("Unable to render this sender response.")
                     .foregroundStyle(.red)
+
+                teleportPassword
             }
 
-            VStack(spacing: 4) {
-                Text("Teleport Password")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(state.password.groupedText())
-                    .font(.system(.title2, design: .monospaced))
-                    .fontWeight(.semibold)
-            }
+            Text("Show the QR code to the receiver in person or over video, and send the password through a different channel, like a call or message. Only one is visible at a time — tap the hidden one to reveal it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Button("Done", action: finish)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
+        }
+    }
+
+    private var teleportPassword: some View {
+        VStack(spacing: 4) {
+            Text("Teleport Password")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            KeyTeleportCodeText(state.password.groupedText())
         }
     }
 }
