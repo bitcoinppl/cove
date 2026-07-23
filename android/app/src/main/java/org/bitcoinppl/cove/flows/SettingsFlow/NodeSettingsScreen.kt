@@ -379,6 +379,11 @@ fun NodeSettingsScreen(
                 }
                 refreshNodeState()
 
+                (selectedNodeSelection as? NodeSelection.Custom)?.toNode()?.let { selectedNode ->
+                    customUrl = selectedNode.url
+                    customNodeName = selectedNode.name
+                }
+
                 scope.launch {
                     snackbarHostState.showSnackbar(String.format(Locale.US, successConnected, node.url))
                 }
