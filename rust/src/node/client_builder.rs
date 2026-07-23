@@ -1,14 +1,11 @@
 use crate::node::client::Error;
 
-use super::{
-    Node,
-    client::{NodeClient, NodeClientOptions},
-};
+use super::{Node, client::NodeClient};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeClientBuilder {
     pub node: Node,
-    pub options: NodeClientOptions,
+    pub batch_size: usize,
 }
 impl NodeClientBuilder {
     pub async fn build(&self) -> Result<NodeClient, Error> {

@@ -34,9 +34,7 @@ impl EsploraClient {
         match &options.tor {
             None => {}
             Some(endpoint) => {
-                let host = &endpoint.host;
-                let port = endpoint.port;
-                builder = builder.proxy(&format!("socks5h://{host}:{port}"));
+                builder = builder.proxy(&format!("socks5h://{}", endpoint.authority()));
             }
         }
 

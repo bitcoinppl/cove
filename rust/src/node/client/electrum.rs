@@ -329,14 +329,7 @@ impl ElectrumClient {
     }
 
     fn connection_config(options: &ResolvedNodeClientOptions) -> Config {
-        let socks5 = match &options.tor {
-            None => None,
-            Some(endpoint) => {
-                let host = &endpoint.host;
-                let port = endpoint.port;
-                Some(Socks5Config::new(format!("{host}:{port}")))
-            }
-        };
+        let socks5 = options.tor.as_ref().map(|endpoint| Socks5Config::new(endpoint.authority()));
 
         ConfigBuilder::new().socks5(socks5).build()
     }

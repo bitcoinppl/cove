@@ -109,9 +109,6 @@ impl<W: io::Write> io::Write for SizeLimitedWriter<W> {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum UploadError {
-    #[error("failed to create HTTP client: {0}")]
-    Client(reqwest::Error),
-
     #[error("failed to encode report JSON: {0}")]
     EncodeJson(serde_json::Error),
 
@@ -155,8 +152,7 @@ impl From<age::EncryptError> for UploadError {
 impl UploadError {
     pub(crate) fn user_message(&self) -> String {
         match self {
-            Self::Client(_)
-            | Self::EncodeJson(_)
+            Self::EncodeJson(_)
             | Self::Gzip(_)
             | Self::InvalidRecipient(_)
             | Self::Encrypt(_) => {
@@ -206,7 +202,6 @@ impl UploadError {
             Self::InvalidResponse(message) => {
                 format!("collector success response was invalid: {message}")
             }
-            Self::Client(error) => format!("failed to create HTTP client: {error}"),
             Self::EncodeJson(error) => format!("failed to encode report JSON: {error}"),
             Self::Gzip(error) => format!("failed to gzip report JSON: {error}"),
             Self::JsonTooLarge { limit } => format!("report JSON exceeded {limit} bytes"),
@@ -229,16 +224,24 @@ struct UploadResponse {
 }
 
 pub(crate) async fn submit_report(report: DiagnosticsUploadReport) -> Result<String, UploadError> {
+    let client = crate::manager::tor_manager::http_client_without_redirects();
+
+    submit_report_with_client(&client, report).await
+}
+
+async fn submit_report_with_client(
+    client: &reqwest::Client,
+    report: DiagnosticsUploadReport,
+) -> Result<String, UploadError> {
     let body = cove_tokio::unblock::run_blocking(move || {
         let recipient = production_recipient(PRODUCTION_ENCRYPTION_KEY)?;
 
         encrypted_gzipped_json(&report, &recipient)
     })
     .await?;
-    let client = cove_http::new_client_without_redirects().map_err(UploadError::Client)?;
 
     for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
-        match submit_report_once(&client, body.clone(), PRODUCTION_ENCRYPTION_KEY).await {
+        match submit_report_once(client, body.clone(), PRODUCTION_ENCRYPTION_KEY).await {
             Ok(report_id) => return Ok(report_id),
             Err(error) if attempt < MAX_UPLOAD_ATTEMPTS && upload_error_is_retryable(&error) => {
                 tracing::warn!(
@@ -354,8 +357,7 @@ fn upload_error_is_retryable(error: &UploadError) -> bool {
     match error {
         // only retry pre-connection failures because POST outcomes are otherwise ambiguous
         UploadError::Request(error) => error.is_connect(),
-        UploadError::Client(_)
-        | UploadError::EncodeJson(_)
+        UploadError::EncodeJson(_)
         | UploadError::Gzip(_)
         | UploadError::JsonTooLarge { .. }
         | UploadError::GzipTooLarge { .. }
@@ -493,6 +495,10 @@ mod tests {
                 body: "amount=5000 sats".to_string(),
             }],
         }
+    }
+
+    fn test_client() -> reqwest::Client {
+        cove_http::new_client_without_redirects().unwrap()
     }
 
     fn report_with_body(body: String) -> DiagnosticsUploadReport {
@@ -795,7 +801,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(report()).await.unwrap_err();
+        let error = submit_report_with_client(&test_client(), report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::Status { status, .. } if status.is_server_error()));
         assert!(error.user_message().contains("may have been received"));
@@ -809,7 +815,7 @@ mod tests {
             redirect_server("http://127.0.0.1:0/reports").await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(report()).await.unwrap_err();
+        let error = submit_report_with_client(&test_client(), report()).await.unwrap_err();
 
         server.abort();
 
@@ -830,7 +836,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(report()).await.unwrap_err();
+        let error = submit_report_with_client(&test_client(), report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::DecodeResponse(_)));
         assert!(error.user_message().contains("may have been received"));
@@ -847,7 +853,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(report()).await.unwrap_err();
+        let error = submit_report_with_client(&test_client(), report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::InvalidResponse(_)));
         assert!(error.user_message().contains("may have been received"));
@@ -863,7 +869,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(report()).await.unwrap_err();
+        let error = submit_report_with_client(&test_client(), report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::Status { status: StatusCode::PAYLOAD_TOO_LARGE, .. }));
         assert!(error.user_message().contains("too large to submit"));
@@ -880,7 +886,7 @@ mod tests {
         .await;
         let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
 
-        let error = submit_report(report()).await.unwrap_err();
+        let error = submit_report_with_client(&test_client(), report()).await.unwrap_err();
 
         assert!(matches!(error, UploadError::ResponseTooLarge { .. }));
         assert!(error.user_message().contains("may have been received"));

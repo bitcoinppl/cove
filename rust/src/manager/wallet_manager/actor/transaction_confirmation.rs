@@ -10,7 +10,7 @@ use crate::{
         WalletManagerReconcileMessage,
         actor::{ActorState, WalletActor, WalletScanGeneration},
     },
-    node::client::{Error as NodeError, NodeClientOptions},
+    node::client::Error as NodeError,
     transaction_watcher::{
         TRANSACTION_WATCHER_TERMINAL_CONFIRMATIONS, TransactionWatcher, TransactionWatcherEvent,
     },
@@ -127,9 +127,8 @@ impl WalletActor {
         }
 
         let network = self.wallet.network;
-        let options = NodeClientOptions::from_db(1);
 
-        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, options, network);
+        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, 1, network);
         let addr = spawn_actor(watcher);
 
         self.transaction_watchers.insert(tx_id, addr);

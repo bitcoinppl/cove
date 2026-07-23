@@ -9,7 +9,7 @@ use crate::{
     database::Database,
     manager::wallet_manager::actor::WalletActor,
     node::{
-        client::{Error as NodeError, NodeClient, NodeClientOptions},
+        client::{Error as NodeError, NodeClient},
         client_builder::NodeClientBuilder,
     },
 };
@@ -22,7 +22,7 @@ pub struct TransactionWatcher {
     wallet_actor: WeakAddr<WalletActor>,
     addr: WeakAddr<Self>,
     tx_id: Txid,
-    options: NodeClientOptions,
+    batch_size: usize,
     network: Network,
     client: Option<NodeClient>,
     keep_watching: bool,
@@ -73,7 +73,7 @@ impl TransactionWatcher {
     pub fn new(
         wallet_actor: WeakAddr<WalletActor>,
         tx_id: Txid,
-        options: NodeClientOptions,
+        batch_size: usize,
         network: Network,
     ) -> Self {
         debug!("creating transaction watcher for {tx_id}");
@@ -81,7 +81,7 @@ impl TransactionWatcher {
             wallet_actor,
             addr: Default::default(),
             tx_id,
-            options,
+            batch_size,
             network,
             client: None,
             keep_watching: true,
@@ -99,7 +99,7 @@ impl TransactionWatcher {
             .client
             .take()
             .filter(|client| client.connection_identity() == &connection_identity);
-        let builder = NodeClientBuilder { node: selected_node, options: self.options.clone() };
+        let builder = NodeClientBuilder { node: selected_node, batch_size: self.batch_size };
         let tx_id = self.tx_id;
 
         trace!("checking txn: {tx_id}");

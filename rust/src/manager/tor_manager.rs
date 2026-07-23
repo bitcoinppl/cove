@@ -23,21 +23,22 @@ type Message = TorManagerReconcileMessage;
 type Result<T, E = TorError> = std::result::Result<T, E>;
 
 const PROXY_TEST_TIMEOUT: Duration = Duration::from_secs(5);
+const CONNECTION_TEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum HttpProxyRoute {
+enum HttpRoute {
     Direct,
-    BuiltIn,
-    Socks5(Socks5Proxy),
+    Proxy(Socks5Proxy),
+    Blocked,
 }
 
-impl From<&TorConfig> for HttpProxyRoute {
+impl From<&TorConfig> for HttpRoute {
     fn from(config: &TorConfig) -> Self {
         match config {
             TorConfig::Off => Self::Direct,
-            TorConfig::BuiltIn => Self::BuiltIn,
+            TorConfig::BuiltIn => Self::Blocked,
             TorConfig::External { host, port } => {
-                Self::Socks5(Socks5Proxy::new(host.clone(), *port))
+                Self::Proxy(Socks5Proxy::new(host.clone(), *port))
             }
         }
     }
@@ -207,6 +208,9 @@ pub enum TorError {
     /// No clearnet preset could replace an onion node
     #[error("Unable to select a clearnet fallback node")]
     ClearnetFallback,
+    /// The persisted Tor configuration could not be read safely
+    #[error("Unable to read Tor settings")]
+    ConfigUnreadable,
 }
 
 impl From<tor_runtime::Error> for TorError {
@@ -222,25 +226,46 @@ pub struct RustTorManager {
     operations: AsyncMutex<()>,
     status_forwarder: Mutex<Option<AbortHandle>>,
     http_client: ArcSwap<reqwest::Client>,
+    http_route: ArcSwap<HttpRoute>,
 }
 
 impl RustTorManager {
     fn init() -> Arc<Self> {
-        let config = Database::global().global_config.tor_config();
-        let http_client = initial_http_client(&config);
+        let (http_client, http_route, initial_error) = match Database::global()
+            .global_config
+            .tor_config()
+        {
+            Ok(config) => initial_http_client(&config),
+            Err(_) => {
+                (fail_closed_http_client(), HttpRoute::Blocked, Some(TorError::ConfigUnreadable))
+            }
+        };
 
-        Arc::new(Self {
+        let manager = Arc::new(Self {
             reconciler: ReconcileChannel::new(1000),
             operations: AsyncMutex::new(()),
             status_forwarder: Mutex::new(None),
             http_client: ArcSwap::from_pointee(http_client),
-        })
+            http_route: ArcSwap::from_pointee(http_route),
+        });
+        if let Some(error) = initial_error {
+            manager.send(Message::Failed(error));
+        }
+
+        manager
     }
 
     /// Starts configured built-in Tor during application initialization
     pub(crate) async fn warmup(&self) {
         let _operation = self.operations.lock().await;
-        let config = Database::global().global_config.tor_config();
+        let config = match Database::global().global_config.tor_config() {
+            Ok(config) => config,
+            Err(_) => {
+                self.block_http_requests();
+                self.send(Message::Failed(TorError::ConfigUnreadable));
+                return;
+            }
+        };
 
         self.send(Message::ConfigChanged(config.clone()));
         match config {
@@ -250,10 +275,16 @@ impl RustTorManager {
                     self.send(Message::Failed(error));
                 }
             }
-            TorConfig::Off | TorConfig::External { .. } => match http_client_for_config(&config) {
-                Ok(client) => self.set_http_client(client),
-                Err(_) => self.send(Message::Failed(http_client_error())),
-            },
+            TorConfig::Off | TorConfig::External { .. } => {
+                let route = HttpRoute::from(&config);
+                match http_client_for_route(&route) {
+                    Ok(client) => self.set_http_client(client, route),
+                    Err(_) => {
+                        self.block_http_requests();
+                        self.send(Message::Failed(http_client_error()));
+                    }
+                }
+            }
         }
     }
 
@@ -264,15 +295,19 @@ impl RustTorManager {
             return Err(TorError::InvalidExternalProxy);
         }
 
-        let current = Database::global().global_config.tor_config();
-        let prepared_http_client = match config {
+        // a user-driven config change is the recovery path for unreadable persisted state
+        let current = Database::global().global_config.tor_config().ok();
+        let prepared_http_route = match config {
             TorConfig::BuiltIn => None,
             TorConfig::Off | TorConfig::External { .. } => {
-                Some(http_client_for_config(&config).map_err(|_| http_client_error())?)
+                let route = HttpRoute::from(&config);
+                let client = http_client_for_route(&route).map_err(|_| http_client_error())?;
+
+                Some((client, route))
             }
         };
 
-        if current != config {
+        if current.as_ref() != Some(&config) {
             self.block_http_requests();
             self.stop_status_forwarder();
             if let Err(error) = tor_runtime::stop().await {
@@ -293,9 +328,14 @@ impl RustTorManager {
             self.block_http_requests();
             self.start_built_in().await?;
         } else {
-            self.set_http_client(prepared_http_client.expect("non-built-in client is prepared"));
+            let Some((client, route)) = prepared_http_route else {
+                let error = http_client_error();
+                self.send(Message::Failed(error.clone()));
+                return Err(error);
+            };
+            self.set_http_client(client, route);
 
-            if current != config {
+            if current.as_ref() != Some(&config) {
                 self.send(Message::Stopped);
             }
         }
@@ -312,15 +352,23 @@ impl RustTorManager {
     }
 
     fn block_http_requests(&self) {
-        self.set_http_client(fail_closed_http_client());
+        self.set_http_client(fail_closed_http_client(), HttpRoute::Blocked);
     }
 
-    fn set_http_client(&self, client: reqwest::Client) {
+    fn set_http_client(&self, client: reqwest::Client, route: HttpRoute) {
         self.http_client.store(Arc::new(client));
+        self.http_route.store(Arc::new(route));
     }
 
     fn http_client(&self) -> reqwest::Client {
         self.http_client.load().as_ref().clone()
+    }
+
+    fn http_client_without_redirects(&self) -> reqwest::Client {
+        let route = self.http_route.load();
+
+        http_client_without_redirects_for_route(&route)
+            .unwrap_or_else(|_| fail_closed_http_client_without_redirects())
     }
 
     fn start_status_forwarder(&self) {
@@ -364,7 +412,18 @@ impl RustTorManager {
 
         let config = {
             let _operation = self.operations.lock().await;
-            let config = Database::global().global_config.tor_config();
+            let config = match Database::global().global_config.tor_config() {
+                Ok(config) => config,
+                Err(_) => {
+                    self.block_http_requests();
+                    self.send(Message::Failed(TorError::ConfigUnreadable));
+                    self.send_test_update(
+                        TorTestStep::ProxyReachable,
+                        TorTestState::Failed("Unable to read Tor settings".to_string()),
+                    );
+                    return;
+                }
+            };
 
             if config == TorConfig::BuiltIn && self.start_built_in().await.is_err() {
                 self.send_test_update(
@@ -385,17 +444,33 @@ impl RustTorManager {
                 );
                 return;
             }
-            TorConfig::BuiltIn => match tor_runtime::built_in_socks_endpoint().await {
-                Ok(endpoint) => (endpoint.ip().to_string(), endpoint.port()),
-                Err(error) => {
-                    self.send(Message::Failed(error.into()));
-                    self.send_test_update(
-                        TorTestStep::ProxyReachable,
-                        TorTestState::Failed("The built-in Tor proxy is unavailable".to_string()),
-                    );
-                    return;
+            TorConfig::BuiltIn => {
+                match tokio::time::timeout(
+                    CONNECTION_TEST_TIMEOUT,
+                    tor_runtime::built_in_socks_endpoint(),
+                )
+                .await
+                {
+                    Ok(Ok(endpoint)) => (endpoint.ip().to_string(), endpoint.port()),
+                    Ok(Err(error)) => {
+                        self.send(Message::Failed(error.into()));
+                        self.send_test_update(
+                            TorTestStep::ProxyReachable,
+                            TorTestState::Failed(
+                                "The built-in Tor proxy is unavailable".to_string(),
+                            ),
+                        );
+                        return;
+                    }
+                    Err(_) => {
+                        self.send_test_update(
+                            TorTestStep::ProxyReachable,
+                            TorTestState::Failed("Tor did not become ready in time".to_string()),
+                        );
+                        return;
+                    }
                 }
-            },
+            }
             TorConfig::External { host, port } => (host.clone(), *port),
         };
 
@@ -417,28 +492,59 @@ impl RustTorManager {
         let (node, options) = {
             let _operation = self.operations.lock().await;
             let database = Database::global();
-            if database.global_config.tor_config() != config {
-                self.send_test_update(
-                    TorTestStep::NodeReachableViaTor,
-                    TorTestState::Failed("Tor settings changed during the test".to_string()),
-                );
-                return;
+            match database.global_config.tor_config() {
+                Ok(current) if current == config => {}
+                Ok(_) => {
+                    self.send_test_update(
+                        TorTestStep::NodeReachableViaTor,
+                        TorTestState::Failed("Tor settings changed during the test".to_string()),
+                    );
+                    return;
+                }
+                Err(_) => {
+                    self.block_http_requests();
+                    self.send(Message::Failed(TorError::ConfigUnreadable));
+                    self.send_test_update(
+                        TorTestStep::NodeReachableViaTor,
+                        TorTestState::Failed("Unable to read Tor settings".to_string()),
+                    );
+                    return;
+                }
             }
 
             let node = database.global_config.selected_node();
-            let options = NodeClientOptions::from_db_for_node(&node);
+            let options = match NodeClientOptions::from_db_for_node(&node) {
+                Ok(options) => options,
+                Err(_) => {
+                    self.block_http_requests();
+                    self.send(Message::Failed(TorError::ConfigUnreadable));
+                    self.send_test_update(
+                        TorTestStep::NodeReachableViaTor,
+                        TorTestState::Failed("Unable to read Tor settings".to_string()),
+                    );
+                    return;
+                }
+            };
 
             (node, options)
         };
-        let result = match crate::node::client::NodeClient::new_with_options(&node, options).await {
-            Ok(client) => client.check_url().await,
-            Err(error) => Err(error),
-        };
+        let result = tokio::time::timeout(CONNECTION_TEST_TIMEOUT, async {
+            let client = crate::node::client::NodeClient::new_with_options(&node, options).await?;
+
+            client.check_url().await
+        })
+        .await;
         match result {
-            Ok(()) => self.send_test_update(TorTestStep::NodeReachableViaTor, TorTestState::Passed),
-            Err(_) => self.send_test_update(
+            Ok(Ok(())) => {
+                self.send_test_update(TorTestStep::NodeReachableViaTor, TorTestState::Passed);
+            }
+            Ok(Err(_)) => self.send_test_update(
                 TorTestStep::NodeReachableViaTor,
                 TorTestState::Failed("The selected node is unavailable through Tor".to_string()),
+            ),
+            Err(_) => self.send_test_update(
+                TorTestStep::NodeReachableViaTor,
+                TorTestState::Failed("The selected node connection test timed out".to_string()),
             ),
         }
     }
@@ -447,6 +553,32 @@ impl RustTorManager {
 /// Returns the currently configured shared HTTP client
 pub(crate) fn http_client() -> reqwest::Client {
     TOR_MANAGER.http_client()
+}
+
+/// Returns a route-matched HTTP client that does not follow redirects
+pub(crate) fn http_client_without_redirects() -> reqwest::Client {
+    TOR_MANAGER.http_client_without_redirects()
+}
+
+/// Starts built-in Tor on demand before constructing a routed node client
+pub(crate) async fn ensure_built_in_started() -> Result<()> {
+    let manager = TOR_MANAGER.clone();
+    let _operation = manager.operations.lock().await;
+    let config = match Database::global().global_config.tor_config() {
+        Ok(config) => config,
+        Err(_) => {
+            manager.block_http_requests();
+            let error = TorError::ConfigUnreadable;
+            manager.send(Message::Failed(error.clone()));
+            return Err(error);
+        }
+    };
+
+    if config != TorConfig::BuiltIn {
+        return Err(TorError::Runtime(TorRuntimeError::NotRunning));
+    }
+
+    manager.start_built_in().await
 }
 
 /// Swaps the shared HTTP client to the built-in endpoint once bootstrap
@@ -465,32 +597,52 @@ fn spawn_built_in_http_client_swap() {
         // config may have changed while bootstrap was in flight
         let manager = TOR_MANAGER.clone();
         let _operation = manager.operations.lock().await;
-        if Database::global().global_config.tor_config() != TorConfig::BuiltIn {
-            return;
+        match Database::global().global_config.tor_config() {
+            Ok(TorConfig::BuiltIn) => {}
+            Ok(TorConfig::Off | TorConfig::External { .. }) => return,
+            Err(_) => {
+                manager.block_http_requests();
+                manager.send(Message::Failed(TorError::ConfigUnreadable));
+                return;
+            }
         }
 
         let proxy = Socks5Proxy::new(endpoint.ip().to_string(), endpoint.port());
         match cove_http::new_client_with_socks_proxy(Some(&proxy)) {
-            Ok(client) => manager.set_http_client(client),
-            Err(_) => manager.send(Message::Failed(http_client_error())),
+            Ok(client) => manager.set_http_client(client, HttpRoute::Proxy(proxy)),
+            Err(_) => {
+                manager.block_http_requests();
+                manager.send(Message::Failed(http_client_error()));
+            }
         }
     });
 }
 
-fn initial_http_client(config: &TorConfig) -> reqwest::Client {
-    match HttpProxyRoute::from(config) {
-        HttpProxyRoute::BuiltIn => fail_closed_http_client(),
-        HttpProxyRoute::Direct | HttpProxyRoute::Socks5(_) => {
-            http_client_for_config(config).unwrap_or_else(|_| fail_closed_http_client())
-        }
+fn initial_http_client(config: &TorConfig) -> (reqwest::Client, HttpRoute, Option<TorError>) {
+    let route = HttpRoute::from(config);
+    match http_client_for_route(&route) {
+        Ok(client) => (client, route, None),
+        Err(_) => (fail_closed_http_client(), HttpRoute::Blocked, Some(http_client_error())),
     }
 }
 
-fn http_client_for_config(config: &TorConfig) -> Result<reqwest::Client, reqwest::Error> {
-    match HttpProxyRoute::from(config) {
-        HttpProxyRoute::Direct => cove_http::new_client_with_socks_proxy(None),
-        HttpProxyRoute::BuiltIn => Ok(fail_closed_http_client()),
-        HttpProxyRoute::Socks5(proxy) => cove_http::new_client_with_socks_proxy(Some(&proxy)),
+fn http_client_for_route(route: &HttpRoute) -> Result<reqwest::Client, reqwest::Error> {
+    match route {
+        HttpRoute::Direct => cove_http::new_client_with_socks_proxy(None),
+        HttpRoute::Proxy(proxy) => cove_http::new_client_with_socks_proxy(Some(proxy)),
+        HttpRoute::Blocked => Ok(fail_closed_http_client()),
+    }
+}
+
+fn http_client_without_redirects_for_route(
+    route: &HttpRoute,
+) -> Result<reqwest::Client, reqwest::Error> {
+    match route {
+        HttpRoute::Direct => cove_http::new_client_without_redirects_with_socks_proxy(None),
+        HttpRoute::Proxy(proxy) => {
+            cove_http::new_client_without_redirects_with_socks_proxy(Some(proxy))
+        }
+        HttpRoute::Blocked => Ok(fail_closed_http_client_without_redirects()),
     }
 }
 
@@ -499,6 +651,13 @@ fn fail_closed_http_client() -> reqwest::Client {
     let proxy = Socks5Proxy::new("127.0.0.1", 0);
 
     cove_http::new_client_with_socks_proxy(Some(&proxy))
+        .expect("the fail-closed HTTP proxy endpoint is valid")
+}
+
+fn fail_closed_http_client_without_redirects() -> reqwest::Client {
+    let proxy = Socks5Proxy::new("127.0.0.1", 0);
+
+    cove_http::new_client_without_redirects_with_socks_proxy(Some(&proxy))
         .expect("the fail-closed HTTP proxy endpoint is valid")
 }
 
@@ -536,7 +695,15 @@ impl RustTorManager {
         let _operation = self.operations.lock().await;
         match action {
             TorManagerAction::Enable => {
-                let current = Database::global().global_config.tor_config();
+                let current = match Database::global().global_config.tor_config() {
+                    Ok(config) => config,
+                    Err(_) => {
+                        self.block_http_requests();
+                        let error = TorError::ConfigUnreadable;
+                        self.send(Message::Failed(error.clone()));
+                        return Err(error);
+                    }
+                };
                 let config = if current == TorConfig::Off { TorConfig::BuiltIn } else { current };
 
                 self.apply_config(config).await?;
@@ -661,14 +828,11 @@ mod tests {
 
     #[test]
     fn tor_config_maps_to_the_expected_http_route() {
-        assert_eq!(HttpProxyRoute::from(&TorConfig::Off), HttpProxyRoute::Direct);
-        assert_eq!(HttpProxyRoute::from(&TorConfig::BuiltIn), HttpProxyRoute::BuiltIn);
+        assert_eq!(HttpRoute::from(&TorConfig::Off), HttpRoute::Direct);
+        assert_eq!(HttpRoute::from(&TorConfig::BuiltIn), HttpRoute::Blocked);
         assert_eq!(
-            HttpProxyRoute::from(&TorConfig::External {
-                host: "proxy.example".to_string(),
-                port: 9050,
-            }),
-            HttpProxyRoute::Socks5(Socks5Proxy::new("proxy.example", 9050))
+            HttpRoute::from(&TorConfig::External { host: "proxy.example".to_string(), port: 9050 }),
+            HttpRoute::Proxy(Socks5Proxy::new("proxy.example", 9050))
         );
     }
 

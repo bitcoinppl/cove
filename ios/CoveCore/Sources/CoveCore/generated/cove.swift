@@ -26344,6 +26344,8 @@ enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.Locali
     )
     case Read(String
     )
+    case CorruptTorConfig(String
+    )
     case PinCodeMustBeHashed
     case InvalidCustomBlockExplorer(String
     )
@@ -26394,11 +26396,14 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
         case 2: return .Read(
             try FfiConverterString.read(from: &buf)
             )
-        case 3: return .PinCodeMustBeHashed
-        case 4: return .InvalidCustomBlockExplorer(
+        case 3: return .CorruptTorConfig(
             try FfiConverterString.read(from: &buf)
             )
-        case 5: return .ManagerOwnedKey
+        case 4: return .PinCodeMustBeHashed
+        case 5: return .InvalidCustomBlockExplorer(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .ManagerOwnedKey
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26421,17 +26426,22 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .PinCodeMustBeHashed:
+        case let .CorruptTorConfig(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .PinCodeMustBeHashed:
+            writeInt(&buf, Int32(4))
 
 
         case let .InvalidCustomBlockExplorer(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
 
 
         case .ManagerOwnedKey:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
 
         }
     }
@@ -34348,6 +34358,10 @@ enum TorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
      * No clearnet preset could replace an onion node
      */
     case ClearnetFallback
+    /**
+     * The persisted Tor configuration could not be read safely
+     */
+    case ConfigUnreadable
 
 
 
@@ -34394,6 +34408,7 @@ public struct FfiConverterTypeTorError: FfiConverterRustBuffer {
         case 2: return .InvalidExternalProxy
         case 3: return .Persistence
         case 4: return .ClearnetFallback
+        case 5: return .ConfigUnreadable
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -34421,6 +34436,10 @@ public struct FfiConverterTypeTorError: FfiConverterRustBuffer {
 
         case .ClearnetFallback:
             writeInt(&buf, Int32(4))
+
+
+        case .ConfigUnreadable:
+            writeInt(&buf, Int32(5))
 
         }
     }

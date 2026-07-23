@@ -349,9 +349,13 @@ async fn enable_tor_for_onion_save(node: &Node) -> Result<(), Error> {
 }
 
 async fn check_node_with_tor_inference(node: &Node) -> Result<(), Error> {
-    let options = check_options_for_node(node, NodeClientOptions::from_db_for_node(node))?;
     let redacted_host =
         if node_implies_tor(node) { "<redacted-onion-host>" } else { "<redacted-host>" };
+    let options = NodeClientOptions::from_db_for_node(node).map_err(|error| {
+        debug!(?error, host = redacted_host, "failed to read Tor settings");
+        Error::NodeAccessError("connection failed".to_string())
+    })?;
+    let options = check_options_for_node(node, options)?;
 
     debug!(
         api_type = ?node.api_type,

@@ -27,24 +27,47 @@ impl Socks5Proxy {
 /// Build a reqwest Client that uses webpki-roots for TLS cert verification,
 /// bypassing rustls-platform-verifier (which requires Android JNI init)
 pub fn new_client() -> Result<reqwest::Client, reqwest::Error> {
-    client_builder().build()
+    build_client(None, Redirects::Follow)
 }
 
 /// Builds a reqwest client with an optional remote-DNS SOCKS5 proxy
 pub fn new_client_with_socks_proxy(
     proxy: Option<&Socks5Proxy>,
 ) -> Result<reqwest::Client, reqwest::Error> {
-    let builder = client_builder();
-    let Some(proxy) = proxy else {
-        return builder.build();
-    };
-
-    builder.proxy(reqwest::Proxy::all(proxy.url())?).build()
+    build_client(proxy, Redirects::Follow)
 }
 
 /// Build a reqwest Client with the shared TLS configuration that does not follow redirects
 pub fn new_client_without_redirects() -> Result<reqwest::Client, reqwest::Error> {
-    client_builder().redirect(reqwest::redirect::Policy::none()).build()
+    new_client_without_redirects_with_socks_proxy(None)
+}
+
+/// Builds a no-redirect reqwest client with an optional remote-DNS SOCKS5 proxy
+pub fn new_client_without_redirects_with_socks_proxy(
+    proxy: Option<&Socks5Proxy>,
+) -> Result<reqwest::Client, reqwest::Error> {
+    build_client(proxy, Redirects::Blocked)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Redirects {
+    Follow,
+    Blocked,
+}
+
+fn build_client(
+    proxy: Option<&Socks5Proxy>,
+    redirects: Redirects,
+) -> Result<reqwest::Client, reqwest::Error> {
+    let mut builder = client_builder();
+    if redirects == Redirects::Blocked {
+        builder = builder.redirect(reqwest::redirect::Policy::none());
+    }
+    if let Some(proxy) = proxy {
+        builder = builder.proxy(reqwest::Proxy::all(proxy.url())?);
+    }
+
+    builder.build()
 }
 
 fn client_builder() -> reqwest::ClientBuilder {

@@ -106,6 +106,9 @@ pub enum GlobalConfigTableError {
     #[error("failed to get global config: {0}")]
     Read(String),
 
+    #[error("stored Tor config is corrupt: {0}")]
+    CorruptTorConfig(String),
+
     #[error("pin code must be hashed before saving")]
     PinCodeMustBeHashed,
 
@@ -480,10 +483,14 @@ impl GlobalConfigTable {
 // not FFI-exported: platforms must change Tor settings through TorManager,
 // never by writing the persisted config directly
 impl GlobalConfigTable {
-    pub fn tor_config(&self) -> TorConfig {
-        let config_json = self.get(GlobalConfigKey::TorConfig).unwrap_or(None).unwrap_or_default();
+    pub fn tor_config(&self) -> Result<TorConfig> {
+        let Some(config_json) = self.get(GlobalConfigKey::TorConfig)? else {
+            return Ok(TorConfig::Off);
+        };
 
-        serde_json::from_str(&config_json).unwrap_or_default()
+        serde_json::from_str(&config_json)
+            .map_err_str(GlobalConfigTableError::CorruptTorConfig)
+            .map_err(Into::into)
     }
 
     pub fn set_tor_config(&self, config: TorConfig) -> Result<()> {
@@ -554,7 +561,7 @@ mod tests {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, table) = test_table();
 
-        assert_eq!(table.tor_config(), TorConfig::Off);
+        assert_eq!(table.tor_config().unwrap(), TorConfig::Off);
 
         for config in [
             TorConfig::Off,
@@ -563,9 +570,24 @@ mod tests {
         ] {
             table.set_tor_config(config.clone()).unwrap();
 
-            assert_eq!(table.tor_config(), config);
+            assert_eq!(table.tor_config().unwrap(), config);
             assert!(table.get(super::GlobalConfigKey::TorConfig).unwrap().is_some());
         }
+    }
+
+    #[test]
+    fn corrupt_tor_config_is_an_error() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table.set_unchecked(super::GlobalConfigKey::TorConfig, "not-json".to_string()).unwrap();
+
+        assert!(matches!(
+            table.tor_config(),
+            Err(crate::database::Error::GlobalConfig(
+                super::GlobalConfigTableError::CorruptTorConfig(_)
+            ))
+        ));
     }
 
     #[test]

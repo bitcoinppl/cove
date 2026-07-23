@@ -24,7 +24,7 @@ use crate::{
     },
     node::{
         Node,
-        client::{Error as NodeError, NodeClient, NodeClientOptions},
+        client::{Error as NodeError, NodeClient},
         client_builder::NodeClientBuilder,
     },
     receive_address_watcher::ReceiveAddressWatcher,
@@ -471,8 +471,7 @@ impl WalletActor {
         self.stop_receive_address_watcher();
 
         let node = Database::global().global_config.selected_node();
-        let options = NodeClientOptions::from_db(1);
-        let client_builder = NodeClientBuilder { node, options };
+        let client_builder = NodeClientBuilder { node, batch_size: 1 };
 
         let address =
             self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;

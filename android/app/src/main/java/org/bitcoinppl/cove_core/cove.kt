@@ -43807,6 +43807,14 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class CorruptTorConfig(
+
+        val v1: kotlin.String
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class PinCodeMustBeHashed(
         ) : GlobalConfigTableException() {
         override val message
@@ -43861,11 +43869,14 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             2 -> GlobalConfigTableException.Read(
                 FfiConverterString.read(buf),
                 )
-            3 -> GlobalConfigTableException.PinCodeMustBeHashed()
-            4 -> GlobalConfigTableException.InvalidCustomBlockExplorer(
+            3 -> GlobalConfigTableException.CorruptTorConfig(
                 FfiConverterString.read(buf),
                 )
-            5 -> GlobalConfigTableException.ManagerOwnedKey()
+            4 -> GlobalConfigTableException.PinCodeMustBeHashed()
+            5 -> GlobalConfigTableException.InvalidCustomBlockExplorer(
+                FfiConverterString.read(buf),
+                )
+            6 -> GlobalConfigTableException.ManagerOwnedKey()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -43878,6 +43889,11 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 + FfiConverterString.allocationSize(value.v1)
             )
             is GlobalConfigTableException.Read -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is GlobalConfigTableException.CorruptTorConfig -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -43910,17 +43926,22 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is GlobalConfigTableException.PinCodeMustBeHashed -> {
+            is GlobalConfigTableException.CorruptTorConfig -> {
                 buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is GlobalConfigTableException.PinCodeMustBeHashed -> {
+                buf.putInt(4)
                 Unit
             }
             is GlobalConfigTableException.InvalidCustomBlockExplorer -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is GlobalConfigTableException.ManagerOwnedKey -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -53982,6 +54003,15 @@ sealed class TorException: kotlin.Exception() {
             get() = ""
     }
 
+    /**
+     * The persisted Tor configuration could not be read safely
+     */
+    class ConfigUnreadable(
+        ) : TorException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -54016,6 +54046,7 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
             2 -> TorException.InvalidExternalProxy()
             3 -> TorException.Persistence()
             4 -> TorException.ClearnetFallback()
+            5 -> TorException.ConfigUnreadable()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -54039,6 +54070,10 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is TorException.ConfigUnreadable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -54059,6 +54094,10 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
             }
             is TorException.ClearnetFallback -> {
                 buf.putInt(4)
+                Unit
+            }
+            is TorException.ConfigUnreadable -> {
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

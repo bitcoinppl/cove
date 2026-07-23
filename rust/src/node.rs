@@ -52,6 +52,7 @@ pub(crate) struct NodeConnectionIdentity {
 pub(crate) enum TorRouteIdentity {
     BuiltIn { generation: u64 },
     Socks5 { host: String, port: u16 },
+    Unreadable,
 }
 
 impl From<TorProxy> for TorRouteIdentity {
@@ -71,17 +72,29 @@ pub enum Error {
 
 impl Node {
     pub(crate) fn connection_identity(&self) -> NodeConnectionIdentity {
-        let tor = NodeClientOptions::from_db(1).tor;
+        let tor = match NodeClientOptions::from_db(1) {
+            Ok(options) => options.tor.map(TorRouteIdentity::from),
 
-        self.connection_identity_with_tor(tor)
+            // client construction fails on unreadable config, so this identity only invalidates caches
+            Err(_) => Some(TorRouteIdentity::Unreadable),
+        };
+
+        self.connection_identity_with_tor_route(tor)
     }
 
     fn connection_identity_with_tor(&self, tor: Option<TorProxy>) -> NodeConnectionIdentity {
+        self.connection_identity_with_tor_route(tor.map(TorRouteIdentity::from))
+    }
+
+    fn connection_identity_with_tor_route(
+        &self,
+        tor: Option<TorRouteIdentity>,
+    ) -> NodeConnectionIdentity {
         NodeConnectionIdentity {
             network: self.network,
             api_type: self.api_type,
             url: self.url.clone(),
-            tor: tor.map(TorRouteIdentity::from),
+            tor,
         }
     }
 

@@ -1,8 +1,8 @@
 pub mod electrum;
 pub mod esplora;
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::{collections::BTreeMap, net::Ipv6Addr};
 
 use bdk_electrum::electrum_client;
 use bdk_esplora::esplora_client;
@@ -63,6 +63,9 @@ impl core::fmt::Debug for NodeClient {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Tor configuration is unreadable: {0}")]
+    TorConfigUnreadable(#[source] crate::database::Error),
+
     #[error("failed to create node client: {0}")]
     CreateEsploraClient(esplora_client::Error),
 
@@ -71,6 +74,9 @@ pub enum Error {
 
     #[error("built-in Tor runtime is unavailable")]
     BuiltInTorRuntime(#[from] crate::tor_runtime::Error),
+
+    #[error("built-in Tor could not be started: {0}")]
+    BuiltInTorManager(#[from] crate::manager::tor_manager::TorError),
 
     #[error("failed to connect to node: {0}")]
     EsploraConnect(esplora_client::Error),
@@ -136,26 +142,36 @@ struct Socks5Endpoint {
     port: u16,
 }
 
+impl Socks5Endpoint {
+    fn authority(&self) -> String {
+        if self.host.parse::<Ipv6Addr>().is_ok() {
+            format!("[{}]:{}", self.host, self.port)
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
+    }
+}
+
 impl NodeClientOptions {
     /// Loads the persisted Tor route from the database
-    pub fn from_db(batch_size: usize) -> Self {
+    pub fn from_db(batch_size: usize) -> Result<Self, Error> {
         let database = Database::global();
 
         Self::from_global_config(batch_size, &database.global_config)
     }
 
-    fn from_global_config(batch_size: usize, config: &GlobalConfigTable) -> Self {
-        let tor = match config.tor_config() {
+    fn from_global_config(batch_size: usize, config: &GlobalConfigTable) -> Result<Self, Error> {
+        let tor = match config.tor_config().map_err(Error::TorConfigUnreadable)? {
             TorConfig::Off => None,
             TorConfig::BuiltIn => Some(TorProxy::BuiltIn),
             TorConfig::External { host, port } => Some(TorProxy::Socks5 { host, port }),
         };
 
-        Self { batch_size, tor }
+        Ok(Self { batch_size, tor })
     }
 
     /// Loads persisted options with the backend's standard batch size
-    pub(crate) fn from_db_for_node(node: &Node) -> Self {
+    pub(crate) fn from_db_for_node(node: &Node) -> Result<Self, Error> {
         let batch_size = match node.api_type {
             ApiType::Electrum => ELECTRUM_BATCH_SIZE,
             ApiType::Esplora | ApiType::Rpc => ESPLORA_BATCH_SIZE,
@@ -164,9 +180,10 @@ impl NodeClientOptions {
         Self::from_db(batch_size)
     }
 
-    async fn resolve_tor(self) -> Result<ResolvedNodeClientOptions, crate::tor_runtime::Error> {
+    async fn resolve_tor(self) -> Result<ResolvedNodeClientOptions, Error> {
         let tor = match self.tor {
             Some(TorProxy::BuiltIn) => {
+                crate::manager::tor_manager::ensure_built_in_started().await?;
                 let endpoint = crate::tor_runtime::built_in_socks_endpoint().await?;
 
                 Some(Socks5Endpoint { host: endpoint.ip().to_string(), port: endpoint.port() })
@@ -181,13 +198,14 @@ impl NodeClientOptions {
 
 impl NodeClient {
     pub async fn new(node: &Node) -> Result<Self, Error> {
-        let options = NodeClientOptions::from_db_for_node(node);
+        let options = NodeClientOptions::from_db_for_node(node)?;
 
         Self::new_with_options(node, options).await
     }
 
     pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
-        let node_client = Self::new_with_options(&builder.node, builder.options.clone()).await?;
+        let options = NodeClientOptions::from_db(builder.batch_size)?;
+        let node_client = Self::new_with_options(&builder.node, options).await?;
         Ok(node_client)
     }
 
@@ -391,9 +409,22 @@ mod tests {
             config.set_tor_config(persisted).unwrap();
 
             assert_eq!(
-                NodeClientOptions::from_global_config(42, &config),
+                NodeClientOptions::from_global_config(42, &config).unwrap(),
                 NodeClientOptions { batch_size: 42, tor: expected }
             );
+        }
+    }
+
+    #[test]
+    fn socks5_authority_formats_hosts() {
+        for (host, expected) in [
+            ("127.0.0.1", "127.0.0.1:9050"),
+            ("proxy.example", "proxy.example:9050"),
+            ("::1", "[::1]:9050"),
+        ] {
+            let endpoint = Socks5Endpoint { host: host.to_string(), port: 9050 };
+
+            assert_eq!(endpoint.authority(), expected);
         }
     }
 
