@@ -39,6 +39,7 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingBackground
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
+import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 import org.bitcoinppl.cove_core.KeyTeleportRoute
@@ -137,7 +138,11 @@ private fun KeyTeleportStateCard(
     val context = LocalContext.current
     val onPaste = {
         readClipboardText(context)?.trim()?.takeIf(String::isNotEmpty)?.let {
-            manager.ingest(StringOrData.String(it))
+            manager.dispatch(
+                KeyTeleportManagerAction.Ingest(
+                    KeyTeleportInput.MultiFormat(StringOrData.String(it)),
+                ),
+            )
         }
         Unit
     }
@@ -242,16 +247,18 @@ private fun KeyTeleportReceiveContent(
         }
 
         is KeyTeleportManagerState.ReceiveImportedWallet -> {
-            ReceiveImportedWalletView(manager, state.v1) { app.selectWallet(state.v1.id) }
+            ReceiveImportedWalletView(
+                manager = manager,
+                wallet = state.v1,
+                status = ImportedWalletStatus.IMPORTED,
+            ) { app.selectWallet(state.v1.id) }
         }
 
         is KeyTeleportManagerState.ReceiveAlreadyImportedWallet -> {
             ReceiveImportedWalletView(
                 manager = manager,
                 wallet = state.v1,
-                title = "Wallet already imported",
-                message = "${state.v1.name} is already available in Cove.",
-                buttonTitle = "Open Wallet",
+                status = ImportedWalletStatus.ALREADY_IMPORTED,
             ) { app.selectWallet(state.v1.id) }
         }
 

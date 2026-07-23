@@ -6,6 +6,18 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
 import org.bitcoinppl.cove_core.types.*
 
+private sealed interface KeyTeleportTextParseResult {
+    data class Parsed(
+        val multiFormat: MultiFormat,
+    ) : KeyTeleportTextParseResult
+
+    data object UnsupportedPsbt : KeyTeleportTextParseResult
+
+    data object InvalidPacket : KeyTeleportTextParseResult
+
+    data object NotKeyTeleport : KeyTeleportTextParseResult
+}
+
 @Stable
 class ScanManager private constructor() {
     private val tag = "ScanManager"
@@ -77,58 +89,77 @@ class ScanManager private constructor() {
 
     fun handleKeyTeleportText(input: String): Boolean {
         val text = input.trim()
-        val multiFormat = try {
-            StringOrData.String(text).tryIntoMultiFormat()
-        } catch (_: MultiFormatException.KeyTeleportPsbtNotSupported) {
-            app.alertState =
-                TaggedItem(
-                    AppAlertState.InvalidFileFormat(
-                        "Key Teleport PSBT packets are not supported yet.",
-                    ),
+        val parseResult =
+            try {
+                KeyTeleportTextParseResult.Parsed(
+                    StringOrData.String(text).tryIntoMultiFormat(),
                 )
-            return true
-        } catch (_: Exception) {
-            val normalized = text.lowercase()
-            val looksLikeKeyTeleport =
-                normalized.contains("keyteleport.com") ||
-                    normalized.startsWith("b\$2r") ||
-                    normalized.startsWith("b\$2s") ||
-                    normalized.startsWith("b\$2p")
-            if (looksLikeKeyTeleport) {
+            } catch (_: MultiFormatException.KeyTeleportPsbtNotSupported) {
+                KeyTeleportTextParseResult.UnsupportedPsbt
+            } catch (_: Exception) {
+                val normalized = text.lowercase()
+                val looksLikeKeyTeleport =
+                    normalized.contains("keyteleport.com") ||
+                        normalized.startsWith("b\$2r") ||
+                        normalized.startsWith("b\$2s") ||
+                        normalized.startsWith("b\$2p")
+
+                if (looksLikeKeyTeleport) {
+                    KeyTeleportTextParseResult.InvalidPacket
+                } else {
+                    KeyTeleportTextParseResult.NotKeyTeleport
+                }
+            }
+
+        return when (parseResult) {
+            is KeyTeleportTextParseResult.Parsed ->
+                when (val multiFormat = parseResult.multiFormat) {
+                    is MultiFormat.KeyTeleportReceiver -> {
+                        handleKeyTeleportReceiver(multiFormat.v1)
+                        true
+                    }
+
+                    is MultiFormat.KeyTeleportSender -> {
+                        handleKeyTeleportSender(multiFormat.v1)
+                        true
+                    }
+
+                    else -> false
+                }
+
+            KeyTeleportTextParseResult.UnsupportedPsbt -> {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.InvalidFileFormat(
+                            "Key Teleport PSBT packets are not supported yet.",
+                        ),
+                    )
+                true
+            }
+
+            KeyTeleportTextParseResult.InvalidPacket -> {
                 app.alertState =
                     TaggedItem(
                         AppAlertState.InvalidFileFormat(
                             "This Key Teleport packet could not be read.",
                         ),
                     )
-            }
-            return looksLikeKeyTeleport
-        }
-
-        return when (multiFormat) {
-            is MultiFormat.KeyTeleportReceiver -> {
-                handleKeyTeleportReceiver(multiFormat.v1)
                 true
             }
 
-            is MultiFormat.KeyTeleportSender -> {
-                handleKeyTeleportSender(multiFormat.v1)
-                true
-            }
-
-            else -> false
+            KeyTeleportTextParseResult.NotKeyTeleport -> false
         }
     }
 
     private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket) {
         val manager = app.getKeyTeleportManager()
-        manager.ingest(packet)
+        manager.dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Receiver(packet)))
         app.pushRoute(RouteFactory().keyTeleportSend())
     }
 
     private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket) {
         val manager = app.getKeyTeleportManager()
-        manager.ingest(packet)
+        manager.dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Sender(packet)))
         app.pushRoute(RouteFactory().keyTeleportReceive())
     }
 

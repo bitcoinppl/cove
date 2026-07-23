@@ -690,40 +690,6 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             .replacingOccurrences(of: "\n", with: " ") ?? ""
     }
 
-    private func assertTextIsInBottomScreenRegion(
-        _ text: String,
-        maximumNormalizedMidY: CGFloat,
-        in image: UIImage,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) throws {
-        let cgImage = try XCTUnwrap(image.cgImage)
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = false
-
-        let handler = VNImageRequestHandler(cgImage: cgImage)
-        try handler.perform([request])
-
-        let matchingObservation = request.results?.first { observation in
-            observation.topCandidates(1).first?.string.lowercased().contains(text) == true
-        }
-        let observation = try XCTUnwrap(
-            matchingObservation,
-            "expected to recognize \(text)",
-            file: file,
-            line: line
-        )
-
-        XCTAssertLessThan(
-            observation.boundingBox.midY,
-            maximumNormalizedMidY,
-            "expected \(text) to stay in the bottom screen region",
-            file: file,
-            line: line
-        )
-    }
-
     private func assertPrimaryActionIsNotClippedAtBottom(
         in image: UIImage,
         file: StaticString = #filePath,

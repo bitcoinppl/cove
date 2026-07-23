@@ -60,6 +60,17 @@ private val ImportedWalletSuccessTint = Color(0xFF7DD195)
 private val ImportedWalletSuccessFill = Color(0x297DD195)
 private const val MNEMONIC_PLACEHOLDER_WORD_COUNT = 4
 
+internal enum class ImportedWalletStatus {
+    IMPORTED,
+    ALREADY_IMPORTED,
+}
+
+private data class ImportedWalletContent(
+    val title: String,
+    val message: String,
+    val buttonTitle: String,
+)
+
 @Composable
 internal fun ReceiveReadyView(
     receive: KeyTeleportReceiveState,
@@ -403,11 +414,26 @@ private fun MessageField(
 internal fun ReceiveImportedWalletView(
     manager: KeyTeleportManager,
     wallet: WalletMetadata,
-    title: String = "Wallet imported",
-    message: String = "${wallet.name} is ready to use in Cove.",
-    buttonTitle: String = "Done",
+    status: ImportedWalletStatus,
     onDone: () -> Unit,
 ) {
+    val content =
+        when (status) {
+            ImportedWalletStatus.IMPORTED ->
+                ImportedWalletContent(
+                    title = "Wallet imported",
+                    message = "${wallet.name} is ready to use in Cove.",
+                    buttonTitle = "Done",
+                )
+
+            ImportedWalletStatus.ALREADY_IMPORTED ->
+                ImportedWalletContent(
+                    title = "Wallet already imported",
+                    message = "${wallet.name} is already available in Cove.",
+                    buttonTitle = "Open Wallet",
+                )
+        }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -418,8 +444,8 @@ internal fun ReceiveImportedWalletView(
             tint = ImportedWalletSuccessTint,
             fillColor = ImportedWalletSuccessFill,
         )
-        Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-        Text(message, color = OnboardingTextSecondary)
+        Text(content.title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+        Text(content.message, color = OnboardingTextSecondary)
         Button(
             onClick = {
                 manager.dispatch(KeyTeleportManagerAction.Clear)
@@ -427,7 +453,7 @@ internal fun ReceiveImportedWalletView(
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(buttonTitle)
+            Text(content.buttonTitle)
         }
     }
 }
