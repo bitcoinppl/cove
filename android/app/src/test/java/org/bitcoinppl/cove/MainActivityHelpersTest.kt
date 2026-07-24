@@ -78,6 +78,28 @@ class MainActivityHelpersTest {
         )
     }
 
+    @Test
+    fun repeatedExternalLinkIsSkippedOnlyWhileItsFlowIsAlive() {
+        assertTrue(
+            shouldSkipHandledExternalIntent(
+                signatureMatches = true,
+                hasActiveKeyTeleportFlow = true,
+            ),
+        )
+        assertFalse(
+            shouldSkipHandledExternalIntent(
+                signatureMatches = true,
+                hasActiveKeyTeleportFlow = false,
+            ),
+        )
+        assertFalse(
+            shouldSkipHandledExternalIntent(
+                signatureMatches = false,
+                hasActiveKeyTeleportFlow = true,
+            ),
+        )
+    }
+
     private companion object {
         const val KEY_TELEPORT_ALIAS = "org.bitcoinppl.cove.KeyTeleportLinkActivity"
     }

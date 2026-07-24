@@ -61,6 +61,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.App
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.KeyTeleportIngestOutcome
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.TaggedItem
@@ -117,7 +118,7 @@ fun NewWalletSelectScreen(
     }
 
     fun importWallet(content: String) {
-        if (Scanner.handleKeyTeleportText(content)) {
+        if (Scanner.handleKeyTeleportText(content) != KeyTeleportIngestOutcome.NOT_KEY_TELEPORT) {
             return
         }
 

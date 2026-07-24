@@ -19,6 +19,18 @@ private sealed interface KeyTeleportTextParseResult {
     data object NotKeyTeleport : KeyTeleportTextParseResult
 }
 
+/** Outcome of routing text that may hold a KeyTeleport packet */
+internal enum class KeyTeleportIngestOutcome {
+    /** the packet was accepted by the KeyTeleport flow */
+    INGESTED,
+
+    /** the text was a KeyTeleport packet, but it could not be used and an alert was shown */
+    REJECTED,
+
+    /** the text was not a KeyTeleport packet, so another handler may claim it */
+    NOT_KEY_TELEPORT,
+}
+
 @Stable
 class ScanManager private constructor() {
     private val tag = "ScanManager"
@@ -88,7 +100,7 @@ class ScanManager private constructor() {
         }
     }
 
-    fun handleKeyTeleportText(input: String): Boolean {
+    internal fun handleKeyTeleportText(input: String): KeyTeleportIngestOutcome {
         val text = input.trim()
         val parseResult =
             try {
@@ -115,19 +127,15 @@ class ScanManager private constructor() {
         return when (parseResult) {
             is KeyTeleportTextParseResult.Parsed ->
                 when (val multiFormat = parseResult.multiFormat) {
-                    is MultiFormat.KeyTeleportReceiver -> {
-                        handleKeyTeleportReceiver(multiFormat.v1)
-                        true
-                    }
+                    is MultiFormat.KeyTeleportReceiver ->
+                        ingestOutcome(handleKeyTeleportReceiver(multiFormat.v1))
 
-                    is MultiFormat.KeyTeleportSender -> {
-                        handleKeyTeleportSender(multiFormat.v1)
-                        true
-                    }
+                    is MultiFormat.KeyTeleportSender ->
+                        ingestOutcome(handleKeyTeleportSender(multiFormat.v1))
 
                     else -> {
                         multiFormat.destroy()
-                        false
+                        KeyTeleportIngestOutcome.NOT_KEY_TELEPORT
                     }
                 }
 
@@ -138,7 +146,7 @@ class ScanManager private constructor() {
                             "KeyTeleport PSBT packets are not supported yet.",
                         ),
                     )
-                true
+                KeyTeleportIngestOutcome.REJECTED
             }
 
             KeyTeleportTextParseResult.InvalidPacket -> {
@@ -148,47 +156,51 @@ class ScanManager private constructor() {
                             "This KeyTeleport packet could not be read.",
                         ),
                     )
-                true
+                KeyTeleportIngestOutcome.REJECTED
             }
 
-            KeyTeleportTextParseResult.NotKeyTeleport -> false
+            KeyTeleportTextParseResult.NotKeyTeleport -> KeyTeleportIngestOutcome.NOT_KEY_TELEPORT
         }
     }
 
-    private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket) {
+    private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket): Boolean =
+        ingestKeyTeleportPacket(
+            input = KeyTeleportInput.Receiver(packet),
+            direction = KeyTeleportFlowDirection.SEND,
+            route = RouteFactory().keyTeleportSend(),
+        )
+
+    private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket): Boolean =
+        ingestKeyTeleportPacket(
+            input = KeyTeleportInput.Sender(packet),
+            direction = KeyTeleportFlowDirection.RECEIVE,
+            route = RouteFactory().keyTeleportReceive(),
+        )
+
+    private fun ingestKeyTeleportPacket(
+        input: KeyTeleportInput,
+        direction: KeyTeleportFlowDirection,
+        route: Route,
+    ): Boolean {
         val manager = app.getKeyTeleportManager()
-        val route = RouteFactory().keyTeleportSend()
-        if (!canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
-            KeyTeleportInput.Receiver(packet).destroy()
+        val ingested =
+            if (canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
+                manager.ingest(input, direction)
+            } else {
+                input.destroy()
+                false
+            }
+
+        if (!ingested) {
             showKeyTeleportFlowConflict()
-            return
-        }
-        if (!manager.ingest(KeyTeleportInput.Receiver(packet), KeyTeleportFlowDirection.SEND)) {
-            showKeyTeleportFlowConflict()
-            return
+            return false
         }
 
         if (app.currentRoute != route) {
             app.pushRoute(route)
         }
-    }
 
-    private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket) {
-        val manager = app.getKeyTeleportManager()
-        val route = RouteFactory().keyTeleportReceive()
-        if (!canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
-            KeyTeleportInput.Sender(packet).destroy()
-            showKeyTeleportFlowConflict()
-            return
-        }
-        if (!manager.ingest(KeyTeleportInput.Sender(packet), KeyTeleportFlowDirection.RECEIVE)) {
-            showKeyTeleportFlowConflict()
-            return
-        }
-
-        if (app.currentRoute != route) {
-            app.pushRoute(route)
-        }
+        return true
     }
 
     private fun canRouteKeyTeleportPacket(
@@ -394,6 +406,9 @@ class ScanManager private constructor() {
             }
     }
 }
+
+private fun ingestOutcome(ingested: Boolean): KeyTeleportIngestOutcome =
+    if (ingested) KeyTeleportIngestOutcome.INGESTED else KeyTeleportIngestOutcome.REJECTED
 
 private fun Route.keyTeleportFlowDirection(): KeyTeleportFlowDirection? =
     when (this) {

@@ -496,13 +496,29 @@ class MainActivity : FragmentActivity() {
         }
 
         val signature = "${intent.action}:$text"
-        if (signature == handledExternalIntentSignature) {
+        val signatureMatches = signature == handledExternalIntentSignature
+        if (shouldSkipHandledExternalIntent(
+                signatureMatches = signatureMatches,
+                hasActiveKeyTeleportFlow = AppManager.getInstance().keyTeleportManager != null,
+            )
+        ) {
             return
         }
 
-        if (Scanner.handleKeyTeleportText(text)) {
-            handledExternalIntentSignature = signature
-            sanitizeConsumedExternalIntent(intent)
+        // the flow that consumed this link ended, so the same link may be opened again
+        if (signatureMatches) {
+            handledExternalIntentSignature = null
+        }
+
+        when (Scanner.handleKeyTeleportText(text)) {
+            KeyTeleportIngestOutcome.INGESTED -> {
+                handledExternalIntentSignature = signature
+                sanitizeConsumedExternalIntent(intent)
+            }
+
+            KeyTeleportIngestOutcome.REJECTED -> sanitizeConsumedExternalIntent(intent)
+
+            KeyTeleportIngestOutcome.NOT_KEY_TELEPORT -> Unit
         }
     }
 
@@ -576,6 +592,15 @@ class MainActivity : FragmentActivity() {
         private const val TAG = "MainActivity"
     }
 }
+
+/**
+ * A repeated external link is only a duplicate delivery while the flow it opened is still alive;
+ * once that flow ends the same link must be able to start a new transfer.
+ */
+internal fun shouldSkipHandledExternalIntent(
+    signatureMatches: Boolean,
+    hasActiveKeyTeleportFlow: Boolean,
+): Boolean = signatureMatches && hasActiveKeyTeleportFlow
 
 internal fun shouldAcceptExternalKeyTeleportIntent(
     action: String?,
