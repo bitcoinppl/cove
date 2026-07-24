@@ -1566,10 +1566,18 @@ fn eligible_wallets() -> Result<Vec<WalletMetadata>, KeyTeleportAlert> {
 }
 
 fn eligible_wallet_by_id(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTeleportAlert> {
-    eligible_wallets()?
-        .into_iter()
-        .find(|wallet| wallet.id == *wallet_id)
-        .ok_or(KeyTeleportAlert::IneligibleWallet)
+    let database = Database::global();
+    let network = database.global_config.selected_network();
+    let mode = database.global_config.wallet_mode();
+    let wallet = database
+        .wallets
+        .get(wallet_id, network, mode)?
+        .ok_or(KeyTeleportAlert::IneligibleWallet)?;
+    if !is_send_eligible(&wallet)? {
+        return Err(KeyTeleportAlert::IneligibleWallet);
+    }
+
+    Ok(wallet)
 }
 
 fn current_send_wallet(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTeleportAlert> {
@@ -2329,6 +2337,43 @@ mod tests {
             receiver.decode(ready.packet.inner(), &ready.password.0).unwrap(),
             DecodedPayload::Mnemonic(_)
         ));
+    }
+
+    #[test]
+    fn eligible_wallet_by_id_ignores_other_wallets_with_unreadable_secrets() {
+        use cove_cspp::CsppStore as _;
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let fixture = SendWalletFixture::new();
+        let database = Database::global();
+        let network = fixture.wallet.network;
+        let mode = fixture.wallet.wallet_mode;
+
+        let mut corrupt = WalletMetadata::preview_new();
+        corrupt.network = network;
+        corrupt.wallet_mode = mode;
+        database
+            .wallets
+            .save_all_wallets(network, mode, vec![fixture.wallet.clone(), corrupt.clone()])
+            .unwrap();
+        Keychain::global()
+            .save(format!("{}::wallet_mnemonic", corrupt.id), "garbage-secret".to_string())
+            .unwrap();
+        Keychain::global()
+            .save(
+                format!("{}::wallet_mnemonic_encryption_key_and_nonce", corrupt.id),
+                "garbage-cryptor".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(eligible_wallet_by_id(&fixture.wallet.id).unwrap(), fixture.wallet);
+        assert_eq!(
+            eligible_wallet_by_id(&WalletMetadata::preview_new().id),
+            Err(KeyTeleportAlert::IneligibleWallet)
+        );
+
+        assert!(Keychain::global().delete_wallet_items(&corrupt.id));
     }
 
     #[test]
