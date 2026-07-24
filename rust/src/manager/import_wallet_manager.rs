@@ -204,7 +204,17 @@ fn import_wallet_secret_with_default_name(
     let previous_selected_wallet = database.global_config.selected_wallet();
     let secret_created = match existing_secret {
         None => {
-            keychain.save_wallet_secret(&id, secret)?;
+            if let Err(error) = keychain.save_wallet_secret(&id, secret) {
+                if matches!(error, KeychainError::WalletSecretExists) {
+                    warn!(
+                        "wallet {id} has a stored secret that is present but unreadable, showing duplicate alert"
+                    );
+
+                    return Err(ImportWalletError::WalletAlreadyExists(id));
+                }
+
+                return Err(error.into());
+            }
 
             true
         }
@@ -686,6 +696,32 @@ mod tests {
         assert_eq!(upgraded.id, existing.id);
         assert_eq!(upgraded.wallet_type, WalletType::Hot);
         assert_eq!(Keychain::global().get_wallet_secret(&existing.id).unwrap(), Some(expected));
+    }
+
+    #[test]
+    fn existing_hot_wallet_with_unreadable_secret_reports_a_duplicate() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(39);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let mut existing =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Main);
+        existing.wallet_type = WalletType::Hot;
+        Database::global().wallets.update_wallet_metadata(existing.clone()).unwrap();
+
+        let secret_key = format!("{}::wallet_mnemonic", existing.id);
+        let cryptor_key = format!("{}::wallet_mnemonic_encryption_key_and_nonce", existing.id);
+        Keychain::global().save(secret_key.clone(), "garbage-secret".to_string()).unwrap();
+        Keychain::global().save(cryptor_key.clone(), "garbage-cryptor".to_string()).unwrap();
+
+        let result = import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Main);
+
+        assert!(matches!(result, Err(ImportWalletError::WalletAlreadyExists(_))));
+        assert_eq!(Keychain::global().get(secret_key), Some("garbage-secret".to_string()));
+        assert_eq!(Keychain::global().get(cryptor_key), Some("garbage-cryptor".to_string()));
+
+        assert!(Keychain::global().delete_wallet_items(&existing.id));
     }
 
     #[test]
