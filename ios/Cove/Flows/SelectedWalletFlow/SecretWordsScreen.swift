@@ -51,6 +51,9 @@ struct SecretWordsScreen: View {
     @State var errorMessage: String?
     @State private var pendingSensitiveAction: SecretWordsSensitiveAction?
     @State private var showSeedQrSheet = false
+    @State private var showingKeyTeleportCredentialVerification = false
+    @State private var keyTeleportCredentialVerificationSucceeded = false
+    @State private var showingAppLockRequired = false
 
     let rowHeight = 30.0
     private let numberOfColumns = 2
@@ -85,7 +88,13 @@ struct SecretWordsScreen: View {
         case .seedQr:
             showSeedQrSheet = true
         case .keyTeleport:
-            app.startKeyTeleportSend(walletId: id)
+            guard auth.isAuthEnabled else {
+                showingAppLockRequired = true
+                return
+            }
+
+            keyTeleportCredentialVerificationSucceeded = false
+            showingKeyTeleportCredentialVerification = true
         }
     }
 
@@ -110,10 +119,13 @@ struct SecretWordsScreen: View {
                         Label("Seed QR", systemImage: "qrcode")
                     }
 
-                    Button {
-                        presentConfirmation(for: .keyTeleport)
-                    } label: {
-                        Label("KeyTeleport", systemImage: "paperplane")
+                    // the main credential is required because the decoy PIN can never satisfy it
+                    if !auth.isInDecoyMode() {
+                        Button {
+                            presentConfirmation(for: .keyTeleport)
+                        } label: {
+                            Label("KeyTeleport", systemImage: "paperplane")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -143,6 +155,24 @@ struct SecretWordsScreen: View {
             if let words {
                 SeedQrSheetView(words: words)
             }
+        }
+        .fullScreenCover(
+            isPresented: $showingKeyTeleportCredentialVerification,
+            onDismiss: {
+                defer { keyTeleportCredentialVerificationSucceeded = false }
+                guard keyTeleportCredentialVerificationSucceeded else { return }
+
+                app.startKeyTeleportSend(walletId: id)
+            }
+        ) {
+            MainCredentialVerificationView(auth: auth) {
+                keyTeleportCredentialVerificationSucceeded = true
+            }
+        }
+        .alert("App Lock Required", isPresented: $showingAppLockRequired) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enable a PIN or biometric app lock before sending secret words with KeyTeleport.")
         }
         .background(SecretWordsPatternBackground())
         .background(Color.midnightBlue)
