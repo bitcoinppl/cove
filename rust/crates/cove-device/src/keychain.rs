@@ -474,6 +474,9 @@ impl Keychain {
     /// Returns a `KeychainError` if the stored entries are incomplete or the
     /// secret cannot be decrypted or parsed
     pub fn get_wallet_secret(&self, id: &WalletId) -> Result<Option<WalletSecret>, KeychainError> {
+        // serialize against writers so a read never observes a half-written pair
+        let _wallet_secret_guard = self.1.lock();
+
         self.get_wallet_secret_from_pair(
             wallet_mnemonic_key_name(id),
             wallet_mnemonic_encryption_and_nonce_key_name(id),
