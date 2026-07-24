@@ -49,6 +49,7 @@ pub(crate) struct NodeConnectionIdentity {
     network: Network,
     api_type: ApiType,
     url: String,
+    tls: Option<tls::TlsTrust>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +71,7 @@ impl Node {
             network: self.network,
             api_type: self.api_type,
             url: self.url.clone(),
+            tls: self.tls.clone(),
         }
     }
 
@@ -172,10 +174,19 @@ mod tests {
         let different_url = Node { url: "https://other.example/api".to_string(), ..node.clone() };
         let different_api = Node { api_type: ApiType::Electrum, ..node.clone() };
         let different_network = Node { network: Network::Signet, ..node.clone() };
+        let different_tls = Node {
+            tls: Some(tls::TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }),
+            ..node.clone()
+        };
 
         assert_ne!(node.connection_identity(), different_url.connection_identity());
         assert_ne!(node.connection_identity(), different_api.connection_identity());
         assert_ne!(node.connection_identity(), different_network.connection_identity());
+        assert_ne!(node.connection_identity(), different_tls.connection_identity());
+        assert_eq!(
+            different_tls.connection_identity(),
+            different_tls.clone().connection_identity()
+        );
     }
 
     /// Nodes saved before `tls` existed are still in the database, so the field

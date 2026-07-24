@@ -48,12 +48,6 @@ struct NodeSelectionView: View {
         }
     }
 
-    /// Whether the custom fields differ from the node that is already saved.
-    var hasUnsavedCustomNode: Bool {
-        guard case let .custom(saved) = nodeSelector.selectedNode() else { return !customUrl.isEmpty }
-        return saved.url != customUrl || saved.name != customNodeName
-    }
-
     var certificateAlertTitle: String {
         switch certificateAlert {
         case .changed: "Certificate changed"

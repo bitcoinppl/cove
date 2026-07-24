@@ -186,7 +186,11 @@ impl NodeSelector {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
         }
 
-        let url_string = url.to_string();
+        // Certificate trust is matched by exact url equality, so the saved url
+        // must be in the same normalized form `certificate_decision` compares
+        // against, or a trailing slash lets a rotated certificate be offered
+        // again instead of reported as changed
+        let url_string = strip_trailing_slash(url.to_string());
 
         let name = if entered_name.is_empty() {
             url.domain().unwrap_or(url_string.as_str()).to_string()
@@ -366,9 +370,13 @@ fn would_forget_certificate(saved: &Node, node: &Node) -> bool {
 }
 
 fn normalized_url(url: &str) -> Result<String, Error> {
-    let url = parse_node_url(url).map_err_str(Error::ParseNodeUrlError)?.to_string();
+    let url = parse_node_url(url).map_err_str(Error::ParseNodeUrlError)?;
 
-    Ok(url.strip_suffix('/').unwrap_or(&url).to_string())
+    Ok(strip_trailing_slash(url.to_string()))
+}
+
+fn strip_trailing_slash(url: String) -> String {
+    url.strip_suffix('/').map(str::to_string).unwrap_or(url)
 }
 
 /// A url is usable when it names a host we can actually reach: a dotted domain
@@ -489,6 +497,28 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(node.tls, Some(trust));
+    }
+
+    /// A trailing slash is the same server, so it must save in the same
+    /// normalized form and keep the trusted certificate, or
+    /// `certificate_decision` would offer a rotated certificate for re-pinning
+    /// instead of reporting it as changed.
+    #[test]
+    fn a_trailing_slash_is_normalized_away_and_keeps_the_certificate() {
+        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
+        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
+
+        let node = selector_with_saved(saved)
+            .parse_custom_node(
+                "ssl://node.example.com:50002/".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(node.url, "ssl://node.example.com:50002");
         assert_eq!(node.tls, Some(trust));
     }
 
