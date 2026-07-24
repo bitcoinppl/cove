@@ -48,6 +48,7 @@ fun KeyTeleportContainer(
     app: AppManager,
     route: KeyTeleportRoute,
 ) {
+    val context = LocalContext.current
     val manager = remember { app.getKeyTeleportManager() }
     var showScanner by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -58,11 +59,20 @@ fun KeyTeleportContainer(
         }
     }
 
+    // an empty clipboard stays silent, only a clip this flow cannot use reports back
+    val onPaste: () -> Unit = {
+        val text = readClipboardText(context)?.trim()?.takeIf(String::isNotEmpty)
+        if (text != null && !manager.ingestKeyTeleportText(text, route.flowDirection())) {
+            localError = "Scan the KeyTeleport response expected by this flow."
+        }
+    }
+
     KeyTeleportScreen(
         app = app,
         manager = manager,
         route = route,
         onScan = { showScanner = true },
+        onPaste = onPaste,
     )
     KeyTeleportOverlays(
         app = app,
@@ -86,6 +96,7 @@ private fun KeyTeleportScreen(
     manager: KeyTeleportManager,
     route: KeyTeleportRoute,
     onScan: () -> Unit,
+    onPaste: () -> Unit,
 ) {
     OnboardingBackground {
         Scaffold(
@@ -121,7 +132,7 @@ private fun KeyTeleportScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 KeyTeleportRouteHeader(route)
-                KeyTeleportStateCard(app, manager, route, onScan)
+                KeyTeleportStateCard(app, manager, route, onScan, onPaste)
             }
         }
     }
@@ -133,16 +144,8 @@ private fun KeyTeleportStateCard(
     manager: KeyTeleportManager,
     route: KeyTeleportRoute,
     onScan: () -> Unit,
+    onPaste: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val onPaste = {
-        readClipboardText(context)
-            ?.trim()
-            ?.takeIf(String::isNotEmpty)
-            ?.let { manager.ingestKeyTeleportText(it, route.flowDirection()) }
-        Unit
-    }
-
     Surface(
         color = OnboardingCardFill,
         shape = RoundedCornerShape(22.dp),
