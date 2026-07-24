@@ -880,6 +880,10 @@ impl RustKeyTeleportManager {
     fn end_receive(&self) -> Result<(), KeyTeleportAlert> {
         let session_id = {
             let model = self.model.lock();
+            if model.phase.is_send_direction() {
+                return Err(KeyTeleportAlert::ConflictingTransferDirection);
+            }
+
             receive_session_id_from_phase(&model.phase)
         }?;
         let generation = self.invalidate_phase();
@@ -2325,6 +2329,39 @@ mod tests {
             receiver.decode(ready.packet.inner(), &ready.password.0).unwrap(),
             DecodedPayload::Mnemonic(_)
         ));
+    }
+
+    #[test]
+    fn end_receive_during_send_ready_preserves_receive_session_and_send_state() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+        let fixture = SendWalletFixture::new();
+        let receive_manager = RustKeyTeleportManager::new();
+        receive_manager.start_receive().unwrap();
+        assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
+
+        let manager = RustKeyTeleportManager::new();
+        let receiver = ReceiverSession::from_private_key_bytes([14; 32]).unwrap();
+        let request = receiver.request().unwrap();
+        manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
+        manager
+            .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(
+                request.packet,
+            )))
+            .unwrap();
+        manager.enter_receiver_code(request.numeric_code.as_str()).unwrap();
+        assert!(matches!(manager.state(), KeyTeleportManagerState::SendReady(_)));
+
+        assert_eq!(
+            manager.handle_action(Action::EndReceive),
+            Err(KeyTeleportAlert::ConflictingTransferDirection)
+        );
+        assert_eq!(
+            manager.handle_action(Action::FinishReview),
+            Err(KeyTeleportAlert::ConflictingTransferDirection)
+        );
+        assert!(matches!(manager.state(), KeyTeleportManagerState::SendReady(_)));
+        assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
     }
 
     #[test]
