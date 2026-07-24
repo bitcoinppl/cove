@@ -11,13 +11,14 @@ use cove_util::result_ext::ResultExt as _;
 use std::sync::Arc;
 
 use bbqr::{
-    continuous_join::{ContinuousJoinResult, ContinuousJoiner},
+    continuous_join::{ContinuousJoinError, ContinuousJoinResult, ContinuousJoiner},
     header::Header,
 };
 use cove_ur::Ur;
 use foundation_ur::Decoder as UrDecoder;
 use parking_lot::Mutex;
 use tracing::{debug, warn};
+use zeroize::Zeroizing;
 
 use crate::{
     multi_format::StringOrData,
@@ -42,17 +43,24 @@ enum MultiQr {
 }
 
 /// BBQr scanning in progress
+///
+/// Accepted parts can carry secret material (seed transfers), so they are held
+/// in zeroizing storage and erased when scanning completes or resets. The bbqr
+/// joiner keeps its own plain internal copies with no zeroization hooks; this
+/// only removes our long-lived plaintext copies
 struct BbqrInProgress {
     header: Header,
     joiner: ContinuousJoiner,
-    accepted_parts: Vec<String>,
+    accepted_parts: Vec<Zeroizing<String>>,
     previous_progress: Option<ScanProgress>,
 }
 
 /// UR scanning in progress
+///
+/// Accepted parts are zeroized on drop for the same reason as [`BbqrInProgress`]
 struct UrInProgress {
     decoder: UrDecoder,
-    accepted_parts: Vec<String>,
+    accepted_parts: Vec<Zeroizing<String>>,
     previous_progress: Option<ScanProgress>,
 }
 
@@ -60,7 +68,7 @@ impl BbqrInProgress {
     fn restore_accepted_parts(&mut self) -> Result<(), MultiQrError> {
         let mut joiner = ContinuousJoiner::new();
         for part in &self.accepted_parts {
-            joiner.add_part(part.clone()).map_err_str(MultiQrError::ParseError)?;
+            joiner.add_part(part.as_str().to_owned()).map_err_str(MultiQrError::ParseError)?;
         }
 
         self.joiner = joiner;
@@ -265,7 +273,7 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
 
             let state = QrScanner::InProgress(MultiQr::Ur(Box::new(UrInProgress {
                 decoder,
-                accepted_parts: vec![qr.to_string()],
+                accepted_parts: vec![Zeroizing::new(qr.to_string())],
                 previous_progress: Some(ScanProgress::Ur { percentage }),
             })));
 
@@ -341,7 +349,7 @@ fn parse_bbqr(qr: &str, header: Header) -> Result<(QrScanner, ScanResult), Multi
             let state = QrScanner::InProgress(MultiQr::Bbqr(BbqrInProgress {
                 header,
                 joiner,
-                accepted_parts: vec![qr.to_string()],
+                accepted_parts: vec![Zeroizing::new(qr.to_string())],
                 previous_progress: Some(progress),
             }));
 
@@ -444,7 +452,12 @@ impl QrScanner {
         let join_result = match bbqr.joiner.add_part(qr.to_string()) {
             Ok(result) => result,
             Err(error) => {
-                bbqr.restore_accepted_parts()?;
+                // only a failed completion decode mutates the joiner (the part
+                // was stored and parts_left consumed before decoding failed);
+                // header, index, and duplicate-content errors leave it untouched
+                if matches!(error, ContinuousJoinError::DecodeError(_)) {
+                    bbqr.restore_accepted_parts()?;
+                }
 
                 return Err(MultiQrError::ParseError(error.to_string()));
             }
@@ -477,7 +490,7 @@ impl QrScanner {
                 };
 
                 if matches!(haptic, HapticFeedback::Progress) {
-                    bbqr.accepted_parts.push(qr.to_string());
+                    bbqr.accepted_parts.push(Zeroizing::new(qr.to_string()));
                 }
 
                 bbqr.previous_progress = Some(progress.clone());
@@ -497,7 +510,11 @@ impl QrScanner {
         let parsed_ur = Ur::parse(qr)?;
         let foundation_ur = parsed_ur.to_foundation_ur()?;
         if let Err(error) = ur.decoder.receive(foundation_ur) {
-            ur.restore_accepted_parts()?;
+            // only fountain-processing errors occur after the decoder consumed
+            // the part; type/bytewords/CBOR errors happen before any state change
+            if matches!(error, foundation_ur::decoder::Error::Fountain(_)) {
+                ur.restore_accepted_parts()?;
+            }
 
             return Err(MultiQrError::Ur(UrError::UrParseError(error.to_string())));
         }
@@ -542,8 +559,8 @@ impl QrScanner {
                 None => HapticFeedback::Progress,
             };
 
-            if !ur.accepted_parts.iter().any(|part| part == qr) {
-                ur.accepted_parts.push(qr.to_string());
+            if !ur.accepted_parts.iter().any(|part| part.as_str() == qr) {
+                ur.accepted_parts.push(Zeroizing::new(qr.to_string()));
             }
 
             ur.previous_progress = Some(progress.clone());
@@ -1285,6 +1302,31 @@ mod tests {
             scanner.scan(StringOrData::String(mismatched_part)).is_err(),
             "frame from a different sequence should be rejected"
         );
+
+        let next = scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+        assert!(matches!(
+            next,
+            ScanResult::InProgress { progress: ScanProgress::Bbqr { scanned: 2, total: 3 }, .. }
+        ));
+
+        let complete = scanner.scan(StringOrData::String(parts[2].clone())).unwrap();
+        assert!(matches!(complete, ScanResult::Complete { .. }));
+    }
+
+    #[test]
+    fn repeated_mismatched_frames_preserve_bbqr_progress() {
+        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let parts = multi_part_bbqr_text(address, 3);
+        let mut mismatched_part = parts[0].clone();
+        mismatched_part.replace_range(4..6, "04");
+        let scanner = QrScannerFFI::new();
+
+        scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+
+        // a stray QR sitting in the camera frame is rejected every frame
+        for _ in 0..25 {
+            assert!(scanner.scan(StringOrData::String(mismatched_part.clone())).is_err());
+        }
 
         let next = scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
         assert!(matches!(
