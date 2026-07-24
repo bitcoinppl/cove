@@ -59,6 +59,13 @@ extension HotWalletImportAlertState: TaggedAlertPresentable {
                 message: error,
                 actions: singleOkCancel
             ).eraseToAny()
+
+        case let .importError(message):
+            return AlertBuilder(
+                title: "Import Failed",
+                message: message,
+                actions: singleOkCancel
+            ).eraseToAny()
         }
     }
 }
