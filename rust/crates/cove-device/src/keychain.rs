@@ -272,6 +272,7 @@ impl Keychain {
             }
         };
 
+        let cryptor_str = Zeroizing::new(cryptor_str);
         let cryptor = Cryptor::try_from_string(&cryptor_str)
             .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
 
@@ -279,7 +280,7 @@ impl Keychain {
             .decrypt_from_string(&encrypted)
             .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
 
-        let bytes: [u8; 32] = hex::decode(hex)
+        let bytes: [u8; 32] = hex::decode(hex.as_str())
             .map_err(|e| KeychainError::ParseSavedValue(e.to_string()))?
             .try_into()
             .map_err(|_| KeychainError::ParseSavedValue("not 32 bytes".into()))?;
@@ -323,7 +324,9 @@ impl Keychain {
         )
     }
 
-    pub fn get_key_teleport_receive_session(&self) -> Result<Option<String>, KeychainError> {
+    pub fn get_key_teleport_receive_session(
+        &self,
+    ) -> Result<Option<Zeroizing<String>>, KeychainError> {
         let has_cryptor = self.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into());
         let has_session = self.0.get(KEY_TELEPORT_RECEIVE_SESSION.into());
 
@@ -343,6 +346,7 @@ impl Keychain {
             }
         };
 
+        let cryptor_str = Zeroizing::new(cryptor_str);
         let cryptor = Cryptor::try_from_string(&cryptor_str)
             .map_err_prefix("KeyTeleport receive session cryptor", KeychainError::Decrypt)?;
 
@@ -383,7 +387,10 @@ impl Keychain {
             .encrypt_to_string(plaintext)
             .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
 
-        self.0.save(cryptor_key.clone(), cryptor.serialize_to_string())?;
+        // the keychain callback takes an owned String, so one plain copy at the
+        // FFI boundary is unavoidable; it is moved into and consumed by the callback
+        let serialized = cryptor.serialize_to_string();
+        self.0.save(cryptor_key.clone(), serialized.as_str().to_owned())?;
 
         if let Err(error) = self.0.save(value_key, encrypted) {
             if cleanup_cryptor_on_failure {
@@ -510,11 +517,9 @@ impl Keychain {
         let cryptor = Cryptor::try_from_string(&encryption_key)
             .map_err_prefix("wallet secret encryption key", KeychainError::Decrypt)?;
 
-        let wallet_secret = Zeroizing::new(
-            cryptor
-                .decrypt_from_string(&encrypted_secret)
-                .map_err_prefix("wallet secret", KeychainError::Decrypt)?,
-        );
+        let wallet_secret = cryptor
+            .decrypt_from_string(&encrypted_secret)
+            .map_err_prefix("wallet secret", KeychainError::Decrypt)?;
 
         WalletSecret::parse(&wallet_secret).map(Some)
     }
@@ -673,6 +678,7 @@ impl Keychain {
             return Ok(None);
         };
 
+        let encryption_secret_key = Zeroizing::new(encryption_secret_key);
         let cryptor = Cryptor::try_from_string(&encryption_secret_key)
             .map_err_prefix("tap signer encryption key", KeychainError::Decrypt)?;
 
@@ -687,7 +693,7 @@ impl Keychain {
             .decrypt_from_string(&encrypted_backup)
             .map_err_prefix("tap signer backup", KeychainError::Decrypt)?;
 
-        let backup = hex::decode(backup_hex)
+        let backup = hex::decode(backup_hex.as_str())
             .map_err_prefix("tap signer backup hex", KeychainError::ParseSavedValue)?;
 
         Ok(Some(backup))
@@ -865,7 +871,10 @@ mod tests {
 
         keychain
             .0
-            .save(wallet_mnemonic_encryption_and_nonce_key_name(id), cryptor.serialize_to_string())
+            .save(
+                wallet_mnemonic_encryption_and_nonce_key_name(id),
+                cryptor.serialize_to_string().as_str().to_owned(),
+            )
             .unwrap();
         keychain.0.save(wallet_mnemonic_key_name(id), encrypted).unwrap();
     }
@@ -1096,7 +1105,7 @@ mod tests {
         let decrypted = cryptor.decrypt_from_string(&encrypted).unwrap();
 
         assert_eq!(
-            decrypted,
+            *decrypted,
             format!("{WALLET_SECRET_TAG_PREFIX}{WALLET_SECRET_XPRIV_TAG}{expected}")
         );
         assert!(Mnemonic::from_str(&decrypted).is_err());
@@ -1253,8 +1262,8 @@ mod tests {
         kc.save_key_teleport_receive_session("{\"private_key\":\"redacted\"}").unwrap();
 
         assert_eq!(
-            kc.get_key_teleport_receive_session().unwrap().as_deref(),
-            Some("{\"private_key\":\"redacted\"}")
+            kc.get_key_teleport_receive_session().unwrap().unwrap().as_str(),
+            "{\"private_key\":\"redacted\"}"
         );
     }
 

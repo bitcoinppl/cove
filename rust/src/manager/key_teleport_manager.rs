@@ -1453,7 +1453,6 @@ fn load_receive_session_unlocked() -> Result<Option<PersistedReceiveSession>, Ke
         return Ok(None);
     };
 
-    let value = Zeroizing::new(value);
     let mut session: PersistedReceiveSession = serde_json::from_str(&value).map_err(|error| {
         KeyTeleportAlert::Keychain(format!("unable to parse receive session: {error}"))
     })?;
@@ -1795,11 +1794,11 @@ mod tests {
 
         manager.clone().dispatch(Action::StartReceive);
         let resumed = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
-        assert_eq!(first, resumed);
+        assert_eq!(*first, *resumed);
 
         manager.clone().dispatch(Action::RestartReceive);
         let restarted = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
-        assert_ne!(resumed, restarted);
+        assert_ne!(*resumed, *restarted);
         assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
     }
 
@@ -1893,7 +1892,7 @@ mod tests {
         manager.clone().dispatch(Action::StartReceive);
 
         let replacement = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
-        assert_ne!(replacement, corrupt);
+        assert_ne!(*replacement, *corrupt);
         assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
     }
 

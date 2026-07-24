@@ -70,7 +70,7 @@ pub enum Error {
     Base64Decode(base64::DecodeError),
 
     #[error("invalid utf8 string")]
-    InvalidUtf8(#[from] std::string::FromUtf8Error),
+    InvalidUtf8(#[from] std::str::Utf8Error),
 }
 
 impl_default_for!(Cryptor);
@@ -115,14 +115,21 @@ impl Cryptor {
         ChaCha20Poly1305::new(&self.key)
     }
 
-    pub fn serialize_to_string(self) -> String {
+    pub fn serialize_to_string(self) -> Zeroizing<String> {
         let key_bytes = self.key.as_slice();
         let key_string = Zeroizing::new(BASE64_STANDARD.encode(key_bytes));
 
         let nonce_bytes = self.nonce.as_slice();
         let nonce_string = BASE64_STANDARD.encode(nonce_bytes);
 
-        format!("{}{SPLITTER}{nonce_string}", key_string.as_str())
+        let mut serialized = Zeroizing::new(String::with_capacity(
+            key_string.len() + SPLITTER.len() + nonce_string.len(),
+        ));
+        serialized.push_str(&key_string);
+        serialized.push_str(SPLITTER);
+        serialized.push_str(&nonce_string);
+
+        serialized
     }
 
     /// Encrypt plaintext bytes
@@ -161,25 +168,27 @@ impl Cryptor {
     ///
     /// # Errors
     /// Returns an error if decryption fails or the result is not valid UTF-8
-    pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<String, Error> {
+    pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<Zeroizing<String>, Error> {
         let ciphertext_bytes =
             BASE64_STANDARD.decode(ciphertext.as_bytes()).map_err(Error::Base64Decode)?;
 
         let decrypted = self.decrypt(&ciphertext_bytes)?;
 
-        let decrypted_string = String::from_utf8(decrypted)?;
-        Ok(decrypted_string)
+        // Zeroizing has no into_inner, so validate in place and make one
+        // zeroize-guarded copy
+        let text = std::str::from_utf8(&decrypted)?;
+        Ok(Zeroizing::new(text.to_string()))
     }
 
     /// Decrypt ciphertext bytes
     ///
     /// # Errors
     /// Returns an error if decryption fails
-    pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
         let decrypted =
             self.cipher().decrypt(&self.nonce, ciphertext).map_err(Error::UnableToDecrypt)?;
 
-        Ok(decrypted)
+        Ok(Zeroizing::new(decrypted))
     }
 }
 
@@ -201,6 +210,6 @@ mod tests {
         let serialized = cryptor.serialize_to_string();
         let restored = Cryptor::try_from_string(&serialized).unwrap();
 
-        assert_eq!(restored.decrypt(&ciphertext).unwrap(), b"secret");
+        assert_eq!(restored.decrypt(&ciphertext).unwrap().as_slice(), b"secret");
     }
 }
