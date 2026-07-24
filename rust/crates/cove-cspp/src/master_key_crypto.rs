@@ -1,6 +1,7 @@
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, Nonce, aead::Aead as _};
 use cove_util::ResultExt as _;
 use rand::RngExt as _;
+use zeroize::Zeroizing;
 
 use crate::backup_data::{
     EncryptedMasterKeyBackup, MasterKeyBackupVersion, PasskeyProviderHint,
@@ -73,10 +74,12 @@ pub fn decrypt_master_key(
     let cipher = ChaCha20Poly1305::new(prf_key.into());
     let nonce: &Nonce = (&backup.nonce).into();
 
-    let plaintext =
-        cipher.decrypt(nonce, backup.ciphertext.as_slice()).map_err(|_| CsppError::WrongKey)?;
+    let plaintext = Zeroizing::new(
+        cipher.decrypt(nonce, backup.ciphertext.as_slice()).map_err(|_| CsppError::WrongKey)?,
+    );
 
     let bytes: [u8; 32] = plaintext
+        .as_slice()
         .try_into()
         .map_err(|_| CsppError::Decrypt("decrypted master key is not 32 bytes".to_string()))?;
 

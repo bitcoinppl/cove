@@ -6,6 +6,7 @@ use base64::prelude::BASE64_STANDARD;
 use chacha20poly1305::aead::Generate as _;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 use chacha20poly1305::{Key, Nonce};
+use zeroize::{Zeroize as _, Zeroizing};
 
 use cove_macros::impl_default_for;
 
@@ -21,11 +22,22 @@ const SPLITTER: &str = "::";
 ///
 /// Usage: create a fresh `Cryptor` (random key + nonce), encrypt the secret, then
 /// store both the ciphertext and the serialized Cryptor as separate keychain entries
-#[derive(Debug)]
 pub struct Cryptor {
     key: Key,
     nonce: Nonce,
     used: bool,
+}
+
+impl std::fmt::Debug for Cryptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Cryptor(****)")
+    }
+}
+
+impl Drop for Cryptor {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -78,10 +90,13 @@ impl Cryptor {
         let (key_string, nonce_string) =
             string.split_once(SPLITTER).ok_or(Error::KeyAndNonceNotFound)?;
 
-        let key_bytes =
-            BASE64_STANDARD.decode(key_string.as_bytes()).map_err(Error::KeyInvalidFormat)?;
+        let key_bytes = Zeroizing::new(
+            BASE64_STANDARD.decode(key_string.as_bytes()).map_err(Error::KeyInvalidFormat)?,
+        );
 
-        let key_bytes: [u8; 32] = key_bytes.try_into().map_err(|_| Error::KeyInvalidLength)?;
+        let key_bytes = Zeroizing::new(
+            <[u8; 32]>::try_from(key_bytes.as_slice()).map_err(|_| Error::KeyInvalidLength)?,
+        );
 
         let nonce_bytes =
             BASE64_STANDARD.decode(nonce_string.as_bytes()).map_err(Error::NonceInvalidFormat)?;
@@ -89,7 +104,11 @@ impl Cryptor {
         let nonce_bytes: [u8; 12] =
             nonce_bytes.try_into().map_err(|_| Error::NonceInvalidLength)?;
 
-        Ok(Self { key: key_bytes.into(), nonce: nonce_bytes.into(), used: true })
+        Ok(Self {
+            key: Key::clone_from_slice(key_bytes.as_ref()),
+            nonce: nonce_bytes.into(),
+            used: true,
+        })
     }
 
     pub(crate) fn cipher(&self) -> ChaCha20Poly1305 {
@@ -98,12 +117,12 @@ impl Cryptor {
 
     pub fn serialize_to_string(self) -> String {
         let key_bytes = self.key.as_slice();
-        let key_string = BASE64_STANDARD.encode(key_bytes);
+        let key_string = Zeroizing::new(BASE64_STANDARD.encode(key_bytes));
 
         let nonce_bytes = self.nonce.as_slice();
         let nonce_string = BASE64_STANDARD.encode(nonce_bytes);
 
-        format!("{key_string}{SPLITTER}{nonce_string}")
+        format!("{}{SPLITTER}{nonce_string}", key_string.as_str())
     }
 
     /// Encrypt plaintext bytes
@@ -161,5 +180,27 @@ impl Cryptor {
             self.cipher().decrypt(&self.nonce, ciphertext).map_err(Error::UnableToDecrypt)?;
 
         Ok(decrypted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_redacts_key_material() {
+        let cryptor = Cryptor::new();
+
+        assert_eq!(format!("{cryptor:?}"), "Cryptor(****)");
+    }
+
+    #[test]
+    fn serialized_cryptor_restores_key() {
+        let mut cryptor = Cryptor::new();
+        let ciphertext = cryptor.encrypt(b"secret").unwrap();
+        let serialized = cryptor.serialize_to_string();
+        let restored = Cryptor::try_from_string(&serialized).unwrap();
+
+        assert_eq!(restored.decrypt(&ciphertext).unwrap(), b"secret");
     }
 }

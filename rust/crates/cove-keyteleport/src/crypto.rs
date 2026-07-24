@@ -23,16 +23,18 @@ impl EphemeralPrivateKey {
         let mut rng = rand::rng();
 
         loop {
-            let bytes = rng.random::<[u8; 32]>();
+            let bytes = Zeroizing::new(rng.random::<[u8; 32]>());
 
-            if let Ok(secret_key) = SecretKey::from_slice(&bytes) {
+            if let Ok(secret_key) = SecretKey::from_slice(bytes.as_ref()) {
                 return Self(secret_key);
             }
         }
     }
 
     pub(crate) fn from_bytes(bytes: [u8; 32]) -> Result<Self> {
-        Ok(Self(SecretKey::from_slice(&bytes)?))
+        let bytes = Zeroizing::new(bytes);
+
+        Ok(Self(SecretKey::from_slice(bytes.as_ref())?))
     }
 
     pub(crate) fn expose_bytes(&self) -> [u8; 32] {
@@ -47,10 +49,10 @@ impl EphemeralPrivateKey {
 
     pub(crate) fn session_key(&self, public_key: &PublicKey) -> SessionKey {
         let mut point = shared_secret_point(public_key, &self.0);
-        let digest = Sha256::digest(point);
+        let digest = Zeroizing::new(Sha256::digest(point));
         point.zeroize();
         let mut bytes = [0_u8; 32];
-        bytes.copy_from_slice(&digest);
+        bytes.copy_from_slice(digest.as_ref());
 
         SessionKey(bytes)
     }
@@ -143,25 +145,25 @@ pub(crate) fn decrypt_inner(paranoid_key: &[u8; 32], body: &[u8]) -> Result<Vec<
     decrypt_checked(paranoid_key, body)
 }
 
-fn receiver_code_hash(private_key: &EphemeralPrivateKey) -> [u8; 32] {
+fn receiver_code_hash(private_key: &EphemeralPrivateKey) -> Zeroizing<[u8; 32]> {
     let private_key_bytes = Zeroizing::new(private_key.expose_bytes());
     let mut material = Zeroizing::new(Vec::with_capacity(32 + RECEIVER_CODE_DOMAIN.len()));
     material.extend_from_slice(private_key_bytes.as_ref());
     material.extend_from_slice(RECEIVER_CODE_DOMAIN);
 
-    let first = Sha256::digest(&material);
+    let first = Zeroizing::new(Sha256::digest(&material));
 
-    let second = Sha256::digest(first);
-    let mut bytes = [0_u8; 32];
-    bytes.copy_from_slice(&second);
+    let second = Zeroizing::new(Sha256::digest(&first[..]));
+    let mut bytes = Zeroizing::new([0_u8; 32]);
+    bytes.copy_from_slice(second.as_ref());
 
     bytes
 }
 
 fn receiver_code_aes_key(code: &NumericCode) -> Zeroizing<[u8; 32]> {
-    let digest = Sha256::digest(code.as_str().as_bytes());
+    let digest = Zeroizing::new(Sha256::digest(code.as_str().as_bytes()));
     let mut key = Zeroizing::new([0_u8; 32]);
-    key.copy_from_slice(&digest);
+    key.copy_from_slice(digest.as_ref());
 
     key
 }
@@ -191,7 +193,7 @@ fn decrypt_checked(key: &[u8; 32], body: &[u8]) -> Result<Vec<u8>> {
 }
 
 fn checksum(body: &[u8]) -> [u8; 2] {
-    let digest = Sha256::digest(body);
+    let digest = Zeroizing::new(Sha256::digest(body));
 
     [digest[30], digest[31]]
 }

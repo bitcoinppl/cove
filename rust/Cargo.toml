@@ -45,9 +45,9 @@ minicbor-serde = { version = "0.7", features = ["std"] }
 
 # encryption / hashing
 age = { version = "0.12.1", default-features = false }
-aes = "0.9.1"
-chacha20poly1305 = "0.11"
-ctr = "0.10.1"
+aes = { version = "0.9.1", features = ["zeroize"] }
+chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
+ctr = { version = "0.10.1", features = ["zeroize"] }
 hmac = "0.13.0"
 hkdf = "0.13.0"
 pbkdf2 = "0.13.0"
