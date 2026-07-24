@@ -149,7 +149,7 @@ struct WalletSettingsView: View {
                 walletName: metadata.name,
                 isHotWallet: metadata.walletType == .hot,
                 hasRecoveryWords: manager.hasRecoveryWords(),
-                hasXprvSecret: manager.hasXprvSecret(),
+                hasXprvSecret: manager.hasXprvSecret() && !auth.isInDecoyMode(),
                 deleteConfirmationMessage: deleteConfirmationMessage,
                 finalDeleteConfirmationMessage: finalDeleteConfirmationMessage,
                 finalDeleteButtonTitle: finalDeleteButtonTitle,

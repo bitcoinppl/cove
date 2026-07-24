@@ -379,7 +379,7 @@ fun WalletSettingsScreen(
                                     },
                                 )
                                 dangerItemCount++
-                            } else if (manager.hasXprvSecret()) {
+                            } else if (manager.hasXprvSecret() && !auth.isInDecoyMode()) {
                                 MaterialSettingsItem(
                                     title = stringResource(R.string.label_wallet_export_private_key),
                                     titleColor = CoveColor.WarningOrange,
