@@ -297,39 +297,14 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
-    use std::{
-        collections::HashMap,
-        sync::{Arc, Once},
-    };
+    use cove_device::keychain::Keychain;
+    use std::sync::Arc;
 
     use crate::wallet::metadata::WalletMetadata;
     use crate::wallet_identity::test_support::ExistingWalletIdentitySetTestExt as _;
 
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
-
     fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
+        crate::test_support::init_test_keychain();
         Keychain::global()
     }
 

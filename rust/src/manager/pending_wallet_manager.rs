@@ -266,12 +266,8 @@ fn post_save_routes(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Once};
-
-    use parking_lot::Mutex;
-
     use crate::{
-        keychain::{Keychain, KeychainAccess, KeychainError},
+        keychain::Keychain,
         router::{HotWalletRoute, NewWalletRoute, Route},
         wallet::metadata::WalletId,
     };
@@ -279,30 +275,8 @@ mod tests {
     use super::{RustPendingWalletManager, post_save_routes};
     use crate::mnemonic::NumberOfBip39Words;
 
-    #[derive(Debug, Default)]
-    struct TestKeychain(Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
-
     fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
+        crate::test_support::init_test_keychain();
         Keychain::global()
     }
 

@@ -12,7 +12,9 @@ use cove_device::cloud_storage::{
     CloudAccessPolicy, CloudStorage, CloudStorageAccess, CloudStorageError,
     CloudStorageInventorySnapshot, CloudSyncHealth,
 };
-use cove_device::keychain::{Keychain, KeychainAccess};
+use cove_device::keychain::Keychain;
+
+use crate::test_support::MockKeychain;
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
@@ -89,71 +91,6 @@ type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResults = Arc<Mutex<VecDeque<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 type MockPasskeyPresenceResults = Arc<Mutex<VecDeque<PasskeyCredentialPresence>>>;
-#[derive(Debug, Clone, Default)]
-pub(crate) struct MockKeychain {
-    entries: Arc<Mutex<HashMap<String, String>>>,
-    fail_save_at: Arc<Mutex<Option<usize>>>,
-    fail_delete_at: Arc<Mutex<Option<usize>>>,
-    save_count: Arc<Mutex<usize>>,
-    delete_count: Arc<Mutex<usize>>,
-}
-
-impl MockKeychain {
-    fn reset(&self) {
-        self.entries.lock().clear();
-        *self.fail_save_at.lock() = None;
-        *self.fail_delete_at.lock() = None;
-        *self.save_count.lock() = 0;
-        *self.delete_count.lock() = 0;
-    }
-
-    pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
-        *self.entries.lock() =
-            entries.into_iter().map(|(key, value)| (key.into(), value.into())).collect();
-    }
-
-    pub(crate) fn get_entry(&self, key: &str) -> Option<String> {
-        self.entries.lock().get(key).cloned()
-    }
-
-    pub(crate) fn fail_save_at(&self, save_attempt: usize) {
-        *self.save_count.lock() = 0;
-        *self.fail_save_at.lock() = Some(save_attempt);
-    }
-
-    pub(crate) fn fail_delete_at(&self, delete_attempt: usize) {
-        *self.delete_count.lock() = 0;
-        *self.fail_delete_at.lock() = Some(delete_attempt);
-    }
-}
-
-impl KeychainAccess for MockKeychain {
-    fn save(&self, key: String, value: String) -> Result<(), cove_device::keychain::KeychainError> {
-        let mut save_count = self.save_count.lock();
-        *save_count += 1;
-        if Some(*save_count) == *self.fail_save_at.lock() {
-            return Err(cove_device::keychain::KeychainError::Save);
-        }
-
-        self.entries.lock().insert(key, value);
-        Ok(())
-    }
-
-    fn get(&self, key: String) -> Option<String> {
-        self.entries.lock().get(&key).cloned()
-    }
-
-    fn delete(&self, key: String) -> bool {
-        let mut delete_count = self.delete_count.lock();
-        *delete_count += 1;
-        if Some(*delete_count) == *self.fail_delete_at.lock() {
-            return false;
-        }
-
-        self.entries.lock().remove(&key).is_some()
-    }
-}
-
 #[derive(Debug, Default)]
 struct MockCloudState {
     wallet_files: HashMap<String, Vec<String>>,
@@ -1016,11 +953,11 @@ pub(crate) struct TestGlobals {
 
 impl TestGlobals {
     fn init() -> Self {
-        let keychain = MockKeychain::default();
+        let keychain = crate::test_support::shared_mock_keychain().clone();
         let cloud = MockCloudStorage::default();
         let passkey = MockPasskeyProviderImpl::default();
 
-        let _ = Keychain::new(Box::new(keychain.clone()));
+        crate::test_support::init_test_keychain();
         let _ = CloudStorage::new(Box::new(cloud.clone()));
         let _ = PasskeyAccess::new(Box::new(passkey.clone()));
 

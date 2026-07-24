@@ -368,43 +368,22 @@ fn rollback_result<E: std::fmt::Display>(result: &Result<(), E>) -> String {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::HashMap,
         str::FromStr as _,
-        sync::{Arc, Mutex, Once},
+        sync::{Arc, Once},
     };
 
     use super::*;
-    use crate::keychain::KeychainAccess;
     use crate::wallet::WalletAddressType;
     use bdk_wallet::bitcoin::bip32::Xpriv;
     use cove_cspp::CsppStore as _;
     use cove_device::keychain::WalletXprv;
-
-    #[derive(Debug, Default)]
-    struct TestKeychain(Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().unwrap().insert(key, value);
-
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().unwrap().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().unwrap().remove(&key).is_some()
-        }
-    }
 
     fn init_globals() {
         static INIT: Once = Once::new();
         INIT.call_once(|| {
             crate::test_support::ensure_tokio_runtime();
             crate::database::test_support::init_test_database();
-            let _ = Keychain::new(Box::<TestKeychain>::default());
+            crate::test_support::init_test_keychain();
         });
     }
 

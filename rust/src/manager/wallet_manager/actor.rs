@@ -1204,7 +1204,7 @@ mod tests {
         transaction::Version,
     };
     use cove_bdk_progressive_scan::ScanUpdate;
-    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use cove_device::keychain::Keychain;
     use cove_tokio::FutureTimeoutExt as _;
     use cove_types::{
         fees::{FeeRateOption, FeeRateOptions, FeeSpeed},
@@ -1212,10 +1212,10 @@ mod tests {
     };
     use parking_lot::RwLock;
     use std::{
-        collections::{BTreeMap, HashMap, HashSet},
+        collections::{BTreeMap, HashSet},
         str::FromStr as _,
         sync::{
-            Arc, Once,
+            Arc,
             atomic::{AtomicUsize, Ordering},
         },
         time::{Duration, UNIX_EPOCH},
@@ -1250,24 +1250,6 @@ mod tests {
     };
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
 
     struct LockedActorFixture {
         actor: super::WalletActor,
@@ -1411,11 +1393,7 @@ mod tests {
     }
 
     fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
+        crate::test_support::init_test_keychain();
         Keychain::global()
     }
 

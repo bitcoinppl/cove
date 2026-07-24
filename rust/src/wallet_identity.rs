@@ -37,12 +37,11 @@ pub(crate) enum WalletIdentityError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr as _;
-    use std::sync::{Arc, Once};
+    use std::sync::Arc;
 
     use bdk_wallet::bitcoin::bip32::{Fingerprint as BdkFingerprint, Xpub};
-    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use cove_device::keychain::Keychain;
 
     use super::existing::matching_public_wallet_by_identity;
     use super::*;
@@ -55,30 +54,8 @@ mod tests {
         metadata::{WalletMetadata, WalletType},
     };
 
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
-
     fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
+        crate::test_support::init_test_keychain();
         Keychain::global()
     }
 

@@ -1657,51 +1657,22 @@ impl From<ImportWalletError> for KeyTeleportAlert {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::HashMap,
         str::FromStr as _,
-        sync::{
-            Arc, Once,
-            atomic::{AtomicBool, Ordering},
-        },
+        sync::{Arc, Once},
     };
 
     use crate::wallet_secret::WalletSecretExt as _;
-    use cove_device::keychain::{KeychainAccess, KeychainError};
 
     use super::*;
-
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
-
-    static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            if FAIL_KEYCHAIN_DELETES.load(Ordering::Relaxed) {
-                return false;
-            }
-
-            self.0.lock().remove(&key).is_some()
-        }
-    }
 
     fn init_globals() {
         static INIT: Once = Once::new();
         INIT.call_once(|| {
             crate::database::test_support::init_test_database();
-            let _ = Keychain::new(Box::<TestKeychain>::default());
+            crate::test_support::init_test_keychain();
         });
 
-        FAIL_KEYCHAIN_DELETES.store(false, Ordering::Relaxed);
+        crate::test_support::set_fail_keychain_deletes(false);
         Keychain::global().delete_key_teleport_receive_session();
     }
 
@@ -1927,12 +1898,12 @@ mod tests {
         init_globals();
         let manager = RustKeyTeleportManager::new();
         manager.start_receive().unwrap();
-        FAIL_KEYCHAIN_DELETES.store(true, Ordering::Relaxed);
+        crate::test_support::set_fail_keychain_deletes(true);
 
         let error = manager.end_receive();
 
-        FAIL_KEYCHAIN_DELETES.store(false, Ordering::Relaxed);
-        assert!(matches!(error, Err(KeyTeleportAlert::Keychain(_))));
+        crate::test_support::set_fail_keychain_deletes(false);
+        assert!(matches!(error, Err(KeyTeleportAlert::Keychain(_))), "got {error:?}");
         assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
         assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
     }
