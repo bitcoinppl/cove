@@ -60,12 +60,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.SecureFlagPolicy
 import android.view.WindowManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.flows.SettingsFlow.hasFreshMainCredential
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.ColumnMajorGrid
@@ -167,6 +172,8 @@ fun SecretWordsScreen(
         }
     }
 
+    val requestKeyTeleportSend = rememberKeyTeleportSendRequest(app, auth, walletId)
+
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
 
@@ -198,7 +205,10 @@ fun SecretWordsScreen(
                     }
                 },
                 actions = {
-                    SecretWordsToolbarMenu { pendingSensitiveAction = it }
+                    SecretWordsToolbarMenu(
+                        showKeyTeleport = !auth.isInDecoyMode(),
+                        onAction = { pendingSensitiveAction = it },
+                    )
                 },
             )
         },
@@ -296,17 +306,7 @@ fun SecretWordsScreen(
                 pendingSensitiveAction = null
                 action.perform(
                     showSeedQr = { showSeedQrSheet = true },
-                    startKeyTeleport = {
-                        if (!app.startKeyTeleportSend(walletId)) {
-                            app.alertState =
-                                TaggedItem(
-                                    AppAlertState.General(
-                                        title = "KeyTeleport",
-                                        message = "Finish the active KeyTeleport flow before starting another transfer.",
-                                    ),
-                                )
-                        }
-                    },
+                    startKeyTeleport = requestKeyTeleportSend,
                 )
             },
             onDismiss = { pendingSensitiveAction = null },
@@ -327,8 +327,75 @@ fun SecretWordsScreen(
     }
 }
 
+/**
+ * Build the KeyTeleport send request for this wallet's secret words.
+ *
+ * The send is held until the main credential is entered again, so neither a decoy session nor an
+ * unlock that happened before the request can start a transfer.
+ */
 @Composable
-private fun SecretWordsToolbarMenu(onAction: (SecretWordsSensitiveAction) -> Unit) {
+private fun rememberKeyTeleportSendRequest(
+    app: AppManager,
+    auth: AuthManager,
+    walletId: WalletId,
+): () -> Unit {
+    var pendingGeneration by remember(walletId) { mutableStateOf<Long?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(auth.mainCredentialGeneration) {
+        val requestedAt = pendingGeneration ?: return@LaunchedEffect
+        if (!hasFreshMainCredential(auth.mainCredentialGeneration, requestedAt)) return@LaunchedEffect
+
+        pendingGeneration = null
+        if (!app.startKeyTeleportSend(walletId)) {
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "KeyTeleport",
+                        message = "Finish the active KeyTeleport flow before starting another transfer.",
+                    ),
+                )
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                    pendingGeneration = null
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            pendingGeneration = null
+        }
+    }
+
+    return remember(app, auth, walletId) {
+        {
+            if (!auth.isAuthEnabled) {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "KeyTeleport",
+                            message = "Set up a PIN or biometric unlock before sending secret words with KeyTeleport.",
+                        ),
+                    )
+            } else {
+                pendingGeneration = auth.mainCredentialGeneration
+                auth.lock()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecretWordsToolbarMenu(
+    showKeyTeleport: Boolean,
+    onAction: (SecretWordsSensitiveAction) -> Unit,
+) {
     var isExpanded by remember { mutableStateOf(false) }
 
     IconButton(onClick = { isExpanded = true }) {
@@ -352,16 +419,18 @@ private fun SecretWordsToolbarMenu(onAction: (SecretWordsSensitiveAction) -> Uni
                 onAction(SecretWordsSensitiveAction.SEED_QR)
             },
         )
-        DropdownMenuItem(
-            text = { Text("KeyTeleport") },
-            leadingIcon = {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-            },
-            onClick = {
-                isExpanded = false
-                onAction(SecretWordsSensitiveAction.KEY_TELEPORT)
-            },
-        )
+        if (showKeyTeleport) {
+            DropdownMenuItem(
+                text = { Text("KeyTeleport") },
+                leadingIcon = {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                },
+                onClick = {
+                    isExpanded = false
+                    onAction(SecretWordsSensitiveAction.KEY_TELEPORT)
+                },
+            )
+        }
     }
 }
 
