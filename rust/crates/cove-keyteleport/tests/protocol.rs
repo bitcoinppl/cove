@@ -151,6 +151,14 @@ fn password_parsing_is_case_insensitive_and_groups_for_display() {
 }
 
 #[test]
+fn password_rejects_characters_outside_base32_alphabet() {
+    assert!(matches!(TeleportPassword::from_str("AAAAAAA9"), Err(Error::InvalidTeleportPassword)));
+    assert!(matches!(TeleportPassword::from_str("9AAAAAAA"), Err(Error::InvalidTeleportPassword)));
+    // 0/1/8 substitutions still map into the alphabet as OOLLBBAA
+    assert!(TeleportPassword::from_str("o0l1b8aa").is_ok());
+}
+
+#[test]
 fn receiver_code_groups_for_display() {
     let code = NumericCode::from_str("12345678").unwrap();
 

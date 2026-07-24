@@ -87,7 +87,8 @@ fn normalize_password(value: &str) -> Result<Zeroizing<String>> {
             _ => ch,
         };
 
-        if !ch.is_ascii_alphanumeric() {
+        // RFC 4648 Base32 alphabet; anything else (like '9') can never decode
+        if !matches!(ch, 'A'..='Z' | '2'..='7') {
             return Err(Error::InvalidTeleportPassword);
         }
 
