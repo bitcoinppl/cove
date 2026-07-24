@@ -22,7 +22,6 @@ const LOCAL_DB_KEY_CRYPTOR: &str = "local::v1::db_encryption_key_cryptor";
 const KEY_TELEPORT_RECEIVE_SESSION: &str = "key_teleport::v1::receive_session";
 const KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR: &str = "key_teleport::v1::receive_session_cryptor";
 const WALLET_SECRET_TAG_PREFIX: &str = "cove::wallet_secret::v1::";
-const WALLET_SECRET_MNEMONIC_TAG: &str = "mnemonic::";
 const WALLET_SECRET_XPRIV_TAG: &str = "xpriv::";
 
 /// A validated BIP32 extended private key backed by zeroizing storage
@@ -146,12 +145,6 @@ impl WalletSecret {
                 .map(Self::Mnemonic)
                 .map_err_str(KeychainError::ParseSavedValue);
         };
-
-        if let Some(mnemonic) = tagged_value.strip_prefix(WALLET_SECRET_MNEMONIC_TAG) {
-            return Mnemonic::from_str(mnemonic)
-                .map(Self::Mnemonic)
-                .map_err_str(KeychainError::ParseSavedValue);
-        }
 
         if let Some(xpriv) = tagged_value.strip_prefix(WALLET_SECRET_XPRIV_TAG) {
             return WalletXprv::parse(xpriv)
