@@ -10,7 +10,7 @@ import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
-import org.bitcoinppl.cove.flows.keyteleport.clearOwnedSensitiveClipboard
+import org.bitcoinppl.cove.flows.keyteleport.clearExpiredSensitiveClipboard
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.device.CloudStorage
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
@@ -242,7 +242,6 @@ open class CoveApplication : Application() {
 
             auth.concealSensitiveContent()
             AppManager.getInstance().concealSensitiveKeyTeleportContent()
-            clearOwnedSensitiveClipboard(this)
 
             // reset biometric flag in case it got stuck from a failed prompt
             if (auth.isUsingBiometrics) {
@@ -261,6 +260,8 @@ open class CoveApplication : Application() {
     private fun handleForeground() {
         try {
             val auth = Auth
+
+            clearExpiredSensitiveClipboard(this)
 
             // if auth is not enabled, unlock immediately
             if (!auth.isAuthEnabled) {

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import android.os.SystemClock
 import org.bitcoinppl.cove_core.KeyTeleportAlert
 import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.MultiFormat
@@ -16,7 +17,6 @@ import org.bitcoinppl.cove_core.StringOrData
 import java.util.UUID
 
 private const val SENSITIVE_CLIPBOARD_TOKEN = "org.bitcoinppl.cove.keyteleport.CLIP_TOKEN"
-private const val SENSITIVE_CLIPBOARD_LIFETIME_MILLIS = 60_000L
 
 internal fun KeyTeleportManager.ingestKeyTeleportMultiFormat(
     multiFormat: MultiFormat,
@@ -129,44 +129,97 @@ internal fun copyText(
     }
 }
 
-internal fun clearOwnedSensitiveClipboard(context: Context) {
-    SensitiveClipboardExpiry.clearIfOwned(context.applicationContext)
+/**
+ * Clear a sensitive clip that outlived its deadline while the app was backgrounded.
+ *
+ * Background clipboard reads are denied on Android 10+, so an expiry that could not confirm
+ * ownership defers to this foreground sweep.
+ */
+internal fun clearExpiredSensitiveClipboard(context: Context) {
+    SensitiveClipboardExpiry.clearIfExpired(context.applicationContext)
 }
 
 private object SensitiveClipboardExpiry {
     private val handler = Handler(Looper.getMainLooper())
     private var pendingClear: Runnable? = null
     private var currentToken: String? = null
+    private var deadlineElapsedRealtime = 0L
+    private var retriesAfterDeadline = 0
 
     fun schedule(
         context: Context,
         token: String,
     ) {
-        pendingClear?.let(handler::removeCallbacks)
+        cancelPending()
         currentToken = token
+        deadlineElapsedRealtime = SystemClock.elapsedRealtime() + SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
+        retriesAfterDeadline = 0
+        postClear(context, SENSITIVE_CLIPBOARD_LIFETIME_MILLIS)
+    }
+
+    fun clearIfExpired(context: Context) {
+        if (currentToken == null) return
+        if (SystemClock.elapsedRealtime() < deadlineElapsedRealtime) return
+
+        retriesAfterDeadline = 0
+        clearIfOwned(context)
+    }
+
+    private fun clearIfOwned(context: Context) {
+        val expectedToken = currentToken ?: return
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val description = runCatching { clipboard.primaryClipDescription }.getOrNull()
+        val token = runCatching { description?.extras?.getString(SENSITIVE_CLIPBOARD_TOKEN) }.getOrNull()
+        val remainingLifetimeMillis = deadlineElapsedRealtime - SystemClock.elapsedRealtime()
+
+        val decision =
+            resolveSensitiveClipboardClear(
+                descriptionReadable = description != null,
+                tokenMatches = token == expectedToken,
+                remainingLifetimeMillis = remainingLifetimeMillis,
+                retriesAfterDeadline = retriesAfterDeadline,
+            )
+
+        when (decision) {
+            SensitiveClipboardClearDecision.ClearAndForget -> {
+                runCatching(clipboard::clearPrimaryClip)
+                forget()
+            }
+
+            SensitiveClipboardClearDecision.ForgetOnly -> forget()
+
+            is SensitiveClipboardClearDecision.Retry -> {
+                if (remainingLifetimeMillis <= 0) retriesAfterDeadline += 1
+                postClear(context, decision.delayMillis)
+            }
+
+            // the token stays so the next foreground sweep can finish the clear
+            SensitiveClipboardClearDecision.KeepForForeground -> cancelPending()
+        }
+    }
+
+    private fun postClear(
+        context: Context,
+        delayMillis: Long,
+    ) {
+        cancelPending()
         pendingClear =
             Runnable {
                 clearIfOwned(context)
             }.also {
-                handler.postDelayed(it, SENSITIVE_CLIPBOARD_LIFETIME_MILLIS)
+                handler.postDelayed(it, delayMillis)
             }
     }
 
-    fun clearIfOwned(context: Context) {
-        val expectedToken = currentToken ?: return
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val token =
-            runCatching {
-                clipboard.primaryClipDescription?.extras?.getString(SENSITIVE_CLIPBOARD_TOKEN)
-            }.getOrNull()
-
-        if (token == expectedToken) {
-            runCatching(clipboard::clearPrimaryClip)
-        }
-
+    private fun cancelPending() {
         pendingClear?.let(handler::removeCallbacks)
         pendingClear = null
+    }
+
+    private fun forget() {
+        cancelPending()
         currentToken = null
+        retriesAfterDeadline = 0
     }
 }
 
