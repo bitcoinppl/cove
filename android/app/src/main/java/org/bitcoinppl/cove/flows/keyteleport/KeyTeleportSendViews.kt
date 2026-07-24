@@ -78,6 +78,7 @@ internal fun SendEnterCodeView(
 ) {
     var code by remember { mutableStateOf("") }
 
+    SecureScreenEffect()
     TextBlock(
         title = "Enter receiver code",
         body = "Use the numeric receiver code shown on the receiving device for ${send.selectedWallet.name}.",

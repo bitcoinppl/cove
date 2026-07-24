@@ -79,6 +79,7 @@ internal fun ReceiveReadyView(
 ) {
     val packetText = remember(receive.packet) { runCatching { receive.packet.bbqrPart() }.getOrNull() }
 
+    SecureScreenEffect()
     if (packetText == null) {
         Text("Unable to render this receive request.", color = MaterialTheme.colorScheme.error)
         ReceiverCode(receive.groupedNumericCode)
@@ -127,6 +128,7 @@ private fun ReceiverCode(code: String) {
 internal fun ReceivePasswordView(manager: KeyTeleportManager) {
     var password by remember { mutableStateOf("") }
 
+    SecureScreenEffect()
     TextBlock(
         title = "Enter sender password",
         body = "Type the password shown by the sending device.",
