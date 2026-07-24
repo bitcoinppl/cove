@@ -368,6 +368,15 @@ fn decode_stash_payload(body: &[u8]) -> Result<DecodedPayload> {
         return decode_stash_xprv(rest);
     }
 
+    // COLDCARD raw BIP32 master secret: marker is the byte length (16-64),
+    // body is the raw seed, and the wallet key is the BIP32 master derived
+    // from it (HMAC-SHA512 "Bitcoin seed"), matching COLDCARD's hd.from_master
+    if (0x10..=0x40).contains(&marker) {
+        let xprv = Xpriv::new_master(NetworkKind::Main, &rest[..usize::from(marker)])
+            .map_err(|_| Error::InvalidXprvPayload)?;
+        return Ok(DecodedPayload::Xprv(XprvPayload { value: xprv.to_string() }));
+    }
+
     if marker & 0x80 == 0 {
         return Err(Error::InvalidMnemonicPayload);
     }
@@ -523,6 +532,52 @@ mod tests {
 
         assert_eq!(decoded.chain_code.as_bytes(), &chain_code);
         assert_eq!(decoded.private_key.secret_bytes(), private_key);
+    }
+
+    #[test]
+    fn raw_master_secret_stash_decodes_as_bip32_master() {
+        for seed_len in [16_usize, 32, 64] {
+            let seed = vec![7_u8; seed_len];
+            let mut encoded = vec![b's', seed_len as u8];
+            encoded.extend_from_slice(&seed);
+
+            let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&encoded).unwrap() else {
+                panic!("expected xprv for seed length {seed_len}")
+            };
+            let expected = Xpriv::new_master(NetworkKind::Main, &seed).unwrap();
+
+            assert_eq!(decoded.expose_string(), expected.to_string());
+        }
+    }
+
+    #[test]
+    fn raw_master_secret_stash_restores_trimmed_trailing_zeros() {
+        let mut seed = [9_u8; 24];
+        seed[20..].fill(0);
+        let mut encoded = vec![b's', 24];
+        encoded.extend_from_slice(&seed);
+        trim_stash_padding(&mut encoded);
+        assert!(encoded.len() < 26);
+
+        let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&encoded).unwrap() else {
+            panic!("expected xprv")
+        };
+        let expected = Xpriv::new_master(NetworkKind::Main, &seed).unwrap();
+
+        assert_eq!(decoded.expose_string(), expected.to_string());
+    }
+
+    #[test]
+    fn raw_master_secret_stash_rejects_out_of_range_lengths() {
+        for marker in [0x02_u8, 0x0f, 0x41, 0x7f] {
+            let mut encoded = vec![b's', marker];
+            encoded.extend_from_slice(&[3_u8; 70]);
+
+            assert!(
+                matches!(DecodedPayload::decode(&encoded), Err(Error::InvalidMnemonicPayload)),
+                "marker 0x{marker:02x} should be rejected"
+            );
+        }
     }
 
     #[test]
