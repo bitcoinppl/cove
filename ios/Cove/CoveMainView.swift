@@ -56,7 +56,12 @@ struct CoveMainView: View {
 
         if oldPhase == .active, newPhase != .active {
             app.hideSensitiveKeyTeleportReveals()
-            showCover = true
+
+            // an NFC scan makes the app inactive, covering it would interrupt the scan
+            let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
+            if !app.nfcWriter.isScanning, !app.nfcReader.isScanning, !tapSignerScanning {
+                showCover = true
+            }
         }
 
         unlockWhenAuthenticationIsDisabled()
