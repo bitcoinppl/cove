@@ -1923,6 +1923,7 @@ enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     case Decrypt(String
     )
     case WalletSecretTypeMismatch
+    case WalletSecretExists
 
 
 
@@ -1975,6 +1976,7 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .WalletSecretTypeMismatch
+        case 7: return .WalletSecretExists
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2012,6 +2014,10 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
 
         case .WalletSecretTypeMismatch:
             writeInt(&buf, Int32(6))
+
+
+        case .WalletSecretExists:
+            writeInt(&buf, Int32(7))
 
         }
     }
