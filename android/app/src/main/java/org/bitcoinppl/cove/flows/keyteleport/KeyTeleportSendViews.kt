@@ -40,7 +40,7 @@ internal fun SendIdleView(
         Text("No eligible hot wallets are available on this device.", color = Color.White.copy(alpha = 0.75f))
     } else {
         WalletChoices(eligibleWallets, selectedWallet = null) {
-            manager.dispatch(KeyTeleportManagerAction.StartSendFromWallet(it.id))
+            manager.startSendFromWallet(it.id)
         }
     }
 }
@@ -103,6 +103,7 @@ internal fun SendEnterCodeView(
 @Composable
 internal fun SendReadyView(
     ready: KeyTeleportSendReady,
+    concealmentGeneration: Long,
     onDone: () -> Unit,
 ) {
     val packetText = remember(ready.packet) { runCatching { ready.packet.bbqrPart() }.getOrNull() }
@@ -123,6 +124,7 @@ internal fun SendReadyView(
         KeyTeleportRevealPair(
             qrHint = "Tap to show QR code",
             codeHint = "Tap to show password",
+            resetKey = concealmentGeneration,
             qr = { PacketQr(packetText) },
             code = { KeyTeleportCodeText(password) },
         )

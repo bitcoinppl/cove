@@ -85,9 +85,7 @@ struct SecretWordsScreen: View {
         case .seedQr:
             showSeedQrSheet = true
         case .keyTeleport:
-            let keyTeleportManager = app.ensureKeyTeleportManager()
-            keyTeleportManager.dispatch(.startSendFromWallet(id))
-            app.pushRoute(RouteFactory().keyTeleportSend())
+            app.startKeyTeleportSend(walletId: id)
         }
     }
 

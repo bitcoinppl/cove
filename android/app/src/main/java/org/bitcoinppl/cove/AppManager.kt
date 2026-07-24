@@ -230,6 +230,21 @@ class AppManager private constructor() : FfiReconcile {
 
     fun clearKeyTeleportManager() = managerCache.clearKeyTeleportManager()
 
+    fun concealSensitiveKeyTeleportContent() {
+        managerCache.keyTeleportManager?.concealSensitiveContent()
+    }
+
+    internal fun startKeyTeleportSend(walletId: WalletId): Boolean {
+        if (routeStackContainsKeyTeleport(router.default, router.routes)) return false
+
+        val manager = getKeyTeleportManager()
+        if (!manager.startSendFromWallet(walletId)) return false
+
+        router.pushRoute(RouteFactory().keyTeleportSend())
+
+        return true
+    }
+
     fun canKeyTeleportSend(walletId: WalletId): Boolean =
         withRustOr(false) {
             canKeyTeleportSend(walletId)
@@ -275,6 +290,7 @@ class AppManager private constructor() : FfiReconcile {
         }
 
     fun closeRust() {
+        clearKeyTeleportManager()
         rustGuard.closeOnce {
             rust.close()
         }
@@ -423,6 +439,21 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
+        if (
+            route is Route.KeyTeleport &&
+            routeStackContainsKeyTeleport(router.default, router.routes) &&
+            currentRoute != route
+        ) {
+            alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "KeyTeleport",
+                        message = "Finish the active KeyTeleport flow before opening a different transfer.",
+                    ),
+                )
+            return
+        }
+
         router.pushRoute(route)
     }
 

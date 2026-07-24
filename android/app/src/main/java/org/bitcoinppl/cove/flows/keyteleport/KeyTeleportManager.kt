@@ -22,6 +22,11 @@ import org.bitcoinppl.cove_core.types.WalletId
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal enum class KeyTeleportFlowDirection {
+    RECEIVE,
+    SEND,
+}
+
 @Stable
 class KeyTeleportManager internal constructor(
     private val rust: RustKeyTeleportManager,
@@ -48,6 +53,12 @@ class KeyTeleportManager internal constructor(
     var alert by mutableStateOf<KeyTeleportAlert?>(null)
         private set
 
+    var concealmentGeneration by mutableStateOf(0L)
+        private set
+
+    internal val activeFlowDirection: KeyTeleportFlowDirection?
+        get() = state.flowDirection()
+
     init {
         rust.listenForUpdates(this)
     }
@@ -64,6 +75,80 @@ class KeyTeleportManager internal constructor(
                 Log.e(tag, "Unable to dispatch KeyTeleport action", it)
             }
         }
+    }
+
+    private fun dispatchOwnedInput(input: org.bitcoinppl.cove_core.KeyTeleportInput) {
+        if (!acceptingActions.get()) {
+            input.destroy()
+            return
+        }
+
+        val inputReleased = AtomicBoolean(false)
+        fun releaseInput() {
+            if (inputReleased.compareAndSet(false, true)) {
+                input.destroy()
+            }
+        }
+
+        val job =
+            rustScope.launch {
+                try {
+                    runCatching {
+                        rustGuard.withHandle(rust) {
+                            dispatch(KeyTeleportManagerAction.Ingest(input))
+                        }
+                    }.onFailure {
+                        Log.e(tag, "Unable to dispatch KeyTeleport input", it)
+                    }
+                } finally {
+                    releaseInput()
+                }
+            }
+        job.invokeOnCompletion {
+            releaseInput()
+        }
+    }
+
+    internal fun ensureReceiveStarted(): Boolean {
+        when (state.flowDirection()) {
+            KeyTeleportFlowDirection.RECEIVE -> return true
+            KeyTeleportFlowDirection.SEND -> return false
+            null -> Unit
+        }
+
+        dispatch(KeyTeleportManagerAction.StartReceive)
+
+        return true
+    }
+
+    internal fun startSendFromWallet(walletId: WalletId): Boolean {
+        if (state !is KeyTeleportManagerState.Idle) return false
+
+        dispatch(KeyTeleportManagerAction.StartSendFromWallet(walletId))
+
+        return true
+    }
+
+    internal fun ingest(
+        input: org.bitcoinppl.cove_core.KeyTeleportInput,
+        direction: KeyTeleportFlowDirection,
+    ): Boolean {
+        val activeDirection = state.flowDirection()
+        if (activeDirection != null && activeDirection != direction) {
+            input.destroy()
+            return false
+        }
+
+        dispatchOwnedInput(input)
+
+        return true
+    }
+
+    internal fun concealSensitiveContent() {
+        if (!acceptingActions.get()) return
+
+        concealmentGeneration += 1
+        dispatch(KeyTeleportManagerAction.HideXprv)
     }
 
     fun clearAlertForDisplay() {
@@ -86,21 +171,38 @@ class KeyTeleportManager internal constructor(
         }
 
     override fun reconcile(message: KeyTeleportManagerReconcileMessage) {
-        mainScope.launch {
-            apply(message)
+        if (!acceptingActions.get()) {
+            message.destroy()
+            return
+        }
+
+        val applied = AtomicBoolean(false)
+        val job = mainScope.launch {
+            if (acceptingActions.get()) {
+                apply(message)
+                applied.set(true)
+            } else {
+                message.destroy()
+                applied.set(true)
+            }
+        }
+        job.invokeOnCompletion {
+            if (!applied.get()) {
+                message.destroy()
+            }
         }
     }
 
     override fun reconcileMany(messages: List<KeyTeleportManagerReconcileMessage>) {
-        mainScope.launch {
-            messages.forEach { apply(it) }
-        }
+        messages.forEach(::reconcile)
     }
 
     private fun apply(message: KeyTeleportManagerReconcileMessage) {
         when (message) {
             is KeyTeleportManagerReconcileMessage.UpdateState -> {
+                val previousState = state
                 state = message.v1
+                previousState.destroy()
             }
 
             is KeyTeleportManagerReconcileMessage.SetAlert -> {
@@ -116,6 +218,10 @@ class KeyTeleportManager internal constructor(
     override fun close() {
         if (!acceptingActions.compareAndSet(true, false)) return
 
+        concealmentGeneration += 1
+        val previousState = state
+        state = KeyTeleportManagerState.Idle
+        previousState.destroy()
         mainScope.cancel()
         rustScope.launch {
             rustGuard.closeOnce {
@@ -130,3 +236,24 @@ class KeyTeleportManager internal constructor(
         }
     }
 }
+
+internal fun KeyTeleportManagerState.flowDirection(): KeyTeleportFlowDirection? =
+    when (this) {
+        is KeyTeleportManagerState.ReceiveReady,
+        is KeyTeleportManagerState.ReceiveError,
+        is KeyTeleportManagerState.ReceiveEnterPassword,
+        is KeyTeleportManagerState.ReceiveMnemonicReview,
+        is KeyTeleportManagerState.ReceiveXprvReview,
+        is KeyTeleportManagerState.ReceiveMessageReview,
+        is KeyTeleportManagerState.ReceiveImportedWallet,
+        is KeyTeleportManagerState.ReceiveAlreadyImportedWallet,
+        -> KeyTeleportFlowDirection.RECEIVE
+
+        is KeyTeleportManagerState.SendAwaitReceiver,
+        is KeyTeleportManagerState.SendChooseWallet,
+        is KeyTeleportManagerState.SendEnterCode,
+        is KeyTeleportManagerState.SendReady,
+        -> KeyTeleportFlowDirection.SEND
+
+        is KeyTeleportManagerState.Idle -> null
+    }

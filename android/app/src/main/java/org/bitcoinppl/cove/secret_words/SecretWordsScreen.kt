@@ -65,13 +65,13 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
-import org.bitcoinppl.cove_core.KeyTeleportManagerAction
+import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Mnemonic
-import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.types.WalletId
 
 private enum class SecretWordsSensitiveAction(
@@ -297,11 +297,15 @@ fun SecretWordsScreen(
                 action.perform(
                     showSeedQr = { showSeedQrSheet = true },
                     startKeyTeleport = {
-                        val keyTeleportManager = app.getKeyTeleportManager()
-                        keyTeleportManager.dispatch(
-                            KeyTeleportManagerAction.StartSendFromWallet(walletId),
-                        )
-                        app.pushRoute(RouteFactory().keyTeleportSend())
+                        if (!app.startKeyTeleportSend(walletId)) {
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.General(
+                                        title = "KeyTeleport",
+                                        message = "Finish the active KeyTeleport flow before starting another transfer.",
+                                    ),
+                                )
+                        }
                     },
                 )
             },

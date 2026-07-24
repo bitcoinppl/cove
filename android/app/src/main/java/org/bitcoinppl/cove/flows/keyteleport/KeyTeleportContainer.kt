@@ -39,11 +39,9 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingBackground
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
-import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 import org.bitcoinppl.cove_core.KeyTeleportRoute
-import org.bitcoinppl.cove_core.StringOrData
 
 @Composable
 fun KeyTeleportContainer(
@@ -55,8 +53,8 @@ fun KeyTeleportContainer(
     var localError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(route) {
-        if (route == KeyTeleportRoute.RECEIVE && manager.state is KeyTeleportManagerState.Idle) {
-            manager.dispatch(KeyTeleportManagerAction.StartReceive)
+        if (route == KeyTeleportRoute.RECEIVE && !manager.ensureReceiveStarted()) {
+            localError = "Finish the active KeyTeleport send before starting a receive session."
         }
     }
 
@@ -69,6 +67,7 @@ fun KeyTeleportContainer(
     KeyTeleportOverlays(
         app = app,
         manager = manager,
+        route = route,
         showScanner = showScanner,
         localError = localError,
         actions =
@@ -137,13 +136,10 @@ private fun KeyTeleportStateCard(
 ) {
     val context = LocalContext.current
     val onPaste = {
-        readClipboardText(context)?.trim()?.takeIf(String::isNotEmpty)?.let {
-            manager.dispatch(
-                KeyTeleportManagerAction.Ingest(
-                    KeyTeleportInput.MultiFormat(StringOrData.String(it)),
-                ),
-            )
-        }
+        readClipboardText(context)
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?.let { manager.ingestKeyTeleportText(it, route.flowDirection()) }
         Unit
     }
 
@@ -170,6 +166,15 @@ private fun KeyTeleportStateContent(
     onScan: () -> Unit,
     onPaste: () -> Unit,
 ) {
+    val activeDirection = manager.state.flowDirection()
+    if (activeDirection != null && activeDirection != route.flowDirection()) {
+        Text(
+            "Finish the active KeyTeleport flow before opening a different transfer.",
+            color = MaterialTheme.colorScheme.error,
+        )
+        return
+    }
+
     when (val state = manager.state) {
         is KeyTeleportManagerState.Idle -> {
             KeyTeleportIdleContent(app, manager, route, onScan, onPaste)
@@ -231,7 +236,7 @@ private fun KeyTeleportReceiveContent(
         }
 
         is KeyTeleportManagerState.ReceiveReady -> {
-            ReceiveReadyView(state.v1, onScan)
+            ReceiveReadyView(state.v1, manager.concealmentGeneration, onScan)
         }
 
         is KeyTeleportManagerState.ReceiveEnterPassword -> {
@@ -294,7 +299,7 @@ private fun KeyTeleportSendContent(
         }
 
         is KeyTeleportManagerState.SendReady -> {
-            SendReadyView(state.v1) {
+            SendReadyView(state.v1, manager.concealmentGeneration) {
                 manager.dispatch(KeyTeleportManagerAction.Clear)
                 app.popRoute()
             }
@@ -337,6 +342,7 @@ private fun KeyTeleportRouteHeader(route: KeyTeleportRoute) {
 private fun KeyTeleportOverlays(
     app: AppManager,
     manager: KeyTeleportManager,
+    route: KeyTeleportRoute,
     showScanner: Boolean,
     localError: String?,
     actions: KeyTeleportOverlayActions,
@@ -345,8 +351,8 @@ private fun KeyTeleportOverlays(
         QrCodeScanView(
             onScanned = { multiFormat ->
                 actions.onScannerDismiss()
-                if (!manager.ingestKeyTeleportMultiFormat(multiFormat)) {
-                    actions.onScanError("Scan a KeyTeleport QR code.")
+                if (!manager.ingestKeyTeleportMultiFormat(multiFormat, route.flowDirection())) {
+                    actions.onScanError("Scan the KeyTeleport response expected by this flow.")
                 }
             },
             onDismiss = actions.onScannerDismiss,
@@ -370,3 +376,9 @@ private data class KeyTeleportOverlayActions(
     val onScanError: (String) -> Unit,
     val onErrorDismiss: () -> Unit,
 )
+
+private fun KeyTeleportRoute.flowDirection(): KeyTeleportFlowDirection =
+    when (this) {
+        KeyTeleportRoute.RECEIVE -> KeyTeleportFlowDirection.RECEIVE
+        KeyTeleportRoute.SEND -> KeyTeleportFlowDirection.SEND
+    }

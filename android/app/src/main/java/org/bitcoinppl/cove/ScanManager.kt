@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportFlowDirection
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
@@ -156,14 +157,66 @@ class ScanManager private constructor() {
 
     private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket) {
         val manager = app.getKeyTeleportManager()
-        manager.dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Receiver(packet)))
-        app.pushRoute(RouteFactory().keyTeleportSend())
+        val route = RouteFactory().keyTeleportSend()
+        if (!canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
+            KeyTeleportInput.Receiver(packet).destroy()
+            showKeyTeleportFlowConflict()
+            return
+        }
+        if (!manager.ingest(KeyTeleportInput.Receiver(packet), KeyTeleportFlowDirection.SEND)) {
+            showKeyTeleportFlowConflict()
+            return
+        }
+
+        if (app.currentRoute != route) {
+            app.pushRoute(route)
+        }
     }
 
     private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket) {
         val manager = app.getKeyTeleportManager()
-        manager.dispatch(KeyTeleportManagerAction.Ingest(KeyTeleportInput.Sender(packet)))
-        app.pushRoute(RouteFactory().keyTeleportReceive())
+        val route = RouteFactory().keyTeleportReceive()
+        if (!canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
+            KeyTeleportInput.Sender(packet).destroy()
+            showKeyTeleportFlowConflict()
+            return
+        }
+        if (!manager.ingest(KeyTeleportInput.Sender(packet), KeyTeleportFlowDirection.RECEIVE)) {
+            showKeyTeleportFlowConflict()
+            return
+        }
+
+        if (app.currentRoute != route) {
+            app.pushRoute(route)
+        }
+    }
+
+    private fun canRouteKeyTeleportPacket(
+        managerDirection: KeyTeleportFlowDirection?,
+        targetRoute: Route,
+    ): Boolean {
+        val targetDirection = targetRoute.keyTeleportFlowDirection() ?: return false
+        val activeRouteDirections =
+            (listOf(app.router.default) + app.router.routes)
+                .filterIsInstance<Route.KeyTeleport>()
+                .mapNotNull(Route::keyTeleportFlowDirection)
+
+        return canRouteKeyTeleportPacket(
+            managerDirection = managerDirection,
+            targetDirection = targetDirection,
+            activeRouteDirections = activeRouteDirections,
+            currentRouteDirection = app.currentRoute.keyTeleportFlowDirection(),
+        )
+    }
+
+    private fun showKeyTeleportFlowConflict() {
+        app.alertState =
+            TaggedItem(
+                AppAlertState.General(
+                    title = "KeyTeleport",
+                    message = "Finish the active KeyTeleport flow before opening a different transfer.",
+                ),
+            )
     }
 
     private fun importLabels(labels: Bip329Labels) {
@@ -340,6 +393,28 @@ class ScanManager private constructor() {
                 instance ?: ScanManager().also { instance = it }
             }
     }
+}
+
+private fun Route.keyTeleportFlowDirection(): KeyTeleportFlowDirection? =
+    when (this) {
+        is Route.KeyTeleport ->
+            when (v1) {
+                KeyTeleportRoute.RECEIVE -> KeyTeleportFlowDirection.RECEIVE
+                KeyTeleportRoute.SEND -> KeyTeleportFlowDirection.SEND
+            }
+        else -> null
+    }
+
+internal fun canRouteKeyTeleportPacket(
+    managerDirection: KeyTeleportFlowDirection?,
+    targetDirection: KeyTeleportFlowDirection,
+    activeRouteDirections: List<KeyTeleportFlowDirection>,
+    currentRouteDirection: KeyTeleportFlowDirection?,
+): Boolean {
+    if (managerDirection != null && managerDirection != targetDirection) return false
+    if (activeRouteDirections.any { it != targetDirection }) return false
+
+    return activeRouteDirections.isEmpty() || currentRouteDirection == targetDirection
 }
 
 val Scanner: ScanManager

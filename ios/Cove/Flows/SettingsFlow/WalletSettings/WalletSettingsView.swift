@@ -1,13 +1,15 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-private enum XprvExportAction {
-    case share
+private enum XprvPostVerificationAction {
+    case reveal
     case keyTeleport
 }
 
 struct WalletSettingsView: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
 
@@ -19,8 +21,12 @@ struct WalletSettingsView: View {
     @State private var showingSecondDeleteConfirmation = false
     @State private var showingFinalDeleteConfirmation = false
     @State private var showingXprvExportWarning = false
-    @State private var showingXprvExportOptions = false
-    @State private var pendingXprvExportAction: XprvExportAction?
+    @State private var showingXprvCredentialVerification = false
+    @State private var xprvCredentialVerificationSucceeded = false
+    @State private var pendingXprvAction: XprvPostVerificationAction?
+    @State private var revealedXprv: String?
+    @State private var showingXprvReveal = false
+    @State private var showingAppLockRequired = false
     @State private var requiredConfirmations: UInt8 = 1
     @State private var accountNumber: UInt32? = nil
 
@@ -83,29 +89,46 @@ struct WalletSettingsView: View {
         showingDeleteConfirmation = true
     }
 
-    private func startXprvExport(_ action: XprvExportAction) {
-        if auth.isAuthEnabled {
-            pendingXprvExportAction = action
-            auth.lock()
-        } else {
-            performXprvExport(action)
+    private func startXprvExport(_ action: XprvPostVerificationAction) {
+        guard auth.isAuthEnabled else {
+            showingAppLockRequired = true
+            return
+        }
+
+        clearRevealedXprv()
+        pendingXprvAction = action
+        xprvCredentialVerificationSucceeded = false
+        showingXprvCredentialVerification = true
+    }
+
+    private func performXprvExport(_ action: XprvPostVerificationAction) {
+        switch action {
+        case .reveal:
+            do {
+                revealedXprv = try manager.rust.exposeXprv()
+                showingXprvReveal = true
+            } catch {
+                Log.error("Unable to reveal private key: \(error)")
+                app.alertState = .init(
+                    .general(
+                        title: "Unable to Reveal Private Key",
+                        message: "Cove could not access this wallet's private key."
+                    )
+                )
+            }
+        case .keyTeleport:
+            app.startKeyTeleportSend(walletId: metadata.id)
         }
     }
 
-    private func performXprvExport(_ action: XprvExportAction) {
-        switch action {
-        case .share:
-            do {
-                let xprv = try manager.rust.exposeXprv()
-                ShareSheet.presentFromMenu(text: xprv)
-            } catch {
-                Log.error("Unable to export private key: \(error)")
-            }
-        case .keyTeleport:
-            let keyTeleportManager = app.ensureKeyTeleportManager()
-            keyTeleportManager.dispatch(.startSendFromWallet(metadata.id))
-            app.pushRoute(RouteFactory().keyTeleportSend())
-        }
+    private func clearRevealedXprv() {
+        revealedXprv = nil
+        showingXprvReveal = false
+    }
+
+    private func handleDisappear() {
+        clearRevealedXprv()
+        manager.validateMetadata()
     }
 
     var body: some View {
@@ -133,7 +156,6 @@ struct WalletSettingsView: View {
                 requiredConfirmations: $requiredConfirmations,
                 showingSecretWordsConfirmation: $showingSecretWordsConfirmation,
                 showingXprvExportWarning: $showingXprvExportWarning,
-                showingXprvExportOptions: $showingXprvExportOptions,
                 showingDeleteConfirmation: $showingDeleteConfirmation,
                 showingSecondDeleteConfirmation: $showingSecondDeleteConfirmation,
                 showingFinalDeleteConfirmation: $showingFinalDeleteConfirmation,
@@ -146,16 +168,42 @@ struct WalletSettingsView: View {
         .navigationTitle(manager.walletMetadata.name)
         .navigationBarTitleDisplayMode(.inline)
         .foregroundColor(.primary)
-        .onDisappear { manager.validateMetadata() }
+        .onDisappear(perform: handleDisappear)
         .onAppear { manager.validateMetadata() }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            guard oldPhase == .active, newPhase != .active else { return }
+
+            clearRevealedXprv()
+        }
         .task {
             accountNumber = manager.rust.nonDefaultAccountNumber()
         }
-        .onChange(of: auth.lockState) { _, new in
-            guard new == .unlocked, let action = pendingXprvExportAction else { return }
+        .fullScreenCover(
+            isPresented: $showingXprvCredentialVerification,
+            onDismiss: {
+                defer {
+                    pendingXprvAction = nil
+                    xprvCredentialVerificationSucceeded = false
+                }
+                guard xprvCredentialVerificationSucceeded, let pendingXprvAction else { return }
 
-            pendingXprvExportAction = nil
-            performXprvExport(action)
+                performXprvExport(pendingXprvAction)
+            }
+        ) {
+            MainCredentialVerificationView(auth: auth) {
+                xprvCredentialVerificationSucceeded = true
+            }
+        }
+        .sheet(
+            isPresented: $showingXprvReveal,
+            onDismiss: clearRevealedXprv
+        ) {
+            XprvRevealSheet(xprv: $revealedXprv)
+        }
+        .alert("App Lock Required", isPresented: $showingAppLockRequired) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enable a PIN or biometric app lock before exporting a private key.")
         }
         .scrollContentBackground(.hidden)
     }
@@ -324,12 +372,11 @@ private struct WalletSettingsDangerSection: View {
     @Binding var requiredConfirmations: UInt8
     @Binding var showingSecretWordsConfirmation: Bool
     @Binding var showingXprvExportWarning: Bool
-    @Binding var showingXprvExportOptions: Bool
     @Binding var showingDeleteConfirmation: Bool
     @Binding var showingSecondDeleteConfirmation: Bool
     @Binding var showingFinalDeleteConfirmation: Bool
     let showSecretWords: () -> Void
-    let startXprvExport: (XprvExportAction) -> Void
+    let startXprvExport: (XprvPostVerificationAction) -> Void
     let prepareDelete: () -> Void
     let deleteWallet: () -> Void
 
@@ -345,7 +392,6 @@ private struct WalletSettingsDangerSection: View {
             if isHotWallet, hasXprvSecret {
                 WalletXprvExportButton(
                     showingWarning: $showingXprvExportWarning,
-                    showingOptions: $showingXprvExportOptions,
                     export: startXprvExport
                 )
             }
@@ -380,8 +426,7 @@ private struct WalletSettingsDangerSection: View {
 
 private struct WalletXprvExportButton: View {
     @Binding var showingWarning: Bool
-    @Binding var showingOptions: Bool
-    let export: (XprvExportAction) -> Void
+    let export: (XprvPostVerificationAction) -> Void
 
     var body: some View {
         Button("Export Private Key") {
@@ -389,21 +434,13 @@ private struct WalletXprvExportButton: View {
         }
         .font(.subheadline)
         .confirmationDialog("Are you sure?", isPresented: $showingWarning) {
-            Button("Continue") { showingOptions = true }
+            Button("Reveal and Copy") { export(.reveal) }
+            Button("Continue with KeyTeleport") { export(.keyTeleport) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
                 "Whoever has access to your extended private key, has access to your bitcoin. Please keep it safe, don't show it to anyone."
             )
-        }
-        .confirmationDialog(
-            "Export Private Key",
-            isPresented: $showingOptions,
-            titleVisibility: .visible
-        ) {
-            Button("Share…") { export(.share) }
-            Button("KeyTeleport") { export(.keyTeleport) }
-            Button("Cancel", role: .cancel) {}
         }
     }
 }
@@ -512,6 +549,73 @@ private struct WalletFinalDeleteConfirmationHost<Content: View>: View {
                 Text(message)
             }
     }
+}
+
+private struct XprvRevealSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var xprv: String?
+    @State private var copied = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Extended Private Key")
+                        .font(.headline)
+
+                    if let xprv {
+                        Text(xprv)
+                            .font(.system(.caption, design: .monospaced))
+                            .privacySensitive()
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                        Button {
+                            copySensitiveXprv(xprv)
+                            copied = true
+                        } label: {
+                            Label(
+                                copied ? "Copied for 2 Minutes" : "Copy for 2 Minutes",
+                                systemImage: copied ? "checkmark" : "doc.on.doc"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    Text("The clipboard copy stays on this device and expires after two minutes.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+            }
+            .navigationTitle("Private Key")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        xprv = nil
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+        .onDisappear { xprv = nil }
+    }
+}
+
+private func copySensitiveXprv(_ xprv: String) {
+    UIPasteboard.general.setItems(
+        [[UTType.utf8PlainText.identifier: xprv]],
+        options: [
+            .localOnly: true,
+            .expirationDate: Date().addingTimeInterval(120),
+        ]
+    )
 }
 
 private extension WalletBirthday {

@@ -49,10 +49,11 @@ private enum class KeyTeleportRevealedElement {
 internal fun KeyTeleportRevealPair(
     qrHint: String,
     codeHint: String,
+    resetKey: Any? = Unit,
     qr: @Composable () -> Unit,
     code: @Composable () -> Unit,
 ) {
-    var revealed by remember { mutableStateOf(KeyTeleportRevealedElement.QrCode) }
+    var revealed by remember(resetKey) { mutableStateOf(KeyTeleportRevealedElement.QrCode) }
 
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         KeyTeleportRevealable(

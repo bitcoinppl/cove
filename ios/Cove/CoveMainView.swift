@@ -30,6 +30,7 @@ struct CoveMainView: View {
             DispatchQueue.main.async { id = UUID() }
         }
 
+        app.reconcileRouteOwnedManagers()
         app.dispatch(action: AppAction.updateRoute(routes: new))
     }
 
@@ -53,6 +54,11 @@ struct CoveMainView: View {
             "[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(auth.isUsingBiometrics)"
         )
 
+        if oldPhase == .active, newPhase != .active {
+            app.hideSensitiveKeyTeleportReveals()
+            showCover = true
+        }
+
         unlockWhenAuthenticationIsDisabled()
         guard handleActivePhase(newPhase) else { return }
 
@@ -65,7 +71,6 @@ struct CoveMainView: View {
     private func unlockWhenAuthenticationIsDisabled() {
         guard !auth.isAuthEnabled else { return }
 
-        showCover = false
         auth.unlock()
     }
 

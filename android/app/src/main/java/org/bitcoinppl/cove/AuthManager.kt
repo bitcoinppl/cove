@@ -50,6 +50,12 @@ class AuthManager private constructor() : AuthManagerReconciler {
 
     var isUsingBiometrics by mutableStateOf(false)
 
+    var mainCredentialGeneration by mutableStateOf(0L)
+        private set
+
+    var sensitiveContentGeneration by mutableStateOf(0L)
+        private set
+
     var isWipeDataPinEnabled by mutableStateOf<Boolean>(rust.isWipeDataPinEnabled())
         private set
 
@@ -134,6 +140,19 @@ class AuthManager private constructor() : AuthManagerReconciler {
         }
     }
 
+    internal fun completeMainBiometricAuthentication() {
+        if (isInDecoyMode()) {
+            switchToMainMode()
+        }
+
+        recordMainCredentialAuthentication()
+        unlock()
+    }
+
+    internal fun concealSensitiveContent() {
+        sensitiveContentGeneration += 1
+    }
+
     /**
      * check if in decoy mode
      */
@@ -185,6 +204,8 @@ class AuthManager private constructor() : AuthManagerReconciler {
             if (Database().globalConfig().isInDecoyMode()) {
                 switchToMainMode()
             }
+
+            recordMainCredentialAuthentication()
             unlock()
             return UnlockMode.MAIN
         }
@@ -236,6 +257,10 @@ class AuthManager private constructor() : AuthManagerReconciler {
         }
 
         return UnlockMode.LOCKED
+    }
+
+    private fun recordMainCredentialAuthentication() {
+        mainCredentialGeneration += 1
     }
 
     /**

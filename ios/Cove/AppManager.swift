@@ -212,6 +212,31 @@ struct WalletTransitionRecoveryPlan {
     }
 
     @MainActor
+    @discardableResult
+    func startKeyTeleportSend(walletId: WalletId) -> Bool {
+        let activeDirections = [router.default.keyTeleportFlowDirection]
+            + router.routes.map(\.keyTeleportFlowDirection)
+            + [keyTeleportManager?.flowDirection]
+        guard KeyTeleportSendStartDecision.resolve(
+            activeDirections: activeDirections.compactMap(\.self)
+        ) == .start else {
+            alertState = .init(
+                .general(
+                    title: "KeyTeleport Session Active",
+                    message: "Finish the active KeyTeleport session before starting another transfer."
+                )
+            )
+            return false
+        }
+
+        let keyTeleportManager = ensureKeyTeleportManager()
+        keyTeleportManager.dispatch(.startSendFromWallet(walletId))
+        navigateToKeyTeleport(.send)
+
+        return true
+    }
+
+    @MainActor
     public func reconcileAfterLabelsChanged(walletId: WalletId) {
         managerCache.reconcileAfterLabelsChanged(walletId: walletId)
     }
@@ -250,6 +275,7 @@ struct WalletTransitionRecoveryPlan {
         needsOnboarding = rust.needsOnboarding()
         clearWalletManager()
         managerCache.clearCoinControlManager()
+        clearKeyTeleportManager()
 
         let state = rust.state()
         router = state.router
@@ -345,6 +371,10 @@ struct WalletTransitionRecoveryPlan {
     }
 
     func pushRoute(_ route: Route) {
+        if route.keyTeleportFlowDirection != nil, restoreExistingRouteIfPresent(route) {
+            return
+        }
+
         navigationCoordinator.pushRoute(
             route,
             router: &router,
@@ -374,6 +404,38 @@ struct WalletTransitionRecoveryPlan {
         navigationCoordinator.setRoute(routes, router: &router) { router in
             self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
+    }
+
+    func reconcileRouteOwnedManagers() {
+        managerCache.reconcileRouteOwnedManagers(router: router)
+    }
+
+    func hideSensitiveKeyTeleportReveals() {
+        keyTeleportManager?.hideSensitiveReveals()
+    }
+
+    func navigateToKeyTeleport(_ route: KeyTeleportRoute) {
+        pushRoute(.keyTeleport(route))
+    }
+
+    private func restoreExistingRouteIfPresent(_ target: Route) -> Bool {
+        if router.default == target {
+            if !router.routes.isEmpty {
+                setRoute([])
+            }
+            return true
+        }
+
+        guard let existingIndex = router.routes.firstIndex(of: target) else {
+            return false
+        }
+
+        let routesThroughExisting = Array(router.routes.prefix(through: existingIndex))
+        if routesThroughExisting != router.routes {
+            setRoute(routesThroughExisting)
+        }
+
+        return true
     }
 
     func scanQr() {

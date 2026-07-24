@@ -30,6 +30,7 @@ struct KeyTeleportContainer: View {
 
 private struct KeyTeleportLoadedView: View {
     @Environment(AppManager.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
 
     @Bindable var manager: KeyTeleportManager
     let route: KeyTeleportRoute
@@ -41,6 +42,7 @@ private struct KeyTeleportLoadedView: View {
     @State private var senderPassword = ""
     @State private var mnemonicDisclosure = KeyTeleportMnemonicDisclosure.hidden
     @State private var xprv: String?
+    @State private var sensitiveRevealResetId = UUID()
     @State private var showEndSessionConfirmation = false
     @State private var showRestartSessionConfirmation = false
 
@@ -56,6 +58,7 @@ private struct KeyTeleportLoadedView: View {
                 }
 
                 stateContent
+                    .id(sensitiveRevealResetId)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 24)
@@ -78,6 +81,11 @@ private struct KeyTeleportLoadedView: View {
         }
         .onAppear(perform: prepare)
         .onDisappear(perform: handleDisappear)
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            guard oldPhase == .active, newPhase != .active else { return }
+
+            resetSensitiveRevealUI()
+        }
         .onChange(of: isMnemonicReview) { _, isReview in
             if !isReview {
                 mnemonicDisclosure = .hidden
@@ -316,19 +324,28 @@ private struct KeyTeleportLoadedView: View {
     }
 
     private func handleDisappear() {
+        resetSensitiveRevealUI()
+    }
+
+    private func resetSensitiveRevealUI() {
+        senderPassword = ""
+        receiverCode = ""
         mnemonicDisclosure = .hidden
         xprv = nil
+        sensitiveRevealResetId = UUID()
 
-        if case .receiveXprvReview = manager.state {
-            manager.dispatch(.hideXprv)
-        }
+        manager.hideSensitiveReveals()
     }
 
     private func paste() {
         let text = pastedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        manager.ingest(text)
+        do {
+            try ingest(StringOrData(text).toMultiFormat())
+        } catch {
+            manager.ingest(text)
+        }
     }
 
     private func revealMnemonicWords() {
@@ -346,12 +363,39 @@ private struct KeyTeleportLoadedView: View {
     private func ingest(_ multiFormat: MultiFormat) {
         switch multiFormat {
         case let .keyTeleportReceiver(packet):
+            guard canIngestPacket(requiring: .send) else {
+                showDirectionConflict(requiredDirection: .send)
+                return
+            }
+
             manager.ingest(packet)
         case let .keyTeleportSender(packet):
+            guard canIngestPacket(requiring: .receive) else {
+                showDirectionConflict(requiredDirection: .receive)
+                return
+            }
+
             manager.ingest(packet)
         default:
             app.alertState = .init(.invalidFormat(message: "This is not a KeyTeleport packet."))
         }
+    }
+
+    private func canIngestPacket(requiring requiredDirection: KeyTeleportFlowDirection) -> Bool {
+        KeyTeleportPacketRoutingDecision.resolve(
+            activeDirections: [route.flowDirection, manager.flowDirection].compactMap(\.self),
+            requiredDirection: requiredDirection
+        ) == .accept
+    }
+
+    private func showDirectionConflict(requiredDirection: KeyTeleportFlowDirection) {
+        let expectedPacket = requiredDirection == .send ? "receiver request" : "sender response"
+        app.alertState = .init(
+            .general(
+                title: "Wrong KeyTeleport Packet",
+                message: "This session expects a \(expectedPacket). End it before starting the opposite flow."
+            )
+        )
     }
 
     private var isMnemonicReview: Bool {
@@ -398,6 +442,10 @@ private struct KeyTeleportAlertBanner: View {
             "This receive session expired. Start a new receive session."
         case .ReceiveSessionReset:
             "The previous receive request was unreadable, so Cove replaced it. Responses for the old request will not work."
+        case .ReceiveSessionScopeChanged:
+            "Return to the network and wallet mode where this receive session was started."
+        case .ConflictingTransferDirection:
+            "Finish the active KeyTeleport transfer before starting the opposite direction."
         case .ParseFailed:
             "This KeyTeleport packet could not be read."
         case .UnsupportedPsbt:
@@ -596,7 +644,7 @@ private struct KeyTeleportRevealPair<QR: View, Code: View>: View {
     let qr: QR
     let code: Code
 
-    @State private var revealed: KeyTeleportRevealedElement = .qrCode
+    @State private var revealed: KeyTeleportRevealedElement?
 
     init(
         qrHint: String,
@@ -824,7 +872,6 @@ private struct KeyTeleportXprvReviewView: View {
             if review.revealed, let xprv {
                 Text(xprv)
                     .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.midnightBlue.opacity(0.48))

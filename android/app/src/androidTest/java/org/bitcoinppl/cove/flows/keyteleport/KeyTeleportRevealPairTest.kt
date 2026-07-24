@@ -1,6 +1,9 @@
 package org.bitcoinppl.cove.flows.keyteleport
 
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -46,6 +49,34 @@ class KeyTeleportRevealPairTest {
             .onNodeWithContentDescription("Tap to show QR code")
             .assertHasClickAction()
             .performClick()
+
+        compose.onNodeWithText("QR payload").assertIsDisplayed()
+        compose.onNodeWithText("Secret password").assertDoesNotExist()
+    }
+
+    @Test
+    fun concealmentResetHidesThePreviouslyRevealedCode() {
+        var resetKey by mutableStateOf(0)
+        compose.setContent {
+            CoveTheme(dynamicColor = false) {
+                KeyTeleportRevealPair(
+                    qrHint = "Tap to show QR code",
+                    codeHint = "Tap to show password",
+                    resetKey = resetKey,
+                    qr = { Text("QR payload") },
+                    code = { Text("Secret password") },
+                )
+            }
+        }
+
+        compose
+            .onNodeWithContentDescription("Tap to show password")
+            .performClick()
+        compose.onNodeWithText("Secret password").assertIsDisplayed()
+
+        compose.runOnUiThread {
+            resetKey += 1
+        }
 
         compose.onNodeWithText("QR payload").assertIsDisplayed()
         compose.onNodeWithText("Secret password").assertDoesNotExist()

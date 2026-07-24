@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,15 +45,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.flows.keyteleport.shareText
+import org.bitcoinppl.cove.flows.keyteleport.SecureScreenEffect
+import org.bitcoinppl.cove.flows.keyteleport.copyText
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.utils.toComposeColor
@@ -62,9 +68,7 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.Route
-import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletBirthday
 import org.bitcoinppl.cove_core.WalletColor
@@ -77,9 +81,14 @@ import java.util.Date
 import java.util.Locale
 
 private enum class XprvExportAction {
-    SHARE,
+    REVEAL,
     KEY_TELEPORT,
 }
+
+private data class PendingXprvExport(
+    val action: XprvExportAction,
+    val credentialGeneration: Long,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,14 +98,16 @@ fun WalletSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val metadata = manager.walletMetadata
-    val context = LocalContext.current
     val auth = remember { Auth }
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showFirstDeleteConfirmation by remember { mutableStateOf(false) }
     var showSecondDeleteConfirmation by remember { mutableStateOf(false) }
     var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
     var showXprvExportWarning by remember { mutableStateOf(false) }
     var showXprvExportOptions by remember { mutableStateOf(false) }
-    var pendingXprvExportAction by remember { mutableStateOf<XprvExportAction?>(null) }
+    var pendingXprvExport by remember { mutableStateOf<PendingXprvExport?>(null) }
+    var revealedXprv by remember { mutableStateOf<String?>(null) }
+    var xprvExportError by remember { mutableStateOf<String?>(null) }
     var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
@@ -132,7 +143,25 @@ fun WalletSettingsScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            pendingXprvExport = null
+            revealedXprv = null
             manager.validateMetadata()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                    pendingXprvExport = null
+                    revealedXprv = null
+                    showXprvExportOptions = false
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -160,39 +189,52 @@ fun WalletSettingsScreen(
 
     fun performXprvExport(action: XprvExportAction) {
         when (action) {
-            XprvExportAction.SHARE -> {
+            XprvExportAction.REVEAL -> {
                 try {
-                    shareText(context, "Export Private Key", manager.exposeXprv())
+                    revealedXprv = manager.exposeXprv()
                 } catch (e: Exception) {
-                    Log.e("WalletSettingsScreen", "failed to export private key", e)
+                    xprvExportError = e.message ?: "Unable to reveal the private key."
+                    Log.e("WalletSettingsScreen", "failed to reveal private key", e)
                 }
             }
 
             XprvExportAction.KEY_TELEPORT -> {
-                val keyTeleportManager = app.getKeyTeleportManager()
-                keyTeleportManager.dispatch(KeyTeleportManagerAction.StartSendFromWallet(metadata.id))
-                app.pushRoute(RouteFactory().keyTeleportSend())
+                if (!app.startKeyTeleportSend(metadata.id)) {
+                    xprvExportError = "Finish the active KeyTeleport session before starting another transfer."
+                }
             }
         }
     }
 
     fun startXprvExport(action: XprvExportAction) {
         showXprvExportOptions = false
-        if (auth.isAuthEnabled) {
-            pendingXprvExportAction = action
-            auth.lock()
-        } else {
-            performXprvExport(action)
+        if (!auth.isAuthEnabled) {
+            xprvExportError = "Set up a PIN or biometric unlock before exporting a private key."
+            return
         }
+
+        pendingXprvExport =
+            PendingXprvExport(
+                action = action,
+                credentialGeneration = auth.mainCredentialGeneration,
+            )
+        auth.lock()
     }
 
-    LaunchedEffect(auth.isLocked) {
-        if (!auth.isLocked) {
-            pendingXprvExportAction?.let { action ->
-                pendingXprvExportAction = null
-                performXprvExport(action)
-            }
+    LaunchedEffect(auth.mainCredentialGeneration) {
+        val pending = pendingXprvExport ?: return@LaunchedEffect
+        if (!hasFreshMainCredential(auth.mainCredentialGeneration, pending.credentialGeneration)) {
+            return@LaunchedEffect
         }
+
+        pendingXprvExport = null
+        performXprvExport(pending.action)
+    }
+
+    LaunchedEffect(auth.sensitiveContentGeneration) {
+        pendingXprvExport = null
+        revealedXprv = null
+        showXprvExportOptions = false
     }
 
     Scaffold(
@@ -404,10 +446,10 @@ fun WalletSettingsScreen(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     TextButton(
-                        onClick = { startXprvExport(XprvExportAction.SHARE) },
+                        onClick = { startXprvExport(XprvExportAction.REVEAL) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Share…")
+                        Text("Reveal")
                     }
                     TextButton(
                         onClick = { startXprvExport(XprvExportAction.KEY_TELEPORT) },
@@ -421,6 +463,26 @@ fun WalletSettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showXprvExportOptions = false }) {
                     Text("Cancel")
+                }
+            },
+        )
+    }
+
+    revealedXprv?.let { xprv ->
+        XprvRevealDialog(
+            xprv = xprv,
+            onDismiss = { revealedXprv = null },
+        )
+    }
+
+    xprvExportError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { xprvExportError = null },
+            title = { Text("Private Key Export") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { xprvExportError = null }) {
+                    Text("OK")
                 }
             },
         )
@@ -530,6 +592,58 @@ private fun WalletBirthday.displayValue(): String =
             SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(date)
         }
     }
+
+internal fun hasFreshMainCredential(
+    currentGeneration: Long,
+    generationAtRequest: Long,
+): Boolean = currentGeneration > generationAtRequest
+
+@Composable
+private fun XprvRevealDialog(
+    xprv: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+
+    SecureScreenEffect()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Extended Private Key") },
+        text = {
+            Column {
+                Text(
+                    text = "Keep this private. Anyone with this key can spend this wallet’s bitcoin.",
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+                Text(
+                    text = xprv,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    copyText(
+                        context = context,
+                        label = "Cove extended private key",
+                        text = xprv,
+                        sensitive = true,
+                    )
+                },
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null)
+                Text("Copy")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        },
+    )
+}
 
 @Composable
 private fun WalletColorSelector(

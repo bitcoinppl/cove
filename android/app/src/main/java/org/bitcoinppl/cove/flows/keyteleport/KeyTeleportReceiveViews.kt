@@ -74,6 +74,7 @@ private data class ImportedWalletContent(
 @Composable
 internal fun ReceiveReadyView(
     receive: KeyTeleportReceiveState,
+    concealmentGeneration: Long,
     onScan: () -> Unit,
 ) {
     val packetText = remember(receive.packet) { runCatching { receive.packet.bbqrPart() }.getOrNull() }
@@ -85,6 +86,7 @@ internal fun ReceiveReadyView(
         KeyTeleportRevealPair(
             qrHint = "Tap to show QR code",
             codeHint = "Tap to show receiver code",
+            resetKey = concealmentGeneration,
             qr = { PacketQr(packetText) },
             code = { ReceiverCode(receive.groupedNumericCode) },
         )
@@ -154,7 +156,9 @@ internal fun ReceiveMnemonicReviewView(
     wordCount: Int,
     onDone: () -> Unit,
 ) {
-    var disclosure by remember(wordCount) { mutableStateOf<MnemonicDisclosure>(MnemonicDisclosure.Hidden) }
+    var disclosure by remember(wordCount, manager.concealmentGeneration) {
+        mutableStateOf<MnemonicDisclosure>(MnemonicDisclosure.Hidden)
+    }
 
     DisposableEffect(Unit) {
         onDispose { disclosure = MnemonicDisclosure.Hidden }
@@ -240,6 +244,9 @@ internal fun ReceiveXprvReviewView(
     }
     LaunchedEffect(review.revealed) {
         xprv = if (review.revealed) manager.revealXprv() else null
+    }
+    LaunchedEffect(manager.concealmentGeneration) {
+        xprv = null
     }
 
     TextBlock(

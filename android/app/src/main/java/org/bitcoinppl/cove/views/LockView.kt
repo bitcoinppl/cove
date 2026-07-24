@@ -127,13 +127,7 @@ fun LockView(
                         super.onAuthenticationSucceeded(result)
                         biometricTimeoutJob?.cancel()
                         auth.isUsingBiometrics = false
-
-                        // if in decoy mode, switch back to main mode (biometric = trusted user = main mode)
-                        if (auth.isInDecoyMode()) {
-                            auth.switchToMainMode()
-                        }
-
-                        auth.unlock()
+                        auth.completeMainBiometricAuthentication()
                     }
 
                     override fun onAuthenticationFailed() {

@@ -215,16 +215,53 @@ extension ScanManager {
 
     @MainActor
     private func handleKeyTeleportReceiver(_ packet: KeyTeleportReceiverPacket) {
+        guard canIngestKeyTeleportPacket(requiring: .send) else {
+            showKeyTeleportDirectionConflict(requiredDirection: .send)
+            return
+        }
+
         let manager = app.ensureKeyTeleportManager()
         manager.ingest(packet)
-        app.pushRoute(RouteFactory().keyTeleportSend())
+        app.navigateToKeyTeleport(.send)
     }
 
     @MainActor
     private func handleKeyTeleportSender(_ packet: KeyTeleportSenderPacket) {
+        guard canIngestKeyTeleportPacket(requiring: .receive) else {
+            showKeyTeleportDirectionConflict(requiredDirection: .receive)
+            return
+        }
+
         let manager = app.ensureKeyTeleportManager()
         manager.ingest(packet)
-        app.pushRoute(RouteFactory().keyTeleportReceive())
+        app.navigateToKeyTeleport(.receive)
+    }
+
+    private func canIngestKeyTeleportPacket(
+        requiring requiredDirection: KeyTeleportFlowDirection
+    ) -> Bool {
+        let routeDirections = [app.router.default.keyTeleportFlowDirection]
+            + app.router.routes.map(\.keyTeleportFlowDirection)
+        let activeDirections = routeDirections.compactMap(\.self)
+            + [app.keyTeleportManager?.flowDirection].compactMap(\.self)
+
+        return KeyTeleportPacketRoutingDecision.resolve(
+            activeDirections: activeDirections,
+            requiredDirection: requiredDirection
+        ) == .accept
+    }
+
+    private func showKeyTeleportDirectionConflict(
+        requiredDirection: KeyTeleportFlowDirection
+    ) {
+        let activeFlow = requiredDirection == .send ? "receive" : "send"
+        let requestedFlow = requiredDirection == .send ? "send" : "receive"
+        app.alertState = .init(
+            .general(
+                title: "KeyTeleport Session Active",
+                message: "End the active \(activeFlow) session before starting a \(requestedFlow) session."
+            )
+        )
     }
 
     @MainActor

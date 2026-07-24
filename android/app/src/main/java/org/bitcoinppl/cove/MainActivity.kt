@@ -2,8 +2,10 @@ package org.bitcoinppl.cove
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -111,15 +113,17 @@ class MainActivity : FragmentActivity() {
         super.onPause()
         ForegroundUiBridge.pause(this)
         if (!isBootstrapped) return
-        // show cover only on actual app transitions (not internal popups like DropdownMenu)
-        if (Auth.isAuthEnabled) {
-            privacyCoverView?.visibility = View.VISIBLE
-            isPrivacyCoverVisible = true
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE,
-            )
-        }
+
+        Auth.concealSensitiveContent()
+        AppManager.getInstance().concealSensitiveKeyTeleportContent()
+
+        // onPause represents an actual activity transition, unlike focus loss from an in-app popup
+        privacyCoverView?.visibility = View.VISIBLE
+        isPrivacyCoverVisible = true
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
     }
 
     override fun onResume() {
@@ -476,8 +480,12 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleExternalKeyTeleportIntent(intent: Intent?) {
+        if (intent == null || !isExternalKeyTeleportIntentAllowed(intent)) {
+            return
+        }
+
         val text =
-            when (intent?.action) {
+            when (intent.action) {
                 Intent.ACTION_VIEW -> intent.dataString
                 Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
                 else -> null
@@ -487,14 +495,52 @@ class MainActivity : FragmentActivity() {
             return
         }
 
-        val signature = "${intent?.action}:$text"
+        val signature = "${intent.action}:$text"
         if (signature == handledExternalIntentSignature) {
             return
         }
 
         if (Scanner.handleKeyTeleportText(text)) {
             handledExternalIntentSignature = signature
+            sanitizeConsumedExternalIntent(intent)
         }
+    }
+
+    private fun isExternalKeyTeleportIntentAllowed(intent: Intent): Boolean {
+        if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return false
+
+        val alias = ComponentName(packageName, KEY_TELEPORT_LINK_ALIAS)
+        val aliasEnabled =
+            runCatching {
+                val setting = packageManager.getComponentEnabledSetting(alias)
+                when (setting) {
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
+                        packageManager
+                            .getActivityInfo(
+                                alias,
+                                PackageManager.ComponentInfoFlags.of(
+                                    PackageManager.MATCH_DISABLED_COMPONENTS.toLong(),
+                                ),
+                            ).enabled
+                    else -> false
+                }
+            }.getOrDefault(false)
+
+        return shouldAcceptExternalKeyTeleportIntent(
+            action = intent.action,
+            componentClassName = intent.component?.className,
+            keyTeleportAliasClassName = KEY_TELEPORT_LINK_ALIAS,
+            keyTeleportAliasEnabled = aliasEnabled,
+        )
+    }
+
+    private fun sanitizeConsumedExternalIntent(intent: Intent) {
+        intent.action = Intent.ACTION_MAIN
+        intent.data = null
+        intent.type = null
+        intent.clipData = null
+        intent.removeExtra(Intent.EXTRA_TEXT)
     }
 
     private fun resetLocalDataForUiTestsIfRequested() {
@@ -526,6 +572,20 @@ class MainActivity : FragmentActivity() {
          *  Prevents a distracting spinner flash when bootstrap completes quickly */
         const val SPINNER_DELAY_MS = 100L
         private const val UI_TEST_RESET_DATA_EXTRA = "org.bitcoinppl.cove.uitest.RESET_DATA"
+        private const val KEY_TELEPORT_LINK_ALIAS = "org.bitcoinppl.cove.KeyTeleportLinkActivity"
         private const val TAG = "MainActivity"
     }
 }
+
+internal fun shouldAcceptExternalKeyTeleportIntent(
+    action: String?,
+    componentClassName: String?,
+    keyTeleportAliasClassName: String,
+    keyTeleportAliasEnabled: Boolean,
+): Boolean =
+    when (action) {
+        Intent.ACTION_SEND -> keyTeleportAliasEnabled
+        Intent.ACTION_VIEW ->
+            keyTeleportAliasEnabled && componentClassName == keyTeleportAliasClassName
+        else -> false
+    }

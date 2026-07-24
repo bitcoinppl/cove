@@ -3,6 +3,32 @@ import SwiftUI
 
 extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTeleportManager {}
 
+enum KeyTeleportFlowDirection: Equatable {
+    case receive
+    case send
+}
+
+enum KeyTeleportPacketRoutingDecision: Equatable {
+    case accept
+    case rejectConflict
+
+    static func resolve(
+        activeDirections: [KeyTeleportFlowDirection],
+        requiredDirection: KeyTeleportFlowDirection
+    ) -> Self {
+        activeDirections.allSatisfy { $0 == requiredDirection } ? .accept : .rejectConflict
+    }
+}
+
+enum KeyTeleportSendStartDecision: Equatable {
+    case start
+    case rejectActiveFlow
+
+    static func resolve(activeDirections: [KeyTeleportFlowDirection]) -> Self {
+        activeDirections.isEmpty ? .start : .rejectActiveFlow
+    }
+}
+
 @Observable final class KeyTeleportManager: ReconcilingManager, KeyTeleportManagerReconciler {
     typealias Message = KeyTeleportManagerReconcileMessage
     typealias Action = KeyTeleportManagerAction
@@ -40,6 +66,9 @@ extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTe
         guard let rust = takeRustForClose() else { return }
 
         logger.debug("Closing KeyTeleportManager")
+        state = .idle
+        alert = nil
+
         rustBridge.async {
             rust.dispatch(action: .clear)
         }
@@ -108,7 +137,56 @@ extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTe
         rust?.revealXprv()
     }
 
+    func hideSensitiveReveals() {
+        dispatch(.hideXprv)
+    }
+
     func isSendEligible(walletId: WalletId) -> Bool {
         rust?.isSendEligible(walletId: walletId) ?? false
+    }
+
+    var flowDirection: KeyTeleportFlowDirection? {
+        state.flowDirection
+    }
+}
+
+extension KeyTeleportManagerState {
+    var flowDirection: KeyTeleportFlowDirection? {
+        switch self {
+        case .idle:
+            nil
+        case .receiveReady,
+             .receiveError,
+             .receiveEnterPassword,
+             .receiveMnemonicReview,
+             .receiveXprvReview,
+             .receiveMessageReview,
+             .receiveImportedWallet,
+             .receiveAlreadyImportedWallet:
+            .receive
+        case .sendAwaitReceiver,
+             .sendChooseWallet,
+             .sendEnterCode,
+             .sendReady:
+            .send
+        }
+    }
+}
+
+extension KeyTeleportRoute {
+    var flowDirection: KeyTeleportFlowDirection {
+        switch self {
+        case .receive:
+            .receive
+        case .send:
+            .send
+        }
+    }
+}
+
+extension Route {
+    var keyTeleportFlowDirection: KeyTeleportFlowDirection? {
+        guard case let .keyTeleport(route) = self else { return nil }
+        return route.flowDirection
     }
 }
