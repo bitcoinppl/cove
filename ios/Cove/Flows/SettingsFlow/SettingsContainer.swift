@@ -63,6 +63,8 @@ struct SettingsContainer: View {
                 AboutScreen()
             case .cloudBackup:
                 CloudBackupDetailScreen()
+            case .ohttpRelay:
+                OhttpRelaySettingsView()
             }
         }
         .navigationBarTitleDisplayMode(.inline)

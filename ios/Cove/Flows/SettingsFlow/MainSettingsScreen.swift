@@ -222,6 +222,7 @@ struct MainSettingsScreen: View {
         Form {
             MainSettingsGeneralSection()
             WalletSettingsSection()
+            MainSettingsAdvancedSection()
             MainSettingsSecuritySection(
                 canUseBiometrics: canUseBiometrics(),
                 toggleBiometric: toggleBiometric,

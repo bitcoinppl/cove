@@ -281,6 +281,8 @@
     <ID>FunctionNaming:NodeSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NodeSettingsScreen</ID>
     <ID>FunctionNaming:NumberPadPinView.kt:@Composable fun NumberPadPinView</ID>
     <ID>FunctionNaming:NumberPadPinView.kt:@Composable private fun NumberButton</ID>
+    <ID>FunctionNaming:OhttpRelaySettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun OhttpRelaySettingsScreen</ID>
+    <ID>FunctionNaming:OhttpRelaySettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun RelayItem</ID>
     <ID>FunctionNaming:OnboardingBackupViews.kt:@Composable internal fun OnboardingBackupWalletView</ID>
     <ID>FunctionNaming:OnboardingBackupViews.kt:@Composable internal fun OnboardingCreatingWalletView</ID>
     <ID>FunctionNaming:OnboardingCloudBackupEnableViews.kt:@Composable internal fun OnboardingCloudBackupStepView</ID>
@@ -590,6 +592,7 @@
     <ID>LongMethod:NfcWriteSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NfcWriteSheet</ID>
     <ID>LongMethod:NodeSettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun NodeSettingsScreen</ID>
     <ID>LongMethod:NumberPadPinView.kt:@Composable fun NumberPadPinView</ID>
+    <ID>LongMethod:OhttpRelaySettingsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun OhttpRelaySettingsScreen</ID>
     <ID>LongMethod:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingCloudBackupDetailsStepView</ID>
     <ID>LongMethod:OnboardingCloudBackupEnableViews.kt:@Composable private fun OnboardingHardwareImportCloudBackupStepView</ID>
     <ID>LongMethod:OnboardingCloudRestoreProgressViews.kt:@Composable private fun OnboardingRestoreContent</ID>
@@ -1078,6 +1081,7 @@
     <ID>PackageNaming:NewWalletSelectScreen.kt:package org.bitcoinppl.cove.flows.NewWalletFlow</ID>
     <ID>PackageNaming:NfcHelpSheet.kt:package org.bitcoinppl.cove.flows.NewWalletFlow</ID>
     <ID>PackageNaming:NodeSettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
+    <ID>PackageNaming:OhttpRelaySettingsScreen.kt:package org.bitcoinppl.cove.flows.SettingsFlow</ID>
     <ID>PackageNaming:OnboardingBackupViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
     <ID>PackageNaming:OnboardingBackupViewsTest.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
     <ID>PackageNaming:OnboardingCloudBackupEnableViews.kt:package org.bitcoinppl.cove.flows.OnboardingFlow</ID>
@@ -1173,6 +1177,7 @@
     <ID>SwallowedException:HotWalletImportScreen.kt:e: ImportWalletException.InvalidWordGroup</ID>
     <ID>SwallowedException:NfcReader.kt:NfcReader$e: Exception</ID>
     <ID>SwallowedException:NfcWriter.kt:NfcWriter$closeError: Exception</ID>
+    <ID>SwallowedException:OhttpRelaySettingsScreen.kt:e: Exception</ID>
     <ID>SwallowedException:ScanManager.kt:ScanManager$e: ImportWalletException.InvalidWordGroup</ID>
     <ID>SwallowedException:SelectedWalletContainer.kt:ex: Exception</ID>
     <ID>SwallowedException:SendFlowAdvancedDetailsView.kt:e: Exception</ID>
@@ -1231,6 +1236,7 @@
     <ID>TooGenericExceptionCaught:NfcWriter.kt:NfcWriter$closeError: Exception</ID>
     <ID>TooGenericExceptionCaught:NfcWriter.kt:NfcWriter$e: Exception</ID>
     <ID>TooGenericExceptionCaught:NodeSettingsScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:OhttpRelaySettingsScreen.kt:e: Exception</ID>
     <ID>TooGenericExceptionCaught:OnboardingExchangeFundingView.kt:error: Exception</ID>
     <ID>TooGenericExceptionCaught:OnboardingImportViews.kt:error: Exception</ID>
     <ID>TooGenericExceptionCaught:QrCodeImportScreen.kt:e: Exception</ID>

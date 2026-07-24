@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cove_util::ResultExt as _;
 use redb::TableDefinition;
 use tap::TapFallible as _;
 use tracing::{error, warn};
@@ -42,6 +43,8 @@ pub enum GlobalConfigKey {
     LockedAt,
     OnboardingProgress,
     CustomBlockExplorer(Network),
+    OhttpRelayUrl,
+    OhttpRelayUrls,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -74,6 +77,8 @@ impl From<GlobalConfigKey> for &'static str {
                 "custom_block_explorer_testnet4"
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
+            GlobalConfigKey::OhttpRelayUrl => "ohttp_relay_url",
+            GlobalConfigKey::OhttpRelayUrls => "ohttp_relay_urls",
         }
     }
 }
@@ -106,6 +111,9 @@ pub enum GlobalConfigTableError {
 
     #[error("invalid custom block explorer: {0}")]
     InvalidCustomBlockExplorer(String),
+
+    #[error("invalid OHTTP relay URL: {0}")]
+    InvalidOhttpRelayUrl(String),
 }
 
 impl From<CustomBlockExplorerError> for GlobalConfigTableError {
@@ -212,6 +220,17 @@ impl GlobalConfigTable {
             self.get(GlobalConfigKey::CustomBlockExplorer(network)).ok().flatten();
 
         effective_transaction_url(network, stored_template.as_deref(), txid)
+    }
+
+    pub(crate) fn parse_ohttp_relay_url(url: &str) -> Result<String, GlobalConfigTableError> {
+        let parsed =
+            url::Url::parse(url).map_err_str(GlobalConfigTableError::InvalidOhttpRelayUrl)?;
+        if parsed.scheme() != "https" {
+            return Err(GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relay URL must use HTTPS".to_string(),
+            ));
+        }
+        Ok(parsed.to_string())
     }
 }
 
@@ -376,6 +395,82 @@ impl GlobalConfigTable {
 
     pub fn clear_custom_block_explorer(&self, network: Network) -> Result<()> {
         self.delete(GlobalConfigKey::CustomBlockExplorer(network))
+    }
+
+    pub fn ohttp_relay_url(&self) -> Option<String> {
+        self.get(GlobalConfigKey::OhttpRelayUrl)
+            .unwrap_or(None)
+            .and_then(|url| Self::parse_ohttp_relay_url(&url).ok())
+    }
+
+    pub fn set_ohttp_relay_url(&self, url: String) -> Result<Option<String>> {
+        let url = url.trim().to_string();
+
+        if url.is_empty() {
+            self.clear_ohttp_relay_url()?;
+            return Ok(None);
+        }
+
+        let canonical = Self::parse_ohttp_relay_url(&url)?;
+        self.set(GlobalConfigKey::OhttpRelayUrl, canonical.clone())?;
+
+        Ok(Some(canonical))
+    }
+
+    pub fn clear_ohttp_relay_url(&self) -> Result<()> {
+        self.delete(GlobalConfigKey::OhttpRelayUrl)
+    }
+
+    pub fn ohttp_relay_urls(&self) -> Vec<String> {
+        if let Some(json) = self.get(GlobalConfigKey::OhttpRelayUrls).unwrap_or(None) {
+            let urls: Vec<String> = serde_json::from_str(&json)
+                .tap_err(|error| warn!("failed to deserialize ohttp_relay_urls from db: {error}"))
+                .unwrap_or_default();
+
+            return urls
+                .into_iter()
+                .filter_map(|url| {
+                    Self::parse_ohttp_relay_url(&url)
+                        .tap_err(|error| warn!("skipping invalid stored relay URL: {error}"))
+                        .ok()
+                })
+                .collect();
+        }
+
+        // migrate from old single URL key if present
+        if let Some(url) = self.ohttp_relay_url() {
+            return vec![url];
+        }
+
+        Vec::new()
+    }
+
+    pub fn set_ohttp_relay_urls(&self, urls: Vec<String>) -> Result<Vec<String>> {
+        if urls.is_empty() {
+            self.delete(GlobalConfigKey::OhttpRelayUrls)?;
+            self.delete(GlobalConfigKey::OhttpRelayUrl)?;
+            return Ok(Vec::new());
+        }
+
+        let mut canonical = Vec::with_capacity(urls.len());
+        for url in urls {
+            let url = url.trim().to_string();
+            if url.is_empty() {
+                continue;
+            }
+
+            canonical.push(Self::parse_ohttp_relay_url(&url)?);
+        }
+
+        if canonical.is_empty() {
+            self.delete(GlobalConfigKey::OhttpRelayUrls)?;
+            return Ok(Vec::new());
+        }
+
+        let json = serde_json::to_string(&canonical).map_err_str(SerdeError::SerializationError)?;
+        self.set(GlobalConfigKey::OhttpRelayUrls, json)?;
+
+        Ok(canonical)
     }
 
     #[uniffi::method(name = "selectedFiatCurrency")]
@@ -686,6 +781,188 @@ mod tests {
             table.selected_block_explorer_option(Network::Bitcoin),
             BlockExplorerOption::MempoolSpace
         );
+    }
+
+    #[test]
+    fn ohttp_relay_url_is_none_when_unset() {
+        let (_tmp, table) = test_table();
+
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_stores_and_retrieves_https_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table.set_ohttp_relay_url(" https://relay.example.com ".to_string()).unwrap();
+
+        assert_eq!(saved.as_deref(), Some("https://relay.example.com/"));
+        assert_eq!(table.ohttp_relay_url().as_deref(), Some("https://relay.example.com/"));
+    }
+
+    #[test]
+    fn ohttp_relay_url_rejects_http_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.set_ohttp_relay_url("http://relay.example.com".to_string()).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relay URL must use HTTPS".to_string(),
+            ))
+        );
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_rejects_invalid_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.set_ohttp_relay_url("not a url".to_string()).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relative URL without a base".to_string(),
+            ))
+        );
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_normalizes_stored_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table.set_ohttp_relay_url("HTTPS://Relay.Example.com".to_string()).unwrap();
+
+        assert_eq!(saved.as_deref(), Some("https://relay.example.com/"));
+        assert_eq!(table.ohttp_relay_url().as_deref(), Some("https://relay.example.com/"));
+    }
+
+    #[test]
+    fn ohttp_relay_url_clears_on_empty_input() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table.set_ohttp_relay_url("https://relay.example.com".to_string()).unwrap();
+        let cleared = table.set_ohttp_relay_url("   ".to_string()).unwrap();
+
+        assert_eq!(cleared, None);
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_url_clear_removes_stored_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table.set_ohttp_relay_url("https://relay.example.com".to_string()).unwrap();
+        table.clear_ohttp_relay_url().unwrap();
+
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn corrupt_stored_ohttp_relay_url_returns_none() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        use super::GlobalConfigKey;
+
+        table.set(GlobalConfigKey::OhttpRelayUrl, "javascript:alert(1)".to_string()).unwrap();
+
+        assert_eq!(table.ohttp_relay_url(), None);
+    }
+
+    #[test]
+    fn ohttp_relay_urls_is_empty_when_unset() {
+        let (_tmp, table) = test_table();
+
+        assert_eq!(table.ohttp_relay_urls(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ohttp_relay_urls_stores_and_retrieves_multiple() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table
+            .set_ohttp_relay_urls(vec![
+                "https://relay1.example.com".to_string(),
+                "https://relay2.example.com".to_string(),
+            ])
+            .unwrap();
+
+        assert_eq!(saved, vec!["https://relay1.example.com/", "https://relay2.example.com/"]);
+        assert_eq!(
+            table.ohttp_relay_urls(),
+            vec!["https://relay1.example.com/", "https://relay2.example.com/"]
+        );
+    }
+
+    #[test]
+    fn ohttp_relay_urls_rejects_http_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.set_ohttp_relay_urls(vec!["http://relay.example.com".to_string()]).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relay URL must use HTTPS".to_string(),
+            ))
+        );
+        assert_eq!(table.ohttp_relay_urls(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ohttp_relay_urls_rejects_invalid_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        assert_eq!(
+            table.set_ohttp_relay_urls(vec!["not a url".to_string()]).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::InvalidOhttpRelayUrl(
+                "relative URL without a base".to_string(),
+            ))
+        );
+        assert_eq!(table.ohttp_relay_urls(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ohttp_relay_urls_normalizes_urls() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved =
+            table.set_ohttp_relay_urls(vec!["HTTPS://Relay.Example.com".to_string()]).unwrap();
+
+        assert_eq!(saved, vec!["https://relay.example.com/"]);
+        assert_eq!(table.ohttp_relay_urls(), vec!["https://relay.example.com/"]);
+    }
+
+    #[test]
+    fn ohttp_relay_urls_clears_on_empty_list() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table.set_ohttp_relay_urls(vec!["https://relay.example.com".to_string()]).unwrap();
+        let cleared = table.set_ohttp_relay_urls(vec![]).unwrap();
+
+        assert_eq!(cleared, Vec::<String>::new());
+        assert_eq!(table.ohttp_relay_urls(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ohttp_relay_urls_migrates_from_old_single_key() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        // set old single URL key directly
+        table.set_ohttp_relay_url("https://legacy.example.com".to_string()).unwrap();
+
+        // new getter should return it as a one element list
+        assert_eq!(table.ohttp_relay_urls(), vec!["https://legacy.example.com/"]);
     }
 
     fn test_table() -> (tempfile::TempDir, super::GlobalConfigTable) {

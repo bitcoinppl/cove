@@ -1303,6 +1303,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_clear_ohttp_relay_url(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_colorscheme(
@@ -1322,6 +1324,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalconfigtable_is_in_decoy_mode(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_url(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_urls(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer(
     ): Short
@@ -1346,6 +1352,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_url(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_urls(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_set_selected_network(
     ): Short
@@ -2336,6 +2346,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_clear_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_globalconfigtable_clear_ohttp_relay_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_colorscheme(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2356,6 +2368,10 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_globalconfigtable_ohttp_relay_url(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_ohttp_relay_urls(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2380,6 +2396,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(`ptr`: Long,`hashedPinCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_url(`ptr`: Long,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_urls(`ptr`: Long,`urls`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_network(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_set_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4157,6 +4177,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_clear_custom_block_explorer() != 40308.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_clear_ohttp_relay_url() != 26983.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 50864.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4185,6 +4208,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_url() != 61876.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_ohttp_relay_urls() != 44564.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136.toShort()) {
@@ -4221,6 +4250,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_url() != 7011.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_ohttp_relay_urls() != 64715.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 20578.toShort()) {
@@ -13140,6 +13175,8 @@ public interface GlobalConfigTableInterface {
 
     fun `clearCustomBlockExplorer`(`network`: Network)
 
+    fun `clearOhttpRelayUrl`()
+
     fun `clearSelectedWallet`()
 
     fun `colorScheme`(): ColorSchemeSelection
@@ -13159,6 +13196,10 @@ public interface GlobalConfigTableInterface {
     fun `isInDecoyMode`(): kotlin.Boolean
 
     fun `isInMainMode`(): kotlin.Boolean
+
+    fun `ohttpRelayUrl`(): kotlin.String?
+
+    fun `ohttpRelayUrls`(): List<kotlin.String>
 
     fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
@@ -13183,6 +13224,10 @@ public interface GlobalConfigTableInterface {
     fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String?
 
     fun `setHashedPinCode`(`hashedPinCode`: kotlin.String)
+
+    fun `setOhttpRelayUrl`(`url`: kotlin.String): kotlin.String?
+
+    fun `setOhttpRelayUrls`(`urls`: List<kotlin.String>): List<kotlin.String>
 
     fun `setSelectedNetwork`(`network`: Network)
 
@@ -13322,6 +13367,19 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 
 
 
+    @Throws(DatabaseException::class)override fun `clearOhttpRelayUrl`()
+        =
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_clear_ohttp_relay_url(
+        it,
+        _status)
+}
+    }
+
+
+
+
     @Throws(DatabaseException::class)override fun `clearSelectedWallet`()
         =
     callWithHandle {
@@ -13449,6 +13507,32 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `ohttpRelayUrl`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_ohttp_relay_url(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `ohttpRelayUrls`(): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_ohttp_relay_urls(
         it,
         _status)
 }
@@ -13626,6 +13710,36 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 }
     }
 
+
+
+
+    @Throws(DatabaseException::class)override fun `setOhttpRelayUrl`(`url`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_url(
+        it,
+
+        FfiConverterString.lower(`url`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(DatabaseException::class)override fun `setOhttpRelayUrls`(`urls`: List<kotlin.String>): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_ohttp_relay_urls(
+        it,
+
+        FfiConverterSequenceString.lower(`urls`),_status)
+}
+    }
+    )
+    }
 
 
 
@@ -43888,6 +44002,12 @@ sealed class GlobalConfigKey {
         companion object
     }
 
+    object OhttpRelayUrl : GlobalConfigKey()
+
+
+    object OhttpRelayUrls : GlobalConfigKey()
+
+
 
 
 
@@ -43923,6 +44043,8 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             15 -> GlobalConfigKey.CustomBlockExplorer(
                 FfiConverterTypeNetwork.read(buf),
                 )
+            16 -> GlobalConfigKey.OhttpRelayUrl
+            17 -> GlobalConfigKey.OhttpRelayUrls
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -44020,6 +44142,18 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 + FfiConverterTypeNetwork.allocationSize(value.v1)
             )
         }
+        is GlobalConfigKey.OhttpRelayUrl -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is GlobalConfigKey.OhttpRelayUrls -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -44086,6 +44220,14 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 FfiConverterTypeNetwork.write(value.v1, buf)
                 Unit
             }
+            is GlobalConfigKey.OhttpRelayUrl -> {
+                buf.putInt(16)
+                Unit
+            }
+            is GlobalConfigKey.OhttpRelayUrls -> {
+                buf.putInt(17)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
@@ -44121,6 +44263,14 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
     }
 
     class InvalidCustomBlockExplorer(
+
+        val v1: kotlin.String
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class InvalidOhttpRelayUrl(
 
         val v1: kotlin.String
         ) : GlobalConfigTableException() {
@@ -44166,6 +44316,9 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             4 -> GlobalConfigTableException.InvalidCustomBlockExplorer(
                 FfiConverterString.read(buf),
                 )
+            5 -> GlobalConfigTableException.InvalidOhttpRelayUrl(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -44191,6 +44344,11 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is GlobalConfigTableException.InvalidOhttpRelayUrl -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -44212,6 +44370,11 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             }
             is GlobalConfigTableException.InvalidCustomBlockExplorer -> {
                 buf.putInt(4)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is GlobalConfigTableException.InvalidOhttpRelayUrl -> {
+                buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -52181,6 +52344,9 @@ sealed class SettingsRoute {
     object CloudBackup : SettingsRoute()
 
 
+    object OhttpRelay : SettingsRoute()
+
+
 
 
 
@@ -52210,6 +52376,7 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             8 -> SettingsRoute.AllWallets
             9 -> SettingsRoute.About
             10 -> SettingsRoute.CloudBackup
+            11 -> SettingsRoute.OhttpRelay
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -52277,6 +52444,12 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
                 4UL
             )
         }
+        is SettingsRoute.OhttpRelay -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: SettingsRoute, buf: ByteBuffer) {
@@ -52321,6 +52494,10 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             }
             is SettingsRoute.CloudBackup -> {
                 buf.putInt(10)
+                Unit
+            }
+            is SettingsRoute.OhttpRelay -> {
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
