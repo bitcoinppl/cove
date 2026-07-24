@@ -14,6 +14,21 @@ enum WalletTargetPreparationOutcome {
     case redirected
 }
 
+enum WalletPreparationFailureDisposition: Equatable {
+    case tryNextCandidate
+    case unrecoverable
+
+    static func classify(_ error: Error) -> Self {
+        switch error {
+        case WalletManagerError.WalletDoesNotExist,
+             WalletManagerError.DatabaseCorruption:
+            .tryNextCandidate
+        default:
+            .unrecoverable
+        }
+    }
+}
+
 struct WalletTransitionRecoveryPlan {
     private(set) var attemptedIds: [WalletId] = []
 
@@ -552,7 +567,12 @@ struct WalletTransitionRecoveryPlan {
                 throw CancellationError()
             } catch {
                 handleWalletPreparationError(error, walletId: candidateId)
-                guard walletPreparationFailureAllowsFallback(error) else { throw error }
+
+                guard WalletPreparationFailureDisposition.classify(error) == .tryNextCandidate
+                else {
+                    recoverFromFailedWalletTransition(error: error, generation: generation)
+                    return .redirected
+                }
             }
 
             guard let nextId = recoveryPlan.candidates(
@@ -580,14 +600,17 @@ struct WalletTransitionRecoveryPlan {
         logger.error("Unable to prepare wallet \(walletId): \(error)")
     }
 
-    private func walletPreparationFailureAllowsFallback(_ error: Error) -> Bool {
-        switch error {
-        case WalletManagerError.WalletDoesNotExist,
-             WalletManagerError.DatabaseCorruption:
-            true
-        default:
-            false
-        }
+    @MainActor
+    private func recoverFromFailedWalletTransition(error: Error, generation: GenerationToken) {
+        guard navigationCoordinator.isNavigationGenerationCurrent(generation) else { return }
+
+        alertState = TaggedItem(.general(
+            title: "Unable to Open Wallet",
+            message: "This wallet could not be opened: \(error.localizedDescription). "
+                + "Select the wallet to try again, or choose another wallet."
+        ))
+
+        recoverFromExhaustedWalletTransition(generation: generation)
     }
 
     @MainActor

@@ -572,11 +572,17 @@ class AppManager private constructor() : FfiReconcile {
 
         var candidateId = recovery.nextCandidate()
         while (candidateId != null) {
-            val manager = loadWalletRouteCandidate(candidateId, generation)
-            if (manager != null) {
-                ensureWalletRouteGenerationIsCurrent(generation, candidateId)
+            when (val load = loadWalletRouteCandidate(candidateId, generation)) {
+                is WalletRouteCandidateLoad.Loaded -> {
+                    ensureWalletRouteGenerationIsCurrent(generation, candidateId)
 
-                prepareLoadedWalletRoute(manager, candidateId, recovery)?.let { return it }
+                    prepareLoadedWalletRoute(load.manager, candidateId, recovery)?.let { return it }
+                }
+
+                WalletRouteCandidateLoad.TryNext -> Unit
+
+                is WalletRouteCandidateLoad.Unrecoverable ->
+                    return recoverFailedWalletRoute(load.error, generation)
             }
 
             candidateId = recovery.nextCandidate()
@@ -605,7 +611,7 @@ class AppManager private constructor() : FfiReconcile {
     private suspend fun loadWalletRouteCandidate(
         candidateId: WalletId,
         generation: GenerationToken,
-    ): WalletManager? {
+    ): WalletRouteCandidateLoad {
         val result =
             runCatchingCancellable(tag, "Unable to prepare wallet $candidateId") {
                 getWalletManagerLoaded(candidateId) {
@@ -613,27 +619,34 @@ class AppManager private constructor() : FfiReconcile {
                 }
             }
 
-        return result.getOrElse { error ->
-            when (val disposition = WalletPreparationFailureDisposition.classify(error)) {
-                WalletPreparationFailureDisposition.MissingWallet -> null
+        return result.fold(
+            onSuccess = { WalletRouteCandidateLoad.Loaded(it) },
+            onFailure = { error ->
+                when (val disposition = WalletPreparationFailureDisposition.classify(error)) {
+                    WalletPreparationFailureDisposition.MissingWallet ->
+                        WalletRouteCandidateLoad.TryNext
 
-                is WalletPreparationFailureDisposition.CorruptedWallet -> {
-                    withContext(Dispatchers.Main.immediate) {
-                        alertState =
-                            TaggedItem(
-                                AppAlertState.WalletDatabaseCorrupted(
-                                    walletId = disposition.error.`id`,
-                                    error = disposition.error.`error`,
-                                ),
-                            )
+                    is WalletPreparationFailureDisposition.CorruptedWallet -> {
+                        withContext(Dispatchers.Main.immediate) {
+                            alertState =
+                                TaggedItem(
+                                    AppAlertState.WalletDatabaseCorrupted(
+                                        walletId = disposition.error.`id`,
+                                        error = disposition.error.`error`,
+                                    ),
+                                )
+                        }
+
+                        WalletRouteCandidateLoad.TryNext
                     }
 
-                    null
-                }
+                    is WalletPreparationFailureDisposition.Rethrow -> throw disposition.error
 
-                is WalletPreparationFailureDisposition.Rethrow -> throw disposition.error
-            }
-        }
+                    is WalletPreparationFailureDisposition.UnrecoverableWallet ->
+                        WalletRouteCandidateLoad.Unrecoverable(disposition.error)
+                }
+            },
+        )
     }
 
     private fun ensureWalletRouteGenerationIsCurrent(
@@ -662,6 +675,29 @@ class AppManager private constructor() : FfiReconcile {
             }.isSuccess
 
         return if (selected) WalletRoutePreparation.RouteRedirected else null
+    }
+
+    private suspend fun recoverFailedWalletRoute(
+        error: Throwable,
+        generation: GenerationToken,
+    ): WalletRoutePreparation {
+        if (!router.isNavigationGenerationCurrent(generation)) {
+            throw CancellationException("Wallet route changed while recovering from failed wallet load")
+        }
+
+        withContext(Dispatchers.Main.immediate) {
+            alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Open Wallet",
+                        message =
+                            "This wallet could not be opened: ${error.message ?: error}. " +
+                                "Select the wallet to try again, or choose another wallet.",
+                    ),
+                )
+        }
+
+        return recoverMissingWalletRoute(generation)
     }
 
     private suspend fun recoverMissingWalletRoute(

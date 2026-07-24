@@ -17,6 +17,18 @@ internal sealed interface WalletRoutePreparation {
     data object RouteRedirected : WalletRoutePreparation
 }
 
+internal sealed interface WalletRouteCandidateLoad {
+    data class Loaded(
+        val manager: WalletManager,
+    ) : WalletRouteCandidateLoad
+
+    data object TryNext : WalletRouteCandidateLoad
+
+    data class Unrecoverable(
+        val error: Throwable,
+    ) : WalletRouteCandidateLoad
+}
+
 internal sealed interface WalletManagerInvalidation {
     data object All : WalletManagerInvalidation
 
@@ -105,12 +117,17 @@ internal sealed interface WalletPreparationFailureDisposition {
         val error: Throwable,
     ) : WalletPreparationFailureDisposition
 
+    data class UnrecoverableWallet(
+        val error: Throwable,
+    ) : WalletPreparationFailureDisposition
+
     companion object {
         fun classify(error: Throwable): WalletPreparationFailureDisposition =
             when (error) {
+                is CancellationException -> Rethrow(error)
                 is WalletManagerException.WalletDoesNotExist -> MissingWallet
                 is WalletManagerException.DatabaseCorruption -> CorruptedWallet(error)
-                else -> Rethrow(error)
+                else -> UnrecoverableWallet(error)
             }
     }
 }

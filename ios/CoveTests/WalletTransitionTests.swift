@@ -106,6 +106,40 @@ final class WalletTransitionTests: XCTestCase {
         )
     }
 
+    func testMissingWalletFailureAllowsFallback() {
+        XCTAssertEqual(
+            WalletPreparationFailureDisposition.classify(WalletManagerError.WalletDoesNotExist),
+            .tryNextCandidate
+        )
+    }
+
+    func testDatabaseCorruptionFailureAllowsFallback() {
+        XCTAssertEqual(
+            WalletPreparationFailureDisposition.classify(
+                WalletManagerError.DatabaseCorruption(id: "wallet-b", error: "corrupt")
+            ),
+            .tryNextCandidate
+        )
+    }
+
+    func testOrdinaryWalletPreparationFailureIsUnrecoverable() {
+        XCTAssertEqual(
+            WalletPreparationFailureDisposition.classify(
+                WalletManagerError.GetSelectedWalletError("failed")
+            ),
+            .unrecoverable
+        )
+    }
+
+    func testUnexpectedWalletPreparationFailureIsUnrecoverable() {
+        XCTAssertEqual(
+            WalletPreparationFailureDisposition.classify(
+                NSError(domain: "test", code: 1)
+            ),
+            .unrecoverable
+        )
+    }
+
     func testRepeatedInvalidationAdvancesWhenCacheIsEmpty() {
         var state = WalletManagerCacheState()
         state.invalidate(.wallet("wallet-b"))

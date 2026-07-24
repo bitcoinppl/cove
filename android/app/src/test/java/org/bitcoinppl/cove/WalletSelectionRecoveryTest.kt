@@ -188,11 +188,21 @@ class WalletSelectionRecoveryTest {
     }
 
     @Test
-    fun ordinaryWalletPreparationFailureIsClassifiedForRethrow() {
+    fun ordinaryWalletPreparationFailureIsUnrecoverable() {
         val error = WalletManagerException.GetSelectedWalletException("failed")
         val disposition =
             WalletPreparationFailureDisposition.classify(error)
-                as WalletPreparationFailureDisposition.Rethrow
+                as WalletPreparationFailureDisposition.UnrecoverableWallet
+
+        assertSame(error, disposition.error)
+    }
+
+    @Test
+    fun unexpectedWalletPreparationFailureIsUnrecoverable() {
+        val error = IllegalStateException("boom")
+        val disposition =
+            WalletPreparationFailureDisposition.classify(error)
+                as WalletPreparationFailureDisposition.UnrecoverableWallet
 
         assertSame(error, disposition.error)
     }
