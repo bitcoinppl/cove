@@ -172,7 +172,7 @@ fn parse_packet(packet: Packet) -> Result<ParsedKeyTeleport, KeyTeleportParseErr
 mod tests {
     use std::str::FromStr as _;
 
-    use cove_keyteleport::{Payload, ReceiverSession, SenderSession, TeleportPassword};
+    use cove_keyteleport::{Payload, ReceiverSession, SenderSession};
 
     use super::*;
 
@@ -195,13 +195,7 @@ mod tests {
     fn parses_keyteleport_sender_packet() {
         let receiver = ReceiverSession::from_private_key_bytes([1; 32]).unwrap();
         let request = receiver.request().unwrap();
-        let sender = SenderSession::with_private_key_and_password(
-            &request.packet,
-            &request.numeric_code,
-            [2; 32],
-            TeleportPassword::from_bytes([1, 2, 3, 4, 5]),
-        )
-        .unwrap();
+        let sender = SenderSession::new(&request.packet, &request.numeric_code).unwrap();
         let mnemonic = bip39::Mnemonic::from_str(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
         )

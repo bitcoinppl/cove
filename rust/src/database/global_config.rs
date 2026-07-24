@@ -213,6 +213,23 @@ impl GlobalConfigTable {
 
         effective_transaction_url(network, stored_template.as_deref(), txid)
     }
+
+    /// Returns the configured node for `network`, independent of the globally selected network
+    pub(crate) fn selected_node_for_network(&self, network: Network) -> Node {
+        let selected_node_key = GlobalConfigKey::SelectedNode(network);
+        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or_default();
+        let Ok(node) = serde_json::from_str::<Node>(&node_json) else {
+            return Node::default(network);
+        };
+
+        if node.network != network {
+            warn!("ignoring selected node with network {} stored for {}", node.network, network);
+
+            return Node::default(network);
+        }
+
+        node
+    }
 }
 
 #[uniffi::export]
@@ -277,9 +294,7 @@ impl GlobalConfigTable {
 
     pub fn selected_node(&self) -> Node {
         let network = self.selected_network();
-        let selected_node_key = GlobalConfigKey::SelectedNode(network);
-        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or_default();
-        serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
+        self.selected_node_for_network(network)
     }
 
     pub fn set_selected_node(&self, node: &Node) -> Result<()> {
@@ -491,6 +506,28 @@ mod tests {
 
         let key: &str = GlobalConfigKey::SelectedNode(Network::Testnet).into();
         assert_eq!(key, "selected_node_testnet");
+    }
+
+    #[test]
+    fn network_scoped_node_rejects_stored_network_mismatch() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+        let bitcoin_node = crate::node::Node::new_esplora(
+            "Wrong network".into(),
+            "https://bitcoin.example/api".into(),
+            Network::Bitcoin,
+        );
+        table
+            .set(
+                super::GlobalConfigKey::SelectedNode(Network::Signet),
+                serde_json::to_string(&bitcoin_node).unwrap(),
+            )
+            .unwrap();
+
+        let node = table.selected_node_for_network(Network::Signet);
+
+        assert_eq!(node, crate::node::Node::default(Network::Signet));
+        assert_eq!(node.network, Network::Signet);
     }
 
     #[test]

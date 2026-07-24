@@ -28536,6 +28536,11 @@ enum ImportWalletError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case BdkError(String
     )
+    case WalletIdentityCollision
+    case WalletIdentity(String
+    )
+    case UpgradeRollback(String
+    )
 
 
 
@@ -28597,6 +28602,13 @@ public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
         case 7: return .BdkError(
             try FfiConverterString.read(from: &buf)
             )
+        case 8: return .WalletIdentityCollision
+        case 9: return .WalletIdentity(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 10: return .UpgradeRollback(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -28641,6 +28653,20 @@ public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
 
         case let .BdkError(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .WalletIdentityCollision:
+            writeInt(&buf, Int32(8))
+
+
+        case let .WalletIdentity(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .UpgradeRollback(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -28884,6 +28910,8 @@ enum KeyTeleportAlert: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case NoActiveReceiveSession
     case ReceiveSessionExpired
     case ReceiveSessionReset
+    case ReceiveSessionScopeChanged
+    case ConflictingTransferDirection
     case ParseFailed
     case UnsupportedPsbt
     /**
@@ -28951,26 +28979,28 @@ public struct FfiConverterTypeKeyTeleportAlert: FfiConverterRustBuffer {
         case 1: return .NoActiveReceiveSession
         case 2: return .ReceiveSessionExpired
         case 3: return .ReceiveSessionReset
-        case 4: return .ParseFailed
-        case 5: return .UnsupportedPsbt
-        case 6: return .UnsupportedPayload
-        case 7: return .InvalidPayload
-        case 8: return .WrongReceiverCode
-        case 9: return .WrongTeleportPassword
-        case 10: return .NoEligibleWallets
-        case 11: return .IneligibleWallet
-        case 12: return .NoPendingSend
-        case 13: return .NoPendingReceiveSecret
-        case 14: return .ImportFailed(
+        case 4: return .ReceiveSessionScopeChanged
+        case 5: return .ConflictingTransferDirection
+        case 6: return .ParseFailed
+        case 7: return .UnsupportedPsbt
+        case 8: return .UnsupportedPayload
+        case 9: return .InvalidPayload
+        case 10: return .WrongReceiverCode
+        case 11: return .WrongTeleportPassword
+        case 12: return .NoEligibleWallets
+        case 13: return .IneligibleWallet
+        case 14: return .NoPendingSend
+        case 15: return .NoPendingReceiveSecret
+        case 16: return .ImportFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 15: return .Keychain(
+        case 17: return .Keychain(
             try FfiConverterString.read(from: &buf)
             )
-        case 16: return .Protocol(
+        case 18: return .Protocol(
             try FfiConverterString.read(from: &buf)
             )
-        case 17: return .Database(
+        case 19: return .Database(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -28997,63 +29027,71 @@ public struct FfiConverterTypeKeyTeleportAlert: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
 
 
-        case .ParseFailed:
+        case .ReceiveSessionScopeChanged:
             writeInt(&buf, Int32(4))
 
 
-        case .UnsupportedPsbt:
+        case .ConflictingTransferDirection:
             writeInt(&buf, Int32(5))
 
 
-        case .UnsupportedPayload:
+        case .ParseFailed:
             writeInt(&buf, Int32(6))
 
 
-        case .InvalidPayload:
+        case .UnsupportedPsbt:
             writeInt(&buf, Int32(7))
 
 
-        case .WrongReceiverCode:
+        case .UnsupportedPayload:
             writeInt(&buf, Int32(8))
 
 
-        case .WrongTeleportPassword:
+        case .InvalidPayload:
             writeInt(&buf, Int32(9))
 
 
-        case .NoEligibleWallets:
+        case .WrongReceiverCode:
             writeInt(&buf, Int32(10))
 
 
-        case .IneligibleWallet:
+        case .WrongTeleportPassword:
             writeInt(&buf, Int32(11))
 
 
-        case .NoPendingSend:
+        case .NoEligibleWallets:
             writeInt(&buf, Int32(12))
 
 
-        case .NoPendingReceiveSecret:
+        case .IneligibleWallet:
             writeInt(&buf, Int32(13))
 
 
-        case let .ImportFailed(v1):
+        case .NoPendingSend:
             writeInt(&buf, Int32(14))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Keychain(v1):
+        case .NoPendingReceiveSecret:
             writeInt(&buf, Int32(15))
-            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Protocol(v1):
+        case let .ImportFailed(v1):
             writeInt(&buf, Int32(16))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Database(v1):
+        case let .Keychain(v1):
             writeInt(&buf, Int32(17))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Protocol(v1):
+            writeInt(&buf, Int32(18))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Database(v1):
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
 
         }

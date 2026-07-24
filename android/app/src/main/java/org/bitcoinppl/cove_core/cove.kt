@@ -46765,6 +46765,28 @@ sealed class ImportWalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class WalletIdentityCollision(
+        ) : ImportWalletException() {
+        override val message
+            get() = ""
+    }
+
+    class WalletIdentity(
+
+        val v1: kotlin.String
+        ) : ImportWalletException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class UpgradeRollback(
+
+        val v1: kotlin.String
+        ) : ImportWalletException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
 
 
 
@@ -46814,6 +46836,13 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
             7 -> ImportWalletException.BdkException(
                 FfiConverterString.read(buf),
                 )
+            8 -> ImportWalletException.WalletIdentityCollision()
+            9 -> ImportWalletException.WalletIdentity(
+                FfiConverterString.read(buf),
+                )
+            10 -> ImportWalletException.UpgradeRollback(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -46855,6 +46884,20 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is ImportWalletException.WalletIdentityCollision -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is ImportWalletException.WalletIdentity -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is ImportWalletException.UpgradeRollback -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -46892,6 +46935,20 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
             }
             is ImportWalletException.BdkException -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is ImportWalletException.WalletIdentityCollision -> {
+                buf.putInt(8)
+                Unit
+            }
+            is ImportWalletException.WalletIdentity -> {
+                buf.putInt(9)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is ImportWalletException.UpgradeRollback -> {
+                buf.putInt(10)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -47083,6 +47140,18 @@ sealed class KeyTeleportAlert: kotlin.Exception() {
             get() = ""
     }
 
+    class ReceiveSessionScopeChanged(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
+    class ConflictingTransferDirection(
+        ) : KeyTeleportAlert() {
+        override val message
+            get() = ""
+    }
+
     class ParseFailed(
         ) : KeyTeleportAlert() {
         override val message
@@ -47212,26 +47281,28 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
             1 -> KeyTeleportAlert.NoActiveReceiveSession()
             2 -> KeyTeleportAlert.ReceiveSessionExpired()
             3 -> KeyTeleportAlert.ReceiveSessionReset()
-            4 -> KeyTeleportAlert.ParseFailed()
-            5 -> KeyTeleportAlert.UnsupportedPsbt()
-            6 -> KeyTeleportAlert.UnsupportedPayload()
-            7 -> KeyTeleportAlert.InvalidPayload()
-            8 -> KeyTeleportAlert.WrongReceiverCode()
-            9 -> KeyTeleportAlert.WrongTeleportPassword()
-            10 -> KeyTeleportAlert.NoEligibleWallets()
-            11 -> KeyTeleportAlert.IneligibleWallet()
-            12 -> KeyTeleportAlert.NoPendingSend()
-            13 -> KeyTeleportAlert.NoPendingReceiveSecret()
-            14 -> KeyTeleportAlert.ImportFailed(
+            4 -> KeyTeleportAlert.ReceiveSessionScopeChanged()
+            5 -> KeyTeleportAlert.ConflictingTransferDirection()
+            6 -> KeyTeleportAlert.ParseFailed()
+            7 -> KeyTeleportAlert.UnsupportedPsbt()
+            8 -> KeyTeleportAlert.UnsupportedPayload()
+            9 -> KeyTeleportAlert.InvalidPayload()
+            10 -> KeyTeleportAlert.WrongReceiverCode()
+            11 -> KeyTeleportAlert.WrongTeleportPassword()
+            12 -> KeyTeleportAlert.NoEligibleWallets()
+            13 -> KeyTeleportAlert.IneligibleWallet()
+            14 -> KeyTeleportAlert.NoPendingSend()
+            15 -> KeyTeleportAlert.NoPendingReceiveSecret()
+            16 -> KeyTeleportAlert.ImportFailed(
                 FfiConverterString.read(buf),
                 )
-            15 -> KeyTeleportAlert.Keychain(
+            17 -> KeyTeleportAlert.Keychain(
                 FfiConverterString.read(buf),
                 )
-            16 -> KeyTeleportAlert.Protocol(
+            18 -> KeyTeleportAlert.Protocol(
                 FfiConverterString.read(buf),
                 )
-            17 -> KeyTeleportAlert.Database(
+            19 -> KeyTeleportAlert.Database(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -47249,6 +47320,14 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
                 4UL
             )
             is KeyTeleportAlert.ReceiveSessionReset -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ReceiveSessionScopeChanged -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is KeyTeleportAlert.ConflictingTransferDirection -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -47329,63 +47408,71 @@ public object FfiConverterTypeKeyTeleportAlert : FfiConverterRustBuffer<KeyTelep
                 buf.putInt(3)
                 Unit
             }
-            is KeyTeleportAlert.ParseFailed -> {
+            is KeyTeleportAlert.ReceiveSessionScopeChanged -> {
                 buf.putInt(4)
                 Unit
             }
-            is KeyTeleportAlert.UnsupportedPsbt -> {
+            is KeyTeleportAlert.ConflictingTransferDirection -> {
                 buf.putInt(5)
                 Unit
             }
-            is KeyTeleportAlert.UnsupportedPayload -> {
+            is KeyTeleportAlert.ParseFailed -> {
                 buf.putInt(6)
                 Unit
             }
-            is KeyTeleportAlert.InvalidPayload -> {
+            is KeyTeleportAlert.UnsupportedPsbt -> {
                 buf.putInt(7)
                 Unit
             }
-            is KeyTeleportAlert.WrongReceiverCode -> {
+            is KeyTeleportAlert.UnsupportedPayload -> {
                 buf.putInt(8)
                 Unit
             }
-            is KeyTeleportAlert.WrongTeleportPassword -> {
+            is KeyTeleportAlert.InvalidPayload -> {
                 buf.putInt(9)
                 Unit
             }
-            is KeyTeleportAlert.NoEligibleWallets -> {
+            is KeyTeleportAlert.WrongReceiverCode -> {
                 buf.putInt(10)
                 Unit
             }
-            is KeyTeleportAlert.IneligibleWallet -> {
+            is KeyTeleportAlert.WrongTeleportPassword -> {
                 buf.putInt(11)
                 Unit
             }
-            is KeyTeleportAlert.NoPendingSend -> {
+            is KeyTeleportAlert.NoEligibleWallets -> {
                 buf.putInt(12)
                 Unit
             }
-            is KeyTeleportAlert.NoPendingReceiveSecret -> {
+            is KeyTeleportAlert.IneligibleWallet -> {
                 buf.putInt(13)
                 Unit
             }
-            is KeyTeleportAlert.ImportFailed -> {
+            is KeyTeleportAlert.NoPendingSend -> {
                 buf.putInt(14)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportAlert.Keychain -> {
+            is KeyTeleportAlert.NoPendingReceiveSecret -> {
                 buf.putInt(15)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportAlert.Protocol -> {
+            is KeyTeleportAlert.ImportFailed -> {
                 buf.putInt(16)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeyTeleportAlert.Database -> {
+            is KeyTeleportAlert.Keychain -> {
                 buf.putInt(17)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportAlert.Protocol -> {
+                buf.putInt(18)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeyTeleportAlert.Database -> {
+                buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }

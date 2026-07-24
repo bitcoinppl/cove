@@ -2,6 +2,7 @@ use std::{fmt, str::FromStr};
 
 use bip39::Mnemonic;
 use bitcoin::{
+    NetworkKind,
     bip32::{ChildNumber, Fingerprint, Xpriv},
     secp256k1::SecretKey,
 };
@@ -85,9 +86,14 @@ impl XprvPayload {
     ///
     /// # Errors
     ///
-    /// Returns an error when the value is invalid or represents a derived child key
+    /// Returns an error when the value is invalid, is not a mainnet key, or represents a derived
+    /// child key
     pub fn parse(value: &str) -> Result<Self> {
         let xprv = Xpriv::from_str(value).map_err(|_| Error::InvalidXprvPayload)?;
+        if xprv.network != NetworkKind::Main {
+            return Err(Error::NonMainnetXprvPayload);
+        }
+
         if !is_master_xprv(&xprv) {
             return Err(Error::NonMasterXprvPayload);
         }
@@ -404,6 +410,10 @@ fn trim_stash_padding(encoded: &mut Vec<u8>) {
 
 fn decode_xprv_body(body: &[u8]) -> Result<DecodedPayload> {
     let xprv = Xpriv::decode(body).map_err(|_| Error::InvalidXprvPayload)?;
+    if xprv.network != NetworkKind::Main {
+        return Err(Error::NonMainnetXprvPayload);
+    }
+
     let master = Xpriv {
         network: xprv.network,
         depth: 0,
@@ -533,6 +543,15 @@ mod tests {
         assert_eq!(decoded.child_number, ChildNumber::Normal { index: 0 });
         assert_eq!(decoded.chain_code, child.chain_code);
         assert_eq!(decoded.private_key, child.private_key);
+    }
+
+    #[test]
+    fn full_xprv_payload_rejects_non_mainnet_keys() {
+        let testnet = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();
+        let mut payload = Zeroizing::new(vec![b'x']);
+        payload.extend_from_slice(&testnet.encode());
+
+        assert!(matches!(DecodedPayload::decode(&payload), Err(Error::NonMainnetXprvPayload)));
     }
 
     #[test]

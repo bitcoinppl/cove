@@ -8,6 +8,7 @@ use bdk_wallet::descriptor::ExtendedDescriptor;
 use bip39::Mnemonic;
 use bitcoin::bip32::{ChildNumber, Fingerprint, Xpriv, Xpub};
 use once_cell::sync::OnceCell;
+use parking_lot::Mutex;
 use tracing::warn;
 use zeroize::{Zeroize as _, Zeroizing};
 
@@ -205,6 +206,9 @@ pub enum KeychainError {
 
     #[error("saved wallet secret is a different type")]
     WalletSecretTypeMismatch,
+
+    #[error("wallet secret already exists")]
+    WalletSecretExists,
 }
 
 #[uniffi::export(callback_interface)]
@@ -222,7 +226,7 @@ pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
 static REF: OnceCell<Keychain> = OnceCell::new();
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct Keychain(Arc<Box<dyn KeychainAccess>>);
+pub struct Keychain(Arc<Box<dyn KeychainAccess>>, Arc<Mutex<()>>);
 
 #[uniffi::export]
 impl Keychain {
@@ -238,7 +242,7 @@ impl Keychain {
             return me.clone();
         }
 
-        let me = Self(Arc::new(keychain));
+        let me = Self(Arc::new(keychain), Arc::new(Mutex::new(())));
         REF.set(me).expect("failed to set keychain");
 
         Self::global().clone()
@@ -418,8 +422,8 @@ impl Keychain {
 
     /// Saves a hot wallet secret encrypted in the keychain
     ///
-    /// Mnemonics and extended private keys share the existing wallet mnemonic
-    /// slot, so saving either variant replaces the previously stored secret
+    /// Mnemonics and extended private keys share the legacy wallet-mnemonic
+    /// entries. Existing complete pairs are never replaced
     ///
     /// # Errors
     ///
@@ -429,14 +433,28 @@ impl Keychain {
         id: &WalletId,
         wallet_secret: WalletSecret,
     ) -> Result<(), KeychainError> {
-        let serialized = wallet_secret.serialize();
+        let _wallet_secret_guard = self.1.lock();
+        let secret_key = wallet_mnemonic_key_name(id);
+        let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
+        let encrypted_secret = self.0.get(secret_key.clone());
+        let cryptor = self.0.get(cryptor_key.clone());
 
-        self.save_with_fresh_cryptor(
-            wallet_mnemonic_encryption_and_nonce_key_name(id),
-            wallet_mnemonic_key_name(id),
-            &serialized,
-            false,
-        )
+        match (encrypted_secret, cryptor) {
+            (Some(_), Some(_)) => return Err(KeychainError::WalletSecretExists),
+            (Some(_), None) => {
+                if !self.0.delete(secret_key.clone()) {
+                    return Err(KeychainError::Delete);
+                }
+            }
+            (None, Some(_)) => {
+                if !self.0.delete(cryptor_key.clone()) {
+                    return Err(KeychainError::Delete);
+                }
+            }
+            (None, None) => {}
+        }
+
+        self.save_with_fresh_cryptor(cryptor_key, secret_key, &wallet_secret.serialize(), true)
     }
 
     /// Retrieves a wallet's mnemonic seed from the keychain
@@ -463,8 +481,19 @@ impl Keychain {
     /// Returns a `KeychainError` if the stored entries are incomplete or the
     /// secret cannot be decrypted or parsed
     pub fn get_wallet_secret(&self, id: &WalletId) -> Result<Option<WalletSecret>, KeychainError> {
-        let encrypted_secret = self.0.get(wallet_mnemonic_key_name(id));
-        let encryption_key = self.0.get(wallet_mnemonic_encryption_and_nonce_key_name(id));
+        self.get_wallet_secret_from_pair(
+            wallet_mnemonic_key_name(id),
+            wallet_mnemonic_encryption_and_nonce_key_name(id),
+        )
+    }
+
+    fn get_wallet_secret_from_pair(
+        &self,
+        secret_key: String,
+        cryptor_key: String,
+    ) -> Result<Option<WalletSecret>, KeychainError> {
+        let encrypted_secret = self.0.get(secret_key);
+        let encryption_key = self.0.get(cryptor_key);
 
         let (encrypted_secret, encryption_key) = match (encrypted_secret, encryption_key) {
             (None, None) => return Ok(None),
@@ -494,23 +523,20 @@ impl Keychain {
         WalletSecret::parse(&wallet_secret).map(Some)
     }
 
-    fn delete_wallet_key(&self, id: &WalletId) -> bool {
-        let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
-        let key = wallet_mnemonic_key_name(id);
+    /// Deletes a wallet secret and any stale versioned entries
+    pub fn delete_wallet_secret(&self, id: &WalletId) -> bool {
+        let _wallet_secret_guard = self.1.lock();
+        let keys =
+            [wallet_mnemonic_key_name(id), wallet_mnemonic_encryption_and_nonce_key_name(id)];
+        let mut deleted_all = true;
 
-        let has_data = self.0.get(key.clone()).is_some();
-        let has_key = self.0.get(encryption_key_key.clone()).is_some();
-
-        // nothing to delete = success
-        if !has_data && !has_key {
-            return true;
+        for key in keys.into_iter().chain(stale_wallet_secret_key_names(id)) {
+            if self.0.get(key.clone()).is_some() && !self.0.delete(key) {
+                deleted_all = false;
+            }
         }
 
-        // delete encrypted data before its encryption key (reverse of save order)
-        // so a partial failure never leaves orphaned data without a decryption key
-        let data_ok = if has_data { self.0.delete(key) } else { true };
-        let key_ok = if has_key { self.0.delete(encryption_key_key) } else { true };
-        data_ok && key_ok
+        deleted_all
     }
 
     /// Saves a wallet's extended public key in the keychain
@@ -692,7 +718,7 @@ impl Keychain {
 
     /// Deletes all items saved in the keychain for the given wallet id
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
-        let key_ok = self.delete_wallet_key(id);
+        let key_ok = self.delete_wallet_secret(id);
         let xpub_ok = self.delete_wallet_xpub(id);
         let desc_ok = self.delete_public_descriptor(id);
         let tap_ok = self.delete_tap_signer_backup(id);
@@ -728,6 +754,16 @@ fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_mnemonic_encryption_key_and_nonce")
 }
 
+fn stale_wallet_secret_key_names(id: &WalletId) -> [String; 5] {
+    [
+        format!("{id}::wallet_secret::v2::active_slot"),
+        format!("{id}::wallet_secret::v2::slot_a::encrypted"),
+        format!("{id}::wallet_secret::v2::slot_a::cryptor"),
+        format!("{id}::wallet_secret::v2::slot_b::encrypted"),
+        format!("{id}::wallet_secret::v2::slot_b::cryptor"),
+    ]
+}
+
 fn wallet_public_descriptor_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_public_descriptor")
 }
@@ -744,7 +780,7 @@ fn wallet_tap_signer_backup_key_name(id: &WalletId) -> String {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
     struct MockKeychain(Mutex<HashMap<String, String>>);
@@ -776,8 +812,40 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Debug, Default)]
+    struct FailingKeychain {
+        entries: Arc<Mutex<HashMap<String, String>>>,
+        failing_save_key: Arc<Mutex<Option<String>>>,
+    }
+
+    impl FailingKeychain {
+        fn fail_save_for(&self, key: String) {
+            *self.failing_save_key.lock().unwrap() = Some(key);
+        }
+    }
+
+    impl KeychainAccess for FailingKeychain {
+        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
+            if self.failing_save_key.lock().unwrap().as_ref() == Some(&key) {
+                return Err(KeychainError::Save);
+            }
+
+            self.entries.lock().unwrap().insert(key, value);
+
+            Ok(())
+        }
+
+        fn get(&self, key: String) -> Option<String> {
+            self.entries.lock().unwrap().get(&key).cloned()
+        }
+
+        fn delete(&self, key: String) -> bool {
+            self.entries.lock().unwrap().remove(&key).is_some()
+        }
+    }
+
     fn make_keychain(mock: MockKeychain) -> Keychain {
-        Keychain(Arc::new(Box::new(mock)))
+        Keychain(Arc::new(Box::new(mock)), Arc::new(parking_lot::Mutex::new(())))
     }
 
     fn wallet_id() -> WalletId {
@@ -874,17 +942,168 @@ mod tests {
     }
 
     #[test]
-    fn saving_wallet_secret_replaces_the_existing_variant() {
+    fn saving_wallet_secret_rejects_an_existing_secret() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
+        let expected = mnemonic();
+        keychain.save_wallet_key(&id, expected.clone()).unwrap();
+
+        let replacement = WalletSecret::try_from(xpriv()).unwrap();
+        assert_eq!(
+            keychain.save_wallet_secret(&id, replacement),
+            Err(KeychainError::WalletSecretExists)
+        );
+        assert_eq!(
+            keychain.get_wallet_secret(&id).unwrap(),
+            Some(WalletSecret::Mnemonic(expected))
+        );
+    }
+
+    #[test]
+    fn failed_secret_write_leaves_no_partial_state() {
+        let id = wallet_id();
+        let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(&id);
+        let secret_key = wallet_mnemonic_key_name(&id);
+
+        for failing_key in [cryptor_key.clone(), secret_key.clone()] {
+            let access = FailingKeychain::default();
+            access.fail_save_for(failing_key);
+            let keychain =
+                Keychain(Arc::new(Box::new(access.clone())), Arc::new(parking_lot::Mutex::new(())));
+
+            assert_eq!(
+                keychain.save_wallet_secret(&id, WalletSecret::Mnemonic(mnemonic())),
+                Err(KeychainError::Save)
+            );
+            assert!(access.get(cryptor_key.clone()).is_none());
+            assert!(access.get(secret_key.clone()).is_none());
+            assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
+        }
+    }
+
+    #[test]
+    fn concurrent_saves_allow_exactly_one_create() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        let expected = WalletSecret::Mnemonic(mnemonic());
+        let first_keychain = keychain.clone();
+        let first_id = id.clone();
+        let first_secret = expected.clone();
+        let second_keychain = keychain.clone();
+        let second_id = id.clone();
+        let second_secret = expected.clone();
+
+        let first =
+            std::thread::spawn(move || first_keychain.save_wallet_secret(&first_id, first_secret));
+        let second = std::thread::spawn(move || {
+            second_keychain.save_wallet_secret(&second_id, second_secret)
+        });
+        let results = [first.join().unwrap(), second.join().unwrap()];
+
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| **result == Err(KeychainError::WalletSecretExists))
+                .count(),
+            1
+        );
+        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), Some(expected));
+    }
+
+    #[test]
+    fn saving_wallet_secret_repairs_a_lone_orphaned_entry() {
+        let expected = mnemonic();
+
+        for cryptor_only in [false, true] {
+            let id = wallet_id();
+            let orphaned_key = if cryptor_only {
+                wallet_mnemonic_encryption_and_nonce_key_name(&id)
+            } else {
+                wallet_mnemonic_key_name(&id)
+            };
+            let keychain =
+                make_keychain(MockKeychain::with_entries(vec![(orphaned_key.as_str(), "orphan")]));
+
+            keychain.save_wallet_key(&id, expected.clone()).unwrap();
+
+            assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected.clone()));
+        }
+    }
+
+    #[test]
+    fn saving_wallet_secret_rejects_an_unreadable_committed_pair() {
+        let id = wallet_id();
+        let secret_key = wallet_mnemonic_key_name(&id);
+        let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(&id);
+        let keychain = make_keychain(MockKeychain::with_entries(vec![
+            (secret_key.as_str(), "unreadable secret"),
+            (cryptor_key.as_str(), "unreadable cryptor"),
+        ]));
+
+        assert_eq!(
+            keychain.save_wallet_key(&id, mnemonic()),
+            Err(KeychainError::WalletSecretExists)
+        );
+        assert_eq!(keychain.0.get(secret_key), Some("unreadable secret".to_string()));
+        assert_eq!(keychain.0.get(cryptor_key), Some("unreadable cryptor".to_string()));
+    }
+
+    #[test]
+    fn wallet_secret_uses_exact_legacy_key_names() {
+        let access = FailingKeychain::default();
+        let keychain =
+            Keychain(Arc::new(Box::new(access.clone())), Arc::new(parking_lot::Mutex::new(())));
+        let id = wallet_id();
+        let secret_key = format!("{id}::wallet_mnemonic");
+        let cryptor_key = format!("{id}::wallet_mnemonic_encryption_key_and_nonce");
+
         keychain.save_wallet_key(&id, mnemonic()).unwrap();
 
+        let entries = access.entries.lock().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries.contains_key(&secret_key));
+        assert!(entries.contains_key(&cryptor_key));
+        assert!(!entries.keys().any(|key| key.starts_with(&format!("{id}::wallet_secret"))));
+    }
+
+    #[test]
+    fn mnemonic_saved_by_new_code_is_readable_by_master_logic() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        let expected = mnemonic();
+        let secret_key = format!("{id}::wallet_mnemonic");
+        let cryptor_key = format!("{id}::wallet_mnemonic_encryption_key_and_nonce");
+        keychain.save_wallet_key(&id, expected.clone()).unwrap();
+
+        let encrypted = keychain.0.get(secret_key).unwrap();
+        let cryptor = keychain.0.get(cryptor_key).unwrap();
+        let cryptor = Cryptor::try_from_string(&cryptor).unwrap();
+        let decrypted = cryptor.decrypt_from_string(&encrypted).unwrap();
+        let decoded = Mnemonic::from_str(&decrypted).unwrap();
+
+        assert_eq!(decoded, expected);
+    }
+
+    #[test]
+    fn xpriv_saved_under_legacy_keys_is_tagged() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
         let expected = xpriv();
+        let secret_key = format!("{id}::wallet_mnemonic");
+        let cryptor_key = format!("{id}::wallet_mnemonic_encryption_key_and_nonce");
         keychain.save_wallet_secret(&id, WalletSecret::try_from(expected).unwrap()).unwrap();
 
-        let secret = keychain.get_wallet_secret(&id).unwrap().unwrap();
-        assert_eq!(secret.as_xprv().unwrap().to_xpriv(), expected);
-        assert_eq!(keychain.get_wallet_key(&id), Err(KeychainError::WalletSecretTypeMismatch));
+        let encrypted = keychain.0.get(secret_key).unwrap();
+        let cryptor = keychain.0.get(cryptor_key).unwrap();
+        let cryptor = Cryptor::try_from_string(&cryptor).unwrap();
+        let decrypted = cryptor.decrypt_from_string(&encrypted).unwrap();
+
+        assert_eq!(
+            decrypted,
+            format!("{WALLET_SECRET_TAG_PREFIX}{WALLET_SECRET_XPRIV_TAG}{expected}")
+        );
+        assert!(Mnemonic::from_str(&decrypted).is_err());
     }
 
     #[test]
@@ -904,10 +1123,46 @@ mod tests {
     fn delete_wallet_items_removes_wallet_secret() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
-        keychain.save_wallet_secret(&id, WalletSecret::try_from(xpriv()).unwrap()).unwrap();
+        keychain.save_wallet_key(&id, mnemonic()).unwrap();
+        let stale_keys = stale_wallet_secret_key_names(&id);
+        for key in &stale_keys {
+            keychain.0.save(key.clone(), "garbage".to_string()).unwrap();
+        }
 
         assert!(keychain.delete_wallet_items(&id));
         assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
+        assert!(
+            stale_keys
+                .into_iter()
+                .chain([
+                    wallet_mnemonic_key_name(&id),
+                    wallet_mnemonic_encryption_and_nonce_key_name(&id),
+                ])
+                .all(|key| keychain.0.get(key).is_none())
+        );
+    }
+
+    #[test]
+    fn delete_wallet_secret_removes_legacy_and_stale_v2_keys() {
+        let keychain = make_keychain(MockKeychain::new());
+        let id = wallet_id();
+        keychain.save_wallet_key(&id, mnemonic()).unwrap();
+        let stale_keys = stale_wallet_secret_key_names(&id);
+        for key in &stale_keys {
+            keychain.0.save(key.clone(), "garbage".to_string()).unwrap();
+        }
+
+        assert!(keychain.delete_wallet_secret(&id));
+        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
+        assert!(
+            stale_keys
+                .into_iter()
+                .chain([
+                    wallet_mnemonic_key_name(&id),
+                    wallet_mnemonic_encryption_and_nonce_key_name(&id),
+                ])
+                .all(|key| keychain.0.get(key).is_none())
+        );
     }
 
     #[test]
@@ -971,7 +1226,7 @@ mod tests {
         }
 
         let mock = FailSecondSave(Mutex::new((HashMap::new(), 0)));
-        let kc = Keychain(Arc::new(Box::new(mock)));
+        let kc = Keychain(Arc::new(Box::new(mock)), Arc::new(parking_lot::Mutex::new(())));
 
         let err = kc.create_local_encryption_key().unwrap_err();
         assert!(matches!(err, KeychainError::Save));
@@ -1066,7 +1321,7 @@ mod tests {
         }
 
         let mock = FailSecondSave(Mutex::new((HashMap::new(), 0)));
-        let kc = Keychain(Arc::new(Box::new(mock)));
+        let kc = Keychain(Arc::new(Box::new(mock)), Arc::new(parking_lot::Mutex::new(())));
 
         let err = kc.save_key_teleport_receive_session("session").unwrap_err();
         assert!(matches!(err, KeychainError::Save));

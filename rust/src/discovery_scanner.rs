@@ -14,7 +14,7 @@ use bdk_wallet::{
     bitcoin::{Address, Network},
     descriptor::ExtendedDescriptor,
 };
-use cove_device::keychain::WalletSecret;
+use cove_device::keychain::{Keychain, KeychainError, WalletSecret};
 use cove_tokio::task::spawn_actor;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
@@ -28,14 +28,15 @@ const DEFAULT_SCAN_LIMIT: u32 = 200;
 use crate::{
     database::{
         Database,
+        global_config::GlobalConfigTable,
         wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
-    keychain::Keychain,
-    manager::wallet_manager::{SingleOrMany, WalletManagerReconcileMessage},
+    manager::wallet_manager::{SingleOrMany, WalletManagerError, WalletManagerReconcileMessage},
+    network::Network as CoveNetwork,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     wallet::{
         WalletAddressType, WalletError,
-        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata, WalletMode},
     },
     wallet_secret::WalletSecretExt as _,
 };
@@ -63,7 +64,6 @@ pub struct WorkerHandle {
     pub wallet_type: WalletAddressType,
     pub started_at: Instant,
     pub state: WorkerState,
-    pub db: WalletDataDb,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
@@ -73,6 +73,7 @@ pub enum WorkerState {
     Started,
     FoundAddress(String),
     NoneFound,
+    Failed(String),
 }
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
@@ -97,12 +98,14 @@ pub enum ScannerResponse {
 #[derive(Debug, Clone)]
 pub struct WalletDiscoveryScanner {
     pub id: WalletId,
+    origin: DiscoveryOrigin,
     pub addr: WeakAddr<Self>,
     pub workers: Workers,
     pub started_at: Instant,
     pub node_client_builder: NodeClientBuilder,
     pub scan_source: ScanSource,
     pub responder: Sender<SingleOrMany>,
+    failure_reconciled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -112,14 +115,88 @@ pub enum ScanSource {
     Xprv,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct DiscoveryOrigin {
+    network: CoveNetwork,
+    wallet_mode: WalletMode,
+}
+
+impl From<&WalletMetadata> for DiscoveryOrigin {
+    fn from(metadata: &WalletMetadata) -> Self {
+        Self { network: metadata.network, wallet_mode: metadata.wallet_mode }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum WalletSecretKind {
+    Mnemonic,
+    Xpriv,
+}
+
+impl WalletSecretKind {
+    fn matches(self, secret: &WalletSecret) -> bool {
+        matches!(
+            (self, secret),
+            (Self::Mnemonic, WalletSecret::Mnemonic(_)) | (Self::Xpriv, WalletSecret::Xpriv(_))
+        )
+    }
+}
+
+fn required_wallet_secret(
+    result: Result<Option<WalletSecret>, KeychainError>,
+    id: &WalletId,
+    expected: WalletSecretKind,
+) -> Result<WalletSecret, WalletScannerError> {
+    let secret = result
+        .map_err(WalletError::from)?
+        .ok_or_else(|| WalletScannerError::NoWalletSecretAvailable(id.clone()))?;
+
+    if !expected.matches(&secret) {
+        return Err(WalletError::Keychain(KeychainError::WalletSecretTypeMismatch).into());
+    }
+
+    Ok(secret)
+}
+
+fn worker_failure_message(workers: &Workers) -> Option<String> {
+    let failures = workers
+        .iter()
+        .filter_map(|worker| {
+            let worker = worker.as_ref()?;
+            let WorkerState::Failed(message) = &worker.state else {
+                return None;
+            };
+
+            Some(format!("{:?}: {message}", worker.wallet_type))
+        })
+        .collect::<Vec<_>>();
+
+    (!failures.is_empty()).then(|| failures.join("; "))
+}
+
+fn node_client_builder(
+    global_config: &GlobalConfigTable,
+    origin: DiscoveryOrigin,
+) -> NodeClientBuilder {
+    let node = global_config.selected_node_for_network(origin.network);
+    let options = NodeClientOptions { batch_size: 1 };
+
+    NodeClientBuilder { node, options }
+}
+
 #[async_trait::async_trait]
 impl Actor for WalletDiscoveryScanner {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         self.started_at = Instant::now();
 
-        // start workers
-        self.start_workers().await?;
+        if let Err(error) = self.start_workers().await {
+            let message = WalletManagerReconcileMessage::WalletError(
+                WalletManagerError::WalletScanError(error.to_string()),
+            );
+            self.responder.send(message.into())?;
+            self.failure_reconciled = true;
+        }
 
         Produces::ok(())
     }
@@ -141,33 +218,31 @@ impl WalletDiscoveryScanner {
         debug!("starting wallet discovery scanner for {}, metadata: {metadata:?}", metadata.id);
 
         let db = Database::global();
-        let network = db.global_config().selected_network().into();
-
         let id = metadata.id.clone();
+        let origin = DiscoveryOrigin::from(&metadata);
+        let bdk_network = origin.network.into();
         let (wallets, scan_source) = match metadata.discovery_state {
             DiscoveryState::StartedJson(json) => (
-                Wallets::try_from_json(&json, network, metadata.address_type)?,
+                Wallets::try_from_json(&json, bdk_network, metadata.address_type)?,
                 ScanSource::Json(json),
             ),
             DiscoveryState::StartedMnemonic => {
-                let secret = Keychain::global()
-                    .get_wallet_secret(&id)
-                    .ok()
-                    .flatten()
-                    .filter(|secret| matches!(secret, WalletSecret::Mnemonic(_)))
-                    .ok_or_else(|| WalletScannerError::NoWalletSecretAvailable(id.clone()))?;
+                let secret = required_wallet_secret(
+                    Keychain::global().get_wallet_secret(&id),
+                    &id,
+                    WalletSecretKind::Mnemonic,
+                )?;
 
-                (Wallets::try_from_secret(secret, network)?, ScanSource::Mnemonic)
+                (Wallets::try_from_secret(secret, bdk_network)?, ScanSource::Mnemonic)
             }
             DiscoveryState::StartedXprv => {
-                let secret = Keychain::global()
-                    .get_wallet_secret(&id)
-                    .ok()
-                    .flatten()
-                    .filter(|secret| matches!(secret, WalletSecret::Xpriv(_)))
-                    .ok_or_else(|| WalletScannerError::NoWalletSecretAvailable(id.clone()))?;
+                let secret = required_wallet_secret(
+                    Keychain::global().get_wallet_secret(&id),
+                    &id,
+                    WalletSecretKind::Xpriv,
+                )?;
 
-                (Wallets::try_from_secret(secret, network)?, ScanSource::Xprv)
+                (Wallets::try_from_secret(secret, bdk_network)?, ScanSource::Xprv)
             }
             DiscoveryState::Single
             | DiscoveryState::NoneFound
@@ -183,31 +258,29 @@ impl WalletDiscoveryScanner {
             return Err(WalletScannerError::NoAddressTypes);
         }
 
-        let node = db.global_config().selected_node();
-        let options = NodeClientOptions { batch_size: 1 };
-
-        let client_builder = NodeClientBuilder { node, options };
-        Ok(Self::new(metadata.id, client_builder, wallets, scan_source, reconciler))
+        let client_builder = node_client_builder(&db.global_config(), origin);
+        Self::new(metadata.id, origin, client_builder, wallets, scan_source, reconciler)
     }
 
-    pub fn new(
+    fn new(
         id: WalletId,
+        origin: DiscoveryOrigin,
         node_client_builder: NodeClientBuilder,
         wallets: Wallets,
         scan_source: ScanSource,
         reconciler: Sender<SingleOrMany>,
-    ) -> Self {
+    ) -> Result<Self, WalletScannerError> {
         let mut started_workers = 0;
         let mut workers = Workers::default();
 
         // create workers
         for (wallet_type, wallet) in wallets.0.into_iter().flatten() {
-            let worker = WalletDiscoveryWorker::new(
+            let worker = WalletDiscoveryWorker::try_new(
                 id.clone(),
                 wallet_type,
                 wallet,
                 node_client_builder.clone(),
-            );
+            )?;
 
             let addr = spawn_actor(worker);
             workers[index(wallet_type)].replace(WorkerHandle {
@@ -216,8 +289,6 @@ impl WalletDiscoveryScanner {
                 wallet_type,
                 started_at: Instant::now(),
                 state: WorkerState::Created,
-                db: WalletDataDb::new_or_existing(id.clone())
-                    .expect("failed to open wallet database for scanner"),
             });
 
             started_workers += 1;
@@ -225,15 +296,17 @@ impl WalletDiscoveryScanner {
 
         info!("started {started_workers} workers");
 
-        Self {
+        Ok(Self {
             id,
+            origin,
             addr: Default::default(),
             workers,
             started_at: Instant::now(),
             node_client_builder,
             scan_source,
             responder: reconciler,
-        }
+            failure_reconciled: false,
+        })
     }
 
     async fn start_workers(&mut self) -> ActorResult<()> {
@@ -261,31 +334,13 @@ impl WalletDiscoveryScanner {
     pub async fn mark_found_txn(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
         info!("marked worker {wallet_type:?} as found");
 
-        //  mark as found and stop the worker
         let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         let address = call!(worker.addr.first_address()).await?;
         worker.state = WorkerState::FoundAddress(address);
         worker.addr = Default::default();
 
-        let any_still_running = self.workers.iter().any(|worker| {
-            worker.as_ref().is_some_and(|worker| worker.state == WorkerState::Started)
-        });
-
-        // all workers are done, send the response
-        if !any_still_running {
-            let found_addresses = self.found_addresses();
-
-            let msg = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
-                found_addresses.clone(),
-            ));
-            self.responder.send(msg.into())?;
-
-            // update wallet metadata
-            self.set_metadata_address_found()?;
-
-            return Produces::ok(());
-        }
+        self.finish_if_all_workers_stopped()?;
 
         Produces::ok(())
     }
@@ -298,28 +353,66 @@ impl WalletDiscoveryScanner {
         worker.state = WorkerState::NoneFound;
         worker.addr = Default::default();
 
-        let any_still_running = self.workers.iter().any(|worker| {
-            worker.as_ref().is_some_and(|worker| worker.state == WorkerState::Started)
-        });
+        self.finish_if_all_workers_stopped()?;
 
-        // all workers are done, send the response
-        if !any_still_running {
-            let found_addresses = self.found_addresses();
+        Produces::ok(())
+    }
 
-            if found_addresses.is_empty() {
-                let msg = WalletManagerReconcileMessage::from(ScannerResponse::NoneFound);
-                self.responder.send(msg.into())?;
-                self.set_metadata(DiscoveryState::NoneFound)?;
-            } else {
-                let msg = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
-                    found_addresses.clone(),
-                ));
+    /// Records a worker failure and reconciles it after all workers stop
+    pub async fn mark_failed(
+        &mut self,
+        wallet_type: WalletAddressType,
+        message: String,
+    ) -> ActorResult<()> {
+        error!("wallet discovery worker {wallet_type:?} failed: {message}");
 
-                self.responder.send(msg.into())?;
-                self.set_metadata_address_found()?;
-            }
+        let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
+        worker.state = WorkerState::Failed(message);
+        worker.addr = Default::default();
+
+        self.finish_if_all_workers_stopped()?;
+
+        Produces::ok(())
+    }
+
+    fn finish_if_all_workers_stopped(&mut self) -> ActorResult<()> {
+        if self.failure_reconciled {
+            return Produces::ok(());
+        }
+
+        if let Some(failure) = worker_failure_message(&self.workers) {
+            let message = WalletManagerReconcileMessage::WalletError(
+                WalletManagerError::WalletScanError(failure),
+            );
+            self.responder.send(message.into())?;
+            self.failure_reconciled = true;
 
             return Produces::ok(());
+        }
+
+        let any_still_running = self.workers.iter().any(|worker| {
+            worker.as_ref().is_some_and(|worker| {
+                matches!(&worker.state, WorkerState::Created | WorkerState::Started)
+            })
+        });
+
+        if any_still_running {
+            return Produces::ok(());
+        }
+
+        let found_addresses = self.found_addresses();
+        if found_addresses.is_empty() {
+            self.set_metadata(DiscoveryState::NoneFound)?;
+
+            let message = WalletManagerReconcileMessage::from(ScannerResponse::NoneFound);
+            self.responder.send(message.into())?;
+        } else {
+            self.set_metadata_address_found()?;
+
+            let message = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
+                found_addresses,
+            ));
+            self.responder.send(message.into())?;
         }
 
         Produces::ok(())
@@ -367,14 +460,11 @@ impl WalletDiscoveryScanner {
 
     fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
         debug!("setting wallet metadata: {discovery_state:?}");
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
         let db = Database::global().wallets();
 
-        let Ok(Some(mut metadata)) = db.get(&self.id, network, mode) else {
-            error!("wallet metadata not found");
-            return Produces::ok(());
-        };
+        let mut metadata = db
+            .get(&self.id, self.origin.network, self.origin.wallet_mode)?
+            .ok_or_else(|| eyre::eyre!("wallet metadata not found for discovery scan"))?;
 
         metadata.discovery_state = discovery_state;
         db.update_metadata_discovery_state(&metadata)?;
@@ -416,20 +506,20 @@ impl Actor for WalletDiscoveryWorker {
 }
 
 impl WalletDiscoveryWorker {
-    pub fn new(
+    /// Creates a discovery worker and restores its saved scan progress
+    pub fn try_new(
         id: WalletId,
         wallet_type: WalletAddressType,
         wallet: BdkWallet,
         client_builder: NodeClientBuilder,
-    ) -> Self {
+    ) -> Result<Self, WalletScannerError> {
         debug!("creating wallet discovery scanner for {id}, type: {wallet_type}");
         let db = WalletDataDb::new_or_existing(id.clone())
-            .expect("failed to open wallet database for discovery scanner");
+            .map_err(|error| WalletError::LoadError(error.to_string()))?;
 
         let scan_info = db
             .get_scan_state(wallet_type)
-            .ok()
-            .flatten()
+            .map_err(|error| WalletError::LoadError(error.to_string()))?
             .map(|scan_state| match scan_state {
                 ScanState::Scanning(info) => info,
                 ScanState::Completed => {
@@ -441,7 +531,7 @@ impl WalletDiscoveryWorker {
             .unwrap_or_else(|| ScanningInfo::new(wallet_type));
 
         debug!("wallet discovery scan info: {scan_info:?}");
-        Self {
+        Ok(Self {
             parent: Default::default(),
             addr: Default::default(),
             wallet,
@@ -451,7 +541,7 @@ impl WalletDiscoveryWorker {
             scan_info,
             db,
             scan_limit: DEFAULT_SCAN_LIMIT,
-        }
+        })
     }
 
     pub async fn start(&mut self, parent: WeakAddr<WalletDiscoveryScanner>) {
@@ -464,12 +554,20 @@ impl WalletDiscoveryWorker {
     }
 
     async fn start_scan(&mut self) -> ActorResult<()> {
-        let client = self.client_builder.build().await?;
         let wallet_type = self.wallet_type;
+        let client = match self.client_builder.build().await {
+            Ok(client) => client,
+            Err(error) => {
+                call!(self.parent.mark_failed(wallet_type, error.to_string())).await?;
+
+                return Produces::ok(());
+            }
+        };
 
         let scan_limit = self.scan_limit;
         let current_address = self.scan_info.count;
         let parent = self.parent.clone();
+        let failure_parent = parent.clone();
         let db = self.db.clone();
 
         self.addr.send_fut_with(|addr| async move {
@@ -485,12 +583,10 @@ impl WalletDiscoveryWorker {
                         .context("could not check address")?;
 
                     if found_address {
-                        call!(parent.mark_found_txn(wallet_type)).await?;
-
-                        // save the scan state
                         db.set_scan_state(wallet_type, ScanState::Completed)
                             .context("save scan state")?;
 
+                        call!(parent.mark_found_txn(wallet_type)).await?;
                         break;
                     }
 
@@ -509,7 +605,7 @@ impl WalletDiscoveryWorker {
 
                     if current_address >= scan_limit {
                         db.set_scan_state(wallet_type, ScanState::Completed)
-                            .expect("save scan state");
+                            .context("save completed scan state")?;
 
                         call!(parent.mark_limit_reached(wallet_type)).await?;
                         break;
@@ -521,7 +617,12 @@ impl WalletDiscoveryWorker {
 
             if let Err(error) = run_with_error().await {
                 error!("wallet scan failed: {error}");
-                // todo: maybe send the error back to the parent? the scanner or the view model?
+
+                if let Err(report_error) =
+                    call!(failure_parent.mark_failed(wallet_type, error.to_string())).await
+                {
+                    error!("unable to report wallet discovery scan failure: {report_error}");
+                }
             }
         });
 
@@ -619,6 +720,23 @@ impl From<ScannerResponse> for WalletManagerReconcileMessage {
     }
 }
 
+impl From<WalletScannerError> for WalletManagerReconcileMessage {
+    fn from(error: WalletScannerError) -> Self {
+        match error {
+            WalletScannerError::NoAddressTypes => {
+                Self::UnknownError("No alternate wallet address types to scan".to_string())
+            }
+            WalletScannerError::WalletCreationError(WalletError::Keychain(error)) => {
+                Self::WalletError(WalletManagerError::SecretRetrievalError(error))
+            }
+            WalletScannerError::WalletCreationError(error) => {
+                Self::WalletError(WalletManagerError::LoadWalletError(error))
+            }
+            WalletScannerError::NoWalletSecretAvailable(id) => Self::HotWalletKeyMissing(id),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bdk_wallet::bitcoin::bip32::Xpriv;
@@ -637,6 +755,16 @@ mod tests {
         bip84: Option<pubport::descriptor::Descriptors>,
     ) -> pubport::formats::Json {
         pubport::formats::Json { bip44, bip49, bip84, bip86: None }
+    }
+
+    fn test_global_config() -> (tempfile::TempDir, GlobalConfigTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let global_config = GlobalConfigTable::new(db, &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, global_config)
     }
 
     fn bip44_descriptors() -> pubport::descriptor::Descriptors {
@@ -698,5 +826,112 @@ mod tests {
 
         assert!(wallets[index(WalletAddressType::WrappedSegwit)].is_some());
         assert!(wallets[index(WalletAddressType::Legacy)].is_some());
+    }
+
+    #[test]
+    fn discovery_origin_comes_from_wallet_metadata() {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.network = CoveNetwork::Signet;
+        metadata.wallet_mode = WalletMode::Decoy;
+
+        let origin = DiscoveryOrigin::from(&metadata);
+
+        assert_eq!(
+            origin,
+            DiscoveryOrigin { network: CoveNetwork::Signet, wallet_mode: WalletMode::Decoy }
+        );
+    }
+
+    #[test]
+    fn discovery_uses_origin_network_node_when_global_network_differs() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, global_config) = test_global_config();
+        let signet_node = crate::node::Node::new_esplora(
+            "Signet fixture".into(),
+            "https://signet.example/api".into(),
+            CoveNetwork::Signet,
+        );
+        global_config.set_selected_node(&signet_node).unwrap();
+        global_config.set_selected_network(CoveNetwork::Bitcoin).unwrap();
+
+        let origin =
+            DiscoveryOrigin { network: CoveNetwork::Signet, wallet_mode: WalletMode::Main };
+        let client_builder = node_client_builder(&global_config, origin);
+
+        assert_eq!(global_config.selected_network(), CoveNetwork::Bitcoin);
+        assert_eq!(client_builder.node, signet_node);
+    }
+
+    #[test]
+    fn wallet_secret_keychain_error_is_preserved() {
+        let id = WalletId::preview_new_random();
+        let keychain_error = KeychainError::Decrypt("fixture failure".to_string());
+
+        let error =
+            required_wallet_secret(Err(keychain_error.clone()), &id, WalletSecretKind::Mnemonic)
+                .unwrap_err();
+
+        assert!(matches!(
+            error,
+            WalletScannerError::WalletCreationError(WalletError::Keychain(error))
+                if error == keychain_error
+        ));
+    }
+
+    #[test]
+    fn wallet_secret_type_mismatch_is_not_reported_as_missing() {
+        let id = WalletId::preview_new_random();
+        let xprv = Xpriv::new_master(Network::Bitcoin, &[42; 32]).unwrap();
+        let secret = WalletSecret::Xpriv(WalletXprv::try_from(xprv).unwrap());
+
+        let error =
+            required_wallet_secret(Ok(Some(secret)), &id, WalletSecretKind::Mnemonic).unwrap_err();
+
+        assert!(matches!(
+            error,
+            WalletScannerError::WalletCreationError(WalletError::Keychain(
+                KeychainError::WalletSecretTypeMismatch
+            ))
+        ));
+    }
+
+    #[test]
+    fn scanner_setup_failure_maps_to_typed_wallet_reconcile_error() {
+        let keychain_error = KeychainError::Decrypt("fixture failure".into());
+        let message = WalletManagerReconcileMessage::from(WalletScannerError::WalletCreationError(
+            WalletError::Keychain(keychain_error.clone()),
+        ));
+
+        assert_eq!(
+            message,
+            WalletManagerReconcileMessage::WalletError(WalletManagerError::SecretRetrievalError(
+                keychain_error
+            ))
+        );
+    }
+
+    #[test]
+    fn worker_failure_is_ready_to_reconcile_while_another_worker_is_running() {
+        let id = WalletId::preview_new_random();
+        let mut workers = Workers::default();
+        workers[index(WalletAddressType::WrappedSegwit)] = Some(WorkerHandle {
+            id: id.clone(),
+            addr: Addr::default(),
+            wallet_type: WalletAddressType::WrappedSegwit,
+            started_at: Instant::now(),
+            state: WorkerState::Failed("node unavailable".into()),
+        });
+        workers[index(WalletAddressType::Legacy)] = Some(WorkerHandle {
+            id,
+            addr: Addr::default(),
+            wallet_type: WalletAddressType::Legacy,
+            started_at: Instant::now(),
+            state: WorkerState::Started,
+        });
+
+        assert_eq!(
+            worker_failure_message(&workers),
+            Some("WrappedSegwit: node unavailable".into())
+        );
     }
 }

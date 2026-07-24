@@ -13,6 +13,7 @@ use crate::{
         fingerprint::Fingerprint,
         metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
     },
+    wallet_identity::{PublicWalletIdentity, PublicWalletIdentityError},
     wallet_secret::WalletSecretExt as _,
 };
 
@@ -44,9 +45,24 @@ pub enum ImportWalletError {
 
     #[error("failed to create wallet: {0}")]
     BdkError(String),
+
+    #[error("multiple existing wallets match the incoming secret public identity")]
+    WalletIdentityCollision,
+
+    #[error("failed to verify existing wallet public identity: {0}")]
+    WalletIdentity(String),
+
+    #[error("failed to roll back an incomplete existing-wallet upgrade: {0}")]
+    UpgradeRollback(String),
 }
 
 pub type Error = ImportWalletError;
+
+impl From<PublicWalletIdentityError> for ImportWalletError {
+    fn from(error: PublicWalletIdentityError) -> Self {
+        Self::WalletIdentity(error.to_string())
+    }
+}
 
 #[derive(Clone, Copy)]
 enum ImportedWalletDefaultName {
@@ -128,18 +144,16 @@ fn import_wallet_secret_with_default_name(
     default_name: ImportedWalletDefaultName,
 ) -> Result<WalletMetadata, Error> {
     let fingerprint: Fingerprint = secret.xpub(network).fingerprint().into();
+    let database = Database::global();
+    let keychain = Keychain::global();
 
-    // check if the wallet already exists using the fingerprint
-    let existing_wallet = Database::global()
-        .wallets
-        .get_all(network, mode)?
-        .into_iter()
-        .find(|wallet_metadata| wallet_metadata.matches_fingerprint(fingerprint));
+    let existing_wallet =
+        existing_wallet_for_secret(&database, keychain, &secret, network, mode, fingerprint)?;
 
     // new wallet, create it and return
     if existing_wallet.is_none() {
         // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(network, mode)?;
+        let number_of_wallets = database.wallets.len(network, mode)?;
 
         let name = default_name.resolve(fingerprint, number_of_wallets);
         let mut wallet_metadata = match &secret {
@@ -169,10 +183,17 @@ fn import_wallet_secret_with_default_name(
     // existing wallet
     let mut metadata = existing_wallet.expect("wallet exists, just checked above");
     let id = metadata.id.clone();
-    let keychain = Keychain::global();
+    let existing_secret = match keychain.get_wallet_secret(&id) {
+        Ok(secret) => secret,
+        Err(error) => {
+            warn!("failed to read wallet secret for existing wallet {id}: {error}");
+
+            None
+        }
+    };
 
     // hot wallets with private key already in keychain, don't do anything else
-    if metadata.wallet_type == WalletType::Hot && keychain.get_wallet_secret(&id)?.is_some() {
+    if metadata.wallet_type == WalletType::Hot && existing_secret.is_some() {
         warn!("attempted to import a secret for existing hot wallet {id}, showing duplicate alert");
 
         return Err(ImportWalletError::WalletAlreadyExists(id));
@@ -180,32 +201,158 @@ fn import_wallet_secret_with_default_name(
 
     info!("adding private key material to existing wallet {id}");
 
-    // save the private key material for an existing wallet.
-    keychain.save_wallet_secret(&id, secret.clone())?;
+    let previous_selected_wallet = database.global_config.selected_wallet();
+    let secret_created = match existing_secret {
+        None => {
+            keychain.save_wallet_secret(&id, secret)?;
 
-    // save xpub/descriptors in keychain too
-    let xpub = secret.xpub(network);
-    keychain.save_wallet_xpub(&id, xpub)?;
+            true
+        }
+        Some(existing_secret) => {
+            let existing_fingerprint: Fingerprint =
+                existing_secret.xpub(network).fingerprint().into();
+            if existing_fingerprint != fingerprint {
+                return Err(ImportWalletError::WalletIdentity(format!(
+                    "stored secret for wallet {id} does not match the incoming fingerprint"
+                )));
+            }
 
-    // save public descriptors in keychain too
-    let descriptors = secret.into_descriptors(network, metadata.address_type);
-    keychain.save_public_descriptor(
-        &id,
-        descriptors.external.extended_descriptor,
-        descriptors.internal.extended_descriptor,
-    )?;
+            info!("keeping existing private key material for wallet {id}");
 
-    // imported mnemonic means this wallet can now sign locally.
+            false
+        }
+    };
+
+    // private key material means this wallet can now sign locally
     metadata.wallet_type = WalletType::Hot;
     metadata.hardware_metadata = None;
     metadata.verified = true;
 
-    metadata = Database::global().wallets.update_wallet_metadata(metadata)?;
-    Database::global().global_config.select_wallet(id.clone())?;
+    if let Err(error) = database.global_config.select_wallet(id.clone()) {
+        rollback_created_secret(keychain, &id, secret_created, &error)?;
+
+        return Err(error.into());
+    }
+
+    // commit metadata last so a database failure leaves the wallet non-hot and
+    // requires rolling back only the selection and newly created secret
+    metadata = match database.wallets.update_wallet_metadata(metadata) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            rollback_existing_wallet_upgrade(
+                database.as_ref(),
+                keychain,
+                &id,
+                secret_created,
+                previous_selected_wallet,
+                &error,
+            )?;
+
+            return Err(error.into());
+        }
+    };
+
     Updater::send_update(Update::ClearCachedWalletManager(id));
     CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());
 
     Ok(metadata)
+}
+
+fn existing_wallet_for_secret(
+    database: &Database,
+    keychain: &Keychain,
+    secret: &WalletSecret,
+    network: Network,
+    mode: WalletMode,
+    fingerprint: Fingerprint,
+) -> Result<Option<WalletMetadata>, Error> {
+    let same_fingerprint_wallets = database
+        .wallets
+        .get_all(network, mode)?
+        .into_iter()
+        .filter(|metadata| metadata.matches_fingerprint(fingerprint))
+        .collect::<Vec<_>>();
+    if same_fingerprint_wallets.is_empty() {
+        return Ok(None);
+    }
+
+    let mut exact_match = None;
+
+    for metadata in same_fingerprint_wallets {
+        let incoming_descriptors = secret.clone().into_descriptors(network, metadata.address_type);
+        let incoming_identity = PublicWalletIdentity::from_descriptors(&incoming_descriptors);
+        let existing_identity = PublicWalletIdentity::from_existing_wallet(&metadata, keychain)?
+            .ok_or_else(|| {
+                ImportWalletError::WalletIdentity(format!(
+                    "wallet {} has no stored public descriptors or extended public key",
+                    metadata.id
+                ))
+            })?;
+
+        if existing_identity != incoming_identity {
+            continue;
+        }
+
+        if exact_match.is_some() {
+            return Err(ImportWalletError::WalletIdentityCollision);
+        }
+
+        exact_match = Some(metadata);
+    }
+
+    Ok(exact_match)
+}
+
+fn rollback_created_secret(
+    keychain: &Keychain,
+    id: &WalletId,
+    secret_created: bool,
+    cause: &database::Error,
+) -> Result<(), Error> {
+    if !secret_created || keychain.delete_wallet_secret(id) {
+        return Ok(());
+    }
+
+    Err(ImportWalletError::UpgradeRollback(format!(
+        "database update: {cause}; secret rollback: {}",
+        KeychainError::Delete
+    )))
+}
+
+fn rollback_existing_wallet_upgrade(
+    database: &Database,
+    keychain: &Keychain,
+    id: &WalletId,
+    secret_created: bool,
+    previous_selected_wallet: Option<WalletId>,
+    cause: &database::Error,
+) -> Result<(), Error> {
+    let selection_rollback = match previous_selected_wallet {
+        Some(previous_id) => database.global_config.select_wallet(previous_id),
+        None => database.global_config.clear_selected_wallet(),
+    };
+    let secret_rollback = if !secret_created || keychain.delete_wallet_secret(id) {
+        Ok(())
+    } else {
+        Err(KeychainError::Delete)
+    };
+
+    if selection_rollback.is_err() || secret_rollback.is_err() {
+        return Err(ImportWalletError::UpgradeRollback(format!(
+            "metadata update: {cause}; selection rollback: {}; secret rollback: {}",
+            rollback_result(&selection_rollback),
+            rollback_result(&secret_rollback)
+        )));
+    }
+
+    Ok(())
+}
+
+fn rollback_result<E: std::fmt::Display>(result: &Result<(), E>) -> String {
+    match result {
+        Ok(()) => "ok".to_string(),
+        Err(error) => error.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -213,12 +360,14 @@ mod tests {
     use std::{
         collections::HashMap,
         str::FromStr as _,
-        sync::{Mutex, Once},
+        sync::{Arc, Mutex, Once},
     };
 
     use super::*;
     use crate::keychain::KeychainAccess;
+    use crate::wallet::WalletAddressType;
     use bdk_wallet::bitcoin::bip32::Xpriv;
+    use cove_cspp::CsppStore as _;
     use cove_device::keychain::WalletXprv;
 
     #[derive(Debug, Default)]
@@ -247,6 +396,46 @@ mod tests {
             crate::database::test_support::init_test_database();
             let _ = Keychain::new(Box::<TestKeychain>::default());
         });
+    }
+
+    fn xpriv_secret(seed_byte: u8) -> WalletSecret {
+        let xpriv =
+            Xpriv::new_master(bdk_wallet::bitcoin::Network::Bitcoin, &[seed_byte; 32]).unwrap();
+
+        WalletSecret::Xpriv(WalletXprv::try_from(xpriv).unwrap())
+    }
+
+    fn save_watch_only_wallet(
+        public_material: &WalletSecret,
+        fingerprint: Fingerprint,
+        network: Network,
+        mode: WalletMode,
+    ) -> WalletMetadata {
+        let descriptors =
+            public_material.clone().into_descriptors(network, WalletAddressType::NativeSegwit);
+        let id = WalletId::new();
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = id.clone();
+        metadata.name = format!("Watch-only {id}");
+        metadata.master_fingerprint = Some(Arc::new(fingerprint));
+        metadata.origin = descriptors.origin().ok();
+        metadata.network = network;
+        metadata.wallet_mode = mode;
+        metadata.address_type = WalletAddressType::NativeSegwit;
+        metadata.wallet_type = WalletType::WatchOnly;
+        metadata.verified = false;
+
+        Keychain::global().save_wallet_xpub(&id, public_material.xpub(network)).unwrap();
+        Keychain::global()
+            .save_public_descriptor(
+                &id,
+                descriptors.external.extended_descriptor,
+                descriptors.internal.extended_descriptor,
+            )
+            .unwrap();
+        Database::global().wallets.save_new_wallet_metadata(metadata.clone()).unwrap();
+
+        metadata
     }
 
     #[test]
@@ -330,5 +519,192 @@ mod tests {
         .unwrap();
 
         assert_eq!(metadata.name, format!("KeyTeleport {}", fingerprint.as_uppercase()));
+    }
+
+    #[test]
+    fn same_fingerprint_with_different_identity_imports_as_a_distinct_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(31);
+        let colliding_public_material = xpriv_secret(32);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let existing = save_watch_only_wallet(
+            &colliding_public_material,
+            fingerprint,
+            Network::Signet,
+            WalletMode::Main,
+        );
+
+        let imported =
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Main).unwrap();
+
+        assert_ne!(imported.id, existing.id);
+        assert_eq!(imported.wallet_type, WalletType::Hot);
+        assert!(Keychain::global().get_wallet_secret(&imported.id).unwrap().is_some());
+        assert!(Keychain::global().get_wallet_secret(&existing.id).unwrap().is_none());
+        assert_eq!(
+            Database::global()
+                .wallets
+                .get(&existing.id, Network::Signet, WalletMode::Main)
+                .unwrap()
+                .unwrap()
+                .wallet_type,
+            WalletType::WatchOnly
+        );
+    }
+
+    #[test]
+    fn existing_wallet_upgrade_preserves_public_material_and_origin() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(33);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let existing =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Decoy);
+        let expected_descriptors =
+            Keychain::global().get_public_descriptor(&existing.id).unwrap().unwrap();
+        let expected_xpub = Keychain::global().get_wallet_xpub(&existing.id).unwrap().unwrap();
+        let expected_origin = existing.origin.clone();
+
+        let upgraded =
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Decoy).unwrap();
+
+        assert_eq!(upgraded.wallet_type, WalletType::Hot);
+        assert_eq!(upgraded.origin, expected_origin);
+        assert_eq!(
+            Keychain::global().get_public_descriptor(&existing.id).unwrap().unwrap(),
+            expected_descriptors
+        );
+        assert_eq!(
+            Keychain::global().get_wallet_xpub(&existing.id).unwrap().unwrap(),
+            expected_xpub
+        );
+    }
+
+    #[test]
+    fn existing_wallet_upgrade_retries_after_secret_was_already_saved() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(34);
+        let expected = incoming.clone();
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let existing =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Main);
+        Keychain::global().save_wallet_secret(&existing.id, incoming.clone()).unwrap();
+
+        let upgraded =
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Main).unwrap();
+
+        assert_eq!(upgraded.id, existing.id);
+        assert_eq!(upgraded.wallet_type, WalletType::Hot);
+        assert_eq!(Keychain::global().get_wallet_secret(&existing.id).unwrap(), Some(expected));
+    }
+
+    #[test]
+    fn failed_existing_wallet_upgrade_only_deletes_a_created_secret() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let database = Database::global();
+        let keychain = Keychain::global();
+        let original_selected_wallet = database.global_config.selected_wallet();
+        let previous_selected_wallet = WalletId::new();
+        let created_secret_wallet = WalletId::new();
+        let preexisting_secret_wallet = WalletId::new();
+        let preexisting_secret = xpriv_secret(36);
+        let simulated_failure = database::Error::DatabaseAccess("simulated failure".to_string());
+        database.global_config.select_wallet(previous_selected_wallet.clone()).unwrap();
+
+        keychain.save_wallet_secret(&created_secret_wallet, xpriv_secret(37)).unwrap();
+        database.global_config.select_wallet(created_secret_wallet.clone()).unwrap();
+
+        rollback_existing_wallet_upgrade(
+            database.as_ref(),
+            keychain,
+            &created_secret_wallet,
+            true,
+            Some(previous_selected_wallet.clone()),
+            &simulated_failure,
+        )
+        .unwrap();
+
+        assert_eq!(
+            database.global_config.selected_wallet(),
+            Some(previous_selected_wallet.clone())
+        );
+        assert!(keychain.get_wallet_secret(&created_secret_wallet).unwrap().is_none());
+
+        keychain
+            .save_wallet_secret(&preexisting_secret_wallet, preexisting_secret.clone())
+            .unwrap();
+        database.global_config.select_wallet(preexisting_secret_wallet.clone()).unwrap();
+
+        rollback_existing_wallet_upgrade(
+            database.as_ref(),
+            keychain,
+            &preexisting_secret_wallet,
+            false,
+            Some(previous_selected_wallet.clone()),
+            &simulated_failure,
+        )
+        .unwrap();
+
+        assert_eq!(database.global_config.selected_wallet(), Some(previous_selected_wallet));
+        assert_eq!(
+            keychain.get_wallet_secret(&preexisting_secret_wallet).unwrap(),
+            Some(preexisting_secret)
+        );
+
+        match original_selected_wallet {
+            Some(id) => database.global_config.select_wallet(id).unwrap(),
+            None => database.global_config.clear_selected_wallet().unwrap(),
+        }
+        assert!(keychain.delete_wallet_items(&created_secret_wallet));
+        assert!(keychain.delete_wallet_items(&preexisting_secret_wallet));
+    }
+
+    #[test]
+    fn existing_wallet_upgrade_repairs_a_lone_orphaned_secret_entry() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(38);
+        let expected = incoming.clone();
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let existing =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Main);
+        Keychain::global()
+            .save(format!("{}::wallet_mnemonic", existing.id), "orphan".to_string())
+            .unwrap();
+
+        let upgraded =
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Main).unwrap();
+
+        assert_eq!(upgraded.id, existing.id);
+        assert_eq!(upgraded.wallet_type, WalletType::Hot);
+        assert_eq!(Keychain::global().get_wallet_secret(&existing.id).unwrap(), Some(expected));
+    }
+
+    #[test]
+    fn existing_wallet_upgrade_rejects_multiple_exact_matches() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(35);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let first =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Decoy);
+        let second =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Decoy);
+
+        assert!(matches!(
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Decoy),
+            Err(ImportWalletError::WalletIdentityCollision)
+        ));
+        assert!(Keychain::global().get_wallet_secret(&first.id).unwrap().is_none());
+        assert!(Keychain::global().get_wallet_secret(&second.id).unwrap().is_none());
     }
 }

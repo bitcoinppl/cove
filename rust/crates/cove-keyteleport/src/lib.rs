@@ -53,6 +53,9 @@ pub enum Error {
     #[error("xprv payload is not a master key")]
     NonMasterXprvPayload,
 
+    #[error("xprv payload is not a mainnet key")]
+    NonMainnetXprvPayload,
+
     #[error("invalid secure notes payload")]
     InvalidNotesPayload,
 
