@@ -2,6 +2,7 @@ use std::{io, str::FromStr as _, time::Duration};
 
 use age::{Encryptor, x25519};
 use bytes::Bytes;
+use cove_http::HttpTrafficCategory;
 use flate2::{Compression, write::GzEncoder};
 use reqwest::{
     StatusCode,
@@ -127,6 +128,9 @@ pub(crate) enum UploadError {
     #[error("failed to encrypt diagnostics report: {0}")]
     Encrypt(age::EncryptError),
 
+    #[error("the network route is unavailable: {0}")]
+    Route(crate::manager::tor_manager::TorError),
+
     #[error("collector request failed: {0}")]
     Request(reqwest::Error),
 
@@ -157,6 +161,10 @@ impl UploadError {
             | Self::InvalidRecipient(_)
             | Self::Encrypt(_) => {
                 "Unable to prepare the diagnostics report. Please try again.".to_string()
+            }
+            Self::Route(_) => {
+                "Unable to reach the diagnostics collector because the network route is not ready. Try again once Tor has connected."
+                    .to_string()
             }
             Self::JsonTooLarge { .. } | Self::GzipTooLarge { .. } => {
                 "The diagnostics report is too large to submit. You can still share it manually."
@@ -209,6 +217,7 @@ impl UploadError {
             Self::InvalidRecipient(error) => {
                 format!("configured diagnostics recipient is invalid: {error}")
             }
+            Self::Route(error) => format!("network route unavailable: {error}"),
             Self::Encrypt(error) => format!("failed to encrypt diagnostics report: {error}"),
             Self::Request(error) => format!("collector request failed: {error}"),
             Self::DecodeResponse(error) => {
@@ -224,7 +233,12 @@ struct UploadResponse {
 }
 
 pub(crate) async fn submit_report(report: DiagnosticsUploadReport) -> Result<String, UploadError> {
-    let client = crate::manager::tor_manager::http_client_without_redirects();
+    let client = crate::manager::tor_manager::http_client(
+        HttpTrafficCategory::Diagnostics,
+        crate::manager::tor_manager::HTTP_ROUTE_READY_TIMEOUT,
+    )
+    .await
+    .map_err(UploadError::Route)?;
 
     submit_report_with_client(&client, report).await
 }
@@ -357,7 +371,8 @@ fn upload_error_is_retryable(error: &UploadError) -> bool {
     match error {
         // only retry pre-connection failures because POST outcomes are otherwise ambiguous
         UploadError::Request(error) => error.is_connect(),
-        UploadError::EncodeJson(_)
+        UploadError::Route(_)
+        | UploadError::EncodeJson(_)
         | UploadError::Gzip(_)
         | UploadError::JsonTooLarge { .. }
         | UploadError::GzipTooLarge { .. }

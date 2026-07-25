@@ -13,7 +13,7 @@ pub struct HistoricalPriceService {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to get historical price for transaction: {0}")]
-    GetHistoricalPrice(#[from] reqwest::Error),
+    GetHistoricalPrice(#[from] crate::fiat::client::PriceFetchError),
 
     #[error("empty historical prices for block {block_number} at timestamp {timestamp}")]
     EmptyHistoricalPrices { block_number: u32, timestamp: u64 },

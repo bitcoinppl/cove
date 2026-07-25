@@ -21,6 +21,12 @@ use crate::{
 const HEIGHT_CACHE_FRESH_SECS: u64 = 25;
 const HEIGHT_CACHE_BACKGROUND_REFRESH_SECS: u64 = 120;
 
+/// Bound on a whole connection probe, covering client construction and the check
+const NODE_PROBE_TIMEOUT: Duration = Duration::from_secs(75);
+
+/// Bound on the check itself, once a client exists
+const NODE_PROBE_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+
 type HeightRefreshResult = NodeRefreshResult<NodeHeightRefresh>;
 type BlockIdRefreshResult = NodeRefreshResult<NodeBlockIdRefresh>;
 pub(crate) type HeightReply = futures::channel::oneshot::Sender<Produces<Result<usize, Error>>>;
@@ -454,24 +460,31 @@ async fn node_client_or_new(
 }
 
 async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
-    // create a fresh client with its own TCP connection for connection probes
-    // because the actor may continue processing messages with its cached client
-    // while a background check is running. the underlying rust-electrum-client
-    // is not designed for concurrent access, so a fresh connection ensures no
-    // shared state or concurrent access
-    //
-    // todo: consider reusing the cached client when using esplora, since esplora
-    // uses HTTP and does not have electrum's persistent TCP concurrency limits
-    let node_client = NodeClient::new(node)
-        .await
-        .map_err(|_| "unable to create a connection to the node".to_string())?;
+    // the bound covers construction as well as the probe, because a cold Tor
+    // bootstrap happens while the client is being built, not while it is used
+    async {
+        // create a fresh client with its own TCP connection for connection probes
+        // because the actor may continue processing messages with its cached client
+        // while a background check is running. the underlying rust-electrum-client
+        // is not designed for concurrent access, so a fresh connection ensures no
+        // shared state or concurrent access
+        //
+        // todo: consider reusing the cached client when using esplora, since esplora
+        // uses HTTP and does not have electrum's persistent TCP concurrency limits
+        let node_client = NodeClient::new(node)
+            .await
+            .map_err(|_| "unable to create a connection to the node".to_string())?;
 
-    node_client
-        .check_url()
-        .with_timeout(Duration::from_secs(5))
-        .await
-        .map_err(|_| "unable to connect to node, timeout".to_string())?
-        .map_err(|err| err.to_string())?;
+        node_client
+            .check_url()
+            .with_timeout(NODE_PROBE_CHECK_TIMEOUT)
+            .await
+            .map_err(|_| "unable to connect to node, timeout".to_string())?
+            .map_err(|err| err.to_string())?;
 
-    Ok(())
+        Ok(())
+    }
+    .with_timeout(NODE_PROBE_TIMEOUT)
+    .await
+    .map_err(|_| "unable to connect to node, timeout".to_string())?
 }

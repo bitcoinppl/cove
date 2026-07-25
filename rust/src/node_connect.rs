@@ -3,11 +3,12 @@ use url::Url;
 
 use crate::{
     database::{Database, global_flag::GlobalFlagKey},
-    manager::tor_manager::{TOR_MANAGER, TorManagerAction},
+    manager::tor_manager::{TOR_MANAGER, TorManagerAction, onion_selected_networks},
     network::Network,
     node::{
         ApiType, Node,
-        client::{NodeClient, NodeClientOptions},
+        client::{self, NodeClient, NodeClientOptions},
+        is_onion_host,
     },
 };
 use cove_macros::impl_default_for;
@@ -223,7 +224,7 @@ impl NodeSelector {
         check_node_with_tor_inference(&node).await?;
 
         let database = Database::global();
-        if node_implies_tor(&node) {
+        if node.requires_tor() {
             database
                 .global_flag
                 .set_bool_config(GlobalFlagKey::TorSettingsDiscovered, true)
@@ -296,31 +297,30 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
-/// Returns whether a node address requires onion routing
-pub(crate) fn node_implies_tor(node: &Node) -> bool {
-    Url::parse(&node.url)
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_string))
-        .or_else(|| {
-            Url::parse(&format!("tcp://{}", node.url.trim()))
-                .ok()
-                .and_then(|url| url.host_str().map(str::to_string))
-        })
-        .is_some_and(|host| host.to_ascii_lowercase().ends_with(".onion"))
+/// Switches every network whose selected node requires Tor to its first clearnet preset
+pub(crate) fn switch_onion_selections_to_clearnet_presets() -> Result<(), ClearnetPresetError> {
+    let database = Database::global();
+
+    for network in onion_selected_networks(&database.global_config) {
+        let node = node_list(network)
+            .into_iter()
+            .find(|node| !node.requires_tor())
+            .ok_or(ClearnetPresetError::NotFound(network))?;
+
+        database.global_config.set_selected_node(&node)?;
+    }
+
+    Ok(())
 }
 
-/// Switches the selected node to the first clearnet preset for the active network
-pub(crate) fn switch_to_first_clearnet_preset() -> Result<Node, ClearnetPresetError> {
-    let database = Database::global();
-    let network = database.global_config.selected_network();
-    let node = node_list(network)
-        .into_iter()
-        .find(|node| !node_implies_tor(node))
-        .ok_or(ClearnetPresetError::NotFound(network))?;
-
-    database.global_config.set_selected_node(&node)?;
-
-    Ok(node)
+/// Typed rejection of an Electrum URL that no transport policy can satisfy
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum ElectrumUrlError {
+    /// An onion Electrum address was given an explicit TLS scheme
+    #[error(
+        "onion Electrum nodes use tcp://; an onion service cannot present a CA-issued certificate"
+    )]
+    OnionRequiresTcp,
 }
 
 /// Error produced while selecting a clearnet fallback node
@@ -336,7 +336,7 @@ pub(crate) enum ClearnetPresetError {
 }
 
 async fn enable_tor_for_onion_save(node: &Node) -> Result<(), Error> {
-    if !node_implies_tor(node) {
+    if !node.requires_tor() {
         return Ok(());
     }
 
@@ -350,12 +350,11 @@ async fn enable_tor_for_onion_save(node: &Node) -> Result<(), Error> {
 
 async fn check_node_with_tor_inference(node: &Node) -> Result<(), Error> {
     let redacted_host =
-        if node_implies_tor(node) { "<redacted-onion-host>" } else { "<redacted-host>" };
+        if node.requires_tor() { "<redacted-onion-host>" } else { "<redacted-host>" };
     let options = NodeClientOptions::from_db_for_node(node).map_err(|error| {
         debug!(?error, host = redacted_host, "failed to read Tor settings");
         Error::NodeAccessError("connection failed".to_string())
     })?;
-    let options = check_options_for_node(node, options)?;
 
     debug!(
         api_type = ?node.api_type,
@@ -364,9 +363,13 @@ async fn check_node_with_tor_inference(node: &Node) -> Result<(), Error> {
         "checking node",
     );
 
-    let client = NodeClient::new_with_options(node, options).await.map_err(|_| {
+    let client = NodeClient::new_with_options(node, options).await.map_err(|error| {
         debug!(api_type = ?node.api_type, host = redacted_host, "failed to create node client");
-        Error::NodeAccessError("connection failed".to_string())
+
+        match error {
+            client::Error::OnionNodeRequiresTor => Error::OnionNodeRequiresTor,
+            _ => Error::NodeAccessError("connection failed".to_string()),
+        }
     })?;
     client.check_url().await.map_err(|_| {
         debug!(api_type = ?node.api_type, host = redacted_host, "node check failed");
@@ -374,17 +377,6 @@ async fn check_node_with_tor_inference(node: &Node) -> Result<(), Error> {
     })?;
 
     Ok(())
-}
-
-fn check_options_for_node(
-    node: &Node,
-    options: NodeClientOptions,
-) -> Result<NodeClientOptions, Error> {
-    if node_implies_tor(node) && options.tor.is_none() {
-        return Err(Error::OnionNodeRequiresTor);
-    }
-
-    Ok(options)
 }
 
 fn parse_node_url(url: &str, api_type: ApiType) -> eyre::Result<Url> {
@@ -434,8 +426,16 @@ fn parse_electrum_url(url: &str) -> eyre::Result<Url> {
         Url::parse(&url_str)?
     };
 
+    let onion = url.host_str().is_some_and(is_onion_host);
+
     // set the scheme properly, use the port as a hint
     match (url.scheme(), url.port()) {
+        // onion services cannot present a CA-issued certificate, so the port hint
+        // never implies TLS for them
+        ("none", _) if onion => url
+            .set_scheme("tcp")
+            .map_err(|()| eyre!("can't set scheme to tcp"))
+            .context("original: none, host is an onion service")?,
         ("none", Some(50002)) => url
             .set_scheme("ssl")
             .map_err(|()| eyre!("can't set scheme to ssl"))
@@ -457,6 +457,12 @@ fn parse_electrum_url(url: &str) -> eyre::Result<Url> {
             "invalid electrum url scheme `{}`; expected tcp:// or ssl://",
             url.scheme(),
         ));
+    }
+
+    // an onion service has no CA-issued certificate, so an explicit ssl:// can
+    // never validate; the user is told rather than having their scheme rewritten
+    if onion && url.scheme() == "ssl" {
+        return Err(ElectrumUrlError::OnionRequiresTcp.into());
     }
 
     // set the port to if not set, default to 50002 for ssl and 50001 for tcp
@@ -525,31 +531,44 @@ fn default_node_selection() -> NodeSelection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::client::TorProxy;
 
     fn node(url: &str) -> Node {
         Node::new_electrum("test".to_string(), url.to_string(), Network::Bitcoin)
     }
 
     #[test]
-    fn onion_detection_accepts_schemed_and_bare_hosts() {
-        assert!(node_implies_tor(&node("ssl://example.onion:50002")));
-        assert!(node_implies_tor(&node("https://example.onion/api")));
-        assert!(node_implies_tor(&node("custom://example.onion/path")));
-        assert!(node_implies_tor(&node("EXAMPLE.ONION:50001")));
-        assert!(!node_implies_tor(&node("ssl://example.com:50002")));
-    }
+    fn electrum_parser_defaults_onion_hosts_to_tcp_on_every_port() {
+        for (input, port) in [
+            ("example.onion:50002", 50002),
+            ("example.onion:50001", 50001),
+            ("example.onion", 50001),
+        ] {
+            let parsed = parse_electrum_url(input).unwrap();
 
-    #[test]
-    fn electrum_parser_accepts_onion_hosts_and_normalizes_transport() {
-        let parsed = parse_electrum_url("example.onion:50002").unwrap();
-
-        assert_eq!(parsed.scheme(), "ssl");
-        assert_eq!(parsed.host_str(), Some("example.onion"));
-        assert_eq!(parsed.port(), Some(50002));
+            assert_eq!(parsed.scheme(), "tcp", "input: {input}");
+            assert_eq!(parsed.host_str(), Some("example.onion"));
+            assert_eq!(parsed.port(), Some(port));
+        }
 
         let parsed = parse_electrum_url("http://example.onion:50001").unwrap();
         assert_eq!(parsed.scheme(), "tcp");
+
+        // clearnet hosts keep the port-derived TLS default
+        let parsed = parse_electrum_url("example.com:50002").unwrap();
+        assert_eq!(parsed.scheme(), "ssl");
+    }
+
+    #[test]
+    fn electrum_parser_rejects_an_explicit_tls_scheme_on_an_onion_host() {
+        for input in ["ssl://example.onion:50002", "https://example.onion:50002"] {
+            let error = parse_electrum_url(input).unwrap_err();
+
+            assert_eq!(
+                error.downcast_ref::<ElectrumUrlError>(),
+                Some(&ElectrumUrlError::OnionRequiresTcp),
+                "input: {input}",
+            );
+        }
     }
 
     #[test]
@@ -615,13 +634,18 @@ mod tests {
     }
 
     #[test]
-    fn onion_check_requires_a_tor_route() {
-        let onion = node("ssl://example.onion:50002");
-        let direct = NodeClientOptions { batch_size: 10, tor: None };
+    fn parse_custom_electrum_onion_node_uses_tcp() {
+        let selector = NodeSelector { network: Network::Bitcoin, node_list: Vec::new() };
+        let parsed = selector
+            .parse_custom_node(
+                "example.onion:50002".to_string(),
+                "Electrum".to_string(),
+                String::new(),
+            )
+            .unwrap();
 
-        assert_eq!(check_options_for_node(&onion, direct), Err(Error::OnionNodeRequiresTor));
-
-        let routed = NodeClientOptions { batch_size: 10, tor: Some(TorProxy::BuiltIn) };
-        assert_eq!(check_options_for_node(&onion, routed.clone()), Ok(routed));
+        assert_eq!(parsed.api_type, ApiType::Electrum);
+        assert!(parsed.url.starts_with("tcp://"), "url: {}", parsed.url);
+        assert!(node(&parsed.url).requires_tor());
     }
 }

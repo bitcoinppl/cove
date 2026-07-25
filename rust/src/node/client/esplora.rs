@@ -31,11 +31,8 @@ impl EsploraClient {
         options: ResolvedNodeClientOptions,
     ) -> Result<Self, Error> {
         let mut builder = esplora_client::Builder::new(&node.url);
-        match &options.tor {
-            None => {}
-            Some(endpoint) => {
-                builder = builder.proxy(&format!("socks5h://{}", endpoint.authority()));
-            }
+        if let Some(proxy) = &options.tor {
+            builder = builder.proxy(&proxy.url());
         }
 
         let client = builder.build_async().map_err(Error::CreateEsploraClient)?.into();

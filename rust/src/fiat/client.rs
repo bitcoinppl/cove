@@ -10,9 +10,26 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, trace, warn};
 
+use cove_http::HttpTrafficCategory;
+
 use crate::{
-    database::Database, fiat::FiatCurrency, manager::tor_manager::http_client, transaction::Amount,
+    database::Database,
+    fiat::FiatCurrency,
+    manager::tor_manager::{HTTP_ROUTE_READY_TIMEOUT, TorError, http_client},
+    transaction::Amount,
 };
+
+/// Failure while fetching prices over the configured network route
+#[derive(Debug, thiserror::Error)]
+pub enum PriceFetchError {
+    /// The configured route never became usable
+    #[error("the network route is unavailable: {0}")]
+    Route(#[from] TorError),
+
+    /// The price request itself failed
+    #[error("the price request failed: {0}")]
+    Request(#[from] reqwest::Error),
+}
 use cove_macros::impl_default_for;
 
 use super::historical::HistoricalPricesResponse;
@@ -102,10 +119,11 @@ impl FiatClient {
     pub async fn historical_prices(
         &self,
         timestamp: u64,
-    ) -> Result<HistoricalPricesResponse, reqwest::Error> {
+    ) -> Result<HistoricalPricesResponse, PriceFetchError> {
         let url = format!("{HISTORICAL_PRICES_URL}?timestamp={timestamp}");
 
-        let response = http_client().get(&url).send().await?;
+        let client = http_client(HttpTrafficCategory::General, HTTP_ROUTE_READY_TIMEOUT).await?;
+        let response = client.get(&url).send().await?;
         let historical_prices: HistoricalPricesResponse = response.json().await?;
 
         Ok(historical_prices)
@@ -136,7 +154,7 @@ impl FiatClient {
     }
 
     /// Always returns the latest prices, will also update the prices cache
-    pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
+    pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, PriceFetchError> {
         trace!("get_or_fetch_prices");
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
@@ -146,7 +164,8 @@ impl FiatClient {
         }
 
         debug!("fetching prices");
-        let response = http_client().get(&self.url).send().await?;
+        let client = http_client(HttpTrafficCategory::General, HTTP_ROUTE_READY_TIMEOUT).await?;
+        let response = client.get(&self.url).send().await?;
         let prices: PriceResponse = response.json().await?;
 
         // saved prices are the same as the new ones don't need to update
@@ -165,7 +184,7 @@ impl FiatClient {
     }
 
     /// Get the current price for a currency
-    async fn price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
+    async fn price_for(&self, currency: FiatCurrency) -> Result<u64, PriceFetchError> {
         let prices = self.get_or_fetch_prices().await?;
 
         let price = match currency {
@@ -186,7 +205,7 @@ impl FiatClient {
         &self,
         amount: Amount,
         currency: FiatCurrency,
-    ) -> Result<f64, reqwest::Error> {
+    ) -> Result<f64, PriceFetchError> {
         let btc = amount.as_btc();
         let price = self.price_for(currency).await?;
         let value_in_currency = btc * price as f64;

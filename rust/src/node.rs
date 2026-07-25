@@ -7,6 +7,7 @@ use crate::node_connect::{
 
 use client::{NodeClient, NodeClientOptions, TorProxy};
 use cove_types::network::Network;
+use url::Url;
 
 #[derive(
     Debug,
@@ -55,11 +56,23 @@ pub(crate) enum TorRouteIdentity {
     Unreadable,
 }
 
+impl NodeConnectionIdentity {
+    /// Returns whether this identity routes through Tor
+    pub(crate) fn uses_tor(&self) -> bool {
+        match &self.tor {
+            Some(TorRouteIdentity::BuiltIn { .. } | TorRouteIdentity::Socks5 { .. }) => true,
+            Some(TorRouteIdentity::Unreadable) | None => false,
+        }
+    }
+}
+
 impl From<TorProxy> for TorRouteIdentity {
     fn from(proxy: TorProxy) -> Self {
         match proxy {
             TorProxy::BuiltIn => Self::BuiltIn { generation: crate::tor_runtime::generation() },
-            TorProxy::Socks5 { host, port } => Self::Socks5 { host, port },
+            TorProxy::Socks5(proxy) => {
+                Self::Socks5 { host: proxy.host().to_string(), port: proxy.port() }
+            }
         }
     }
 }
@@ -71,6 +84,11 @@ pub enum Error {
 }
 
 impl Node {
+    /// Returns whether this node's address requires onion routing
+    pub(crate) fn requires_tor(&self) -> bool {
+        host_of(&self.url).is_some_and(|host| is_onion_host(&host))
+    }
+
     pub(crate) fn connection_identity(&self) -> NodeConnectionIdentity {
         let tor = match NodeClientOptions::from_db(1) {
             Ok(options) => options.tor.map(TorRouteIdentity::from),
@@ -158,6 +176,25 @@ impl Node {
     }
 }
 
+/// Returns whether a host name addresses an onion service
+///
+/// A fully qualified name keeps its onion semantics, so the empty root label is
+/// not treated as part of the suffix
+pub(crate) fn is_onion_host(host: &str) -> bool {
+    host.trim_end_matches('.').to_ascii_lowercase().ends_with(".onion")
+}
+
+/// Extracts the lowercased host from a node URL, tolerating schemeless addresses
+fn host_of(url: &str) -> Option<String> {
+    let host = |url: &Url| url.host_str().map(str::to_ascii_lowercase);
+
+    Url::parse(url)
+        .ok()
+        .as_ref()
+        .and_then(host)
+        .or_else(|| Url::parse(&format!("tcp://{}", url.trim())).ok().as_ref().and_then(host))
+}
+
 impl From<NodeSelection> for Node {
     fn from(node: NodeSelection) -> Self {
         match node {
@@ -213,13 +250,29 @@ mod tests {
     }
 
     #[test]
+    fn requires_tor_accepts_schemed_bare_and_fully_qualified_onion_hosts() {
+        let electrum =
+            |url: &str| Node::new_electrum("test".to_string(), url.to_string(), Network::Bitcoin);
+
+        assert!(electrum("ssl://example.onion:50002").requires_tor());
+        assert!(electrum("https://example.onion/api").requires_tor());
+        assert!(electrum("custom://example.onion/path").requires_tor());
+        assert!(electrum("EXAMPLE.ONION:50001").requires_tor());
+        assert!(electrum("example.onion.:50001").requires_tor());
+        assert!(electrum("tcp://example.onion.:50001").requires_tor());
+
+        assert!(!electrum("ssl://example.com:50002").requires_tor());
+        assert!(!electrum("ssl://onion:50002").requires_tor());
+        assert!(!electrum("ssl://example.onion.com:50002").requires_tor());
+    }
+
+    #[test]
     fn tor_route_changes_connection_identity() {
         let node = node();
         let direct = node.connection_identity_with_tor(None);
-        let proxied = node.connection_identity_with_tor(Some(TorProxy::Socks5 {
-            host: "127.0.0.1".to_string(),
-            port: 9050,
-        }));
+        let proxied = node.connection_identity_with_tor(Some(TorProxy::Socks5(
+            cove_http::Socks5Proxy::new("127.0.0.1", 9050),
+        )));
 
         assert_ne!(direct, proxied);
     }

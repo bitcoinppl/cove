@@ -2,7 +2,7 @@ pub mod electrum;
 pub mod esplora;
 
 use std::sync::Arc;
-use std::{collections::BTreeMap, net::Ipv6Addr};
+use std::{collections::BTreeMap, time::Duration};
 
 use bdk_electrum::electrum_client;
 use bdk_esplora::esplora_client;
@@ -20,6 +20,7 @@ use bdk_wallet::{
 };
 use bitcoin::{Transaction, Txid};
 use cove_bdk_progressive_scan::ScanEvent;
+use cove_http::{Socks5Proxy, TorTrafficCategory};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
@@ -27,12 +28,16 @@ use crate::{
     database::{Database, global_config::GlobalConfigTable},
     node::{Node, NodeConnectionIdentity},
     tor::TorConfig,
+    tor_runtime::EndpointWait,
 };
 
 use super::{ApiType, client_builder::NodeClientBuilder};
 
 const ELECTRUM_BATCH_SIZE: usize = 10;
 const ESPLORA_BATCH_SIZE: usize = 1;
+
+/// Default bound on waiting for built-in Tor readiness during client construction
+pub const TOR_READY_BOUND: Duration = Duration::from_secs(60);
 
 /// A blockchain client bound to the node that created it
 #[derive(Clone)]
@@ -65,6 +70,12 @@ impl core::fmt::Debug for NodeClient {
 pub enum Error {
     #[error("Tor configuration is unreadable: {0}")]
     TorConfigUnreadable(#[source] crate::database::Error),
+
+    #[error("the selected node is an onion service and requires Tor")]
+    OnionNodeRequiresTor,
+
+    #[error("the configured SOCKS5 proxy host or port is not usable")]
+    InvalidTorProxy,
 
     #[error("failed to create node client: {0}")]
     CreateEsploraClient(esplora_client::Error),
@@ -120,7 +131,11 @@ pub enum TorProxy {
     /// Resolve the built-in Tor runtime's SOCKS5 endpoint during client construction
     BuiltIn,
     /// Route through an external SOCKS5 proxy
-    Socks5 { host: String, port: u16 },
+    ///
+    /// Holds a parsed endpoint so a malformed persisted host cannot reach a client:
+    /// `socks5h://host/path:9050` is read by the HTTP stack as an entirely different
+    /// authority than a socket-address parser reads
+    Socks5(Socks5Proxy),
 }
 
 /// Options controlling node client construction and scanning
@@ -128,28 +143,14 @@ pub enum TorProxy {
 pub struct NodeClientOptions {
     pub batch_size: usize,
     pub tor: Option<TorProxy>,
+    /// How long construction may wait for built-in Tor to become ready
+    pub tor_ready_bound: Duration,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedNodeClientOptions {
     batch_size: usize,
-    tor: Option<Socks5Endpoint>,
-}
-
-#[derive(Debug, Clone)]
-struct Socks5Endpoint {
-    host: String,
-    port: u16,
-}
-
-impl Socks5Endpoint {
-    fn authority(&self) -> String {
-        if self.host.parse::<Ipv6Addr>().is_ok() {
-            format!("[{}]:{}", self.host, self.port)
-        } else {
-            format!("{}:{}", self.host, self.port)
-        }
-    }
+    tor: Option<Socks5Proxy>,
 }
 
 impl NodeClientOptions {
@@ -164,10 +165,17 @@ impl NodeClientOptions {
         let tor = match config.tor_config().map_err(Error::TorConfigUnreadable)? {
             TorConfig::Off => None,
             TorConfig::BuiltIn => Some(TorProxy::BuiltIn),
-            TorConfig::External { host, port } => Some(TorProxy::Socks5 { host, port }),
+            TorConfig::External { host, port } => Some(TorProxy::Socks5(
+                Socks5Proxy::validated(&host, port).map_err(|_| Error::InvalidTorProxy)?,
+            )),
         };
 
-        Ok(Self { batch_size, tor })
+        Ok(Self { batch_size, tor, tor_ready_bound: TOR_READY_BOUND })
+    }
+
+    /// Overrides how long construction may wait for built-in Tor to become ready
+    pub(crate) fn with_tor_ready_bound(self, tor_ready_bound: Duration) -> Self {
+        Self { tor_ready_bound, ..self }
     }
 
     /// Loads persisted options with the backend's standard batch size
@@ -180,15 +188,31 @@ impl NodeClientOptions {
         Self::from_db(batch_size)
     }
 
-    async fn resolve_tor(self) -> Result<ResolvedNodeClientOptions, Error> {
+    async fn resolve_tor(self, node: &Node) -> Result<ResolvedNodeClientOptions, Error> {
+        // enforced here because this runs before any backend exists, so an onion
+        // address can never reach the platform resolver on a clearnet route
+        if node.requires_tor() && self.tor.is_none() {
+            return Err(Error::OnionNodeRequiresTor);
+        }
+
         let tor = match self.tor {
             Some(TorProxy::BuiltIn) => {
                 crate::manager::tor_manager::ensure_built_in_started().await?;
-                let endpoint = crate::tor_runtime::built_in_socks_endpoint().await?;
+                let endpoint = crate::tor_runtime::built_in_socks_endpoint(EndpointWait::Within(
+                    self.tor_ready_bound,
+                ))
+                .await?;
 
-                Some(Socks5Endpoint { host: endpoint.ip().to_string(), port: endpoint.port() })
+                // node traffic gets its own circuits, away from Cove's HTTP requests
+                Some(Socks5Proxy::isolated(
+                    endpoint.ip().to_string(),
+                    endpoint.port(),
+                    TorTrafficCategory::Node,
+                ))
             }
-            Some(TorProxy::Socks5 { host, port }) => Some(Socks5Endpoint { host, port }),
+
+            // a user-supplied proxy is never told what Cove is using it for
+            Some(TorProxy::Socks5(proxy)) => Some(proxy),
             None => None,
         };
 
@@ -213,8 +237,13 @@ impl NodeClient {
         // identity keeps the unresolved route so it compares equal to identities
         // computed fresh from the persisted config; only backend construction
         // sees the resolved built-in endpoint, which changes on runtime restart
-        let connection_identity = node.connection_identity_with_tor(options.tor.clone());
-        let options = options.resolve_tor().await?;
+        let route = options.tor.clone();
+        let options = options.resolve_tor(node).await?;
+
+        // stamped after resolution because resolving is what starts the runtime: an
+        // identity taken first would carry the generation this client replaced, and
+        // every later lookup would discard a perfectly good client
+        let connection_identity = node.connection_identity_with_tor(route);
         let backend = match node.api_type {
             ApiType::Esplora => {
                 let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
@@ -238,6 +267,11 @@ impl NodeClient {
 
     pub(crate) fn connection_identity(&self) -> &NodeConnectionIdentity {
         &self.connection_identity
+    }
+
+    /// Returns whether this client's requests are routed through Tor
+    pub(crate) fn uses_tor(&self) -> bool {
+        self.connection_identity.uses_tor()
     }
 
     pub async fn check_url(&self) -> Result<(), Error> {
@@ -403,29 +437,75 @@ mod tests {
             (TorConfig::BuiltIn, Some(TorProxy::BuiltIn)),
             (
                 TorConfig::External { host: "127.0.0.1".to_string(), port: 9050 },
-                Some(TorProxy::Socks5 { host: "127.0.0.1".to_string(), port: 9050 }),
+                Some(TorProxy::Socks5(Socks5Proxy::validated("127.0.0.1", 9050).unwrap())),
             ),
         ] {
             config.set_tor_config(persisted).unwrap();
 
             assert_eq!(
                 NodeClientOptions::from_global_config(42, &config).unwrap(),
-                NodeClientOptions { batch_size: 42, tor: expected }
+                NodeClientOptions {
+                    batch_size: 42,
+                    tor: expected,
+                    tor_ready_bound: TOR_READY_BOUND,
+                }
             );
         }
     }
 
-    #[test]
-    fn socks5_authority_formats_hosts() {
-        for (host, expected) in [
-            ("127.0.0.1", "127.0.0.1:9050"),
-            ("proxy.example", "proxy.example:9050"),
-            ("::1", "[::1]:9050"),
-        ] {
-            let endpoint = Socks5Endpoint { host: host.to_string(), port: 9050 };
+    #[tokio::test]
+    async fn onion_node_without_a_tor_route_fails_before_any_connection() {
+        let onion = Node::new_electrum(
+            "onion".to_string(),
+            "ssl://example.onion:50002".to_string(),
+            cove_types::Network::Bitcoin,
+        );
+        let direct =
+            NodeClientOptions { batch_size: 10, tor: None, tor_ready_bound: TOR_READY_BOUND };
 
-            assert_eq!(endpoint.authority(), expected);
-        }
+        let error = NodeClient::new_with_options(&onion, direct).await.unwrap_err();
+
+        assert!(matches!(error, Error::OnionNodeRequiresTor));
+    }
+
+    #[tokio::test]
+    async fn an_external_node_proxy_is_never_given_isolation_credentials() {
+        let node = Node::new_electrum(
+            "node".to_string(),
+            "ssl://node.example:50002".to_string(),
+            cove_types::Network::Bitcoin,
+        );
+        let options = NodeClientOptions {
+            batch_size: 10,
+            tor: Some(TorProxy::Socks5(Socks5Proxy::validated("proxy.example", 9050).unwrap())),
+            tor_ready_bound: TOR_READY_BOUND,
+        };
+
+        let resolved = options.resolve_tor(&node).await.unwrap();
+        let proxy = resolved.tor.unwrap();
+
+        assert_eq!(proxy.credentials(), None);
+        assert_eq!(proxy.authority(), "proxy.example:9050");
+    }
+
+    #[test]
+    fn a_malformed_persisted_proxy_never_reaches_a_node_client() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_temp_dir, config) = test_global_config();
+
+        // an HTTP client reads this as the authority "proxy.example" on the default
+        // SOCKS port, so node traffic would silently go somewhere else entirely
+        config
+            .set_tor_config(TorConfig::External {
+                host: "proxy.example/path".to_string(),
+                port: 9050,
+            })
+            .unwrap();
+
+        assert!(matches!(
+            NodeClientOptions::from_global_config(1, &config),
+            Err(Error::InvalidTorProxy)
+        ));
     }
 
     fn test_global_config() -> (tempfile::TempDir, GlobalConfigTable) {

@@ -14,12 +14,26 @@ use tracing::{debug, error, warn};
 /// Guard to prevent multiple concurrent background refresh tasks
 static REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
+use cove_http::HttpTrafficCategory;
+
 use crate::{
     app::reconcile::{AppStateReconcileMessage as AppMessage, Updater},
     database::Database,
-    manager::tor_manager::http_client,
+    manager::tor_manager::{HTTP_ROUTE_READY_TIMEOUT, TorError, http_client},
 };
 use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed};
+
+/// Failure while fetching fees over the configured network route
+#[derive(Debug, thiserror::Error)]
+pub enum FeeFetchError {
+    /// The configured route never became usable
+    #[error("the network route is unavailable: {0}")]
+    Route(#[from] TorError),
+
+    /// The fee request itself failed
+    #[error("the fee request failed: {0}")]
+    Request(#[from] reqwest::Error),
+}
 
 const FEE_URL: &str = "https://mempool.space/api/v1/fees/recommended";
 
@@ -93,7 +107,7 @@ impl FeeClient {
 
     /// Get fees, using cache if available and fresh, otherwise fetching new
     /// Respects 30-second hard limit to prevent excessive fetching
-    pub async fn fetch_and_get_fees(&self) -> Result<FeeResponse, reqwest::Error> {
+    pub async fn fetch_and_get_fees(&self) -> Result<FeeResponse, FeeFetchError> {
         if let Some(cached) = FEES.load().as_ref() {
             let now = Instant::now();
             if now.duration_since(cached.last_fetched) < Duration::from_secs(HARD_LIMIT) {
@@ -109,9 +123,14 @@ impl FeeClient {
     }
 
     /// Always gets new fees from the server
-    async fn get_new_fees(&self) -> Result<FeeResponse, reqwest::Error> {
-        let response = http_client().get(&self.url).send().await?;
+    async fn get_new_fees(&self) -> Result<FeeResponse, FeeFetchError> {
+        // each attempt waits for a usable route, so the retry budget counts real
+        // requests instead of burning on a fail-closed client during bootstrap
+        let client = http_client(HttpTrafficCategory::General, HTTP_ROUTE_READY_TIMEOUT).await?;
+
+        let response = client.get(&self.url).send().await?;
         let fees: FeeResponse = response.json().await?;
+
         Ok(fees)
     }
 }
@@ -167,7 +186,7 @@ impl From<FeeResponse> for FeeRateOptions {
 }
 
 /// get and update fees
-pub async fn get_and_update_fees() -> Result<(), reqwest::Error> {
+pub async fn get_and_update_fees() -> Result<(), FeeFetchError> {
     let fees = FEE_CLIENT.get_new_fees().await?;
     update_fees(fees);
     Ok(())

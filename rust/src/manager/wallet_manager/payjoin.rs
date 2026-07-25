@@ -5,6 +5,7 @@ use bdk_wallet::chain::bitcoin::Psbt;
 use bitcoin::{
     Amount, FeeRate as BdkFeeRate, Transaction as BdkTransaction, consensus, params::Params,
 };
+use cove_http::HttpTrafficCategory;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use payjoin::{
@@ -32,6 +33,9 @@ use super::actor::WalletActor;
 // maximum time to wait for a receiver proposal before broadcasting the fallback transaction;
 // create_poll_request does not check session expiry, so this provides a client-side deadline
 const PAYJOIN_SESSION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// How long a payjoin request waits for the configured Tor route to become usable
+const PAYJOIN_TOR_READY_BOUND: Duration = Duration::from_secs(60);
 
 const OHTTP_RELAYS: [&str; 3] =
     ["https://relay.payjoin.org", "https://ohttp.achow101.com", "https://pj.bobspacebkk.com"];
@@ -365,7 +369,22 @@ async fn do_poll(
     polling_sender: V2Sender<PollingForProposal>,
     persister: PayjoinSessionPersister,
 ) {
-    let client = crate::manager::tor_manager::http_client();
+    let client = match crate::manager::tor_manager::http_client(
+        HttpTrafficCategory::Payjoin,
+        PAYJOIN_TOR_READY_BOUND,
+    )
+    .await
+    {
+        Ok(client) => client,
+        Err(error) => {
+            // the session's own poll_deadline stays the only path to fallback
+            warn!("payjoin poll: network route unavailable, retrying: {error}");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            send!(addr.begin_next_poll_msg());
+
+            return;
+        }
+    };
 
     // polls are long-polling: the directory holds the connection open until a
     // proposal arrives or its own timeout fires, so allow slightly more than
@@ -516,7 +535,22 @@ impl PayjoinActor {
         let persister = self.persister.clone();
 
         self.addr.send_fut_with(|addr| async move {
-            let client = crate::manager::tor_manager::http_client();
+            let client = match crate::manager::tor_manager::http_client(
+                HttpTrafficCategory::Payjoin,
+                PAYJOIN_TOR_READY_BOUND,
+            )
+            .await
+            {
+                Ok(client) => client,
+                Err(error) => {
+                    // nothing was posted, so the sender is handed back intact and the
+                    // user decides whether to retry or fall back
+                    warn!("payjoin POST: network route unavailable: {error}");
+                    send!(addr.post_tor_unavailable(sender));
+
+                    return;
+                }
+            };
 
             let (post_response, post_ctx) =
                 match try_ohttp_relays(&client, Duration::from_secs(30), |relay| {
@@ -544,6 +578,31 @@ impl PayjoinActor {
 
             send!(addr.post_succeeded(polling_sender));
         });
+
+        Produces::ok(())
+    }
+
+    /// Restores the pre-POST state after the Tor route never became usable
+    pub(crate) async fn post_tor_unavailable(
+        &mut self,
+        sender: V2Sender<WithReplyKey>,
+    ) -> ActorResult<()> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
+        if !matches!(self.session, PayjoinSession::Posting) {
+            warn!("payjoin post_tor_unavailable called in unexpected state");
+            return Produces::ok(());
+        }
+
+        self.session = PayjoinSession::PrePost { sender };
+        send!(
+            self.wallet_addr.notify_payjoin_error(
+                "Tor is not ready — the payjoin was not sent. Try again or cancel to send normally."
+                    .to_string()
+            )
+        );
 
         Produces::ok(())
     }

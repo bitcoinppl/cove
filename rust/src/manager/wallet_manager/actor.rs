@@ -678,6 +678,12 @@ impl WalletActor {
             WalletScanEventKind::FlushUi => {
                 self.flush_progressive_scan_ui().await;
             }
+            WalletScanEventKind::ScanRouteInvalidated => {
+                // the cached client belongs to the old route, and its identity already
+                // encodes the route, so reconnecting picks up the new one
+                debug!("restarting wallet scan after a Tor route change");
+                self.start_wallet_scan_after_node_connection(true, ScanProgressStart::Immediate);
+            }
             WalletScanEventKind::FullScanFinished { scan_type, result } => {
                 self.handle_full_scan_complete(result, scan_type).await?;
             }

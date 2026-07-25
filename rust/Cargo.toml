@@ -114,9 +114,10 @@ derive_more = { version = "2.1.1" }
 strum = { version = "0.28.0", features = ["derive"] }
 
 # built-in tor runtime
-arti = { version = "=2.5.0", default-features = false, features = ["tokio", "rustls", "compression", "experimental-api", "onion-service-client"] }
 arti-client = { version = "=0.44.0", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client"] }
 tor-rtcompat = { version = "=0.44.0", default-features = false, features = ["tokio", "rustls"] }
+tor-socksproto = { version = "=0.44.0", default-features = false, features = ["proxy-handshake"] }
+futures-copy = { version = "=0.4.0" }
 
 # extensions
 tap = "1.0.1"
@@ -154,9 +155,10 @@ bdk_esplora = { version = "0.22.2", features = ["async-https-rustls", "tokio"], 
 bdk_electrum = { version = "0.24.0", features = ["use-rustls-ring"], default-features = false }
 
 # built-in tor runtime
-arti = { workspace = true }
 arti-client = { workspace = true }
 tor-rtcompat = { workspace = true }
+tor-socksproto = { workspace = true }
+futures-copy = { workspace = true }
 
 # import / export hardware wallet public keys
 pubport = { workspace = true }
@@ -308,6 +310,10 @@ minicbor-serde = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2.186"
 
+# the built-in SOCKS proxy needs errno constants that std does not distinguish
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.186"
+
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
 
@@ -318,6 +324,7 @@ pretty_assertions = "1.4.1"
 minicbor = { workspace = true }
 
 tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
+tokio-util = { version = "0.7.18", features = ["compat"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
 
 

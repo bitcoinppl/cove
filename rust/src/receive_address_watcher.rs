@@ -13,9 +13,14 @@ use act_zero::{
 use bdk_wallet::chain::bitcoin::Address;
 use tracing::{debug, error, trace, warn};
 
+use cove_tokio::FutureTimeoutExt as _;
+
 use crate::{manager::wallet_manager::actor::WalletActor, node::client_builder::NodeClientBuilder};
 
 pub const RECEIVE_ADDRESS_WATCH_INTERVAL: Duration = Duration::from_secs(20);
+
+/// Bound on one watch tick, kept below the poll interval so ticks cannot pile up
+const RECEIVE_ADDRESS_TICK_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug)]
 pub struct ReceiveAddressWatcher {
@@ -105,9 +110,18 @@ impl Tick for ReceiveAddressWatcher {
             return Produces::ok(());
         }
 
-        let result = match self.client_builder.build().await {
-            Ok(client) => client.check_address_for_txn((*self.address).clone()).await,
-            Err(error) => Err(error),
+        // bounded below the poll interval so a hung build or check cannot block the
+        // mailbox across ticks and delay stop_watching
+        let address = (*self.address).clone();
+        let tick = async {
+            let client = self.client_builder.build_within(RECEIVE_ADDRESS_TICK_TIMEOUT).await?;
+
+            client.check_address_for_txn(address).await
+        };
+
+        let Ok(result) = tick.with_timeout(RECEIVE_ADDRESS_TICK_TIMEOUT).await else {
+            warn!("receive address watch tick timed out index={}", self.derivation_index);
+            return Produces::ok(());
         };
 
         match result {

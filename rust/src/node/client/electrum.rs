@@ -329,7 +329,14 @@ impl ElectrumClient {
     }
 
     fn connection_config(options: &ResolvedNodeClientOptions) -> Config {
-        let socks5 = options.tor.as_ref().map(|endpoint| Socks5Config::new(endpoint.authority()));
+        let socks5 = options.tor.as_ref().map(|proxy| match proxy.credentials() {
+            Some((username, password)) => Socks5Config::with_credentials(
+                proxy.authority(),
+                username.to_string(),
+                password.to_string(),
+            ),
+            None => Socks5Config::new(proxy.authority()),
+        });
 
         ConfigBuilder::new().socks5(socks5).build()
     }
@@ -345,9 +352,66 @@ impl std::fmt::Debug for ElectrumClient {
 mod tests {
     use super::*;
     use bdk_electrum::electrum_client::Param;
+    use cove_http::{Socks5Proxy, TorTrafficCategory};
     use std::str::FromStr;
     use std::time::Duration;
     use tokio::time::timeout;
+
+    fn resolved(tor: Option<Socks5Proxy>) -> ResolvedNodeClientOptions {
+        ResolvedNodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE, tor }
+    }
+
+    #[test]
+    fn only_the_built_in_proxy_receives_socks_credentials() {
+        let built_in =
+            resolved(Some(Socks5Proxy::isolated("127.0.0.1", 9150, TorTrafficCategory::Node)));
+        let config = ElectrumClient::connection_config(&built_in);
+        let socks5 = config.socks5().as_ref().unwrap();
+        let credentials = socks5.credentials.as_ref().unwrap();
+
+        assert_eq!(socks5.addr, "127.0.0.1:9150");
+        assert_eq!(credentials.username, "node");
+        assert_eq!(credentials.password, "cove");
+
+        let external = resolved(Some(Socks5Proxy::new("proxy.example", 9050)));
+        let config = ElectrumClient::connection_config(&external);
+        let socks5 = config.socks5().as_ref().unwrap();
+
+        assert_eq!(socks5.addr, "proxy.example:9050");
+        assert!(socks5.credentials.is_none());
+
+        assert!(ElectrumClient::connection_config(&resolved(None)).socks5().is_none());
+    }
+
+    #[tokio::test]
+    #[ignore] // requires a local Tor SOCKS proxy on 127.0.0.1:9050
+    async fn test_electrum_through_a_credentialed_socks_proxy() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let node = crate::node::Node {
+            url: "ssl://electrum.blockstream.info:50002".to_string(),
+            name: "blockstream".to_string(),
+            api_type: crate::node::ApiType::Electrum,
+            network: cove_types::network::Network::Bitcoin,
+        };
+        let options =
+            resolved(Some(Socks5Proxy::isolated("127.0.0.1", 9050, TorTrafficCategory::Node)));
+
+        let client = timeout(
+            Duration::from_secs(20),
+            ElectrumClient::new_from_node_and_options(&node, options),
+        )
+        .await
+        .expect("timed out creating electrum client")
+        .expect("failed to create electrum client through a credentialed Tor proxy");
+
+        let height = timeout(Duration::from_secs(20), client.get_height())
+            .await
+            .expect("timed out fetching the chain tip")
+            .expect("failed to fetch the chain tip through a credentialed Tor proxy");
+
+        assert!(height > 0);
+    }
 
     #[tokio::test]
     #[ignore] // requires a local Tor SOCKS proxy on 127.0.0.1:9050
@@ -363,9 +427,10 @@ mod tests {
         };
         let options = NodeClientOptions {
             batch_size: ELECTRUM_BATCH_SIZE,
-            tor: Some(TorProxy::Socks5 { host: "127.0.0.1".to_string(), port: 9050 }),
+            tor: Some(TorProxy::Socks5(cove_http::Socks5Proxy::new("127.0.0.1", 9050))),
+            tor_ready_bound: crate::node::client::TOR_READY_BOUND,
         }
-        .resolve_tor()
+        .resolve_tor(&node)
         .await
         .unwrap();
         let client = timeout(
@@ -405,9 +470,10 @@ mod tests {
         };
         let options = NodeClientOptions {
             batch_size: ELECTRUM_BATCH_SIZE,
-            tor: Some(TorProxy::Socks5 { host: "127.0.0.1".to_string(), port: 9050 }),
+            tor: Some(TorProxy::Socks5(cove_http::Socks5Proxy::new("127.0.0.1", 9050))),
+            tor_ready_bound: crate::node::client::TOR_READY_BOUND,
         }
-        .resolve_tor()
+        .resolve_tor(&node)
         .await
         .unwrap();
         let client = timeout(

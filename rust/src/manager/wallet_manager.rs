@@ -426,7 +426,7 @@ impl From<AddUtxoError> for WalletManagerError {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum WalletManagerFeesError {
     #[error(transparent)]
-    Fetch(#[from] reqwest::Error),
+    Fetch(#[from] crate::fee_client::FeeFetchError),
 
     #[error(transparent)]
     Psbt(#[from] bitcoin::psbt::Error),

@@ -360,65 +360,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
-name = "arti"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6da2a9ea3607e7495b2032b95a8bac9c16657a7833450cdde762733e27eef3d"
-dependencies = [
- "anyhow",
- "arti-client",
- "cfg-if",
- "clap",
- "derive-deftly",
- "derive_builder_fork_arti",
- "fs-mistrust",
- "futures",
- "futures-copy",
- "humantime",
- "humantime-serde",
- "itertools 0.14.0",
- "libc",
- "notify",
- "paste",
- "pin-project",
- "postage",
- "rlimit",
- "rustls",
- "safelog",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "tokio-util",
- "toml 1.1.2+spec-1.1.0",
- "tor-async-utils",
- "tor-basic-utils",
- "tor-config",
- "tor-config-path",
- "tor-error",
- "tor-general-addr",
- "tor-key-forge",
- "tor-keymgr",
- "tor-log-ratelim",
- "tor-proto",
- "tor-rtcompat",
- "tor-socksproto",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "visibility",
- "web-time-compat",
- "winapi",
-]
-
-[[package]]
 name = "arti-client"
 version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d54b6c87059a9b6562bfe585f3a637b72f90cddaa327ac29b5ddf082a54b4"
 dependencies = [
- "anyhow",
  "async-trait",
  "cfg-if",
  "derive-deftly",
@@ -1473,7 +1419,6 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim 0.11.1",
- "terminal_size",
 ]
 
 [[package]]
@@ -1662,7 +1607,6 @@ dependencies = [
  "ahash",
  "arc-swap",
  "argon2",
- "arti",
  "arti-client",
  "async-trait",
  "backon",
@@ -1703,6 +1647,7 @@ dependencies = [
  "flume",
  "foundation-ur",
  "futures",
+ "futures-copy",
  "hex",
  "hmac 0.13.0",
  "itertools 0.14.0",
@@ -1740,6 +1685,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tor-rtcompat",
+ "tor-socksproto",
  "tracing",
  "tracing-log",
  "tracing-subscriber",
@@ -1855,6 +1801,8 @@ version = "0.1.0"
 dependencies = [
  "reqwest 0.13.3",
  "rustls",
+ "thiserror 2.0.18",
+ "url",
  "webpki-roots 1.0.7",
 ]
 
@@ -2020,15 +1968,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "crossbeam-channel"
-version = "0.5.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -5840,15 +5779,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlimit"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f35ee2729c56bb610f6dba436bf78135f728b7373bdffae2ec815b2d3eb98cc3"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "rsa"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6741,12 +6671,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "symlink"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7973cce6668464ea31f176d85b13c7ab3bba2cb3b77a2ed26abd7801688010a"
-
-[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6828,16 +6752,6 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.2",
  "once_cell",
- "rustix",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "terminal_size"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
-dependencies = [
  "rustix",
  "windows-sys 0.61.2",
 ]
@@ -8214,19 +8128,6 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-appender"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "050686193eb999b4bb3bc2acfa891a13da00f79734704c4b8b4ef1a10b368a3c"
-dependencies = [
- "crossbeam-channel",
- "symlink",
- "thiserror 2.0.18",
- "time",
- "tracing-subscriber",
 ]
 
 [[package]]

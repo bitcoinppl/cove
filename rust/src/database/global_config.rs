@@ -17,7 +17,7 @@ use crate::{
     fiat::FiatCurrency,
     network::Network,
     node::Node,
-    tor::TorConfig,
+    tor::{TorConfig, TorLaunchHealth},
     wallet::metadata::{WalletId, WalletMode},
 };
 
@@ -46,6 +46,7 @@ pub enum GlobalConfigKey {
     OnboardingProgress,
     CustomBlockExplorer(Network),
     TorConfig,
+    TorLaunchHealth,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -79,6 +80,7 @@ impl From<GlobalConfigKey> for &'static str {
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
             GlobalConfigKey::TorConfig => "tor_config",
+            GlobalConfigKey::TorLaunchHealth => "tor_launch_health",
         }
     }
 }
@@ -86,6 +88,11 @@ impl From<GlobalConfigKey> for &'static str {
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct GlobalConfigTable {
     db: Arc<redb::Database>,
+}
+
+/// Returns whether a key may only be written through the Tor manager
+const fn is_manager_owned_key(key: GlobalConfigKey) -> bool {
+    matches!(key, GlobalConfigKey::TorConfig | GlobalConfigKey::TorLaunchHealth)
 }
 
 impl GlobalConfigTable {
@@ -117,6 +124,9 @@ pub enum GlobalConfigTableError {
 
     #[error("this setting is managed by the app and cannot be written directly")]
     ManagerOwnedKey,
+
+    #[error("the selected node is an onion service and requires Tor")]
+    OnionNodeRequiresTor,
 }
 
 impl From<CustomBlockExplorerError> for GlobalConfigTableError {
@@ -214,6 +224,14 @@ impl GlobalConfigTable {
         Ok(())
     }
 
+    /// Returns the selected node for one network, regardless of the active network
+    pub(crate) fn selected_node_for(&self, network: Network) -> Node {
+        let node_json =
+            self.get(GlobalConfigKey::SelectedNode(network)).unwrap_or(None).unwrap_or_default();
+
+        serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
+    }
+
     pub(crate) fn custom_block_explorer_transaction_url(
         &self,
         network: Network,
@@ -287,13 +305,18 @@ impl GlobalConfigTable {
     }
 
     pub fn selected_node(&self) -> Node {
-        let network = self.selected_network();
-        let selected_node_key = GlobalConfigKey::SelectedNode(network);
-        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or_default();
-        serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
+        self.selected_node_for(self.selected_network())
     }
 
     pub fn set_selected_node(&self, node: &Node) -> Result<()> {
+        // an onion node is unreachable and DNS-leaky without a route, so it is never
+        // persisted as a selection while Tor is off or the route is unreadable
+        if node.requires_tor()
+            && !matches!(self.tor_config(), Ok(TorConfig::BuiltIn | TorConfig::External { .. }))
+        {
+            return Err(GlobalConfigTableError::OnionNodeRequiresTor.into());
+        }
+
         let network = node.network;
         let node_json = serde_json::to_string(node)
             .map_err(|error| SerdeError::SerializationError(error.to_string()))?;
@@ -446,9 +469,9 @@ impl GlobalConfigTable {
     }
 
     pub(crate) fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
-        // tor config is owned by TorManager, which validates and drives the
+        // tor settings are owned by TorManager, which validates them and drives the
         // runtime lifecycle; direct writes would bypass both
-        if matches!(key, GlobalConfigKey::TorConfig) {
+        if is_manager_owned_key(key) {
             return Err(GlobalConfigTableError::ManagerOwnedKey.into());
         }
 
@@ -456,7 +479,7 @@ impl GlobalConfigTable {
     }
 
     pub fn delete(&self, key: GlobalConfigKey) -> Result<()> {
-        if matches!(key, GlobalConfigKey::TorConfig) {
+        if is_manager_owned_key(key) {
             return Err(GlobalConfigTableError::ManagerOwnedKey.into());
         }
 
@@ -498,6 +521,22 @@ impl GlobalConfigTable {
             serde_json::to_string(&config).map_err_str(SerdeError::SerializationError)?;
 
         self.set_unchecked(GlobalConfigKey::TorConfig, config_json)
+    }
+
+    /// Reads the built-in Tor crash-loop bookkeeping, defaulting to healthy
+    pub(crate) fn tor_launch_health(&self) -> TorLaunchHealth {
+        self.get(GlobalConfigKey::TorLaunchHealth)
+            .ok()
+            .flatten()
+            .and_then(|health_json| serde_json::from_str(&health_json).ok())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn set_tor_launch_health(&self, health: &TorLaunchHealth) -> Result<()> {
+        let health_json =
+            serde_json::to_string(health).map_err_str(SerdeError::SerializationError)?;
+
+        self.set_unchecked(GlobalConfigKey::TorLaunchHealth, health_json)
     }
 
     fn set_unchecked(&self, key: GlobalConfigKey, value: String) -> Result<()> {
@@ -573,6 +612,30 @@ mod tests {
             assert_eq!(table.tor_config().unwrap(), config);
             assert!(table.get(super::GlobalConfigKey::TorConfig).unwrap().is_some());
         }
+    }
+
+    #[test]
+    fn selecting_an_onion_node_requires_a_tor_route() {
+        use crate::node::Node;
+
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let onion = Node::new_electrum(
+            "onion".to_string(),
+            "tcp://example.onion:50001".to_string(),
+            Network::Bitcoin,
+        );
+
+        assert_eq!(
+            table.set_selected_node(&onion).unwrap_err(),
+            super::Error::GlobalConfig(super::GlobalConfigTableError::OnionNodeRequiresTor)
+        );
+
+        table.set_tor_config(TorConfig::BuiltIn).unwrap();
+        table.set_selected_node(&onion).unwrap();
+
+        assert_eq!(table.selected_node_for(Network::Bitcoin), onion);
     }
 
     #[test]

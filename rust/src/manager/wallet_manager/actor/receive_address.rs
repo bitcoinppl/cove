@@ -24,7 +24,7 @@ use crate::{
     },
     node::{
         Node,
-        client::{Error as NodeError, NodeClient},
+        client::{Error as NodeError, NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
     receive_address_watcher::ReceiveAddressWatcher,
@@ -32,6 +32,30 @@ use crate::{
 };
 
 const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT: Duration = Duration::from_millis(400);
+
+/// Bound on building the node client for the deferred activity check
+///
+/// Kept under the whole-check bound so a slow Tor bootstrap still leaves time for
+/// the check itself instead of consuming the entire budget
+const RECEIVE_ADDRESS_CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Bound on the whole deferred activity check
+///
+/// The platform awaits this before the receive screen can render, and every timeout
+/// falls back to the cached address, so waiting longer buys the user nothing
+const RECEIVE_ADDRESS_ACTIVITY_CHECK_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// A Tor circuit needs seconds, not milliseconds, so the direct bound would make
+/// the freshness check a guaranteed no-op over onion routing
+const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT_VIA_TOR: Duration = Duration::from_secs(3);
+
+fn freshness_timeout(client: &NodeClient) -> Duration {
+    if client.uses_tor() {
+        RECEIVE_ADDRESS_FRESHNESS_TIMEOUT_VIA_TOR
+    } else {
+        RECEIVE_ADDRESS_FRESHNESS_TIMEOUT
+    }
+}
 
 enum OpenReceiveAddressDecision {
     Complete(Result<ReceiveAddressState, Error>),
@@ -109,24 +133,38 @@ impl WalletActor {
         let (reply, receiver) = futures::channel::oneshot::channel();
 
         self.addr.send_fut_with(|addr| async move {
-            let sync_result = match NodeClient::new(&node).await {
-                Ok(node_client) => {
-                    match node_client
-                        .check_address_for_txn(address)
-                        .with_timeout(RECEIVE_ADDRESS_FRESHNESS_TIMEOUT)
-                        .await
-                    {
-                        Ok(Ok(true)) => Some(
-                            node_client
-                                .sync(&graph, sync_request)
-                                .await
-                                .map_err_str(Error::ReceiveAddressError),
-                        ),
-                        Ok(Ok(false)) | Ok(Err(_)) | Err(_) => None,
-                    }
+            let activity_check = async {
+                let options = NodeClientOptions::from_db_for_node(&node)
+                    .ok()?
+                    .with_tor_ready_bound(RECEIVE_ADDRESS_CLIENT_TIMEOUT);
+                let node_client = NodeClient::new_with_options(&node, options).await.ok()?;
+
+                let found = node_client
+                    .check_address_for_txn(address)
+                    .with_timeout(freshness_timeout(&node_client))
+                    .await
+                    .ok()?
+                    .ok()?;
+
+                if !found {
+                    return None;
                 }
-                Err(_) => None,
+
+                Some(
+                    node_client
+                        .sync(&graph, sync_request)
+                        .await
+                        .map_err_str(Error::ReceiveAddressError),
+                )
             };
+
+            // a caller across the FFI boundary is waiting on this, so every branch is
+            // bounded: an overrun opens the screen on the cached address instead
+            let sync_result = activity_check
+                .with_timeout(RECEIVE_ADDRESS_ACTIVITY_CHECK_TIMEOUT)
+                .await
+                .ok()
+                .flatten();
 
             let _ = call!(addr.finish_open_receive_address_after_activity_check(
                 cache,

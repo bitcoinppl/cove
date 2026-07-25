@@ -99,6 +99,8 @@ pub(crate) enum WalletScanEventKind {
     StatusChanged(WalletScanStatus),
     PartialUpdate(ScanUpdate<KeychainKind>),
     FlushUi,
+    /// The Tor route changed under an in-flight scan, so it must be redone on the new route
+    ScanRouteInvalidated,
     FullScanFinished {
         scan_type: FullScanType,
         result: Result<FullScanResponse<KeychainKind>, NodeClientError>,
@@ -388,11 +390,24 @@ impl WalletScanActor {
         if let Err(error) = &scan_result.result
             && is_cancelled_progressive_scan(error, cancel_token)
         {
+            // the actor cancels only by taking its token, so a token that is still
+            // held and already cancelled means the Tor route epoch cancelled it
+            let route_invalidated =
+                cancel_token.is_some_and(|cancel_token| cancel_token.is_cancelled());
+
             self.clear_scan_lifecycle();
             self.send_event(
                 scan_result.wallet_generation,
                 WalletScanEventKind::StatusChanged(WalletScanStatus::Idle),
             );
+
+            if route_invalidated {
+                self.send_event(
+                    scan_result.wallet_generation,
+                    WalletScanEventKind::ScanRouteInvalidated,
+                );
+            }
+
             return Produces::ok(());
         }
 
@@ -516,7 +531,9 @@ impl WalletScanActor {
             cancel_token.cancel();
         }
 
-        let cancel_token = CancellationToken::new();
+        // a child of the Tor route epoch, so changing the route interrupts scans
+        // that are still talking to the old one
+        let cancel_token = crate::manager::tor_manager::scan_epoch_child_token();
         let scan_generation = self.next_generation;
         self.next_generation = self.next_generation.next();
         self.active_cancel_token = Some(cancel_token.clone());
