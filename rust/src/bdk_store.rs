@@ -32,24 +32,16 @@ impl BdkStore {
         let is_existing_plaintext = sqlite_data_path.exists()
             && crate::database::migration::is_plaintext_sqlite(&sqlite_data_path);
 
-        let conn = bdk_wallet::rusqlite::Connection::open(&sqlite_data_path)
-            .context("unable to open rusqlite connection")?;
+        let key = if is_existing_plaintext {
+            None
+        } else {
+            Some(
+                crate::database::encrypted_backend::encryption_key()
+                    .expect("encryption key must be set"),
+            )
+        };
 
-        if !is_existing_plaintext {
-            let key = crate::database::encrypted_backend::encryption_key()
-                .expect("encryption key must be set");
-            conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
-        }
-
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "FULL")?;
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            conn.pragma_update(None, "fullfsync", 1)?;
-        }
-
-        // in pages (4096 bytes) 2000 pages = 8MB
-        conn.pragma_update(None, "cache_size", 2000)?;
+        let conn = open_store_connection(&sqlite_data_path, key)?;
 
         let mut me = Self { id: id.clone(), network: network.into(), conn };
 
@@ -160,6 +152,34 @@ impl BdkStore {
     }
 }
 
+/// Open a wallet store connection: apply the SQLCipher key when the database is
+/// encrypted, then the pragmas every wallet connection needs
+///
+/// `key` is `None` only for databases still in plaintext because their migration failed
+fn open_store_connection(
+    path: &Path,
+    key: Option<[u8; 32]>,
+) -> Result<bdk_wallet::rusqlite::Connection> {
+    let conn = bdk_wallet::rusqlite::Connection::open(path)
+        .context("unable to open rusqlite connection")?;
+
+    if let Some(key) = key {
+        conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
+    }
+
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "FULL")?;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        conn.pragma_update(None, "fullfsync", 1)?;
+    }
+
+    // in pages (4096 bytes) 2000 pages = 8MB
+    conn.pragma_update(None, "cache_size", 2000)?;
+
+    Ok(conn)
+}
+
 fn remove_sqlite_auxiliary_files(db_path: &Path) {
     for suffix in ["wal", "shm"] {
         let aux_path = sqlite_auxiliary_path(db_path, suffix);
@@ -193,4 +213,93 @@ fn file_store_data_path(wallet_id: &WalletId) -> PathBuf {
 fn sqlite_data_path(wallet_id: &WalletId) -> PathBuf {
     let db = format!("bdk_wallet_sqlite_{}.db", wallet_id.as_str().to_lowercase());
     ROOT_DATA_DIR.join(db)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bdk_wallet::rusqlite::Connection;
+    use tempfile::TempDir;
+
+    /// A wallet database written by the pre-upgrade dependency stack
+    /// (rusqlite 0.31 / libsqlite3-sys 0.28 / SQLCipher 4.5.3), generated at merge-base
+    /// 66674a53 through the same open sequence as `open_store_connection`
+    const PRE_UPGRADE_DB: &[u8] = include_bytes!("../test_data/sqlcipher_v4_pre_upgrade.db");
+
+    /// The key the fixture was encrypted with, not a key any real wallet uses
+    const PRE_UPGRADE_KEY: [u8; 32] = [0x42; 32];
+
+    fn pre_upgrade_db(dir: &TempDir) -> PathBuf {
+        let path = dir.path().join("bdk_wallet_sqlite_pre_upgrade.db");
+        std::fs::write(&path, PRE_UPGRADE_DB).unwrap();
+        path
+    }
+
+    fn table_names(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").unwrap();
+        let names = stmt.query_map([], |row| row.get::<_, String>(0)).unwrap();
+        names.map(Result::unwrap).collect()
+    }
+
+    /// Upgrading SQLCipher must not strand existing users on a wallet database
+    /// their new binary cannot decrypt
+    #[test]
+    fn opens_wallet_db_written_by_previous_sqlcipher() {
+        let dir = TempDir::new().unwrap();
+        let path = pre_upgrade_db(&dir);
+
+        let mut conn = open_store_connection(&path, Some(PRE_UPGRADE_KEY))
+            .expect("pre-upgrade wallet database must open with the current SQLCipher");
+
+        let tables = table_names(&conn);
+        assert!(
+            tables.iter().any(|name| name.starts_with("bdk_")),
+            "expected bdk tables, found {tables:?}"
+        );
+
+        // the wallet itself must still load, not just the raw pages decrypt
+        let mut wallet = bdk_wallet::Wallet::load()
+            .load_wallet(&mut conn)
+            .expect("failed to load persisted wallet")
+            .expect("no wallet found in pre-upgrade database");
+
+        assert_eq!(wallet.network(), Network::Bitcoin);
+
+        // writes must land too, an upgraded wallet keeps persisting scan results
+        let revealed = wallet.reveal_addresses_to(KeychainKind::External, 20).count();
+        assert!(revealed > 0, "fixture already revealed every address, nothing to persist");
+        assert!(
+            wallet.persist(&mut conn).expect("failed to persist into pre-upgrade database"),
+            "expected the revealed addresses to be written back"
+        );
+
+        drop(conn);
+
+        let mut reopened = open_store_connection(&path, Some(PRE_UPGRADE_KEY)).unwrap();
+        let reloaded = bdk_wallet::Wallet::load()
+            .load_wallet(&mut reopened)
+            .expect("failed to reload after writing")
+            .expect("no wallet found after writing");
+
+        assert_eq!(
+            reloaded.derivation_index(KeychainKind::External),
+            wallet.derivation_index(KeychainKind::External)
+        );
+    }
+
+    /// Guards the test above from passing vacuously on a file that turned out to be plaintext
+    #[test]
+    fn wrong_key_cannot_open_wallet_db_written_by_previous_sqlcipher() {
+        let dir = TempDir::new().unwrap();
+        let path = pre_upgrade_db(&dir);
+
+        let error = open_store_connection(&path, Some([0x43; 32]))
+            .map(|conn| table_names(&conn))
+            .expect_err("wrong key must not decrypt the wallet database");
+
+        assert!(
+            error.to_string().contains("not a database"),
+            "expected a decryption failure, got {error}"
+        );
+    }
 }
