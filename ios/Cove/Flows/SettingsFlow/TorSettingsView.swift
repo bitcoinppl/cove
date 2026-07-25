@@ -62,6 +62,7 @@ struct TorSettingsView: View {
             }
 
             if tor.isEnabled {
+                autoStartSuppressedSection
                 modeSection
 
                 if isExternal {
@@ -90,9 +91,7 @@ struct TorSettingsView: View {
                 disableWarning = nil
             }
         } message: {
-            Text(
-                "Your selected node uses an onion address. Cove must switch to a clearnet node before Tor can be disabled."
-            )
+            Text(disableWarningMessage)
         }
         .alert("Unable to Update Tor", isPresented: Binding(
             get: { errorMessage != nil },
@@ -103,6 +102,28 @@ struct TorSettingsView: View {
             }
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var autoStartSuppressedSection: some View {
+        if tor.autoStartSuppressed {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Built-in Tor auto-start is paused after repeated failures")
+
+                    Text(
+                        "Cove stopped starting Tor automatically because it failed to launch several times in a row. Network requests stay blocked until Tor starts."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                Button("Start Built-in Tor") {
+                    Task { await enableTor() }
+                }
+                .disabled(isUpdatingConfig)
+            }
         }
     }
 
@@ -189,7 +210,16 @@ struct TorSettingsView: View {
         } header: {
             Text("Connection Test")
         } footer: {
-            Text("Tests the SOCKS5 proxy and your selected node through the configured Tor route.")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(
+                    "Tests the SOCKS5 proxy and your selected node through the configured Tor route."
+                )
+
+                if let connectionTestError = tor.connectionTestError {
+                    Text("The last test could not finish: \(connectionTestError)")
+                        .foregroundStyle(Color.statusError)
+                }
+            }
         }
     }
 
@@ -219,15 +249,27 @@ struct TorSettingsView: View {
 
     @MainActor
     private func setTorEnabled(_ enabled: Bool) async {
+        guard !enabled else { return await enableTor() }
+
         isUpdatingConfig = true
         defer { isUpdatingConfig = false }
 
         do {
-            if enabled {
-                try await tor.enable()
-            } else if let warning = try await tor.disable() {
+            if let warning = try await tor.disable() {
                 disableWarning = warning
             }
+        } catch {
+            errorMessage = torErrorMessage(error)
+        }
+    }
+
+    @MainActor
+    private func enableTor() async {
+        isUpdatingConfig = true
+        defer { isUpdatingConfig = false }
+
+        do {
+            try await tor.enable()
         } catch {
             errorMessage = torErrorMessage(error)
         }
@@ -310,6 +352,17 @@ struct TorSettingsView: View {
 
         externalHost = host
         externalPort = String(port)
+    }
+
+    private var disableWarningMessage: String {
+        guard case let .onionNodesSelected(networks) = disableWarning else { return "" }
+
+        let names = networks.map { $0.displayName() }.formatted(.list(type: .and))
+        if networks.count == 1 {
+            return "Your selected \(names) node uses an onion address. Cove will switch it to a clearnet server before turning Tor off."
+        }
+
+        return "Your selected nodes on \(names) use onion addresses. Cove will switch them to clearnet servers before turning Tor off."
     }
 
     private var statusTitle: String {

@@ -378,9 +378,10 @@ struct SelectedWalletScreen: View {
         }
     }
 
+    /// Tracks the retained connectivity state rather than alert presence, so dismissing the
+    /// node-error alert cannot make the indicator claim a healthy connection
     private var walletNodeConnectionFailed: Bool {
-        if case .nodeConnectionFailed = manager.errorAlert?.item { return true }
-        return false
+        manager.nodeConnectionFailed
     }
 
     private var torStatusTitle: String {
@@ -418,7 +419,9 @@ struct SelectedWalletScreen: View {
     }
 
     private var torStatusColor: Color {
-        if walletNodeConnectionFailed { return .statusError }
+        // before Tor is ready the node is expected to be unreachable, and the Tor status
+        // below already says so
+        if walletNodeConnectionFailed, tor.status == .ready { return .statusError }
 
         return switch tor.status {
         case .off, .stopped:

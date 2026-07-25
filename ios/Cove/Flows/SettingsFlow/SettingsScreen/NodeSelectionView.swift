@@ -9,17 +9,18 @@ import MijickPopups
 import SwiftUI
 
 private enum NodeSelectionAlert: Identifiable {
-    case parseUrl(String)
+    case message(title: String, body: String)
     case onionNodeRequiresTor
     case apiTypeMismatch(selected: ApiType, inferred: ApiType)
     case torEnableError
 
-    var id: Int {
+    /// content-derived so a second failure with a different message still re-presents
+    var id: String {
         switch self {
-        case .parseUrl: 0
-        case .onionNodeRequiresTor: 1
-        case .apiTypeMismatch: 2
-        case .torEnableError: 3
+        case let .message(title, body): "message:\(title):\(body)"
+        case .onionNodeRequiresTor: "onionNodeRequiresTor"
+        case let .apiTypeMismatch(selected, inferred): "apiTypeMismatch:\(selected):\(inferred)"
+        case .torEnableError: "torEnableError"
         }
     }
 }
@@ -135,6 +136,8 @@ struct NodeSelectionView: View {
         }
 
         if let node {
+            let torWasEnabled = TorManager.shared.isEnabled
+
             Task {
                 showLoadingPopup()
                 let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
@@ -142,14 +145,21 @@ struct NodeSelectionView: View {
                 switch result {
                 case .success:
                     refreshNodeState()
-                    completeLoading(.success("Connected to node successfully"))
+
+                    // saving an onion node turns Tor on behind the user's back, so say so
+                    let torWasEnabledForNode = !torWasEnabled && TorManager.shared.isEnabled
+                    let message = torWasEnabledForNode
+                        ? "Connected to node successfully\nBuilt-in Tor was enabled to reach this node."
+                        : "Connected to node successfully"
+
+                    completeLoading(.success(message))
                 case let .failure(error):
                     if let alert = typedNodeSelectionAlert(for: error) {
                         await presentNodeSelectionAlert(alert)
                         return
                     }
 
-                    let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
+                    let errorMessage = "Failed to connect to node\n\(nodeErrorMessage(error))"
                     let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
 
                     completeLoading(.failure(formattedMessage))
@@ -248,7 +258,7 @@ struct NodeSelectionView: View {
                         return
                     }
 
-                    completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
+                    completeLoading(.failure("Failed to connect to \(node.url)\n\(nodeErrorMessage(error))"))
                 }
             }
             checkUrlTask = task
@@ -264,10 +274,10 @@ struct NodeSelectionView: View {
         }
         .alert(item: $nodeAlert) { alert in
             switch alert {
-            case let .parseUrl(message):
+            case let .message(title, body):
                 Alert(
-                    title: Text("Unable to Parse URL"),
-                    message: Text(message),
+                    title: Text(title),
+                    message: Text(body),
                     dismissButton: .default(Text("OK")) {
                         Task { await dismissAllPopups() }
                     }
@@ -321,12 +331,37 @@ struct NodeSelectionView: View {
         }
 
         if let error = error as? NodeSelectorError,
-           case let .ParseNodeUrlError(message) = error
+           case .ParseNodeUrlError = error
         {
-            return .parseUrl(message)
+            return .message(title: "Unable to Parse URL", body: nodeErrorMessage(error))
         }
 
-        return .parseUrl(error.localizedDescription)
+        return .message(title: "Unable to Save Node", body: nodeErrorMessage(error))
+    }
+
+    /// `NodeSelectorError` has no exported `Display`, and its synthesized `errorDescription` is a
+    /// debug dump, so every case gets its own user-facing wording here
+    private func nodeErrorMessage(_ error: Error) -> String {
+        guard let error = error as? NodeSelectorError else { return error.localizedDescription }
+
+        return switch error {
+        case let .NodeNotFound(name):
+            "Cove has no node named \(name)."
+        case let .SetSelectedNodeError(reason):
+            "Cove could not save this node: \(reason)"
+        case let .NodeAccessError(reason):
+            "Cove could not reach this node: \(reason)"
+        case let .ParseNodeUrlError(reason):
+            "This is not a valid node address: \(reason)"
+        case .OnionNodeRequiresTor:
+            "This node uses an onion address, which can only be reached over Tor."
+        case let .ApiTypeMismatch(selected, inferred):
+            "This URL uses \(apiTypeName(inferred)), but \(apiTypeName(selected)) is selected."
+        case .TorEnableError:
+            "Cove could not enable Tor for this onion node."
+        case .TorSettingsDiscoveryError:
+            "Cove could not save your Tor settings."
+        }
     }
 
     @MainActor

@@ -19,6 +19,7 @@ struct CoveMainView: View {
     @State var scannedCode: TaggedItem<MultiFormat>? = .none
     @State var coverClearTask: Task<Void, Never>?
     @State private var tor = TorManager.shared
+    @State private var dismissedBuiltInFailure: String?
 
     var navBarColor: Color {
         switch app.currentRoute {
@@ -119,12 +120,20 @@ struct CoveMainView: View {
         ScanManager.shared.handleNfcScan(nfcMessage)
     }
 
+    /// Built-in Tor failure the user has not already seen and dismissed
+    private var activeBuiltInFailure: TaggedString? {
+        guard let failure = tor.builtInFailure, failure.value != dismissedBuiltInFailure else {
+            return nil
+        }
+
+        return failure
+    }
+
     @MainActor
     private func useClearnetNode() async {
-        tor.builtInFailure = nil
-
         do {
             try await tor.disableConfirmed()
+            tor.builtInFailure = nil
         } catch {
             let message = if let error = error as? TorError {
                 error.description
@@ -155,6 +164,9 @@ struct CoveMainView: View {
             guard app.asyncRuntimeReady else { return }
             app.dispatch(action: AppAction.updateFees)
             app.dispatch(action: AppAction.updateFiatPrices)
+
+            // a latched ready or failed status can be stale after suspension
+            if tor.isEnabled { tor.refreshStatus() }
         }
 
         // PIN auth active, no biometrics, leaving app
@@ -263,18 +275,24 @@ struct CoveMainView: View {
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
         }
         .alert("Built-in Tor Unavailable", isPresented: Binding(
-            get: { tor.builtInFailure != nil },
-            set: { if !$0 { tor.builtInFailure = nil } }
-        ), presenting: tor.builtInFailure) { _ in
-            Button("Use Clearnet Node", role: .destructive) {
+            get: { activeBuiltInFailure != nil },
+            set: { if !$0 { dismissedBuiltInFailure = tor.builtInFailure?.value } }
+        ), presenting: activeBuiltInFailure) { _ in
+            Button("Disable Tor & Use Clearnet Node", role: .destructive) {
                 Task { await useClearnetNode() }
             }
 
             Button("Dismiss", role: .cancel) {
-                tor.builtInFailure = nil
+                dismissedBuiltInFailure = tor.builtInFailure?.value
             }
         } message: { failure in
-            Text("Cove could not start its built-in Tor connection. \(failure.value)")
+            Text(
+                "Cove could not start its built-in Tor connection. \(failure.value)\n\nSwitching to a clearnet node turns Tor off for all app traffic, including your node, price, and fee requests."
+            )
+        }
+        .onChange(of: tor.builtInFailure?.value) { _, failure in
+            // a recovered route must be able to warn again if it fails later
+            if failure == nil { dismissedBuiltInFailure = nil }
         }
     }
 }

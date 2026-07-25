@@ -82,6 +82,10 @@ private struct WalletManagerBootstrap {
     /// general wallet errors
     var errorAlert: TaggedItem<WalletErrorAlert>? = nil
 
+    /// Whether the last node interaction failed. Outlives `errorAlert`, which the user can
+    /// dismiss, so connectivity indicators do not go green just because an alert was closed
+    var nodeConnectionFailed: Bool = false
+
     /// errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
@@ -460,8 +464,8 @@ private struct WalletManagerBootstrap {
             reconcileLoadStateWithLedgerState()
             notifyInitialScanLifecycleChanged()
 
+        // a cache replay proves nothing about the network, so it must not clear `errorAlert`
         case let .availableTransactions(txns):
-            errorAlert = nil
             switch self.loadState {
             case .loading:
                 self.loadState = loadStateForTransactions(txns)
@@ -476,7 +480,6 @@ private struct WalletManagerBootstrap {
             }
 
         case let .updatedTransactions(txns):
-            errorAlert = nil
             self.loadState = loadStateForTransactions(txns)
 
         case let .transactionUpdated(transaction):
@@ -485,13 +488,14 @@ private struct WalletManagerBootstrap {
         case let .transactionDetailsUpdated(presentation):
             transactionDetailsPresentations[presentation.txId()] = presentation
 
+        // a completed scan is the only reconcile message that proves the node was reached
         case let .scanComplete(txns):
             errorAlert = nil
+            nodeConnectionFailed = false
             self.loadState = loadStateForTransactions(txns)
             notifyInitialScanLifecycleChanged()
 
         case let .walletBalanceChanged(balance):
-            errorAlert = nil
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:
@@ -515,6 +519,7 @@ private struct WalletManagerBootstrap {
             }
 
         case let .nodeConnectionFailed(error):
+            self.nodeConnectionFailed = true
             self.errorAlert = TaggedItem(WalletErrorAlert.nodeConnectionFailed(error))
             self.logger.error(error)
             self.logger.error("set errorAlert")

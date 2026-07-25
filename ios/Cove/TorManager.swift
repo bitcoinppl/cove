@@ -23,6 +23,12 @@ enum TorStatus: Equatable {
     var connectionTestStates: [TorTestStep: TorTestState] = [:]
     var builtInFailure: TaggedString?
 
+    /// Built-in Tor was not auto-started because repeated launches failed
+    var autoStartSuppressed: Bool = false
+
+    /// Last user-initiated connection test failure, which says nothing about the live route
+    var connectionTestError: String?
+
     var isEnabled: Bool {
         config != .off
     }
@@ -57,6 +63,13 @@ enum TorStatus: Equatable {
     @MainActor
     func enable() async throws {
         _ = try await rust.dispatch(action: .enable)
+
+        // enabling an already built-in config is a no-op transition, so no reconcile message
+        // clears the suppression notice until the first bootstrap progress arrives
+        guard autoStartSuppressed else { return }
+
+        autoStartSuppressed = false
+        status = .bootstrapping(percent: 0, message: "Starting Tor")
     }
 
     @MainActor
@@ -81,7 +94,14 @@ enum TorStatus: Equatable {
     @MainActor
     func runConnectionTest() async throws {
         connectionTestStates = [:]
+        connectionTestError = nil
         _ = try await rust.dispatch(action: .runConnectionTest)
+    }
+
+    /// Resynchronizes published state with the runtime, whose latched status can be
+    /// stale after the app was suspended
+    func refreshStatus() {
+        rust.refreshStatus()
     }
 
     func apply(_ message: TorManagerReconcileMessage) {
@@ -89,6 +109,8 @@ enum TorStatus: Equatable {
         case let .configChanged(config):
             self.config = config
             connectionTestStates = [:]
+            connectionTestError = nil
+            autoStartSuppressed = false
 
             switch config {
             case .off:
@@ -106,20 +128,43 @@ enum TorStatus: Equatable {
         case let .bootstrapProgress(percent, message):
             status = .bootstrapping(percent: percent, message: message)
             builtInFailure = nil
+            autoStartSuppressed = false
 
         case .ready:
             status = .ready
             builtInFailure = nil
+            autoStartSuppressed = false
 
         case .stopped:
+            // a stopped runtime without a tripped breaker means nothing is failing or suppressed
             status = config == .off ? .off : .stopped
+            builtInFailure = nil
+            autoStartSuppressed = false
 
-        case let .failed(error):
+        case .autoStartSuppressed:
+            // the runtime was never launched, so nothing is bootstrapping behind this state
+            status = .stopped
+            autoStartSuppressed = true
+
+        case let .failed(origin, error):
             let message = error.description
-            status = .failed(message: message)
 
-            if config == .builtIn {
-                builtInFailure = TaggedString(message)
+            switch origin {
+            // the configured route may still be healthy, so leave the status alone
+            case .connectionTest:
+                connectionTestError = message
+
+            // the route is untouched and the dispatch that asked for the fallback
+            // reports this failure itself, so it must not look like a Tor outage
+            case .lifecycle where error == .ClearnetFallback:
+                break
+
+            case .lifecycle:
+                status = .failed(message: message)
+
+                if config == .builtIn {
+                    builtInFailure = TaggedString(message)
+                }
             }
 
         case let .connectionTest(update):
