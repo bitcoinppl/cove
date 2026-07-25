@@ -86,6 +86,8 @@ num-bigint = "0.4.6"
 
 # http client
 reqwest = { version = "0.13.3", features = ["json", "rustls-no-provider", "socks"], default-features = false }
+# never imported: it exists to union the socks feature onto the reqwest 0.12 that
+# esplora-client resolves to, without which esplora traffic cannot reach a proxy
 reqwest_12 = { package = "reqwest", version = "0.12", default-features = false, features = ["socks"] }
 
 # time
