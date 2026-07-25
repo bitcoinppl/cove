@@ -1621,6 +1621,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rusttormanager_listen_for_updates(
     ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_refresh_status(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_address_at(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_balance(
@@ -2786,6 +2788,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rusttormanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rusttormanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rusttormanager_refresh_status(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_clone_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4618,6 +4622,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rusttormanager_listen_for_updates() != 11980.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_refresh_status() != 23398.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845.toShort()) {
@@ -21985,6 +21992,14 @@ public interface RustTorManagerInterface {
      */
     fun `listenForUpdates`(`reconciler`: TorManagerReconciler)
 
+    /**
+     * Re-emits the current built-in runtime state so a foregrounding UI can resynchronize
+     *
+     * Sends only runtime-status deltas, never `ConfigChanged`: a refresh must not
+     * reset bootstrap progress display or wipe connection-test results
+     */
+    fun `refreshStatus`()
+
     companion object
 }
 
@@ -22139,6 +22154,24 @@ open class RustTorManager: Disposable, AutoCloseable, RustTorManagerInterface
         it,
 
         FfiConverterTypeTorManagerReconciler.lower(`reconciler`),_status)
+}
+    }
+
+
+
+
+    /**
+     * Re-emits the current built-in runtime state so a foregrounding UI can resynchronize
+     *
+     * Sends only runtime-status deltas, never `ConfigChanged`: a refresh must not
+     * reset bootstrap progress display or wipe connection-test results
+     */override fun `refreshStatus`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rusttormanager_refresh_status(
+        it,
+        _status)
 }
     }
 
@@ -43570,6 +43603,9 @@ sealed class GlobalConfigKey {
     object TorConfig : GlobalConfigKey()
 
 
+    object TorLaunchHealth : GlobalConfigKey()
+
+
 
 
 
@@ -43606,6 +43642,7 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 FfiConverterTypeNetwork.read(buf),
                 )
             16 -> GlobalConfigKey.TorConfig
+            17 -> GlobalConfigKey.TorLaunchHealth
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -43709,6 +43746,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 4UL
             )
         }
+        is GlobalConfigKey.TorLaunchHealth -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -43779,6 +43822,10 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 buf.putInt(16)
                 Unit
             }
+            is GlobalConfigKey.TorLaunchHealth -> {
+                buf.putInt(17)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
@@ -43835,6 +43882,12 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
             get() = ""
     }
 
+    class OnionNodeRequiresTor(
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -43877,6 +43930,7 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 FfiConverterString.read(buf),
                 )
             6 -> GlobalConfigTableException.ManagerOwnedKey()
+            7 -> GlobalConfigTableException.OnionNodeRequiresTor()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -43911,6 +43965,10 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is GlobalConfigTableException.OnionNodeRequiresTor -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -43942,6 +44000,10 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             }
             is GlobalConfigTableException.ManagerOwnedKey -> {
                 buf.putInt(6)
+                Unit
+            }
+            is GlobalConfigTableException.OnionNodeRequiresTor -> {
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -53922,13 +53984,23 @@ public object FfiConverterTypeTorConfig : FfiConverterRustBuffer<TorConfig>{
 /**
  * Warning that requires explicit confirmation before disabling Tor
  */
-
-enum class TorDisableWarning {
+sealed class TorDisableWarning {
 
     /**
-     * The selected node is only reachable through onion routing
+     * These networks have a selected node that is only reachable through onion routing
      */
-    SELECTED_NODE_IS_ONION;
+    data class OnionNodesSelected(
+        val `networks`: List<org.bitcoinppl.cove_core.types.Network>) : TorDisableWarning()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
 
 
 
@@ -53936,21 +54008,37 @@ enum class TorDisableWarning {
     companion object
 }
 
-
 /**
  * @suppress
  */
-public object FfiConverterTypeTorDisableWarning: FfiConverterRustBuffer<TorDisableWarning> {
-    override fun read(buf: ByteBuffer) = try {
-        TorDisableWarning.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+public object FfiConverterTypeTorDisableWarning : FfiConverterRustBuffer<TorDisableWarning>{
+    override fun read(buf: ByteBuffer): TorDisableWarning {
+        return when(buf.getInt()) {
+            1 -> TorDisableWarning.OnionNodesSelected(
+                FfiConverterSequenceTypeNetwork.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
     }
 
-    override fun allocationSize(value: TorDisableWarning) = 4UL
+    override fun allocationSize(value: TorDisableWarning): ULong = when(value) {
+        is TorDisableWarning.OnionNodesSelected -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeNetwork.allocationSize(value.`networks`)
+            )
+        }
+    }
 
     override fun write(value: TorDisableWarning, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
+        when(value) {
+            is TorDisableWarning.OnionNodesSelected -> {
+                buf.putInt(1)
+                FfiConverterSequenceTypeNetwork.write(value.`networks`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
@@ -54104,6 +54192,49 @@ public object FfiConverterTypeTorError : FfiConverterRustBuffer<TorException> {
     }
 
 }
+
+
+
+/**
+ * What kind of Tor operation produced a failure
+ */
+
+enum class TorFailureOrigin {
+
+    /**
+     * The configured Tor route itself failed to start, run, persist, or route HTTP
+     */
+    LIFECYCLE,
+    /**
+     * A user-initiated connection test failed; the route may still be healthy
+     */
+    CONNECTION_TEST;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorFailureOrigin: FfiConverterRustBuffer<TorFailureOrigin> {
+    override fun read(buf: ByteBuffer) = try {
+        TorFailureOrigin.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TorFailureOrigin) = 4UL
+
+    override fun write(value: TorFailureOrigin, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -54365,16 +54496,23 @@ sealed class TorManagerReconcileMessage {
 
 
     /**
-     * A Tor lifecycle operation failed
+     * A Tor operation failed
      */
     data class Failed(
-        val v1: org.bitcoinppl.cove_core.TorException) : TorManagerReconcileMessage()
+        val `origin`: org.bitcoinppl.cove_core.TorFailureOrigin,
+        val `error`: org.bitcoinppl.cove_core.TorException) : TorManagerReconcileMessage()
 
     {
 
 
         companion object
     }
+
+    /**
+     * Built-in Tor was not auto-started because repeated launches failed
+     */
+    object AutoStartSuppressed : TorManagerReconcileMessage()
+
 
     /**
      * A progressive connection-test step changed
@@ -54414,9 +54552,11 @@ public object FfiConverterTypeTorManagerReconcileMessage : FfiConverterRustBuffe
             3 -> TorManagerReconcileMessage.Ready
             4 -> TorManagerReconcileMessage.Stopped
             5 -> TorManagerReconcileMessage.Failed(
+                FfiConverterTypeTorFailureOrigin.read(buf),
                 FfiConverterTypeTorError.read(buf),
                 )
-            6 -> TorManagerReconcileMessage.ConnectionTest(
+            6 -> TorManagerReconcileMessage.AutoStartSuppressed
+            7 -> TorManagerReconcileMessage.ConnectionTest(
                 FfiConverterTypeTorTestUpdate.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -54455,7 +54595,14 @@ public object FfiConverterTypeTorManagerReconcileMessage : FfiConverterRustBuffe
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeTorError.allocationSize(value.v1)
+                + FfiConverterTypeTorFailureOrigin.allocationSize(value.`origin`)
+                + FfiConverterTypeTorError.allocationSize(value.`error`)
+            )
+        }
+        is TorManagerReconcileMessage.AutoStartSuppressed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is TorManagerReconcileMessage.ConnectionTest -> {
@@ -54490,11 +54637,16 @@ public object FfiConverterTypeTorManagerReconcileMessage : FfiConverterRustBuffe
             }
             is TorManagerReconcileMessage.Failed -> {
                 buf.putInt(5)
-                FfiConverterTypeTorError.write(value.v1, buf)
+                FfiConverterTypeTorFailureOrigin.write(value.`origin`, buf)
+                FfiConverterTypeTorError.write(value.`error`, buf)
+                Unit
+            }
+            is TorManagerReconcileMessage.AutoStartSuppressed -> {
+                buf.putInt(6)
                 Unit
             }
             is TorManagerReconcileMessage.ConnectionTest -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterTypeTorTestUpdate.write(value.v1, buf)
                 Unit
             }
@@ -54639,6 +54791,15 @@ sealed class TorRuntimeException: kotlin.Exception() {
             get() = ""
     }
 
+    /**
+     * Tor did not finish bootstrapping inside the caller's wait bound
+     */
+    class ReadyTimeout(
+        ) : TorRuntimeException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -54672,6 +54833,7 @@ public object FfiConverterTypeTorRuntimeError : FfiConverterRustBuffer<TorRuntim
             12 -> TorRuntimeException.StoppedBeforeReady()
             13 -> TorRuntimeException.NotRunning()
             14 -> TorRuntimeException.LifecycleChannelClosed()
+            15 -> TorRuntimeException.ReadyTimeout()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -54734,6 +54896,10 @@ public object FfiConverterTypeTorRuntimeError : FfiConverterRustBuffer<TorRuntim
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is TorRuntimeException.ReadyTimeout -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -54793,6 +54959,10 @@ public object FfiConverterTypeTorRuntimeError : FfiConverterRustBuffer<TorRuntim
             }
             is TorRuntimeException.LifecycleChannelClosed -> {
                 buf.putInt(14)
+                Unit
+            }
+            is TorRuntimeException.ReadyTimeout -> {
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -62646,6 +62816,34 @@ public object FfiConverterSequenceTypeWalletManagerReconcileMessage: FfiConverte
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeWalletManagerReconcileMessage.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer<List<Network>> {
+    override fun read(buf: ByteBuffer): List<Network> {
+        val len = buf.getInt()
+        return List<Network>(len) {
+            FfiConverterTypeNetwork.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<Network>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNetwork.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<Network>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNetwork.write(it, buf)
         }
     }
 }

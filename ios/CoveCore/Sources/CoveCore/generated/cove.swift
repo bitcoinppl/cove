@@ -9376,6 +9376,14 @@ public protocol RustTorManagerProtocol: AnyObject, Sendable {
      */
     func listenForUpdates(reconciler: TorManagerReconciler)
 
+    /**
+     * Re-emits the current built-in runtime state so a foregrounding UI can resynchronize
+     *
+     * Sends only runtime-status deltas, never `ConfigChanged`: a refresh must not
+     * reset bootstrap progress display or wipe connection-test results
+     */
+    func refreshStatus()
+
 }
 /**
  * Rust implementation of the Tor manager singleton
@@ -9472,6 +9480,20 @@ open func listenForUpdates(reconciler: TorManagerReconciler)  {try! rustCall() {
     uniffi_cove_fn_method_rusttormanager_listen_for_updates(
             self.uniffiCloneHandle(),
         FfiConverterCallbackInterfaceTorManagerReconciler_lower(reconciler),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Re-emits the current built-in runtime state so a foregrounding UI can resynchronize
+     *
+     * Sends only runtime-status deltas, never `ConfigChanged`: a refresh must not
+     * reset bootstrap progress display or wipe connection-test results
+     */
+open func refreshStatus()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rusttormanager_refresh_status(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
 }
@@ -26186,6 +26208,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case customBlockExplorer(Network
     )
     case torConfig
+    case torLaunchHealth
 
 
 
@@ -26240,6 +26263,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         )
 
         case 16: return .torConfig
+
+        case 17: return .torLaunchHealth
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26314,6 +26339,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case .torConfig:
             writeInt(&buf, Int32(16))
 
+
+        case .torLaunchHealth:
+            writeInt(&buf, Int32(17))
+
         }
     }
 }
@@ -26350,6 +26379,7 @@ enum GlobalConfigTableError: Swift.Error, Equatable, Hashable, Foundation.Locali
     case InvalidCustomBlockExplorer(String
     )
     case ManagerOwnedKey
+    case OnionNodeRequiresTor
 
 
 
@@ -26404,6 +26434,7 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .ManagerOwnedKey
+        case 7: return .OnionNodeRequiresTor
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26442,6 +26473,10 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
 
         case .ManagerOwnedKey:
             writeInt(&buf, Int32(6))
+
+
+        case .OnionNodeRequiresTor:
+            writeInt(&buf, Int32(7))
 
         }
     }
@@ -34275,9 +34310,10 @@ public func FfiConverterTypeTorConfig_lower(_ value: TorConfig) -> RustBuffer {
 public enum TorDisableWarning: Equatable, Hashable {
 
     /**
-     * The selected node is only reachable through onion routing
+     * These networks have a selected node that is only reachable through onion routing
      */
-    case selectedNodeIsOnion
+    case onionNodesSelected(networks: [Network]
+    )
 
 
 
@@ -34299,7 +34335,8 @@ public struct FfiConverterTypeTorDisableWarning: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .selectedNodeIsOnion
+        case 1: return .onionNodesSelected(networks: try FfiConverterSequenceTypeNetwork.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -34309,8 +34346,9 @@ public struct FfiConverterTypeTorDisableWarning: FfiConverterRustBuffer {
         switch value {
 
 
-        case .selectedNodeIsOnion:
+        case let .onionNodesSelected(networks):
             writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeNetwork.write(networks, into: &buf)
 
         }
     }
@@ -34459,6 +34497,81 @@ public func FfiConverterTypeTorError_lift(_ buf: RustBuffer) throws -> TorError 
 public func FfiConverterTypeTorError_lower(_ value: TorError) -> RustBuffer {
     return FfiConverterTypeTorError.lower(value)
 }
+
+
+/**
+ * What kind of Tor operation produced a failure
+ */
+
+public enum TorFailureOrigin: Equatable, Hashable {
+
+    /**
+     * The configured Tor route itself failed to start, run, persist, or route HTTP
+     */
+    case lifecycle
+    /**
+     * A user-initiated connection test failed; the route may still be healthy
+     */
+    case connectionTest
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorFailureOrigin: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorFailureOrigin: FfiConverterRustBuffer {
+    typealias SwiftType = TorFailureOrigin
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorFailureOrigin {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .lifecycle
+
+        case 2: return .connectionTest
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorFailureOrigin, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .lifecycle:
+            writeInt(&buf, Int32(1))
+
+
+        case .connectionTest:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorFailureOrigin_lift(_ buf: RustBuffer) throws -> TorFailureOrigin {
+    return try FfiConverterTypeTorFailureOrigin.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorFailureOrigin_lower(_ value: TorFailureOrigin) -> RustBuffer {
+    return FfiConverterTypeTorFailureOrigin.lower(value)
+}
+
 
 
 /**
@@ -34672,10 +34785,14 @@ public enum TorManagerReconcileMessage: Equatable, Hashable {
      */
     case stopped
     /**
-     * A Tor lifecycle operation failed
+     * A Tor operation failed
      */
-    case failed(TorError
+    case failed(origin: TorFailureOrigin, error: TorError
     )
+    /**
+     * Built-in Tor was not auto-started because repeated launches failed
+     */
+    case autoStartSuppressed
     /**
      * A progressive connection-test step changed
      */
@@ -34712,10 +34829,12 @@ public struct FfiConverterTypeTorManagerReconcileMessage: FfiConverterRustBuffer
 
         case 4: return .stopped
 
-        case 5: return .failed(try FfiConverterTypeTorError.read(from: &buf)
+        case 5: return .failed(origin: try FfiConverterTypeTorFailureOrigin.read(from: &buf), error: try FfiConverterTypeTorError.read(from: &buf)
         )
 
-        case 6: return .connectionTest(try FfiConverterTypeTorTestUpdate.read(from: &buf)
+        case 6: return .autoStartSuppressed
+
+        case 7: return .connectionTest(try FfiConverterTypeTorTestUpdate.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -34745,13 +34864,18 @@ public struct FfiConverterTypeTorManagerReconcileMessage: FfiConverterRustBuffer
             writeInt(&buf, Int32(4))
 
 
-        case let .failed(v1):
+        case let .failed(origin,error):
             writeInt(&buf, Int32(5))
-            FfiConverterTypeTorError.write(v1, into: &buf)
+            FfiConverterTypeTorFailureOrigin.write(origin, into: &buf)
+            FfiConverterTypeTorError.write(error, into: &buf)
+
+
+        case .autoStartSuppressed:
+            writeInt(&buf, Int32(6))
 
 
         case let .connectionTest(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeTorTestUpdate.write(v1, into: &buf)
 
         }
@@ -34839,6 +34963,10 @@ enum TorRuntimeError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
      * An internal lifecycle channel closed unexpectedly
      */
     case LifecycleChannelClosed
+    /**
+     * Tor did not finish bootstrapping inside the caller's wait bound
+     */
+    case ReadyTimeout
 
 
 
@@ -34882,6 +35010,7 @@ public struct FfiConverterTypeTorRuntimeError: FfiConverterRustBuffer {
         case 12: return .StoppedBeforeReady
         case 13: return .NotRunning
         case 14: return .LifecycleChannelClosed
+        case 15: return .ReadyTimeout
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -34948,6 +35077,10 @@ public struct FfiConverterTypeTorRuntimeError: FfiConverterRustBuffer {
 
         case .LifecycleChannelClosed:
             writeInt(&buf, Int32(14))
+
+
+        case .ReadyTimeout:
+            writeInt(&buf, Int32(15))
 
         }
     }
@@ -41931,6 +42064,31 @@ fileprivate struct FfiConverterSequenceTypeWalletManagerReconcileMessage: FfiCon
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
+    typealias SwiftType = [Network]
+
+    public static func write(_ value: [Network], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNetwork.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Network] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Network]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNetwork.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]
 
@@ -43676,6 +43834,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rusttormanager_listen_for_updates() != 11980) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttormanager_refresh_status() != 23398) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845) {
