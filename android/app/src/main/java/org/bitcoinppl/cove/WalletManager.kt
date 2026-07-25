@@ -99,6 +99,14 @@ class WalletManager :
 
     // errors
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
+
+    /**
+     * Whether the last node interaction failed, which outlives [errorAlert] because the user can
+     * dismiss the alert while the node is still unreachable
+     */
+    var nodeConnectionFailed by mutableStateOf(false)
+        private set
+
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
     var labelRefreshFailed by mutableStateOf<TaggedItem<Unit>?>(null)
         private set
@@ -723,6 +731,7 @@ class WalletManager :
                 reconcileLoadStateWithLedgerState()
             }
 
+            // a cache replay proves nothing about the network, so it must not clear `errorAlert`
             is WalletManagerReconcileMessage.AvailableTransactions -> {
                 val txns = message.v1
                 when (val current = loadState) {
@@ -740,12 +749,10 @@ class WalletManager :
                         }
                     }
                 }
-                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.UpdatedTransactions -> {
                 loadState = loadStateForTransactions(message.v1)
-                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.TransactionUpdated -> {
@@ -756,14 +763,15 @@ class WalletManager :
                 transactionDetailsPresentations[message.v1.txId()] = message.v1
             }
 
+            // a completed scan is the only reconcile message that proves the node was reached
             is WalletManagerReconcileMessage.ScanComplete -> {
                 loadState = loadStateForTransactions(message.v1)
                 errorAlert = null
+                nodeConnectionFailed = false
             }
 
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
                 balance = message.v1
-                errorAlert = null
             }
 
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
@@ -796,6 +804,7 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
+                nodeConnectionFailed = true
                 errorAlert = WalletErrorAlert.NodeConnectionFailed(message.v1)
                 logError(message.v1)
             }

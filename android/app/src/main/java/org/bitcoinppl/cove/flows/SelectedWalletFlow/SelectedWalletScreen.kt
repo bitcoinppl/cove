@@ -82,7 +82,6 @@ import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TorConfig
-import org.bitcoinppl.cove_core.WalletErrorAlert
 import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -204,7 +203,7 @@ fun SelectedWalletScreen(
         manager.walletMetadata?.walletType == WalletType.COLD ||
             manager.walletMetadata?.walletType == WalletType.XPUB_ONLY
     val isWatchOnly = manager.walletMetadata?.walletType == WalletType.WATCH_ONLY
-    val torManager = remember { TorManager.getInstance() }
+    val torManager = remember { TorManager.getInstanceOrNull() }
     var showTorStatusDialog by remember { mutableStateOf(false) }
 
     // force white status bar icons for midnight blue background
@@ -298,10 +297,10 @@ fun SelectedWalletScreen(
                 },
                 actions = {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        if (torManager.isEnabled) {
+                        if (torManager != null && torManager.isEnabled) {
                             TorToolbarIndicator(
                                 status = torManager.status,
-                                nodeConnectionFailed = manager.errorAlert is WalletErrorAlert.NodeConnectionFailed,
+                                nodeConnectionFailed = manager.nodeConnectionFailed,
                                 onClick = { showTorStatusDialog = true },
                             )
                         }
@@ -524,7 +523,7 @@ fun SelectedWalletScreen(
         }
     }
 
-    if (showTorStatusDialog) {
+    if (showTorStatusDialog && torManager != null) {
         AlertDialog(
             onDismissRequest = { showTorStatusDialog = false },
             title = { Text(stringResource(R.string.selected_wallet_tor_network_status)) },
@@ -533,7 +532,7 @@ fun SelectedWalletScreen(
                     torWalletStatusText(
                         torManager.config,
                         torManager.status,
-                        nodeConnectionFailed = manager.errorAlert is WalletErrorAlert.NodeConnectionFailed,
+                        nodeConnectionFailed = manager.nodeConnectionFailed,
                     ),
                 )
             },
@@ -564,7 +563,9 @@ private fun TorToolbarIndicator(
 ) {
     val statusColor =
         when {
-            nodeConnectionFailed -> MaterialTheme.colorScheme.error
+            // a node that is unreachable only means something once Tor itself is up, before
+            // that the node is expected to be unreachable
+            status is TorStatus.Ready && nodeConnectionFailed -> MaterialTheme.colorScheme.error
             status is TorStatus.Ready -> MaterialTheme.coveColors.systemGreen
             status is TorStatus.Bootstrapping -> CoveColor.WarningOrange
             status is TorStatus.Failed -> MaterialTheme.colorScheme.error
@@ -617,8 +618,11 @@ private fun torStatusOnlyText(
             stringResource(R.string.tor_status_disabled)
         }
 
+        // the runtime has not said anything yet at 0%, so the percentage would only pad the line
         is TorStatus.Bootstrapping -> {
-            stringResource(R.string.selected_wallet_tor_bootstrapping, status.percent, status.message)
+            status.message?.let {
+                stringResource(R.string.selected_wallet_tor_bootstrapping, status.percent, it)
+            } ?: stringResource(R.string.selected_wallet_tor_starting)
         }
 
         is TorStatus.Ready -> {

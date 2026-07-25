@@ -134,6 +134,11 @@ class MainActivity : FragmentActivity() {
         val app = AppManager.getInstance()
         app.cloudBackupManager.refreshCloudState()
 
+        // a latched ready or failed status can be stale after suspension
+        TorManager.getInstanceOrNull()?.let { tor ->
+            if (tor.isEnabled) tor.refreshStatus()
+        }
+
         // refresh fees and prices in background (30-sec throttle protects against excessive requests)
         // only dispatch if async runtime is ready (initialized in LaunchedEffect)
         if (app.asyncRuntimeReady) {
@@ -342,7 +347,10 @@ class MainActivity : FragmentActivity() {
                             encryptionProgress = null
                             (application as CoveApplication).onBootstrapComplete()
                             val appInstance = AppManager.getInstance()
-                            TorManager.getInstance()
+
+                            // eager start only, a Tor failure here must not take down the splash
+                            TorManager.getInstanceOrNull()
+
                             appInstance.asyncRuntimeReady = true
 
                             runCatching {
