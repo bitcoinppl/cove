@@ -1806,14 +1806,18 @@ mod tests {
         let (sender, _receiver) = flume::bounded(10);
         let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
-        db.labels.set_output_spendability(locked, false).expect("output is locked");
+        db.labels.set_output_spendability_for_outpoints([locked], false).expect("output is locked");
         actor.db = db;
 
         LockedActorFixture { actor, locked, unlocked, _tmp: tmp }
     }
 
     fn lock_output(actor: &super::WalletActor, outpoint: OutPoint) {
-        actor.db.labels.set_output_spendability(outpoint, false).expect("output is locked");
+        actor
+            .db
+            .labels
+            .set_output_spendability_for_outpoints([outpoint], false)
+            .expect("output is locked");
     }
 
     fn spent_outpoints(psbt: &bdk_wallet::bitcoin::Psbt) -> HashSet<OutPoint> {
@@ -2071,7 +2075,10 @@ mod tests {
         let unlocked = receive_output_in_latest_block(&mut wallet, Amount::from_sat(80_000));
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
 
-        wallet_db.labels.set_output_spendability(locked, false).expect("output is locked");
+        wallet_db
+            .labels
+            .set_output_spendability_for_outpoints([locked], false)
+            .expect("output is locked");
 
         let locked_outpoints =
             wallet_db.labels.locked_output_outpoints().expect("locked outpoints load");

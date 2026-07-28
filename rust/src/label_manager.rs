@@ -790,7 +790,7 @@ mod tests {
         assert!(changed);
         assert!(manager.db.labels.get_output_record(outpoint).unwrap().is_none());
         assert!(manager.db.labels.get_txn_label_record(tx_id.0).unwrap().is_none());
-        assert_eq!(manager.db.labels.number_of_labels().expect("labels count loads"), 0);
+        assert!(manager.db.labels.all_labels().expect("labels load").is_empty());
     }
 
     #[test]
@@ -854,7 +854,7 @@ mod tests {
             .save_imported_labels(Arc::unwrap_or_clone(sample_bip329_labels()).0, false)
             .expect("import into selected wallet succeeds");
 
-        assert!(manager.db.labels.number_of_labels().expect("labels count loads") > 0);
+        assert!(!manager.db.labels.all_labels().expect("labels load").is_empty());
         Database::global()
             .global_config
             .clear_selected_wallet()
