@@ -63,15 +63,6 @@ impl LabelsTable {
         Self { db }
     }
 
-    pub fn number_of_labels(&self) -> Result<u64, Error> {
-        let txns = self.count_meaningful_labels(TXN_TABLE, Label::Transaction)?;
-        let inputs = self.count_meaningful_labels(INPUT_TABLE, Label::Input)?;
-        let outputs = self.count_meaningful_labels(OUTPUT_TABLE, Label::Output)?;
-        let addresses = self.count_meaningful_labels(ADDRESS_TABLE, Label::Address)?;
-
-        Ok((txns + inputs + outputs + addresses) as u64)
-    }
-
     pub fn has_labels(&self) -> Result<bool, Error> {
         if self.has_meaningful_label(TXN_TABLE, Label::Transaction)? {
             return Ok(true);
@@ -149,17 +140,6 @@ impl LabelsTable {
             .collect::<Vec<Label>>();
 
         Ok(labels)
-    }
-
-    pub fn all_txns(&self) -> Result<Vec<TransactionRecord>, Error> {
-        let table = self.read_table(TXN_TABLE)?;
-        let txns = table
-            .iter()?
-            .filter_map(Result::ok)
-            .map(|(_key, record)| record.value().item)
-            .collect();
-
-        Ok(txns)
     }
 
     pub fn txn_input_records_iter(
@@ -334,10 +314,6 @@ impl LabelsTable {
         Ok(ImportedLabelAction::Ignore)
     }
 
-    pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
-        self.insert_labels_with_timestamps(labels, Timestamps::now())
-    }
-
     pub fn insert_labels_with_timestamps(
         &self,
         labels: impl IntoIterator<Item = Label>,
@@ -352,26 +328,6 @@ impl LabelsTable {
         write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
-    }
-
-    pub fn insert_or_update_txn_label(&self, label: TransactionRecord) -> Result<(), Error> {
-        let current = self.get_txn_label_record(label.ref_).unwrap_or(None);
-        let label: Label = label.into();
-
-        if let Some(current) = current {
-            let mut updated = current;
-            updated.timestamps.updated_at = jiff::Timestamp::now().as_second().cast_unsigned();
-            let timestamps = updated.timestamps;
-
-            self.insert_label_with_timestamps(label, timestamps)?;
-            return Ok(());
-        }
-
-        self.insert_label(label)
-    }
-
-    pub fn insert_label(&self, label: impl Into<Label>) -> Result<(), Error> {
-        self.insert_label_with_timestamps(label.into(), Timestamps::now())
     }
 
     pub fn insert_label_with_timestamps(
@@ -421,14 +377,6 @@ impl LabelsTable {
         write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
-    }
-
-    pub fn set_output_spendability(
-        &self,
-        outpoint: bitcoin::OutPoint,
-        spendable: bool,
-    ) -> Result<(), Error> {
-        self.set_output_spendability_for_outpoints([outpoint], spendable)
     }
 
     pub fn set_output_spendability_for_outpoints(
@@ -513,17 +461,6 @@ impl LabelsTable {
         Ok(())
     }
 
-    // MARK: DELETE
-    pub fn delete_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
-
-        labels.into_iter().try_for_each(|l| self.delete_label_with_write_txn(l, &write_txn))?;
-
-        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
-
-        Ok(())
-    }
-
     fn delete_label_with_write_txn(
         &self,
         label: Label,
@@ -571,27 +508,6 @@ impl LabelsTable {
         let table = read_txn.open_table(table).map_err_str(DatabaseError::TableAccess)?;
 
         Ok(table)
-    }
-
-    fn count_meaningful_labels<K, T>(
-        &self,
-        table: TableDefinition<K, SerdeRecord<T>>,
-        to_label: impl Fn(T) -> Label,
-    ) -> Result<usize, Error>
-    where
-        K: redb::Key + Debug + Clone + Send + Sync + 'static,
-        T: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
-    {
-        let table = self.read_table(table)?;
-
-        let count = table
-            .iter()?
-            .filter_map(Result::ok)
-            .map(|(_key, record)| to_label(record.value().item))
-            .filter(is_meaningful_export_label)
-            .count();
-
-        Ok(count)
     }
 
     fn has_meaningful_label<K, T>(
@@ -740,12 +656,14 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(labels).expect("failed to insert labels");
+        db.insert_labels_with_timestamps(labels, Timestamps::now())
+            .expect("failed to insert labels");
 
-        let txn = db.all_txns().expect("failed to get all txns");
-        assert_eq!(txn.len(), 1);
-
-        let labels = db.all_labels_for_txn(txn[0].ref_).expect("failed to get labels");
+        let txid = bitcoin::Txid::from_str(
+            "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290",
+        )
+        .expect("failed to parse txid");
+        let labels = db.all_labels_for_txn(txid).expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
     }
@@ -768,7 +686,8 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(labels).expect("failed to insert labels");
+        db.insert_labels_with_timestamps(labels, Timestamps::now())
+            .expect("failed to insert labels");
 
         let txid = bitcoin::Txid::from_str(first_txid).expect("failed to parse txid");
         let inputs =
@@ -793,8 +712,11 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
-            .expect("failed to insert existing labels");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
         db.insert_imported_labels(
             Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
         )
@@ -820,8 +742,11 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
-            .expect("failed to insert existing labels");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
         db.insert_imported_labels(
             Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
         )
@@ -847,8 +772,11 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
-            .expect("failed to insert existing labels");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
         db.insert_imported_labels(
             Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
         )
@@ -894,7 +822,7 @@ mod tests {
 
         let exported = db.all_labels().expect("failed to load labels").export().unwrap();
 
-        assert_eq!(db.number_of_labels().expect("failed to count labels"), 1);
+        assert_eq!(db.all_labels().expect("failed to load labels").len(), 1);
         assert!(exported.contains(r#""label":"real label""#));
         assert!(
             !exported
@@ -930,12 +858,15 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(jsonl).expect("failed to parse labels"))
-            .expect("failed to insert labels");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(jsonl).expect("failed to parse labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert labels");
 
         let exported = db.all_labels().expect("failed to load labels").export().unwrap();
 
-        assert_eq!(db.number_of_labels().expect("failed to count labels"), 3);
+        assert_eq!(db.all_labels().expect("failed to load labels").len(), 3);
         assert!(exported.contains(&lock_only_output.to_string()));
         assert!(exported.contains(&unlock_output.to_string()));
         assert!(exported.contains(r#""label":"real label""#));
@@ -958,7 +889,7 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        db.set_output_spendability_for_outpoints([outpoint], false).expect("failed to lock output");
         db.insert_imported_labels(
             Labels::try_from_str_with_metadata(imported).expect("failed to parse labels"),
         )
@@ -987,8 +918,11 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
-            .expect("failed to insert existing labels");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
         db.insert_imported_labels(
             Labels::try_from_str_with_metadata(imported).expect("failed to parse imported labels"),
         )
@@ -1012,7 +946,7 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        db.set_output_spendability_for_outpoints([outpoint], false).expect("failed to lock output");
 
         let record = db
             .get_output_record(outpoint)
@@ -1034,7 +968,7 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        db.set_output_spendability_for_outpoints([outpoint], false).expect("failed to lock output");
 
         let exported = db.all_labels().expect("failed to load labels").export().unwrap();
 
@@ -1055,7 +989,9 @@ mod tests {
             new_test_wallet_data_db(WalletId::preview_new_random());
         let source_db = &source_wallet_db.labels;
 
-        source_db.set_output_spendability(outpoint, false).expect("failed to lock output");
+        source_db
+            .set_output_spendability_for_outpoints([outpoint], false)
+            .expect("failed to lock output");
         let exported = source_db.all_labels().expect("failed to load labels").export().unwrap();
 
         let (destination_wallet_db, _destination_tmp) =
@@ -1089,8 +1025,9 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.set_output_spendability(outpoint, false).expect("failed to lock output");
-        db.set_output_spendability(outpoint, true).expect("failed to unlock output");
+        db.set_output_spendability_for_outpoints([outpoint], false).expect("failed to lock output");
+        db.set_output_spendability_for_outpoints([outpoint], true)
+            .expect("failed to unlock output");
 
         let record = db
             .get_output_record(outpoint)
@@ -1114,9 +1051,13 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
-            .expect("failed to insert existing labels");
-        db.set_output_spendability(outpoint, true).expect("failed to unlock output");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
+        db.set_output_spendability_for_outpoints([outpoint], true)
+            .expect("failed to unlock output");
 
         let record = db
             .get_output_record(outpoint)
@@ -1144,8 +1085,11 @@ mod tests {
         let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
         let db = &wallet_db.labels;
 
-        db.insert_labels(Labels::try_from_str(existing).expect("failed to parse existing labels"))
-            .expect("failed to insert existing labels");
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
         db.set_output_spendability_for_outpoints([requested], false)
             .expect("failed to lock requested output");
 

@@ -22,23 +22,6 @@ impl<T> Record<T> {
     pub const fn with_timestamps(item: T, timestamps: Timestamps) -> Self {
         Self { item, timestamps }
     }
-
-    pub const fn created_at(&self) -> u64 {
-        self.timestamps.created_at
-    }
-
-    pub const fn updated_at(&self) -> u64 {
-        self.timestamps.updated_at
-    }
-}
-
-impl<T> Record<T> {
-    pub fn into<U>(self) -> Record<U>
-    where
-        T: Into<U>,
-    {
-        Record { item: self.item.into(), timestamps: self.timestamps }
-    }
 }
 
 impl Timestamps {

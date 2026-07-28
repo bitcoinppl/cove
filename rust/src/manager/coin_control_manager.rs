@@ -458,7 +458,10 @@ mod tests {
 
         wallet_db
             .labels
-            .set_output_spendability(bitcoin::OutPoint::from(locked.as_ref()), false)
+            .set_output_spendability_for_outpoints(
+                [bitcoin::OutPoint::from(locked.as_ref())],
+                false,
+            )
             .expect("failed to lock output");
 
         let selection_changed = {
@@ -576,7 +579,10 @@ mod tests {
 
         wallet_db
             .labels
-            .set_output_spendability(bitcoin::OutPoint::from(visible.as_ref()), false)
+            .set_output_spendability_for_outpoints(
+                [bitcoin::OutPoint::from(visible.as_ref())],
+                false,
+            )
             .expect("failed to lock searched output");
 
         manager.reload_labels().await;
@@ -600,7 +606,7 @@ mod tests {
 
         wallet_db
             .labels
-            .set_output_spendability(outpoint, false)
+            .set_output_spendability_for_outpoints([outpoint], false)
             .expect("failed to lock pending output");
 
         let mut pending_state = State::new(
