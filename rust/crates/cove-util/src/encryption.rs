@@ -174,7 +174,7 @@ impl Cryptor {
 
         let decrypted = self.decrypt(&ciphertext_bytes)?;
 
-        // Zeroizing has no into_inner, so validate in place and make one
+        // zeroizing has no into_inner, so validate in place and make one
         // zeroize-guarded copy
         let text = std::str::from_utf8(&decrypted)?;
         Ok(Zeroizing::new(text.to_string()))

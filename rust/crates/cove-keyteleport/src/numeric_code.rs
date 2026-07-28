@@ -2,6 +2,7 @@ use std::{fmt, str::FromStr};
 
 use crate::{Error, Result};
 
+/// An eight-digit receiver code used to establish a KeyTeleport session
 #[derive(Clone, PartialEq, Eq)]
 pub struct NumericCode(String);
 
@@ -10,10 +11,12 @@ impl NumericCode {
         Self(format!("{value:08}"))
     }
 
+    /// Returns the receiver code without display grouping
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// Returns the receiver code grouped into pairs for display
     pub fn grouped(&self) -> String {
         self.0
             .as_bytes()

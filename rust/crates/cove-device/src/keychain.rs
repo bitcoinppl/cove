@@ -204,6 +204,99 @@ pub enum KeychainError {
     WalletSecretExists,
 }
 
+struct EncryptedKeychainPair {
+    value_key: String,
+    cryptor_key: String,
+}
+
+enum EncryptedKeychainPairState {
+    Empty,
+    Complete { encrypted_value: String, serialized_cryptor: Zeroizing<String> },
+    ValueOnly,
+    CryptorOnly { serialized_cryptor: Zeroizing<String> },
+}
+
+enum FailedValueSave {
+    DeleteCryptor,
+    KeepCryptor,
+}
+
+impl EncryptedKeychainPair {
+    fn new(value_key: impl Into<String>, cryptor_key: impl Into<String>) -> Self {
+        Self { value_key: value_key.into(), cryptor_key: cryptor_key.into() }
+    }
+
+    fn state(&self, keychain: &dyn KeychainAccess) -> EncryptedKeychainPairState {
+        let encrypted_value = keychain.get(self.value_key.clone());
+        let serialized_cryptor = keychain.get(self.cryptor_key.clone());
+
+        match (encrypted_value, serialized_cryptor) {
+            (None, None) => EncryptedKeychainPairState::Empty,
+            (Some(encrypted_value), Some(serialized_cryptor)) => {
+                EncryptedKeychainPairState::Complete {
+                    encrypted_value,
+                    serialized_cryptor: Zeroizing::new(serialized_cryptor),
+                }
+            }
+            (Some(_), None) => EncryptedKeychainPairState::ValueOnly,
+            (None, Some(serialized_cryptor)) => EncryptedKeychainPairState::CryptorOnly {
+                serialized_cryptor: Zeroizing::new(serialized_cryptor),
+            },
+        }
+    }
+
+    fn delete_value(&self, keychain: &dyn KeychainAccess) -> bool {
+        keychain.delete(self.value_key.clone())
+    }
+
+    fn delete_cryptor(&self, keychain: &dyn KeychainAccess) -> bool {
+        keychain.delete(self.cryptor_key.clone())
+    }
+
+    fn save(
+        &self,
+        keychain: &dyn KeychainAccess,
+        plaintext: &str,
+        failed_value_save: FailedValueSave,
+    ) -> Result<(), KeychainError> {
+        let mut cryptor = Cryptor::new();
+        let encrypted = cryptor
+            .encrypt_to_string(plaintext)
+            .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
+
+        // the keychain callback takes an owned String, so one plain copy at the
+        // ffi boundary is unavoidable; it is moved into and consumed by the callback
+        let serialized = cryptor.serialize_to_string();
+        keychain.save(self.cryptor_key.clone(), serialized.as_str().to_owned())?;
+
+        if let Err(error) = keychain.save(self.value_key.clone(), encrypted) {
+            if matches!(failed_value_save, FailedValueSave::DeleteCryptor) {
+                self.delete_cryptor(keychain);
+            }
+
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
+    fn save_atomically(
+        &self,
+        keychain: &dyn KeychainAccess,
+        plaintext: &str,
+    ) -> Result<(), KeychainError> {
+        self.save(keychain, plaintext, FailedValueSave::DeleteCryptor)
+    }
+
+    fn save_preserving_cryptor_on_failure(
+        &self,
+        keychain: &dyn KeychainAccess,
+        plaintext: &str,
+    ) -> Result<(), KeychainError> {
+        self.save(keychain, plaintext, FailedValueSave::KeepCryptor)
+    }
+}
+
 #[uniffi::export(callback_interface)]
 pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
     /// Saves a key-value pair
@@ -254,25 +347,24 @@ impl Keychain {
 
     /// Load existing local DB encryption key, returns None if not found
     pub fn get_local_encryption_key(&self) -> Result<Option<[u8; 32]>, KeychainError> {
-        let has_cryptor = self.0.get(LOCAL_DB_KEY_CRYPTOR.into());
-        let has_key = self.0.get(LOCAL_DB_KEY_NAME.into());
-
-        let (cryptor_str, encrypted) = match (has_cryptor, has_key) {
-            (None, None) => return Ok(None),
-            (Some(c), Some(k)) => (c, k),
-            (Some(_), None) => {
+        let pair = EncryptedKeychainPair::new(LOCAL_DB_KEY_NAME, LOCAL_DB_KEY_CRYPTOR);
+        let (encrypted, cryptor_str) = match pair.state(self.0.as_ref().as_ref()) {
+            EncryptedKeychainPairState::Empty => return Ok(None),
+            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
+                (encrypted_value, serialized_cryptor)
+            }
+            EncryptedKeychainPairState::CryptorOnly { .. } => {
                 return Err(KeychainError::Decrypt(
                     "encryption key cryptor found but encrypted key is missing".into(),
                 ));
             }
-            (None, Some(_)) => {
+            EncryptedKeychainPairState::ValueOnly => {
                 return Err(KeychainError::Decrypt(
                     "encrypted key found but cryptor is missing".into(),
                 ));
             }
         };
 
-        let cryptor_str = Zeroizing::new(cryptor_str);
         let cryptor = Cryptor::try_from_string(&cryptor_str)
             .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
 
@@ -300,12 +392,8 @@ impl Keychain {
 
         let key: [u8; 32] = rand::rng().random();
         let encoded = Zeroizing::new(hex::encode(key));
-        self.save_with_fresh_cryptor(
-            LOCAL_DB_KEY_CRYPTOR.into(),
-            LOCAL_DB_KEY_NAME.into(),
-            &encoded,
-            true,
-        )?;
+        let pair = EncryptedKeychainPair::new(LOCAL_DB_KEY_NAME, LOCAL_DB_KEY_CRYPTOR);
+        pair.save_atomically(self.0.as_ref().as_ref(), &encoded)?;
 
         Ok(key)
     }
@@ -318,38 +406,50 @@ impl Keychain {
         self.0.delete(LOCAL_DB_KEY_NAME.into());
     }
 
+    /// Saves the active KeyTeleport receive session encrypted in the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if encryption or saving fails
     pub fn save_key_teleport_receive_session(&self, plaintext: &str) -> Result<(), KeychainError> {
-        self.save_with_fresh_cryptor(
-            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into(),
-            KEY_TELEPORT_RECEIVE_SESSION.into(),
-            plaintext,
-            true,
-        )
+        let pair = EncryptedKeychainPair::new(
+            KEY_TELEPORT_RECEIVE_SESSION,
+            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR,
+        );
+
+        pair.save_atomically(self.0.as_ref().as_ref(), plaintext)
     }
 
+    /// Retrieves the active KeyTeleport receive session from the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if stored entries are incomplete or decryption fails
     pub fn get_key_teleport_receive_session(
         &self,
     ) -> Result<Option<Zeroizing<String>>, KeychainError> {
-        let has_cryptor = self.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into());
-        let has_session = self.0.get(KEY_TELEPORT_RECEIVE_SESSION.into());
-
-        let (cryptor_str, encrypted) = match (has_cryptor, has_session) {
-            (None, None) => return Ok(None),
-            (Some(cryptor), Some(session)) => (cryptor, session),
-            (Some(_), None) => {
+        let pair = EncryptedKeychainPair::new(
+            KEY_TELEPORT_RECEIVE_SESSION,
+            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR,
+        );
+        let (encrypted, cryptor_str) = match pair.state(self.0.as_ref().as_ref()) {
+            EncryptedKeychainPairState::Empty => return Ok(None),
+            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
+                (encrypted_value, serialized_cryptor)
+            }
+            EncryptedKeychainPairState::CryptorOnly { .. } => {
                 return Err(KeychainError::Decrypt(
                     "KeyTeleport receive session cryptor found but encrypted session is missing"
                         .into(),
                 ));
             }
-            (None, Some(_)) => {
+            EncryptedKeychainPairState::ValueOnly => {
                 return Err(KeychainError::Decrypt(
                     "encrypted KeyTeleport receive session found but cryptor is missing".into(),
                 ));
             }
         };
 
-        let cryptor_str = Zeroizing::new(cryptor_str);
         let cryptor = Cryptor::try_from_string(&cryptor_str)
             .map_err_prefix("KeyTeleport receive session cryptor", KeychainError::Decrypt)?;
 
@@ -359,6 +459,7 @@ impl Keychain {
             .map(Some)
     }
 
+    /// Deletes the active KeyTeleport receive session from the keychain
     pub fn delete_key_teleport_receive_session(&self) -> bool {
         let has_session = self.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_some();
         let has_cryptor = self.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_some();
@@ -376,33 +477,6 @@ impl Keychain {
         };
 
         session_ok && cryptor_ok
-    }
-
-    fn save_with_fresh_cryptor(
-        &self,
-        cryptor_key: String,
-        value_key: String,
-        plaintext: &str,
-        cleanup_cryptor_on_failure: bool,
-    ) -> Result<(), KeychainError> {
-        let mut cryptor = Cryptor::new();
-        let encrypted = cryptor
-            .encrypt_to_string(plaintext)
-            .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
-
-        // the keychain callback takes an owned String, so one plain copy at the
-        // FFI boundary is unavoidable; it is moved into and consumed by the callback
-        let serialized = cryptor.serialize_to_string();
-        self.0.save(cryptor_key.clone(), serialized.as_str().to_owned())?;
-
-        if let Err(error) = self.0.save(value_key, encrypted) {
-            if cleanup_cryptor_on_failure {
-                self.0.delete(cryptor_key);
-            }
-            return Err(error);
-        }
-
-        Ok(())
     }
 
     /// Saves a wallet's mnemonic seed encrypted in the keychain
@@ -439,25 +513,26 @@ impl Keychain {
         let _wallet_secret_guard = self.1.lock();
         let secret_key = wallet_mnemonic_key_name(id);
         let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
-        let encrypted_secret = self.0.get(secret_key.clone());
-        let cryptor = self.0.get(cryptor_key.clone());
+        let pair = EncryptedKeychainPair::new(secret_key, cryptor_key);
 
-        match (encrypted_secret, cryptor) {
-            (Some(_), Some(_)) => return Err(KeychainError::WalletSecretExists),
-            (Some(_), None) => {
-                if !self.0.delete(secret_key.clone()) {
+        match pair.state(self.0.as_ref().as_ref()) {
+            EncryptedKeychainPairState::Complete { .. } => {
+                return Err(KeychainError::WalletSecretExists);
+            }
+            EncryptedKeychainPairState::ValueOnly => {
+                if !pair.delete_value(self.0.as_ref().as_ref()) {
                     return Err(KeychainError::Delete);
                 }
             }
-            (None, Some(_)) => {
-                if !self.0.delete(cryptor_key.clone()) {
+            EncryptedKeychainPairState::CryptorOnly { .. } => {
+                if !pair.delete_cryptor(self.0.as_ref().as_ref()) {
                     return Err(KeychainError::Delete);
                 }
             }
-            (None, None) => {}
+            EncryptedKeychainPairState::Empty => {}
         }
 
-        self.save_with_fresh_cryptor(cryptor_key, secret_key, &wallet_secret.serialize(), true)
+        pair.save_atomically(self.0.as_ref().as_ref(), &wallet_secret.serialize())
     }
 
     /// Retrieves a wallet's mnemonic seed from the keychain
@@ -498,25 +573,24 @@ impl Keychain {
         secret_key: String,
         cryptor_key: String,
     ) -> Result<Option<WalletSecret>, KeychainError> {
-        let encrypted_secret = self.0.get(secret_key);
-        let encryption_key = self.0.get(cryptor_key);
-
-        let (encrypted_secret, encryption_key) = match (encrypted_secret, encryption_key) {
-            (None, None) => return Ok(None),
-            (Some(secret), Some(key)) => (secret, key),
-            (Some(_), None) => {
+        let pair = EncryptedKeychainPair::new(secret_key, cryptor_key);
+        let (encrypted_secret, encryption_key) = match pair.state(self.0.as_ref().as_ref()) {
+            EncryptedKeychainPairState::Empty => return Ok(None),
+            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
+                (encrypted_value, serialized_cryptor)
+            }
+            EncryptedKeychainPairState::ValueOnly => {
                 return Err(KeychainError::Decrypt(
                     "encrypted wallet secret found but encryption key is missing".into(),
                 ));
             }
-            (None, Some(_)) => {
+            EncryptedKeychainPairState::CryptorOnly { .. } => {
                 return Err(KeychainError::Decrypt(
                     "wallet secret encryption key found but encrypted secret is missing".into(),
                 ));
             }
         };
 
-        let encryption_key = Zeroizing::new(encryption_key);
         let cryptor = Cryptor::try_from_string(&encryption_key)
             .map_err_prefix("wallet secret encryption key", KeychainError::Decrypt)?;
 
@@ -661,38 +735,46 @@ impl Keychain {
         backup: &[u8],
     ) -> Result<(), KeychainError> {
         let encoded = Zeroizing::new(hex::encode(backup));
-
-        self.save_with_fresh_cryptor(
-            wallet_tap_signer_encryption_key_and_nonce_key_name(id),
+        let pair = EncryptedKeychainPair::new(
             wallet_tap_signer_backup_key_name(id),
-            &encoded,
-            false,
-        )
+            wallet_tap_signer_encryption_key_and_nonce_key_name(id),
+        );
+
+        pair.save_preserving_cryptor_on_failure(self.0.as_ref().as_ref(), &encoded)
     }
 
+    /// Retrieves and decrypts a Tap Signer backup from the keychain
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if stored entries are incomplete, invalid, or cannot be decrypted
     pub fn get_tap_signer_backup(&self, id: &WalletId) -> Result<Option<Vec<u8>>, KeychainError> {
-        let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
-        let Some(encryption_secret_key) = self.0.get(encryption_key_key) else {
-            // check for orphaned encrypted data without its encryption key
-            let backup_key = wallet_tap_signer_backup_key_name(id);
-            if self.0.get(backup_key).is_some() {
+        let pair = EncryptedKeychainPair::new(
+            wallet_tap_signer_backup_key_name(id),
+            wallet_tap_signer_encryption_key_and_nonce_key_name(id),
+        );
+        let (encrypted_backup, encryption_secret_key) = match pair.state(self.0.as_ref().as_ref()) {
+            EncryptedKeychainPairState::Empty => return Ok(None),
+            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
+                (encrypted_value, serialized_cryptor)
+            }
+            EncryptedKeychainPairState::ValueOnly => {
                 return Err(KeychainError::Decrypt(
                     "encrypted tap signer backup found but encryption key is missing".into(),
                 ));
             }
-            return Ok(None);
+            EncryptedKeychainPairState::CryptorOnly { serialized_cryptor } => {
+                Cryptor::try_from_string(&serialized_cryptor)
+                    .map_err_prefix("tap signer encryption key", KeychainError::Decrypt)?;
+
+                return Err(KeychainError::Decrypt(
+                    "tap signer encryption key found but backup data is missing".to_string(),
+                ));
+            }
         };
 
-        let encryption_secret_key = Zeroizing::new(encryption_secret_key);
         let cryptor = Cryptor::try_from_string(&encryption_secret_key)
             .map_err_prefix("tap signer encryption key", KeychainError::Decrypt)?;
-
-        let backup_key = wallet_tap_signer_backup_key_name(id);
-        let Some(encrypted_backup) = self.0.get(backup_key) else {
-            return Err(KeychainError::Decrypt(
-                "tap signer encryption key found but backup data is missing".to_string(),
-            ));
-        };
 
         let backup_hex = cryptor
             .decrypt_from_string(&encrypted_backup)
@@ -704,6 +786,7 @@ impl Keychain {
         Ok(Some(backup))
     }
 
+    /// Deletes a Tap Signer backup from the keychain
     pub fn delete_tap_signer_backup(&self, id: &WalletId) -> bool {
         let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
         let backup_key = wallet_tap_signer_backup_key_name(id);

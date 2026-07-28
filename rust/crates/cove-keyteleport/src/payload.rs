@@ -13,7 +13,7 @@ use crate::{Error, Result};
 
 const MAINNET_XPRV_VERSION: [u8; 4] = [0x04, 0x88, 0xad, 0xe4];
 
-// KeyTeleport payload type codes (first byte of the decrypted body)
+// keyteleport payload type codes use the first decrypted body byte
 const PAYLOAD_CODE_STASH: u8 = b's';
 const PAYLOAD_CODE_XPRV: u8 = b'x';
 const PAYLOAD_CODE_NOTES: u8 = b'n';
@@ -21,7 +21,7 @@ const PAYLOAD_CODE_VAULT: u8 = b'v';
 const PAYLOAD_CODE_PSBT: u8 = b'p';
 const PAYLOAD_CODE_BACKUP: u8 = b'b';
 
-// COLDCARD 72-byte stash layout (payload type `s`): first body byte is a marker
+// COLDCARD 72-byte stash layout uses the first body byte as a marker
 //
 // - 0x01: master xprv as chain_code || private_key
 // - 0x10..=0x40: raw BIP32 master secret; marker is the secret length in bytes
@@ -32,11 +32,16 @@ const STASH_MARKER_MNEMONIC_FLAG: u8 = 0x80;
 const STASH_MNEMONIC_ENTROPY_UNITS_MASK: u8 = 0x03;
 const STASH_RAW_MASTER_SECRET_LEN: std::ops::RangeInclusive<u8> = 0x10..=0x40;
 
+/// A recognized KeyTeleport payload type that this crate cannot decode
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnsupportedPayloadKind {
+    /// A COLDCARD vault payload
     Vault,
+    /// A PSBT payload
     Psbt,
+    /// A COLDCARD backup payload
     Backup,
+    /// An unknown payload code
     Unknown(u8),
 }
 
@@ -302,9 +307,12 @@ impl Drop for WireNotesRecord {
     }
 }
 
+/// A payload decoded from a sender response
 #[derive(Clone, PartialEq, Eq)]
 pub enum DecodedPayload {
+    /// A BIP39 mnemonic
     Mnemonic(Mnemonic),
+    /// A BIP32 master extended private key
     Xprv(XprvPayload),
     /// COLDCARD Secure Notes & Passwords records
     Notes(NotesPayload),

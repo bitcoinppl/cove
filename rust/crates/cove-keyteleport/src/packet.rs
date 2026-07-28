@@ -9,14 +9,19 @@ use crate::{Error, Result, crypto};
 
 const KEY_TELEPORT_DOMAIN: &str = "keyteleport.com";
 
+/// A decoded KeyTeleport packet
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Packet {
+    /// A receiver request packet
     Receiver(ReceiverPacket),
+    /// An encrypted sender response packet
     Sender(SenderPacket),
+    /// A PSBT packet
     Psbt(PsbtPacket),
 }
 
 impl Packet {
+    /// Parses one complete BBQr part
     pub fn from_bbqr_part(value: &str) -> Result<Self> {
         let joined = Joined::try_from_parts(vec![value.to_string()])?;
 
@@ -28,6 +33,7 @@ impl Packet {
         }
     }
 
+    /// Parses a KeyTeleport URL or complete BBQr part
     pub fn from_url(value: &str) -> Result<Self> {
         let value = value.trim();
         if value.to_ascii_uppercase().starts_with("B$") {
@@ -40,6 +46,7 @@ impl Packet {
         Self::from_bbqr_part(fragment)
     }
 
+    /// Encodes the packet as one BBQr part
     pub fn to_bbqr_part(&self) -> Result<String> {
         match self {
             Self::Receiver(packet) => packet.to_bbqr_part(),
@@ -48,15 +55,18 @@ impl Packet {
         }
     }
 
+    /// Encodes the packet as a KeyTeleport URL
     pub fn to_url(&self) -> Result<String> {
         Ok(format!("https://{KEY_TELEPORT_DOMAIN}/#{}", self.to_bbqr_part()?))
     }
 }
 
+/// A validated receiver request packet
 #[derive(Clone, PartialEq, Eq)]
 pub struct ReceiverPacket(Vec<u8>);
 
 impl ReceiverPacket {
+    /// Validates and wraps a receiver packet payload
     pub fn new(payload: Vec<u8>) -> Result<Self> {
         if payload.len() != crypto::RECEIVER_PACKET_LEN {
             return Err(Error::InvalidReceiverPacket);
@@ -65,14 +75,17 @@ impl ReceiverPacket {
         Ok(Self(payload))
     }
 
+    /// Returns the encoded packet bytes
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
+    /// Encodes the packet as one BBQr part
     pub fn to_bbqr_part(&self) -> Result<String> {
         to_single_part_bbqr(&self.0, FileType::KeyTeleportReceiver)
     }
 
+    /// Encodes the packet as a KeyTeleport URL
     pub fn to_url(&self) -> Result<String> {
         Packet::Receiver(self.clone()).to_url()
     }
@@ -84,10 +97,12 @@ impl std::fmt::Debug for ReceiverPacket {
     }
 }
 
+/// A validated encrypted sender response packet
 #[derive(Clone, PartialEq, Eq)]
 pub struct SenderPacket(Vec<u8>);
 
 impl SenderPacket {
+    /// Validates and wraps a sender packet payload
     pub fn new(payload: Vec<u8>) -> Result<Self> {
         if payload.len() < 37 {
             return Err(Error::InvalidSenderPacket);
@@ -96,22 +111,27 @@ impl SenderPacket {
         Ok(Self(payload))
     }
 
+    /// Returns the encoded packet bytes
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
+    /// Returns the encoded sender public key
     pub fn sender_pubkey_bytes(&self) -> &[u8] {
         &self.0[..33]
     }
 
+    /// Returns the encrypted payload body
     pub fn encrypted_body(&self) -> &[u8] {
         &self.0[33..]
     }
 
+    /// Encodes the packet as one BBQr part
     pub fn to_bbqr_part(&self) -> Result<String> {
         to_single_part_bbqr(&self.0, FileType::KeyTeleportSender)
     }
 
+    /// Encodes the packet as a KeyTeleport URL
     pub fn to_url(&self) -> Result<String> {
         Packet::Sender(self.clone()).to_url()
     }
@@ -123,18 +143,22 @@ impl std::fmt::Debug for SenderPacket {
     }
 }
 
+/// A PSBT payload transported in a KeyTeleport-compatible BBQr packet
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PsbtPacket(Vec<u8>);
 
 impl PsbtPacket {
+    /// Wraps a PSBT packet payload
     pub fn new(payload: Vec<u8>) -> Self {
         Self(payload)
     }
 
+    /// Returns the encoded packet bytes
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
+    /// Encodes the packet as one BBQr part
     pub fn to_bbqr_part(&self) -> Result<String> {
         to_single_part_bbqr(&self.0, FileType::KeyTeleportPsbt)
     }

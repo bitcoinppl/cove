@@ -6,30 +6,36 @@ use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::{Error, Result};
 
+/// A five-byte password used to decrypt a KeyTeleport sender response
 #[derive(Clone, PartialEq, Eq)]
 pub struct TeleportPassword {
     bytes: [u8; 5],
 }
 
 impl TeleportPassword {
+    /// Generates a random transfer password
     pub fn generate() -> Self {
         let bytes = rand::rng().random::<[u8; 5]>();
 
         Self { bytes }
     }
 
+    /// Creates a transfer password from its raw bytes
     pub fn from_bytes(bytes: [u8; 5]) -> Self {
         Self { bytes }
     }
 
+    /// Exposes the raw password bytes
     pub fn expose_bytes(&self) -> &[u8; 5] {
         &self.bytes
     }
 
+    /// Returns the ungrouped Base32 password text
     pub fn as_display_text(&self) -> String {
         BASE32_NOPAD.encode(&self.bytes)
     }
 
+    /// Returns the password grouped into pairs for display
     pub fn grouped(&self) -> String {
         self.as_display_text()
             .as_bytes()
@@ -87,7 +93,7 @@ fn normalize_password(value: &str) -> Result<Zeroizing<String>> {
             _ => ch,
         };
 
-        // RFC 4648 Base32 alphabet; anything else (like '9') can never decode
+        // reject characters outside the RFC 4648 Base32 alphabet
         if !matches!(ch, 'A'..='Z' | '2'..='7') {
             return Err(Error::InvalidTeleportPassword);
         }

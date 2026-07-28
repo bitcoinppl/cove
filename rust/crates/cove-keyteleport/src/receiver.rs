@@ -7,30 +7,36 @@ use crate::{
     payload::Payload,
 };
 
+/// A receiver-side KeyTeleport session
 #[derive(Debug)]
 pub struct ReceiverSession {
     private_key: EphemeralPrivateKey,
 }
 
 impl ReceiverSession {
+    /// Creates a receiver session with a new ephemeral private key
     pub fn new() -> Self {
         Self { private_key: EphemeralPrivateKey::generate() }
     }
 
+    /// Restores a receiver session from its ephemeral private key
     pub fn from_private_key_bytes(bytes: [u8; 32]) -> Result<Self> {
         Ok(Self { private_key: EphemeralPrivateKey::from_bytes(bytes)? })
     }
 
+    /// Returns the ephemeral private key bytes for session persistence
     pub fn private_key_bytes(&self) -> [u8; 32] {
         self.private_key.expose_bytes()
     }
 
+    /// Creates the receiver request to share with a sender
     pub fn request(&self) -> Result<ReceiveRequest> {
         let (numeric_code, payload) = crypto::generate_receiver_packet(&self.private_key)?;
 
         Ok(ReceiveRequest { numeric_code, packet: ReceiverPacket::new(payload.to_vec())? })
     }
 
+    /// Decrypts the outer layer of a sender packet
     pub fn decode_step1(&self, packet: &SenderPacket) -> Result<PendingPayload> {
         let sender_pubkey = PublicKey::from_slice(packet.sender_pubkey_bytes())?;
         let session_key = self.private_key.session_key(&sender_pubkey);
@@ -39,6 +45,7 @@ impl ReceiverSession {
         Ok(PendingPayload { session_key, inner })
     }
 
+    /// Decrypts and decodes a sender packet
     pub fn decode(
         &self,
         packet: &SenderPacket,
@@ -54,12 +61,16 @@ impl Default for ReceiverSession {
     }
 }
 
+/// A receiver request containing the numeric code and packet to share
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReceiveRequest {
+    /// The numeric code needed by the sender
     pub numeric_code: NumericCode,
+    /// The receiver packet needed by the sender
     pub packet: ReceiverPacket,
 }
 
+/// A sender payload awaiting password-based decryption
 #[derive(Debug)]
 pub struct PendingPayload {
     session_key: SessionKey,
@@ -67,6 +78,7 @@ pub struct PendingPayload {
 }
 
 impl PendingPayload {
+    /// Decrypts and decodes the payload with the transfer password
     pub fn complete(mut self, password: &TeleportPassword) -> Result<DecodedPayload> {
         let noid_key = password.expose_bytes();
         let paranoid_key = self.session_key.paranoid_key(noid_key);

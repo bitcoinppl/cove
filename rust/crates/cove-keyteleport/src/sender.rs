@@ -6,6 +6,7 @@ use crate::{
     receiver,
 };
 
+/// A sender-side KeyTeleport session
 #[derive(Debug)]
 pub struct SenderSession {
     receiver_public_key: PublicKey,
@@ -14,6 +15,7 @@ pub struct SenderSession {
 }
 
 impl SenderSession {
+    /// Creates a sender session from a receiver request
     pub fn new(receiver_packet: &ReceiverPacket, code: &NumericCode) -> Result<Self> {
         Ok(Self {
             receiver_public_key: crypto::decrypt_receiver_pubkey(code, receiver_packet.as_bytes())?,
@@ -22,6 +24,7 @@ impl SenderSession {
         })
     }
 
+    /// Encrypts a payload and returns the sender response
     pub fn send(self, payload: Payload) -> Result<SendResponse> {
         let Self { receiver_public_key, private_key, password } = self;
         let packet =
@@ -80,14 +83,20 @@ mod tests {
     }
 }
 
+/// Input needed to create a sender session
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SendRequest {
+    /// The receiver packet to answer
     pub receiver_packet: ReceiverPacket,
+    /// The receiver's numeric code
     pub numeric_code: NumericCode,
 }
 
+/// An encrypted sender packet and its decryption password
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SendResponse {
+    /// The encrypted packet to return to the receiver
     pub packet: SenderPacket,
+    /// The password to share with the receiver
     pub password: TeleportPassword,
 }
