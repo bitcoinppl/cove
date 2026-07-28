@@ -16,6 +16,12 @@ const RECEIVER_CODE_DOMAIN: &[u8] = b"COLCARD4EVER";
 pub(crate) const RECEIVER_PACKET_LEN: usize = 33;
 const PBKDF2_ITERATIONS: u32 = 5000;
 
+// COLDCARD blinds the compressed-pubkey prefix with a hash byte, then restores a
+// valid SEC1 compressed prefix (0x02 | y_parity) on the receiver side
+const COMPRESSED_PUBKEY_PREFIX_XOR_MASK: u8 = 0xfe;
+const COMPRESSED_PUBKEY_Y_PARITY_MASK: u8 = 0x01;
+const COMPRESSED_PUBKEY_PREFIX: u8 = 0x02;
+
 pub(crate) struct EphemeralPrivateKey(SecretKey);
 
 impl EphemeralPrivateKey {
@@ -108,7 +114,7 @@ pub(crate) fn generate_receiver_packet(
     let mut public_key_bytes = public_key.serialize();
     let hash = receiver_code_hash(private_key);
 
-    public_key_bytes[0] ^= hash[20] & 0xfe;
+    public_key_bytes[0] ^= hash[20] & COMPRESSED_PUBKEY_PREFIX_XOR_MASK;
 
     let numeric_value =
         u32::from_be_bytes(hash[4..8].try_into().expect("hash slice is 4 bytes")) % 100_000_000;
@@ -131,8 +137,8 @@ pub(crate) fn decrypt_receiver_pubkey(code: &NumericCode, payload: &[u8]) -> Res
     let key = receiver_code_aes_key(code);
     apply_aes256_ctr(&key, &mut pubkey);
 
-    pubkey[0] &= 0x01;
-    pubkey[0] |= 0x02;
+    pubkey[0] &= COMPRESSED_PUBKEY_Y_PARITY_MASK;
+    pubkey[0] |= COMPRESSED_PUBKEY_PREFIX;
 
     PublicKey::from_slice(&pubkey).map_err(Into::into)
 }

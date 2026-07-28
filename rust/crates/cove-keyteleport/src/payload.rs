@@ -13,6 +13,25 @@ use crate::{Error, Result};
 
 const MAINNET_XPRV_VERSION: [u8; 4] = [0x04, 0x88, 0xad, 0xe4];
 
+// KeyTeleport payload type codes (first byte of the decrypted body)
+const PAYLOAD_CODE_STASH: u8 = b's';
+const PAYLOAD_CODE_XPRV: u8 = b'x';
+const PAYLOAD_CODE_NOTES: u8 = b'n';
+const PAYLOAD_CODE_VAULT: u8 = b'v';
+const PAYLOAD_CODE_PSBT: u8 = b'p';
+const PAYLOAD_CODE_BACKUP: u8 = b'b';
+
+// COLDCARD 72-byte stash layout (payload type `s`): first body byte is a marker
+//
+// - 0x01: master xprv as chain_code || private_key
+// - 0x10..=0x40: raw BIP32 master secret; marker is the secret length in bytes
+// - high bit set: BIP39 entropy; low bits encode length as ((marker & 0x03) + 2) * 8
+const STASH_LEN: usize = 72;
+const STASH_MARKER_XPRV: u8 = 0x01;
+const STASH_MARKER_MNEMONIC_FLAG: u8 = 0x80;
+const STASH_MNEMONIC_ENTROPY_UNITS_MASK: u8 = 0x03;
+const STASH_RAW_MASTER_SECRET_LEN: std::ops::RangeInclusive<u8> = 0x10..=0x40;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnsupportedPayloadKind {
     Vault,
@@ -24,9 +43,9 @@ pub enum UnsupportedPayloadKind {
 impl fmt::Display for UnsupportedPayloadKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Vault => f.write_str("v"),
-            Self::Psbt => f.write_str("p"),
-            Self::Backup => f.write_str("b"),
+            Self::Vault => write!(f, "{}", PAYLOAD_CODE_VAULT as char),
+            Self::Psbt => write!(f, "{}", PAYLOAD_CODE_PSBT as char),
+            Self::Backup => write!(f, "{}", PAYLOAD_CODE_BACKUP as char),
             Self::Unknown(code) => write!(f, "0x{code:02x}"),
         }
     }
@@ -296,12 +315,12 @@ impl DecodedPayload {
         let (&code, body) = bytes.split_first().ok_or(Error::InvalidPacket)?;
 
         match code {
-            b's' => decode_stash_payload(body),
-            b'x' => decode_xprv_body(body),
-            b'n' => decode_notes_body(body),
-            b'v' => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Vault)),
-            b'p' => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Psbt)),
-            b'b' => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Backup)),
+            PAYLOAD_CODE_STASH => decode_stash_payload(body),
+            PAYLOAD_CODE_XPRV => decode_xprv_body(body),
+            PAYLOAD_CODE_NOTES => decode_notes_body(body),
+            PAYLOAD_CODE_VAULT => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Vault)),
+            PAYLOAD_CODE_PSBT => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Psbt)),
+            PAYLOAD_CODE_BACKUP => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Backup)),
             other => Err(Error::UnsupportedPayload(UnsupportedPayloadKind::Unknown(other))),
         }
     }
@@ -323,9 +342,9 @@ fn encode_mnemonic_payload(mnemonic: &Mnemonic) -> Result<Zeroizing<Vec<u8>>> {
         return Err(Error::UnsupportedMnemonicWordCount(mnemonic.word_count()));
     }
 
-    let marker = 0x80 | ((entropy.len() / 8) - 2) as u8;
+    let marker = STASH_MARKER_MNEMONIC_FLAG | ((entropy.len() / 8) - 2) as u8;
     let mut encoded = Zeroizing::new(Vec::with_capacity(1 + 1 + entropy.len()));
-    encoded.push(b's');
+    encoded.push(PAYLOAD_CODE_STASH);
     encoded.push(marker);
     encoded.extend_from_slice(&entropy);
     trim_stash_padding(&mut encoded);
@@ -338,8 +357,8 @@ fn encode_xprv_payload(xprv: &XprvPayload) -> Result<Zeroizing<Vec<u8>>> {
     let private_key = Zeroizing::new(xprv.private_key.secret_bytes());
 
     let mut encoded = Zeroizing::new(Vec::with_capacity(66));
-    encoded.push(b's');
-    encoded.push(0x01);
+    encoded.push(PAYLOAD_CODE_STASH);
+    encoded.push(STASH_MARKER_XPRV);
     encoded.extend_from_slice(xprv.chain_code.as_bytes());
     encoded.extend_from_slice(private_key.as_ref());
     trim_stash_padding(&mut encoded);
@@ -354,34 +373,34 @@ fn is_master_xprv(xprv: &Xpriv) -> bool {
 }
 
 fn decode_stash_payload(body: &[u8]) -> Result<DecodedPayload> {
-    if body.is_empty() || body.len() > 72 {
+    if body.is_empty() || body.len() > STASH_LEN {
         return Err(Error::InvalidMnemonicPayload);
     }
 
     // COLDCARD strips trailing zeroes from its 72-byte stash before transport
-    let mut stash = Zeroizing::new([0_u8; 72]);
+    let mut stash = Zeroizing::new([0_u8; STASH_LEN]);
     stash[..body.len()].copy_from_slice(body);
     let marker = stash[0];
     let rest = &stash[1..];
 
-    if marker == 0x01 {
+    if marker == STASH_MARKER_XPRV {
         return decode_stash_xprv(rest);
     }
 
     // COLDCARD raw BIP32 master secret: marker is the byte length (16-64),
     // body is the raw seed, and the wallet key is the BIP32 master derived
     // from it (HMAC-SHA512 "Bitcoin seed"), matching COLDCARD's hd.from_master
-    if (0x10..=0x40).contains(&marker) {
+    if STASH_RAW_MASTER_SECRET_LEN.contains(&marker) {
         let xprv = Xpriv::new_master(NetworkKind::Main, &rest[..usize::from(marker)])
             .map_err(|_| Error::InvalidXprvPayload)?;
         return Ok(DecodedPayload::Xprv(XprvPayload { value: xprv.to_string() }));
     }
 
-    if marker & 0x80 == 0 {
+    if marker & STASH_MARKER_MNEMONIC_FLAG == 0 {
         return Err(Error::InvalidMnemonicPayload);
     }
 
-    let entropy_len = usize::from((marker & 0x03) + 2) * 8;
+    let entropy_len = usize::from((marker & STASH_MNEMONIC_ENTROPY_UNITS_MASK) + 2) * 8;
     if !matches!(entropy_len, 16 | 24 | 32) || rest.len() < entropy_len {
         return Err(Error::InvalidMnemonicPayload);
     }
@@ -500,7 +519,7 @@ mod tests {
         let mnemonic = Mnemonic::from_entropy(&[0_u8; 16]).unwrap();
         let encoded = Payload::mnemonic(mnemonic.clone()).unwrap().encode().unwrap();
 
-        assert_eq!(encoded.as_slice(), &[b's', 0x80]);
+        assert_eq!(encoded.as_slice(), &[PAYLOAD_CODE_STASH, STASH_MARKER_MNEMONIC_FLAG]);
         assert_eq!(DecodedPayload::decode(&encoded).unwrap(), DecodedPayload::Mnemonic(mnemonic));
     }
 
@@ -509,7 +528,7 @@ mod tests {
         let xprv = Xpriv::from_str(XPRV).unwrap();
         let encoded = Payload::xprv(XPRV).unwrap().encode().unwrap();
 
-        assert_eq!(&encoded[..2], &[b's', 0x01]);
+        assert_eq!(&encoded[..2], &[PAYLOAD_CODE_STASH, STASH_MARKER_XPRV]);
         assert_eq!(&encoded[2..34], xprv.chain_code.as_bytes());
         assert_eq!(&encoded[34..66], &xprv.private_key.secret_bytes());
     }
@@ -520,7 +539,7 @@ mod tests {
         let mut private_key = [1_u8; 32];
         private_key[31] = 0;
         SecretKey::from_slice(&private_key).unwrap();
-        let mut encoded = vec![b's', 0x01];
+        let mut encoded = vec![PAYLOAD_CODE_STASH, STASH_MARKER_XPRV];
         encoded.extend_from_slice(&chain_code);
         encoded.extend_from_slice(&private_key);
         trim_stash_padding(&mut encoded);
@@ -538,7 +557,7 @@ mod tests {
     fn raw_master_secret_stash_decodes_as_bip32_master() {
         for seed_len in [16_usize, 32, 64] {
             let seed = vec![7_u8; seed_len];
-            let mut encoded = vec![b's', seed_len as u8];
+            let mut encoded = vec![PAYLOAD_CODE_STASH, seed_len as u8];
             encoded.extend_from_slice(&seed);
 
             let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&encoded).unwrap() else {
@@ -554,7 +573,7 @@ mod tests {
     fn raw_master_secret_stash_restores_trimmed_trailing_zeros() {
         let mut seed = [9_u8; 24];
         seed[20..].fill(0);
-        let mut encoded = vec![b's', 24];
+        let mut encoded = vec![PAYLOAD_CODE_STASH, 24];
         encoded.extend_from_slice(&seed);
         trim_stash_padding(&mut encoded);
         assert!(encoded.len() < 26);
@@ -570,7 +589,7 @@ mod tests {
     #[test]
     fn raw_master_secret_stash_rejects_out_of_range_lengths() {
         for marker in [0x02_u8, 0x0f, 0x41, 0x7f] {
-            let mut encoded = vec![b's', marker];
+            let mut encoded = vec![PAYLOAD_CODE_STASH, marker];
             encoded.extend_from_slice(&[3_u8; 70]);
 
             assert!(
@@ -585,7 +604,7 @@ mod tests {
         let master = Xpriv::from_str(XPRV).unwrap();
         let secp = bitcoin::secp256k1::Secp256k1::new();
         let child = master.derive_priv(&secp, &[ChildNumber::Hardened { index: 7 }]).unwrap();
-        let mut payload = vec![b'x'];
+        let mut payload = vec![PAYLOAD_CODE_XPRV];
         payload.extend_from_slice(&child.encode());
 
         let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&payload).unwrap() else {
@@ -603,7 +622,7 @@ mod tests {
     #[test]
     fn full_xprv_payload_rejects_non_mainnet_keys() {
         let testnet = Xpriv::new_master(NetworkKind::Test, &[42; 32]).unwrap();
-        let mut payload = Zeroizing::new(vec![b'x']);
+        let mut payload = Zeroizing::new(vec![PAYLOAD_CODE_XPRV]);
         payload.extend_from_slice(&testnet.encode());
 
         assert!(matches!(DecodedPayload::decode(&payload), Err(Error::NonMainnetXprvPayload)));
@@ -691,9 +710,9 @@ mod tests {
     #[test]
     fn other_unsupported_payload_types_remain_typed() {
         for (code, expected) in [
-            (b'v', UnsupportedPayloadKind::Vault),
-            (b'p', UnsupportedPayloadKind::Psbt),
-            (b'b', UnsupportedPayloadKind::Backup),
+            (PAYLOAD_CODE_VAULT, UnsupportedPayloadKind::Vault),
+            (PAYLOAD_CODE_PSBT, UnsupportedPayloadKind::Psbt),
+            (PAYLOAD_CODE_BACKUP, UnsupportedPayloadKind::Backup),
             (b'?', UnsupportedPayloadKind::Unknown(b'?')),
         ] {
             assert!(matches!(
