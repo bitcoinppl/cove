@@ -422,8 +422,8 @@ impl Keychain {
 
     /// Saves a hot wallet secret encrypted in the keychain
     ///
-    /// Mnemonics and extended private keys share the legacy wallet-mnemonic
-    /// entries. Existing complete pairs are never replaced
+    /// Mnemonics and extended private keys share the same wallet-mnemonic
+    /// keychain entries. Existing complete pairs are never replaced
     ///
     /// # Errors
     ///
@@ -865,7 +865,7 @@ mod tests {
         Xpriv::new_master(bitcoin::Network::Bitcoin, &[42; 32]).unwrap()
     }
 
-    fn save_legacy_wallet_mnemonic(keychain: &Keychain, id: &WalletId, mnemonic: &Mnemonic) {
+    fn save_untagged_wallet_mnemonic(keychain: &Keychain, id: &WalletId, mnemonic: &Mnemonic) {
         let mut cryptor = Cryptor::new();
         let encrypted = cryptor.encrypt_to_string(&mnemonic.to_string()).unwrap();
 
@@ -895,7 +895,7 @@ mod tests {
     }
 
     #[test]
-    fn wallet_secret_mnemonic_keeps_legacy_serialization() {
+    fn wallet_secret_mnemonic_serialization_is_untagged() {
         let expected = mnemonic();
         let serialized = WalletSecret::Mnemonic(expected.clone()).serialize();
 
@@ -903,11 +903,11 @@ mod tests {
     }
 
     #[test]
-    fn legacy_untagged_wallet_mnemonic_remains_readable() {
+    fn untagged_wallet_mnemonic_remains_readable() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
         let expected = mnemonic();
-        save_legacy_wallet_mnemonic(&keychain, &id, &expected);
+        save_untagged_wallet_mnemonic(&keychain, &id, &expected);
 
         assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected.clone()));
         assert_eq!(
@@ -1055,7 +1055,7 @@ mod tests {
     }
 
     #[test]
-    fn wallet_secret_uses_exact_legacy_key_names() {
+    fn wallet_secret_uses_exact_wallet_mnemonic_key_names() {
         let access = FailingKeychain::default();
         let keychain =
             Keychain(Arc::new(Box::new(access.clone())), Arc::new(parking_lot::Mutex::new(())));
@@ -1091,7 +1091,7 @@ mod tests {
     }
 
     #[test]
-    fn xpriv_saved_under_legacy_keys_is_tagged() {
+    fn xpriv_saved_under_wallet_mnemonic_keys_is_tagged() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
         let expected = xpriv();
@@ -1148,7 +1148,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_wallet_secret_removes_legacy_and_stale_v2_keys() {
+    fn delete_wallet_secret_removes_wallet_mnemonic_and_stale_v2_keys() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
         keychain.save_wallet_key(&id, mnemonic()).unwrap();
