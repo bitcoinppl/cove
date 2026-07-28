@@ -77,9 +77,12 @@ fun KeyTeleportContainer(
     KeyTeleportOverlays(
         app = app,
         manager = manager,
-        route = route,
-        showScanner = showScanner,
-        localError = localError,
+        overlay =
+            KeyTeleportOverlayState(
+                route = route,
+                showScanner = showScanner,
+                localError = localError,
+            ),
         actions =
             KeyTeleportOverlayActions(
                 onScannerDismiss = { showScanner = false },
@@ -345,16 +348,18 @@ private fun KeyTeleportRouteHeader(route: KeyTeleportRoute) {
 private fun KeyTeleportOverlays(
     app: AppManager,
     manager: KeyTeleportManager,
-    route: KeyTeleportRoute,
-    showScanner: Boolean,
-    localError: String?,
+    overlay: KeyTeleportOverlayState,
     actions: KeyTeleportOverlayActions,
 ) {
-    if (showScanner) {
+    if (overlay.showScanner) {
         QrCodeScanView(
             onScanned = { multiFormat ->
                 actions.onScannerDismiss()
-                if (!manager.ingestKeyTeleportMultiFormat(multiFormat, route.flowDirection())) {
+                if (!manager.ingestKeyTeleportMultiFormat(
+                        multiFormat,
+                        overlay.route.flowDirection(),
+                    )
+                ) {
                     actions.onScanError("Scan the KeyTeleport response expected by this flow.")
                 }
             },
@@ -368,11 +373,17 @@ private fun KeyTeleportOverlays(
         }
     }
     if (manager.alert == null) {
-        localError?.let { message ->
+        overlay.localError?.let { message ->
             KeyTeleportMessageDialog(message, actions.onErrorDismiss)
         }
     }
 }
+
+private data class KeyTeleportOverlayState(
+    val route: KeyTeleportRoute,
+    val showScanner: Boolean,
+    val localError: String?,
+)
 
 private data class KeyTeleportOverlayActions(
     val onScannerDismiss: () -> Unit,

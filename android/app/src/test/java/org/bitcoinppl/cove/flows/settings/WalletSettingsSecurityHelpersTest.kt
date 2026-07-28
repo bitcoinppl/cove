@@ -1,5 +1,6 @@
-package org.bitcoinppl.cove.flows.SettingsFlow
+package org.bitcoinppl.cove.flows.settings
 
+import org.bitcoinppl.cove.flows.SettingsFlow.hasFreshMainCredential
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

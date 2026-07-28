@@ -185,7 +185,7 @@ internal fun ReceiveMnemonicReviewView(
             hint = "Tap to reveal recovery words",
             blurRadius = 10.dp,
             onReveal = {
-                val words = manager.revealMnemonicWords()
+                val words = manager.secrets.revealMnemonicWords()
                 disclosure =
                     if (words.isNullOrEmpty()) {
                         MnemonicDisclosure.Failed
@@ -245,7 +245,7 @@ internal fun ReceiveXprvReviewView(
         }
     }
     LaunchedEffect(review.revealed) {
-        xprv = if (review.revealed) manager.revealXprv() else null
+        xprv = if (review.revealed) manager.secrets.revealXprv() else null
     }
     LaunchedEffect(manager.concealmentGeneration) {
         xprv = null

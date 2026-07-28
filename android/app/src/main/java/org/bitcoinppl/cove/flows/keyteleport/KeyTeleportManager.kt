@@ -47,6 +47,8 @@ class KeyTeleportManager internal constructor(
             Log.w(tag, it)
         }
 
+    internal val secrets = KeyTeleportSecrets(rust, rustGuard)
+
     var state by mutableStateOf(rust.state())
         private set
 
@@ -110,15 +112,14 @@ class KeyTeleportManager internal constructor(
     }
 
     internal fun ensureReceiveStarted(): Boolean {
-        when (state.flowDirection()) {
-            KeyTeleportFlowDirection.RECEIVE -> return true
-            KeyTeleportFlowDirection.SEND -> return false
-            null -> Unit
+        return when (state.flowDirection()) {
+            KeyTeleportFlowDirection.RECEIVE -> true
+            KeyTeleportFlowDirection.SEND -> false
+            null -> {
+                dispatch(KeyTeleportManagerAction.StartReceive)
+                true
+            }
         }
-
-        dispatch(KeyTeleportManagerAction.StartReceive)
-
-        return true
     }
 
     internal fun startSendFromWallet(walletId: WalletId): Boolean {
@@ -154,21 +155,6 @@ class KeyTeleportManager internal constructor(
     fun clearAlertForDisplay() {
         alert = null
     }
-
-    fun revealMnemonicWords(): List<String>? =
-        rustGuard.withHandleOr(rust, null) {
-            revealMnemonicWords()
-        }
-
-    fun revealXprv(): String? =
-        rustGuard.withHandleOr(rust, null) {
-            revealXprv()
-        }
-
-    fun isSendEligible(walletId: WalletId): Boolean =
-        rustGuard.withHandleOr(rust, false) {
-            isSendEligible(walletId)
-        }
 
     override fun reconcile(message: KeyTeleportManagerReconcileMessage) {
         if (!acceptingActions.get()) {
@@ -235,6 +221,21 @@ class KeyTeleportManager internal constructor(
             rustScope.cancel()
         }
     }
+}
+
+internal class KeyTeleportSecrets(
+    private val rust: RustKeyTeleportManager,
+    private val rustGuard: RustHandleGuard,
+) {
+    fun revealMnemonicWords(): List<String>? =
+        rustGuard.withHandleOr(rust, null) {
+            revealMnemonicWords()
+        }
+
+    fun revealXprv(): String? =
+        rustGuard.withHandleOr(rust, null) {
+            revealXprv()
+        }
 }
 
 internal fun KeyTeleportManagerState.flowDirection(): KeyTeleportFlowDirection? =

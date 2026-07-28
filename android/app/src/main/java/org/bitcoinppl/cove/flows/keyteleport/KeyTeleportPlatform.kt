@@ -61,7 +61,9 @@ internal fun KeyTeleportManager.ingestKeyTeleportText(
 
 internal fun KeyTeleportAlert.messageForDisplay(): String =
     receiveMessageForDisplay()
-        ?: nonReceiveMessageForDisplay()
+        ?: transferMessageForDisplay()
+        ?: serviceMessageForDisplay()
+        ?: "Something went wrong with KeyTeleport."
 
 private fun KeyTeleportAlert.receiveMessageForDisplay(): String? =
     when (this) {
@@ -76,7 +78,7 @@ private fun KeyTeleportAlert.receiveMessageForDisplay(): String? =
         else -> null
     }
 
-private fun KeyTeleportAlert.nonReceiveMessageForDisplay(): String =
+private fun KeyTeleportAlert.transferMessageForDisplay(): String? =
     when (this) {
         is KeyTeleportAlert.ParseFailed -> "That is not a valid KeyTeleport code."
         is KeyTeleportAlert.ConflictingTransferDirection ->
@@ -88,11 +90,16 @@ private fun KeyTeleportAlert.nonReceiveMessageForDisplay(): String =
         is KeyTeleportAlert.NoEligibleWallets -> "No eligible hot wallets are available on this device."
         is KeyTeleportAlert.IneligibleWallet -> "That wallet is not eligible for KeyTeleport."
         is KeyTeleportAlert.NoPendingSend -> "There is no pending send in progress."
+        else -> null
+    }
+
+private fun KeyTeleportAlert.serviceMessageForDisplay(): String? =
+    when (this) {
         is KeyTeleportAlert.ImportFailed -> v1
         is KeyTeleportAlert.Keychain -> v1
         is KeyTeleportAlert.Protocol -> v1
         is KeyTeleportAlert.Database -> v1
-        else -> "Something went wrong with KeyTeleport."
+        else -> null
     }
 
 internal fun readClipboardText(context: Context): String? {

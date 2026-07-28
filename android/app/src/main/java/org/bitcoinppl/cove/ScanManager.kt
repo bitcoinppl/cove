@@ -36,6 +36,7 @@ class ScanManager private constructor() {
     private val tag = "ScanManager"
 
     private val app: AppManager get() = AppManager.getInstance()
+    private val keyTeleport = KeyTeleportScanHandler(app)
 
     fun handleMultiFormat(multiFormat: MultiFormat) {
         try {
@@ -91,145 +92,17 @@ class ScanManager private constructor() {
             }
 
             is MultiFormat.KeyTeleportReceiver -> {
-                handleKeyTeleportReceiver(multiFormat.v1)
+                keyTeleport.handleReceiver(multiFormat.v1)
             }
 
             is MultiFormat.KeyTeleportSender -> {
-                handleKeyTeleportSender(multiFormat.v1)
+                keyTeleport.handleSender(multiFormat.v1)
             }
         }
     }
 
-    internal fun handleKeyTeleportText(input: String): KeyTeleportIngestOutcome {
-        val text = input.trim()
-        val parseResult =
-            try {
-                KeyTeleportTextParseResult.Parsed(
-                    StringOrData.String(text).tryIntoMultiFormat(),
-                )
-            } catch (_: MultiFormatException.KeyTeleportPsbtNotSupported) {
-                KeyTeleportTextParseResult.UnsupportedPsbt
-            } catch (_: Exception) {
-                val normalized = text.lowercase()
-                val looksLikeKeyTeleport =
-                    normalized.contains("keyteleport.com") ||
-                        normalized.startsWith("b\$2r") ||
-                        normalized.startsWith("b\$2s") ||
-                        normalized.startsWith("b\$2p")
-
-                if (looksLikeKeyTeleport) {
-                    KeyTeleportTextParseResult.InvalidPacket
-                } else {
-                    KeyTeleportTextParseResult.NotKeyTeleport
-                }
-            }
-
-        return when (parseResult) {
-            is KeyTeleportTextParseResult.Parsed ->
-                when (val multiFormat = parseResult.multiFormat) {
-                    is MultiFormat.KeyTeleportReceiver ->
-                        ingestOutcome(handleKeyTeleportReceiver(multiFormat.v1))
-
-                    is MultiFormat.KeyTeleportSender ->
-                        ingestOutcome(handleKeyTeleportSender(multiFormat.v1))
-
-                    else -> {
-                        multiFormat.destroy()
-                        KeyTeleportIngestOutcome.NOT_KEY_TELEPORT
-                    }
-                }
-
-            KeyTeleportTextParseResult.UnsupportedPsbt -> {
-                app.alertState =
-                    TaggedItem(
-                        AppAlertState.InvalidFileFormat(
-                            "KeyTeleport PSBT packets are not supported yet.",
-                        ),
-                    )
-                KeyTeleportIngestOutcome.REJECTED
-            }
-
-            KeyTeleportTextParseResult.InvalidPacket -> {
-                app.alertState =
-                    TaggedItem(
-                        AppAlertState.InvalidFileFormat(
-                            "This KeyTeleport packet could not be read.",
-                        ),
-                    )
-                KeyTeleportIngestOutcome.REJECTED
-            }
-
-            KeyTeleportTextParseResult.NotKeyTeleport -> KeyTeleportIngestOutcome.NOT_KEY_TELEPORT
-        }
-    }
-
-    private fun handleKeyTeleportReceiver(packet: KeyTeleportReceiverPacket): Boolean =
-        ingestKeyTeleportPacket(
-            input = KeyTeleportInput.Receiver(packet),
-            direction = KeyTeleportFlowDirection.SEND,
-            route = RouteFactory().keyTeleportSend(),
-        )
-
-    private fun handleKeyTeleportSender(packet: KeyTeleportSenderPacket): Boolean =
-        ingestKeyTeleportPacket(
-            input = KeyTeleportInput.Sender(packet),
-            direction = KeyTeleportFlowDirection.RECEIVE,
-            route = RouteFactory().keyTeleportReceive(),
-        )
-
-    private fun ingestKeyTeleportPacket(
-        input: KeyTeleportInput,
-        direction: KeyTeleportFlowDirection,
-        route: Route,
-    ): Boolean {
-        val manager = app.getKeyTeleportManager()
-        val ingested =
-            if (canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
-                manager.ingest(input, direction)
-            } else {
-                input.destroy()
-                false
-            }
-
-        if (!ingested) {
-            showKeyTeleportFlowConflict()
-            return false
-        }
-
-        if (app.currentRoute != route) {
-            app.pushRoute(route)
-        }
-
-        return true
-    }
-
-    private fun canRouteKeyTeleportPacket(
-        managerDirection: KeyTeleportFlowDirection?,
-        targetRoute: Route,
-    ): Boolean {
-        val targetDirection = targetRoute.keyTeleportFlowDirection() ?: return false
-        val activeRouteDirections =
-            (listOf(app.router.default) + app.router.routes)
-                .filterIsInstance<Route.KeyTeleport>()
-                .mapNotNull(Route::keyTeleportFlowDirection)
-
-        return canRouteKeyTeleportPacket(
-            managerDirection = managerDirection,
-            targetDirection = targetDirection,
-            activeRouteDirections = activeRouteDirections,
-            currentRouteDirection = app.currentRoute.keyTeleportFlowDirection(),
-        )
-    }
-
-    private fun showKeyTeleportFlowConflict() {
-        app.alertState =
-            TaggedItem(
-                AppAlertState.General(
-                    title = "KeyTeleport",
-                    message = "Finish the active KeyTeleport flow before opening a different transfer.",
-                ),
-            )
-    }
+    internal fun handleKeyTeleportText(input: String): KeyTeleportIngestOutcome =
+        keyTeleport.handleText(input)
 
     private fun importLabels(labels: Bip329Labels) {
         val manager = app.walletManager
@@ -407,6 +280,141 @@ class ScanManager private constructor() {
     }
 }
 
+private class KeyTeleportScanHandler(
+    private val app: AppManager,
+) {
+    fun handleText(input: String): KeyTeleportIngestOutcome {
+        val text = input.trim()
+        val parseResult =
+            try {
+                KeyTeleportTextParseResult.Parsed(
+                    StringOrData.String(text).tryIntoMultiFormat(),
+                )
+            } catch (_: MultiFormatException.KeyTeleportPsbtNotSupported) {
+                KeyTeleportTextParseResult.UnsupportedPsbt
+            } catch (_: Exception) {
+                val normalized = text.lowercase()
+                val looksLikeKeyTeleport =
+                    normalized.contains("keyteleport.com") ||
+                        normalized.startsWith("b\$2r") ||
+                        normalized.startsWith("b\$2s") ||
+                        normalized.startsWith("b\$2p")
+
+                if (looksLikeKeyTeleport) {
+                    KeyTeleportTextParseResult.InvalidPacket
+                } else {
+                    KeyTeleportTextParseResult.NotKeyTeleport
+                }
+            }
+
+        return when (parseResult) {
+            is KeyTeleportTextParseResult.Parsed ->
+                when (val multiFormat = parseResult.multiFormat) {
+                    is MultiFormat.KeyTeleportReceiver ->
+                        ingestOutcome(handleReceiver(multiFormat.v1))
+
+                    is MultiFormat.KeyTeleportSender ->
+                        ingestOutcome(handleSender(multiFormat.v1))
+
+                    else -> {
+                        multiFormat.destroy()
+                        KeyTeleportIngestOutcome.NOT_KEY_TELEPORT
+                    }
+                }
+
+            KeyTeleportTextParseResult.UnsupportedPsbt -> {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.InvalidFileFormat(
+                            "KeyTeleport PSBT packets are not supported yet.",
+                        ),
+                    )
+                KeyTeleportIngestOutcome.REJECTED
+            }
+
+            KeyTeleportTextParseResult.InvalidPacket -> {
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.InvalidFileFormat(
+                            "This KeyTeleport packet could not be read.",
+                        ),
+                    )
+                KeyTeleportIngestOutcome.REJECTED
+            }
+
+            KeyTeleportTextParseResult.NotKeyTeleport -> KeyTeleportIngestOutcome.NOT_KEY_TELEPORT
+        }
+    }
+
+    fun handleReceiver(packet: KeyTeleportReceiverPacket): Boolean =
+        ingestKeyTeleportPacket(
+            input = KeyTeleportInput.Receiver(packet),
+            direction = KeyTeleportFlowDirection.SEND,
+            route = RouteFactory().keyTeleportSend(),
+        )
+
+    fun handleSender(packet: KeyTeleportSenderPacket): Boolean =
+        ingestKeyTeleportPacket(
+            input = KeyTeleportInput.Sender(packet),
+            direction = KeyTeleportFlowDirection.RECEIVE,
+            route = RouteFactory().keyTeleportReceive(),
+        )
+
+    private fun ingestKeyTeleportPacket(
+        input: KeyTeleportInput,
+        direction: KeyTeleportFlowDirection,
+        route: Route,
+    ): Boolean {
+        val manager = app.getKeyTeleportManager()
+        val ingested =
+            if (canRouteKeyTeleportPacket(manager.activeFlowDirection, route)) {
+                manager.ingest(input, direction)
+            } else {
+                input.destroy()
+                false
+            }
+
+        if (!ingested) {
+            showKeyTeleportFlowConflict()
+            return false
+        }
+
+        if (app.currentRoute != route) {
+            app.pushRoute(route)
+        }
+
+        return true
+    }
+
+    private fun canRouteKeyTeleportPacket(
+        managerDirection: KeyTeleportFlowDirection?,
+        targetRoute: Route,
+    ): Boolean {
+        val targetDirection = targetRoute.keyTeleportFlowDirection() ?: return false
+        val activeRouteDirections =
+            (listOf(app.router.default) + app.router.routes)
+                .filterIsInstance<Route.KeyTeleport>()
+                .mapNotNull(Route::keyTeleportFlowDirection)
+
+        return canRouteKeyTeleportPacket(
+            managerDirection = managerDirection,
+            targetDirection = targetDirection,
+            activeRouteDirections = activeRouteDirections,
+            currentRouteDirection = app.currentRoute.keyTeleportFlowDirection(),
+        )
+    }
+
+    private fun showKeyTeleportFlowConflict() {
+        app.alertState =
+            TaggedItem(
+                AppAlertState.General(
+                    title = "KeyTeleport",
+                    message = "Finish the active KeyTeleport flow before opening a different transfer.",
+                ),
+            )
+    }
+}
+
 private fun ingestOutcome(ingested: Boolean): KeyTeleportIngestOutcome =
     if (ingested) KeyTeleportIngestOutcome.INGESTED else KeyTeleportIngestOutcome.REJECTED
 
@@ -426,10 +434,12 @@ internal fun canRouteKeyTeleportPacket(
     activeRouteDirections: List<KeyTeleportFlowDirection>,
     currentRouteDirection: KeyTeleportFlowDirection?,
 ): Boolean {
-    if (managerDirection != null && managerDirection != targetDirection) return false
-    if (activeRouteDirections.any { it != targetDirection }) return false
+    val managerCanRoute = managerDirection == null || managerDirection == targetDirection
+    val activeRoutesMatch = activeRouteDirections.all { it == targetDirection }
+    val currentRouteMatches =
+        activeRouteDirections.isEmpty() || currentRouteDirection == targetDirection
 
-    return activeRouteDirections.isEmpty() || currentRouteDirection == targetDirection
+    return managerCanRoute && activeRoutesMatch && currentRouteMatches
 }
 
 val Scanner: ScanManager

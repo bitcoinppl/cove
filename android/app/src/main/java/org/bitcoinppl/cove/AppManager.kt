@@ -238,11 +238,12 @@ class AppManager private constructor() : FfiReconcile {
         if (routeStackContainsKeyTeleport(router.default, router.routes)) return false
 
         val manager = getKeyTeleportManager()
-        if (!manager.startSendFromWallet(walletId)) return false
+        val started = manager.startSendFromWallet(walletId)
+        if (started) {
+            router.pushRoute(RouteFactory().keyTeleportSend())
+        }
 
-        router.pushRoute(RouteFactory().keyTeleportSend())
-
-        return true
+        return started
     }
 
     fun canKeyTeleportSend(walletId: WalletId): Boolean =

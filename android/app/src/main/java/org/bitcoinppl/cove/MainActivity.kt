@@ -2,10 +2,8 @@ package org.bitcoinppl.cove
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -89,10 +87,12 @@ class MainActivity : FragmentActivity() {
     // view-based privacy cover - updates synchronously (unlike Compose state)
     private var privacyCoverView: View? = null
     private var isBootstrapped = false
-    private var handledExternalIntentSignature: String? = null
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var isPrivacyCoverVisible by mutableStateOf(false)
     private val onboardingManagerViewModel by viewModels<OnboardingManagerViewModel>()
+    private val externalKeyTeleportIntents by lazy(LazyThreadSafetyMode.NONE) {
+        ExternalKeyTeleportIntentHandler(this)
+    }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -358,7 +358,7 @@ class MainActivity : FragmentActivity() {
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
-                            handleExternalKeyTeleportIntent(intent)
+                            externalKeyTeleportIntents.handle(intent)
 
                             // non-blocking — initData preloads caches and prices but is not
                             // required for core functionality, failures are logged but not surfaced to the user
@@ -475,88 +475,8 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (isBootstrapped) {
-            handleExternalKeyTeleportIntent(intent)
+            externalKeyTeleportIntents.handle(intent)
         }
-    }
-
-    private fun handleExternalKeyTeleportIntent(intent: Intent?) {
-        if (intent == null || !isExternalKeyTeleportIntentAllowed(intent)) {
-            return
-        }
-
-        val text =
-            when (intent.action) {
-                Intent.ACTION_VIEW -> intent.dataString
-                Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
-                else -> null
-            }?.trim()
-
-        if (text.isNullOrEmpty()) {
-            return
-        }
-
-        val signature = "${intent.action}:$text"
-        val signatureMatches = signature == handledExternalIntentSignature
-        if (shouldSkipHandledExternalIntent(
-                signatureMatches = signatureMatches,
-                hasActiveKeyTeleportFlow = AppManager.getInstance().keyTeleportManager != null,
-            )
-        ) {
-            return
-        }
-
-        // the flow that consumed this link ended, so the same link may be opened again
-        if (signatureMatches) {
-            handledExternalIntentSignature = null
-        }
-
-        when (Scanner.handleKeyTeleportText(text)) {
-            KeyTeleportIngestOutcome.INGESTED -> {
-                handledExternalIntentSignature = signature
-                sanitizeConsumedExternalIntent(intent)
-            }
-
-            KeyTeleportIngestOutcome.REJECTED -> sanitizeConsumedExternalIntent(intent)
-
-            KeyTeleportIngestOutcome.NOT_KEY_TELEPORT -> Unit
-        }
-    }
-
-    private fun isExternalKeyTeleportIntentAllowed(intent: Intent): Boolean {
-        if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return false
-
-        val alias = ComponentName(packageName, KEY_TELEPORT_LINK_ALIAS)
-        val aliasEnabled =
-            runCatching {
-                val setting = packageManager.getComponentEnabledSetting(alias)
-                when (setting) {
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
-                        packageManager
-                            .getActivityInfo(
-                                alias,
-                                PackageManager.ComponentInfoFlags.of(
-                                    PackageManager.MATCH_DISABLED_COMPONENTS.toLong(),
-                                ),
-                            ).enabled
-                    else -> false
-                }
-            }.getOrDefault(false)
-
-        return shouldAcceptExternalKeyTeleportIntent(
-            action = intent.action,
-            componentClassName = intent.component?.className,
-            keyTeleportAliasClassName = KEY_TELEPORT_LINK_ALIAS,
-            keyTeleportAliasEnabled = aliasEnabled,
-        )
-    }
-
-    private fun sanitizeConsumedExternalIntent(intent: Intent) {
-        intent.action = Intent.ACTION_MAIN
-        intent.data = null
-        intent.type = null
-        intent.clipData = null
-        intent.removeExtra(Intent.EXTRA_TEXT)
     }
 
     private fun resetLocalDataForUiTestsIfRequested() {
@@ -588,29 +508,6 @@ class MainActivity : FragmentActivity() {
          *  Prevents a distracting spinner flash when bootstrap completes quickly */
         const val SPINNER_DELAY_MS = 100L
         private const val UI_TEST_RESET_DATA_EXTRA = "org.bitcoinppl.cove.uitest.RESET_DATA"
-        private const val KEY_TELEPORT_LINK_ALIAS = "org.bitcoinppl.cove.KeyTeleportLinkActivity"
         private const val TAG = "MainActivity"
     }
 }
-
-/**
- * A repeated external link is only a duplicate delivery while the flow it opened is still alive;
- * once that flow ends the same link must be able to start a new transfer.
- */
-internal fun shouldSkipHandledExternalIntent(
-    signatureMatches: Boolean,
-    hasActiveKeyTeleportFlow: Boolean,
-): Boolean = signatureMatches && hasActiveKeyTeleportFlow
-
-internal fun shouldAcceptExternalKeyTeleportIntent(
-    action: String?,
-    componentClassName: String?,
-    keyTeleportAliasClassName: String,
-    keyTeleportAliasEnabled: Boolean,
-): Boolean =
-    when (action) {
-        Intent.ACTION_SEND -> keyTeleportAliasEnabled
-        Intent.ACTION_VIEW ->
-            keyTeleportAliasEnabled && componentClassName == keyTeleportAliasClassName
-        else -> false
-    }
