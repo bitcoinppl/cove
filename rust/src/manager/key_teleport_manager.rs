@@ -1244,10 +1244,6 @@ impl RustKeyTeleportManager {
         model.generation
     }
 
-    fn current_generation(&self) -> PhaseGeneration {
-        self.model.lock().generation
-    }
-
     fn take_receive_ready_session(
         &self,
     ) -> Result<(PhaseGeneration, ActiveReceiveSession), KeyTeleportAlert> {
@@ -1665,6 +1661,12 @@ mod tests {
     use crate::wallet_secret::WalletSecretExt as _;
 
     use super::*;
+
+    impl RustKeyTeleportManager {
+        fn current_generation(&self) -> PhaseGeneration {
+            self.model.lock().generation
+        }
+    }
 
     fn init_globals() {
         static INIT: Once = Once::new();
