@@ -50018,6 +50018,17 @@ public object FfiConverterTypeMultiFormatError : FfiConverterRustBuffer<MultiFor
 
 sealed class MultiQrException: kotlin.Exception() {
 
+    /**
+     * A bad frame that did not invalidate the active multipart scan
+     */
+    class RecoverableFrame(
+
+        val v1: kotlin.String
+        ) : MultiQrException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class ParseException(
 
         val v1: kotlin.String
@@ -50088,24 +50099,32 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
 
 
         return when(buf.getInt()) {
-            1 -> MultiQrException.ParseException(
+            1 -> MultiQrException.RecoverableFrame(
                 FfiConverterString.read(buf),
                 )
-            2 -> MultiQrException.InvalidUtf8()
-            3 -> MultiQrException.RequiresStringData()
-            4 -> MultiQrException.InvalidSeedQr(
+            2 -> MultiQrException.ParseException(
+                FfiConverterString.read(buf),
+                )
+            3 -> MultiQrException.InvalidUtf8()
+            4 -> MultiQrException.RequiresStringData()
+            5 -> MultiQrException.InvalidSeedQr(
                 FfiConverterTypeSeedQrError.read(buf),
                 )
-            5 -> MultiQrException.Ur(
+            6 -> MultiQrException.Ur(
                 FfiConverterTypeUrError.read(buf),
                 )
-            6 -> MultiQrException.BbqrCborNotSupported()
+            7 -> MultiQrException.BbqrCborNotSupported()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: MultiQrException): ULong {
         return when(value) {
+            is MultiQrException.RecoverableFrame -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
             is MultiQrException.ParseException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -50138,31 +50157,36 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
 
     override fun write(value: MultiQrException, buf: ByteBuffer) {
         when(value) {
-            is MultiQrException.ParseException -> {
+            is MultiQrException.RecoverableFrame -> {
                 buf.putInt(1)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is MultiQrException.InvalidUtf8 -> {
+            is MultiQrException.ParseException -> {
                 buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is MultiQrException.RequiresStringData -> {
+            is MultiQrException.InvalidUtf8 -> {
                 buf.putInt(3)
                 Unit
             }
-            is MultiQrException.InvalidSeedQr -> {
+            is MultiQrException.RequiresStringData -> {
                 buf.putInt(4)
+                Unit
+            }
+            is MultiQrException.InvalidSeedQr -> {
+                buf.putInt(5)
                 FfiConverterTypeSeedQrError.write(value.v1, buf)
                 Unit
             }
             is MultiQrException.Ur -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeUrError.write(value.v1, buf)
                 Unit
             }
             is MultiQrException.BbqrCborNotSupported -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
