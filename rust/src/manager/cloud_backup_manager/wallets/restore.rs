@@ -258,9 +258,10 @@ impl DownloadedWalletBackup {
                     .map_err_prefix("restore mnemonic wallet", CloudBackupInternalError::from)?;
             }
             LocalWalletSecret::Xprv(value) => {
-                let xpriv = WalletXprv::parse(value.as_str()).map_err(|source| {
-                    CloudBackupError::internal_context("invalid extended private key", source)
-                })?;
+                let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
+                    "invalid extended private key",
+                    CloudBackupInternalError::from,
+                )?;
 
                 crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv)
                     .map_err(|(error, _)| error)
