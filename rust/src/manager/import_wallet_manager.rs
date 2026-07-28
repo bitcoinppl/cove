@@ -46,7 +46,7 @@ pub enum ImportWalletError {
     #[error("failed to create wallet: {0}")]
     BdkError(String),
 
-    #[error("multiple existing wallets match the incoming secret public identity")]
+    #[error("multiple existing wallets could match the incoming secret")]
     WalletIdentityCollision,
 
     #[error("failed to verify existing wallet public identity: {0}")]
@@ -286,31 +286,47 @@ fn existing_wallet_for_secret(
         return Ok(None);
     }
 
-    let mut exact_match = None;
+    let mut exact_matches = Vec::new();
+    let mut degraded_matches = Vec::new();
 
     for metadata in same_fingerprint_wallets {
         let incoming_descriptors = secret.clone().into_descriptors(network, metadata.address_type);
         let incoming_identity = PublicWalletIdentity::from_descriptors(&incoming_descriptors);
-        let existing_identity = PublicWalletIdentity::from_existing_wallet(&metadata, keychain)?
-            .ok_or_else(|| {
-                ImportWalletError::WalletIdentity(format!(
-                    "wallet {} has no stored public descriptors or extended public key",
-                    metadata.id
-                ))
-            })?;
+        let Some(existing_identity) =
+            PublicWalletIdentity::from_existing_wallet(&metadata, keychain)?
+        else {
+            degraded_matches.push((metadata, incoming_identity.redacted_hash()));
+            continue;
+        };
 
         if existing_identity != incoming_identity {
             continue;
         }
 
-        if exact_match.is_some() {
-            return Err(ImportWalletError::WalletIdentityCollision);
-        }
-
-        exact_match = Some(metadata);
+        exact_matches.push(metadata);
     }
 
-    Ok(exact_match)
+    if exact_matches.len() > 1 {
+        return Err(ImportWalletError::WalletIdentityCollision);
+    }
+
+    if let Some(exact_match) = exact_matches.pop() {
+        return Ok(Some(exact_match));
+    }
+
+    if degraded_matches.len() > 1 {
+        return Err(ImportWalletError::WalletIdentityCollision);
+    }
+
+    let Some((degraded_match, incoming_identity_hash)) = degraded_matches.pop() else {
+        return Ok(None);
+    };
+    let wallet_id = &degraded_match.id;
+    warn!(
+        "same-fingerprint wallet missing public identity wallet_id={wallet_id} incoming_identity_hash={incoming_identity_hash}, falling back to fingerprint match"
+    );
+
+    Ok(Some(degraded_match))
 }
 
 fn rollback_created_secret(
@@ -421,6 +437,27 @@ mod tests {
                 descriptors.internal.extended_descriptor,
             )
             .unwrap();
+        Database::global().wallets.save_new_wallet_metadata(metadata.clone()).unwrap();
+
+        metadata
+    }
+
+    fn save_degraded_watch_only_wallet(
+        fingerprint: Fingerprint,
+        network: Network,
+        mode: WalletMode,
+    ) -> WalletMetadata {
+        let id = WalletId::new();
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = id.clone();
+        metadata.name = format!("Degraded watch-only {id}");
+        metadata.master_fingerprint = Some(Arc::new(fingerprint));
+        metadata.network = network;
+        metadata.wallet_mode = mode;
+        metadata.address_type = WalletAddressType::NativeSegwit;
+        metadata.wallet_type = WalletType::WatchOnly;
+        metadata.verified = false;
+
         Database::global().wallets.save_new_wallet_metadata(metadata.clone()).unwrap();
 
         metadata
@@ -569,6 +606,64 @@ mod tests {
             Keychain::global().get_wallet_xpub(&existing.id).unwrap().unwrap(),
             expected_xpub
         );
+    }
+
+    #[test]
+    fn existing_wallet_upgrade_repairs_one_wallet_missing_public_material() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(40);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let degraded =
+            save_degraded_watch_only_wallet(fingerprint, Network::Signet, WalletMode::Decoy);
+
+        let upgraded =
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Decoy).unwrap();
+
+        assert_eq!(upgraded.id, degraded.id);
+        assert_eq!(upgraded.wallet_type, WalletType::Hot);
+        assert!(Keychain::global().get_wallet_secret(&degraded.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn exact_public_identity_match_wins_over_degraded_fingerprint_match() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(41);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let degraded =
+            save_degraded_watch_only_wallet(fingerprint, Network::Signet, WalletMode::Main);
+        let exact =
+            save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Main);
+
+        let upgraded =
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Main).unwrap();
+
+        assert_eq!(upgraded.id, exact.id);
+        assert!(Keychain::global().get_wallet_secret(&exact.id).unwrap().is_some());
+        assert!(Keychain::global().get_wallet_secret(&degraded.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn multiple_degraded_fingerprint_matches_are_ambiguous() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let incoming = xpriv_secret(42);
+        let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
+        let first =
+            save_degraded_watch_only_wallet(fingerprint, Network::Signet, WalletMode::Decoy);
+        let second =
+            save_degraded_watch_only_wallet(fingerprint, Network::Signet, WalletMode::Decoy);
+
+        assert!(matches!(
+            import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Decoy),
+            Err(ImportWalletError::WalletIdentityCollision)
+        ));
+        assert!(Keychain::global().get_wallet_secret(&first.id).unwrap().is_none());
+        assert!(Keychain::global().get_wallet_secret(&second.id).unwrap().is_none());
     }
 
     #[test]

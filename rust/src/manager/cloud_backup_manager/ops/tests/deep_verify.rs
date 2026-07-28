@@ -404,7 +404,7 @@ async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&metadata, &master_key, "unsupported-revision", 2).await,
+        encrypted_wallet_backup_bytes(&metadata, &master_key, "unsupported-revision", 3).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 

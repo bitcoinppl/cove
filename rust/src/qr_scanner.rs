@@ -56,11 +56,8 @@ struct BbqrInProgress {
 }
 
 /// UR scanning in progress
-///
-/// Accepted parts are zeroized on drop for the same reason as [`BbqrInProgress`]
 struct UrInProgress {
     decoder: UrDecoder,
-    accepted_parts: Vec<Zeroizing<String>>,
     previous_progress: Option<ScanProgress>,
 }
 
@@ -76,24 +73,13 @@ impl BbqrInProgress {
     }
 }
 
-impl UrInProgress {
-    fn restore_accepted_parts(&mut self) -> Result<(), MultiQrError> {
-        use cove_ur::UrError;
-
-        let mut decoder = UrDecoder::default();
-        for part in &self.accepted_parts {
-            let ur = Ur::parse(part)?;
-            decoder.receive(ur.to_foundation_ur()?).map_err_str(UrError::UrParseError)?;
-        }
-
-        self.decoder = decoder;
-        Ok(())
-    }
-}
-
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi::export(Display)]
 pub enum MultiQrError {
+    /// A bad frame that did not invalidate the active multipart scan
+    #[error("Recoverable multipart QR frame error: {0}")]
+    RecoverableFrame(String),
+
     #[error("{0}")]
     ParseError(String),
 
@@ -273,7 +259,6 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
 
             let state = QrScanner::InProgress(MultiQr::Ur(Box::new(UrInProgress {
                 decoder,
-                accepted_parts: vec![Zeroizing::new(qr.to_string())],
                 previous_progress: Some(ScanProgress::Ur { percentage }),
             })));
 
@@ -380,12 +365,16 @@ impl QrScanner {
             }
 
             Self::InProgress(MultiQr::Bbqr(bbqr)) => {
-                let qr = qr.into_string()?;
+                let qr = qr
+                    .into_string()
+                    .map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
                 Self::scan_bbqr_part(bbqr, &qr)?
             }
 
             Self::InProgress(MultiQr::Ur(ur)) => {
-                let qr = qr.into_string()?;
+                let qr = qr
+                    .into_string()
+                    .map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
                 Self::scan_ur_part(ur, &qr)?
             }
 
@@ -459,20 +448,13 @@ impl QrScanner {
                     bbqr.restore_accepted_parts()?;
                 }
 
-                return Err(MultiQrError::ParseError(error.to_string()));
+                return Err(MultiQrError::RecoverableFrame(error.to_string()));
             }
         };
 
         match join_result {
             ContinuousJoinResult::Complete(result) => {
-                let multi_format = match parse_bbqr_data(result.data, bbqr.header.file_type) {
-                    Ok(multi_format) => multi_format,
-                    Err(error) => {
-                        bbqr.restore_accepted_parts()?;
-
-                        return Err(error);
-                    }
-                };
+                let multi_format = parse_bbqr_data(result.data, bbqr.header.file_type)?;
                 let result =
                     ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
                 Ok(result)
@@ -507,16 +489,13 @@ impl QrScanner {
     fn scan_ur_part(ur: &mut UrInProgress, qr: &str) -> Result<ScanResult, MultiQrError> {
         use cove_ur::UrError;
 
-        let parsed_ur = Ur::parse(qr)?;
-        let foundation_ur = parsed_ur.to_foundation_ur()?;
+        let parsed_ur =
+            Ur::parse(qr).map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
+        let foundation_ur = parsed_ur
+            .to_foundation_ur()
+            .map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
         if let Err(error) = ur.decoder.receive(foundation_ur) {
-            // only fountain-processing errors occur after the decoder consumed
-            // the part; type/bytewords/CBOR errors happen before any state change
-            if matches!(error, foundation_ur::decoder::Error::Fountain(_)) {
-                ur.restore_accepted_parts()?;
-            }
-
-            return Err(MultiQrError::Ur(UrError::UrParseError(error.to_string())));
+            return Err(MultiQrError::RecoverableFrame(error.to_string()));
         }
 
         if ur.decoder.is_complete() {
@@ -535,15 +514,7 @@ impl QrScanner {
             .map_err(|e| {
                 warn!("Failed to parse UR payload: type={ur_type_str}, error={e:?}");
                 MultiQrError::ParseError(e.to_string())
-            });
-            let multi_format = match multi_format {
-                Ok(multi_format) => multi_format,
-                Err(error) => {
-                    ur.restore_accepted_parts()?;
-
-                    return Err(error);
-                }
-            };
+            })?;
 
             let result =
                 ScanResult::Complete { data: multi_format, haptic: HapticFeedback::Success };
@@ -558,10 +529,6 @@ impl QrScanner {
                 Some(_) => HapticFeedback::None, // duplicate part
                 None => HapticFeedback::Progress,
             };
-
-            if !ur.accepted_parts.iter().any(|part| part.as_str() == qr) {
-                ur.accepted_parts.push(Zeroizing::new(qr.to_string()));
-            }
 
             ur.previous_progress = Some(progress.clone());
             let result = ScanResult::InProgress { progress, haptic };
@@ -1235,7 +1202,6 @@ mod tests {
         }
     }
 
-    /// Test binary data to multi-part scan returns RequiresStringData error
     #[test]
     fn test_binary_data_to_multi_part_scan_error() {
         use bbqr::{
@@ -1270,10 +1236,9 @@ mod tests {
         let binary_data = vec![0x01, 0x02, 0x03];
         let result = scanner.scan(StringOrData::Data(binary_data));
 
-        assert!(result.is_err());
         assert!(
-            matches!(result.unwrap_err(), MultiQrError::RequiresStringData),
-            "Should return RequiresStringData error"
+            matches!(result, Err(MultiQrError::RecoverableFrame(_))),
+            "binary stray frame should be recoverable"
         );
 
         for part in split.parts.iter().skip(1) {
@@ -1294,12 +1259,15 @@ mod tests {
 
         scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
 
+        assert!(matches!(
+            scanner.scan(StringOrData::String("not a bbqr frame".to_string())),
+            Err(MultiQrError::RecoverableFrame(_))
+        ));
         assert!(
-            scanner.scan(StringOrData::String("not a bbqr frame".to_string())).is_err(),
-            "malformed frame should be rejected"
-        );
-        assert!(
-            scanner.scan(StringOrData::String(mismatched_part)).is_err(),
+            matches!(
+                scanner.scan(StringOrData::String(mismatched_part)),
+                Err(MultiQrError::RecoverableFrame(_))
+            ),
             "frame from a different sequence should be rejected"
         );
 
@@ -1325,7 +1293,10 @@ mod tests {
 
         // a stray QR sitting in the camera frame is rejected every frame
         for _ in 0..25 {
-            assert!(scanner.scan(StringOrData::String(mismatched_part.clone())).is_err());
+            assert!(matches!(
+                scanner.scan(StringOrData::String(mismatched_part.clone())),
+                Err(MultiQrError::RecoverableFrame(_))
+            ));
         }
 
         let next = scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
@@ -1340,20 +1311,68 @@ mod tests {
 
     #[test]
     fn malformed_final_bbqr_frame_does_not_poison_progress() {
-        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
-        let parts = multi_part_bbqr_text(address, 3);
+        let mnemonic = format!("{} art", "abandon ".repeat(23).trim_end());
+        let parts = multi_part_bbqr_text(&mnemonic, 2);
+        let malformed_final = (8..parts[1].len())
+            .find_map(|index| {
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".chars().find_map(|replacement| {
+                    if parts[1].as_bytes()[index] == replacement as u8 {
+                        return None;
+                    }
+
+                    let mut candidate = parts[1].clone();
+                    candidate.replace_range(index..=index, &replacement.to_string());
+                    let trial_scanner = QrScannerFFI::new();
+                    trial_scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+
+                    matches!(
+                        trial_scanner.scan(StringOrData::String(candidate.clone())),
+                        Err(MultiQrError::RecoverableFrame(_))
+                    )
+                    .then_some(candidate)
+                })
+            })
+            .expect("fixture should have a decode-level corruption");
+        let scanner = QrScannerFFI::new();
+        scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+
+        let malformed_result = scanner.scan(StringOrData::String(malformed_final));
+        assert!(
+            matches!(malformed_result, Err(MultiQrError::RecoverableFrame(_))),
+            "unexpected malformed-frame result: {malformed_result:?}"
+        );
+
+        let complete = scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+        assert!(matches!(complete, ScanResult::Complete { .. }));
+    }
+
+    #[test]
+    fn completed_payload_semantic_errors_are_fatal() {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let split = Split::try_from_data(
+            &[0xA5; 100],
+            FileType::Cbor,
+            SplitOptions {
+                encoding: Encoding::Hex,
+                min_split_number: 2,
+                max_split_number: 2,
+                min_version: Version::V01,
+                max_version: Version::V40,
+            },
+        )
+        .unwrap();
         let scanner = QrScannerFFI::new();
 
-        scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
-        scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+        scanner.scan(StringOrData::String(split.parts[0].clone())).unwrap();
+        let result = scanner.scan(StringOrData::String(split.parts[1].clone()));
 
-        let mut malformed_final = parts[2].clone();
-        let replacement = if malformed_final.ends_with('A') { "B" } else { "A" };
-        malformed_final.replace_range(malformed_final.len() - 1.., replacement);
-        assert!(scanner.scan(StringOrData::String(malformed_final)).is_err());
-
-        let complete = scanner.scan(StringOrData::String(parts[2].clone())).unwrap();
-        assert!(matches!(complete, ScanResult::Complete { .. }));
+        assert!(matches!(result, Err(MultiQrError::BbqrCborNotSupported)));
     }
 
     #[test]
@@ -1373,12 +1392,10 @@ mod tests {
 
         scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
 
-        assert!(
-            scanner
-                .scan(StringOrData::String("ur:crypto-seed/not-a-valid-frame".to_string()))
-                .is_err(),
-            "malformed frame should be rejected"
-        );
+        assert!(matches!(
+            scanner.scan(StringOrData::String("ur:crypto-seed/not-a-valid-frame".to_string())),
+            Err(MultiQrError::RecoverableFrame(_))
+        ));
 
         let mismatched = parts[1].replacen("crypto-seed", "crypto-psbt", 1).replacen(
             "CRYPTO-SEED",
@@ -1387,7 +1404,10 @@ mod tests {
         );
         assert_ne!(mismatched, parts[1]);
         assert!(
-            scanner.scan(StringOrData::String(mismatched)).is_err(),
+            matches!(
+                scanner.scan(StringOrData::String(mismatched)),
+                Err(MultiQrError::RecoverableFrame(_))
+            ),
             "frame with a different UR type should be rejected"
         );
 

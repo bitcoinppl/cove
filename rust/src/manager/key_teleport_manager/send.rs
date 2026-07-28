@@ -174,17 +174,23 @@ fn eligible_wallets() -> Result<Vec<WalletMetadata>, KeyTeleportAlert> {
     let database = Database::global();
     let network = database.global_config.selected_network();
     let mode = database.global_config.wallet_mode();
+    let wallets = database.wallets.get_all(network, mode)?;
+    let mut eligible = Vec::new();
 
-    database.wallets.get_all(network, mode)?.into_iter().try_fold(
-        Vec::new(),
-        |mut eligible, wallet| {
-            if is_send_eligible(&wallet)? {
-                eligible.push(wallet);
+    for wallet in wallets {
+        match is_send_eligible(&wallet) {
+            Ok(true) => eligible.push(wallet),
+            Ok(false) => {}
+            Err(error) => {
+                let wallet_id = &wallet.id;
+                tracing::warn!(
+                    "unable to determine KeyTeleport send eligibility wallet_id={wallet_id}: {error}"
+                );
             }
+        }
+    }
 
-            Ok(eligible)
-        },
-    )
+    Ok(eligible)
 }
 
 fn eligible_wallet_by_id(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTeleportAlert> {

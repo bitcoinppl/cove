@@ -1,6 +1,6 @@
 use std::str::FromStr as _;
 
-use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
+use cove_cspp::backup_data::{EncryptedWalletBackup, WalletBackupVersion, WalletEntry};
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use cove_device::keychain::WalletXprv;
@@ -135,10 +135,13 @@ impl WalletBackupReader {
         let encrypted: EncryptedWalletBackup = serde_json::from_slice(&wallet_json)
             .map_err(|source| CloudBackupError::internal_context("deserialize wallet", source))?;
 
-        if encrypted.version != 1 {
-            let version = encrypted.version;
-            warn!("Skipping wallet backup with unsupported wallet backup version {version}");
-            return Ok(WalletBackupLookup::UnsupportedVersion(version));
+        match encrypted.backup_version() {
+            Ok(WalletBackupVersion::V1 | WalletBackupVersion::V2) => {}
+            Err(unsupported) => {
+                let version = unsupported.0;
+                warn!("Skipping wallet backup with unsupported wallet backup version {version}");
+                return Ok(WalletBackupLookup::UnsupportedVersion(version));
+            }
         }
 
         Ok(WalletBackupLookup::Found(encrypted))

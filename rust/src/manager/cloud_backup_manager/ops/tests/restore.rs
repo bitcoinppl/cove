@@ -150,13 +150,13 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         supported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 1)
+        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 2)
             .await,
     );
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         unsupported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&unsupported_wallet, &master_key, "unsupported-revision", 2)
+        encrypted_wallet_backup_bytes(&unsupported_wallet, &master_key, "unsupported-revision", 3)
             .await,
     );
     globals.cloud.set_wallet_files(
@@ -1395,7 +1395,7 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
         (&first_wallet, 1),
         (&second_wallet, 1),
         (&newly_appeared_wallet, 1),
-        (&unsupported_wallet, 2),
+        (&unsupported_wallet, 3),
     ];
     for (wallet, version) in authoritative_wallets {
         let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -1547,7 +1547,7 @@ async fn restore_fails_when_all_wallet_backups_are_unsupported() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &master_key, "unsupported-revision", 2).await,
+        encrypted_wallet_backup_bytes(&wallet, &master_key, "unsupported-revision", 3).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 

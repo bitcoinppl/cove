@@ -54,7 +54,7 @@ pub enum KeyTeleportManagerReconcileMessage {
     ClearAlert,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum KeyTeleportManagerAction {
     StartReceive,
     /// Invalidates the active receive request and creates a new one
@@ -72,6 +72,30 @@ pub enum KeyTeleportManagerAction {
     HideXprv,
     FinishReview,
     Clear,
+}
+
+impl fmt::Debug for KeyTeleportManagerAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StartReceive => f.write_str("StartReceive"),
+            Self::RestartReceive => f.write_str("RestartReceive"),
+            Self::EndReceive => f.write_str("EndReceive"),
+            Self::Ingest(input) => f.debug_tuple("Ingest").field(input).finish(),
+            Self::StartSendFromWallet(wallet_id) => {
+                f.debug_tuple("StartSendFromWallet").field(wallet_id).finish()
+            }
+            Self::SelectSendWallet(wallet_id) => {
+                f.debug_tuple("SelectSendWallet").field(wallet_id).finish()
+            }
+            Self::EnterReceiverCode(_) => f.write_str("EnterReceiverCode(****)"),
+            Self::EnterSenderPassword(_) => f.write_str("EnterSenderPassword(****)"),
+            Self::ImportReceivedWallet => f.write_str("ImportReceivedWallet"),
+            Self::RevealXprv => f.write_str("RevealXprv"),
+            Self::HideXprv => f.write_str("HideXprv"),
+            Self::FinishReview => f.write_str("FinishReview"),
+            Self::Clear => f.write_str("Clear"),
+        }
+    }
 }
 
 /// Validated or unparsed input for a KeyTeleport flow

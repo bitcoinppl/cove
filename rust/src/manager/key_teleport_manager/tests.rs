@@ -22,6 +22,18 @@ use super::{
     },
 };
 
+#[test]
+fn action_debug_redacts_receiver_code_and_sender_password() {
+    assert_eq!(
+        format!("{:?}", Action::EnterReceiverCode("123-456".into())),
+        "EnterReceiverCode(****)"
+    );
+    assert_eq!(
+        format!("{:?}", Action::EnterSenderPassword("secret".into())),
+        "EnterSenderPassword(****)"
+    );
+}
+
 impl RustKeyTeleportManager {
     fn current_generation(&self) -> PhaseGeneration {
         self.model.lock().generation
@@ -742,7 +754,7 @@ fn fixed_wallet_send_ignores_other_wallets_with_unreadable_secrets() {
         )
         .unwrap();
 
-    assert!(matches!(eligible_wallets(), Err(KeyTeleportAlert::Keychain(_))));
+    assert_eq!(eligible_wallets().unwrap(), vec![fixture.wallet.clone()]);
     assert_eq!(eligible_wallet_by_id(&fixture.wallet.id).unwrap(), fixture.wallet);
 
     let manager = RustKeyTeleportManager::new();

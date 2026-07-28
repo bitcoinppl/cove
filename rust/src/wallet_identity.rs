@@ -54,9 +54,12 @@ mod tests {
         metadata::{WalletMetadata, WalletType},
     };
 
-    fn test_keychain() -> &'static Keychain {
+    fn test_keychain() -> (tokio::sync::MutexGuard<'static, ()>, &'static Keychain) {
+        let guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::test_support::init_test_keychain();
-        Keychain::global()
+        crate::test_support::shared_mock_keychain().reset();
+
+        (guard, Keychain::global())
     }
 
     fn descriptor_pair(account: u32) -> Descriptors {
@@ -301,7 +304,7 @@ mod tests {
 
     #[test]
     fn cold_existing_wallet_xpub_synthesizes_default_bip84_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let descriptors = descriptor_pair(0);
         let xpub = descriptors.external.xpub().unwrap();
         let metadata = metadata("Existing cold xpub", WalletType::Cold);
@@ -316,7 +319,7 @@ mod tests {
 
     #[test]
     fn cold_existing_wallet_xpub_preserves_address_type_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
 
         for address_type in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
             let descriptors = descriptor_pair_for_address_type(address_type, 0);
@@ -517,7 +520,7 @@ mod tests {
 
     #[test]
     fn public_wallet_identity_matching_skips_same_fingerprint_different_account() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(1);
         let incoming_fingerprint =
@@ -545,7 +548,7 @@ mod tests {
 
     #[test]
     fn public_wallet_identity_matching_routes_exact_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(0);
         let incoming_fingerprint =
@@ -573,7 +576,7 @@ mod tests {
 
     #[test]
     fn public_wallet_identity_matching_falls_back_to_degraded_same_fingerprint() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let degraded = public_wallet_metadata("Degraded account", 0);
         let expected_id = degraded.id.clone();
         let incoming = descriptor_pair(1);
@@ -594,7 +597,7 @@ mod tests {
 
     #[test]
     fn strict_public_wallet_identity_matching_routes_exact_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(0);
         let incoming_fingerprint =
@@ -622,7 +625,7 @@ mod tests {
 
     #[test]
     fn strict_public_wallet_identity_matching_skips_same_fingerprint_different_account() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(1);
         let incoming_fingerprint =
@@ -650,7 +653,7 @@ mod tests {
 
     #[test]
     fn strict_public_wallet_identity_matching_errors_on_degraded_same_fingerprint() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let degraded = public_wallet_metadata("Degraded account", 0);
         let expected_id = degraded.id.clone();
         let incoming = descriptor_pair(1);

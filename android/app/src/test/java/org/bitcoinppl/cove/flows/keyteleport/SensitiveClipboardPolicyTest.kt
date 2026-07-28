@@ -5,6 +5,65 @@ import org.junit.Test
 
 class SensitiveClipboardPolicyTest {
     @Test
+    fun persistedExpiryRestoresRemainingLifetime() {
+        assertEquals(
+            RestoredSensitiveClipboardExpiry("token", 30_000),
+            restoreSensitiveClipboardExpiry(
+                token = "token",
+                expiresAtEpochMillis = 130_000,
+                nowEpochMillis = 100_000,
+            ),
+        )
+    }
+
+    @Test
+    fun expiredPersistedExpiryRestoresForImmediateClear() {
+        assertEquals(
+            RestoredSensitiveClipboardExpiry("token", 0),
+            restoreSensitiveClipboardExpiry(
+                token = "token",
+                expiresAtEpochMillis = 90_000,
+                nowEpochMillis = 100_000,
+            ),
+        )
+    }
+
+    @Test
+    fun backwardClockChangeCannotExtendRestoredLifetime() {
+        assertEquals(
+            RestoredSensitiveClipboardExpiry(
+                "token",
+                SENSITIVE_CLIPBOARD_LIFETIME_MILLIS,
+            ),
+            restoreSensitiveClipboardExpiry(
+                token = "token",
+                expiresAtEpochMillis = 1_000_000,
+                nowEpochMillis = 100_000,
+            ),
+        )
+    }
+
+    @Test
+    fun incompletePersistedExpiryIsDiscarded() {
+        assertEquals(
+            null,
+            restoreSensitiveClipboardExpiry(
+                token = null,
+                expiresAtEpochMillis = 130_000,
+                nowEpochMillis = 100_000,
+            ),
+        )
+        assertEquals(
+            null,
+            restoreSensitiveClipboardExpiry(
+                token = "token",
+                expiresAtEpochMillis = 0,
+                nowEpochMillis = 100_000,
+            ),
+        )
+    }
+
+    @Test
     fun readableClipOwnedByCoveIsCleared() {
         assertEquals(
             SensitiveClipboardClearDecision.ClearAndForget,

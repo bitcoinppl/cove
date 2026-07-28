@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
 import android.os.SystemClock
+import android.util.Log
 import org.bitcoinppl.cove_core.KeyTeleportAlert
 import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.MultiFormat
@@ -129,8 +130,8 @@ internal fun copyText(
             }
             putString(SENSITIVE_CLIPBOARD_TOKEN, token)
         }
-        clipboard.setPrimaryClip(clip)
         SensitiveClipboardExpiry.schedule(context.applicationContext, token)
+        clipboard.setPrimaryClip(clip)
     } else {
         clipboard.setPrimaryClip(clip)
     }
@@ -147,6 +148,11 @@ internal fun clearExpiredSensitiveClipboard(context: Context) {
 }
 
 private object SensitiveClipboardExpiry {
+    private const val PREFERENCES_NAME = "keyteleport_sensitive_clipboard"
+    private const val TOKEN_KEY = "token"
+    private const val EXPIRES_AT_EPOCH_MILLIS_KEY = "expires_at_epoch_millis"
+    private const val LOG_TAG = "SensitiveClipboard"
+
     private val handler = Handler(Looper.getMainLooper())
     private var pendingClear: Runnable? = null
     private var currentToken: String? = null
@@ -161,15 +167,53 @@ private object SensitiveClipboardExpiry {
         currentToken = token
         deadlineElapsedRealtime = SystemClock.elapsedRealtime() + SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
         retriesAfterDeadline = 0
+
+        val persisted =
+            preferences(context)
+                .edit()
+                .putString(TOKEN_KEY, token)
+                .putLong(
+                    EXPIRES_AT_EPOCH_MILLIS_KEY,
+                    System.currentTimeMillis() + SENSITIVE_CLIPBOARD_LIFETIME_MILLIS,
+                )
+                .commit()
+        if (!persisted) {
+            Log.w(LOG_TAG, "Unable to persist sensitive clipboard expiry")
+        }
+
         postClear(context, SENSITIVE_CLIPBOARD_LIFETIME_MILLIS)
     }
 
     fun clearIfExpired(context: Context) {
-        if (currentToken == null) return
+        if (currentToken == null && !restore(context)) return
         if (SystemClock.elapsedRealtime() < deadlineElapsedRealtime) return
 
         retriesAfterDeadline = 0
         clearIfOwned(context)
+    }
+
+    private fun restore(context: Context): Boolean {
+        val preferences = preferences(context)
+        val restored =
+            restoreSensitiveClipboardExpiry(
+                token = preferences.getString(TOKEN_KEY, null),
+                expiresAtEpochMillis = preferences.getLong(EXPIRES_AT_EPOCH_MILLIS_KEY, 0),
+                nowEpochMillis = System.currentTimeMillis(),
+            )
+        if (restored == null) {
+            preferences.edit().clear().apply()
+            return false
+        }
+
+        currentToken = restored.token
+        deadlineElapsedRealtime =
+            SystemClock.elapsedRealtime() + restored.remainingLifetimeMillis
+        retriesAfterDeadline = 0
+        if (restored.remainingLifetimeMillis > 0) {
+            postClear(context, restored.remainingLifetimeMillis)
+        }
+
+        return true
     }
 
     private fun clearIfOwned(context: Context) {
@@ -190,10 +234,10 @@ private object SensitiveClipboardExpiry {
         when (decision) {
             SensitiveClipboardClearDecision.ClearAndForget -> {
                 runCatching(clipboard::clearPrimaryClip)
-                forget()
+                forget(context)
             }
 
-            SensitiveClipboardClearDecision.ForgetOnly -> forget()
+            SensitiveClipboardClearDecision.ForgetOnly -> forget(context)
 
             is SensitiveClipboardClearDecision.Retry -> {
                 if (remainingLifetimeMillis <= 0) retriesAfterDeadline += 1
@@ -223,11 +267,15 @@ private object SensitiveClipboardExpiry {
         pendingClear = null
     }
 
-    private fun forget() {
+    private fun forget(context: Context) {
         cancelPending()
         currentToken = null
         retriesAfterDeadline = 0
+        preferences(context).edit().clear().apply()
     }
+
+    private fun preferences(context: Context) =
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 }
 
 internal fun shareText(

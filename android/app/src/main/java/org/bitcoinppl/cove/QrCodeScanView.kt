@@ -38,6 +38,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
+import org.bitcoinppl.cove_core.MultiQrException
 import org.bitcoinppl.cove_core.QrScanner
 import org.bitcoinppl.cove_core.ScanProgress
 import org.bitcoinppl.cove_core.ScanResult
@@ -491,6 +492,8 @@ private fun handleQrCode(
     } catch (e: IllegalStateException) {
         // scanner was destroyed during async callback, ignore
         Log.d("QrCodeScanView", "Scanner already destroyed, ignoring: ${e.message}")
+    } catch (e: MultiQrException.RecoverableFrame) {
+        Log.d("QrCodeScanView", "Ignoring recoverable multipart frame: ${e.v1}")
     } catch (e: Exception) {
         onError("Unable to scan QR code: ${e.message ?: "Unknown scanning error"}")
     }

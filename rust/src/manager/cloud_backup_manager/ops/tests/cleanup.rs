@@ -187,7 +187,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
     globals.cloud.set_wallet_backup(
         active_namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &active_master_key, "expected-revision", 2).await,
+        encrypted_wallet_backup_bytes(&wallet, &active_master_key, "expected-revision", 3).await,
     );
     globals.cloud.set_wallet_files(
         active_namespace.clone(),

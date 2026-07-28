@@ -442,16 +442,11 @@ fn decode_xprv_body(body: &[u8]) -> Result<DecodedPayload> {
         return Err(Error::NonMainnetXprvPayload);
     }
 
-    let master = Xpriv {
-        network: xprv.network,
-        depth: 0,
-        parent_fingerprint: Fingerprint::default(),
-        child_number: ChildNumber::Normal { index: 0 },
-        private_key: xprv.private_key,
-        chain_code: xprv.chain_code,
-    };
+    if !is_master_xprv(&xprv) {
+        return Err(Error::NonMasterXprvPayload);
+    }
 
-    Ok(DecodedPayload::Xprv(XprvPayload { value: master.to_string() }))
+    Ok(DecodedPayload::Xprv(XprvPayload { value: xprv.to_string() }))
 }
 
 fn decode_notes_body(body: &[u8]) -> Result<DecodedPayload> {
@@ -600,23 +595,14 @@ mod tests {
     }
 
     #[test]
-    fn full_xprv_payload_discards_child_metadata_like_coldcard() {
+    fn full_xprv_payload_rejects_child_keys() {
         let master = Xpriv::from_str(XPRV).unwrap();
         let secp = bitcoin::secp256k1::Secp256k1::new();
         let child = master.derive_priv(&secp, &[ChildNumber::Hardened { index: 7 }]).unwrap();
         let mut payload = vec![PAYLOAD_CODE_XPRV];
         payload.extend_from_slice(&child.encode());
 
-        let DecodedPayload::Xprv(decoded) = DecodedPayload::decode(&payload).unwrap() else {
-            panic!("expected xprv")
-        };
-        let decoded = Xpriv::from_str(decoded.expose_string()).unwrap();
-
-        assert_eq!(decoded.depth, 0);
-        assert_eq!(decoded.parent_fingerprint, Fingerprint::default());
-        assert_eq!(decoded.child_number, ChildNumber::Normal { index: 0 });
-        assert_eq!(decoded.chain_code, child.chain_code);
-        assert_eq!(decoded.private_key, child.private_key);
+        assert!(matches!(DecodedPayload::decode(&payload), Err(Error::NonMasterXprvPayload)));
     }
 
     #[test]

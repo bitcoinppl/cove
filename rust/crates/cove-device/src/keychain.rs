@@ -280,8 +280,10 @@ impl Keychain {
             .decrypt_from_string(&encrypted)
             .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
 
-        let bytes: [u8; 32] = hex::decode(hex.as_str())
-            .map_err(|e| KeychainError::ParseSavedValue(e.to_string()))?
+        let decoded =
+            Zeroizing::new(hex::decode(hex.as_str()).map_err_str(KeychainError::ParseSavedValue)?);
+        let bytes: [u8; 32] = decoded
+            .as_slice()
             .try_into()
             .map_err(|_| KeychainError::ParseSavedValue("not 32 bytes".into()))?;
 
@@ -297,10 +299,11 @@ impl Keychain {
         }
 
         let key: [u8; 32] = rand::rng().random();
+        let encoded = Zeroizing::new(hex::encode(key));
         self.save_with_fresh_cryptor(
             LOCAL_DB_KEY_CRYPTOR.into(),
             LOCAL_DB_KEY_NAME.into(),
-            &hex::encode(key),
+            &encoded,
             true,
         )?;
 
@@ -657,10 +660,12 @@ impl Keychain {
         id: &WalletId,
         backup: &[u8],
     ) -> Result<(), KeychainError> {
+        let encoded = Zeroizing::new(hex::encode(backup));
+
         self.save_with_fresh_cryptor(
             wallet_tap_signer_encryption_key_and_nonce_key_name(id),
             wallet_tap_signer_backup_key_name(id),
-            &hex::encode(backup),
+            &encoded,
             false,
         )
     }

@@ -522,7 +522,7 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     fn encrypt_master_key(master_key: &MasterKey) -> Result<StoredMasterKeyEntries, CsppError> {
-        let hex = hex::encode(master_key.as_bytes());
+        let hex = Zeroizing::new(hex::encode(master_key.as_bytes()));
         let mut cryptor = Cryptor::new();
         let encrypted = cryptor.encrypt_to_string(&hex).map_err_str(CsppError::Encrypt)?;
         let encryption_key = cryptor.serialize_to_string();
@@ -542,8 +542,10 @@ impl<S: CsppStore> Cspp<S> {
 
         let hex = cryptor.decrypt_from_string(encrypted).map_err_str(CsppError::Decrypt)?;
 
-        let bytes: [u8; 32] = hex::decode(hex.as_str())
-            .map_err_str(CsppError::InvalidData)?
+        let decoded =
+            Zeroizing::new(hex::decode(hex.as_str()).map_err_str(CsppError::InvalidData)?);
+        let bytes: [u8; 32] = decoded
+            .as_slice()
             .try_into()
             .map_err(|_| CsppError::InvalidData("master key not 32 bytes".into()))?;
 

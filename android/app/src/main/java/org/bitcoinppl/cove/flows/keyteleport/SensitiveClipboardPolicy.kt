@@ -4,6 +4,27 @@ internal const val SENSITIVE_CLIPBOARD_LIFETIME_MILLIS = 60_000L
 internal const val SENSITIVE_CLIPBOARD_RETRY_MILLIS = 2_000L
 internal const val SENSITIVE_CLIPBOARD_MAX_RETRIES_AFTER_DEADLINE = 5
 
+internal data class RestoredSensitiveClipboardExpiry(
+    val token: String,
+    val remainingLifetimeMillis: Long,
+)
+
+internal fun restoreSensitiveClipboardExpiry(
+    token: String?,
+    expiresAtEpochMillis: Long,
+    nowEpochMillis: Long,
+): RestoredSensitiveClipboardExpiry? {
+    if (token.isNullOrBlank() || expiresAtEpochMillis <= 0) return null
+
+    val remainingLifetimeMillis =
+        (expiresAtEpochMillis - nowEpochMillis).coerceIn(
+            minimumValue = 0,
+            maximumValue = SENSITIVE_CLIPBOARD_LIFETIME_MILLIS,
+        )
+
+    return RestoredSensitiveClipboardExpiry(token, remainingLifetimeMillis)
+}
+
 internal sealed interface SensitiveClipboardClearDecision {
     data object ClearAndForget : SensitiveClipboardClearDecision
 

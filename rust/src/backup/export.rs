@@ -212,7 +212,7 @@ pub async fn export_all(password: String) -> Result<BackupResult, BackupError> {
     let wallets = exporter.gather_wallets().await?;
     let settings = exporter.gather_settings()?;
 
-    let payload = BackupPayload::new(wallets, settings);
+    let payload = BackupPayload::try_new(wallets, settings)?;
 
     let json =
         serde_json::to_vec(&payload).map_err(|e| BackupError::Serialization(e.to_string()))?;

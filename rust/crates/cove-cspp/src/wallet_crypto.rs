@@ -32,6 +32,7 @@ pub fn encrypt_wallet_entry_with_remote_metadata(
     critical_data_key: &[u8; 32],
     remote_metadata: RemotePayloadMetadata,
 ) -> Result<EncryptedWalletBackup, CsppError> {
+    let version = entry.backup_version();
     let mut wallet_salt = [0u8; 32];
     rand::rng().fill(&mut wallet_salt);
     let json = Zeroizing::new(serde_json::to_vec(entry).map_err_str(CsppError::Serialization)?);
@@ -45,7 +46,7 @@ pub fn encrypt_wallet_entry_with_remote_metadata(
     let ciphertext = cipher.encrypt(nonce, json.as_slice()).map_err_str(CsppError::Encrypt)?;
 
     Ok(EncryptedWalletBackup {
-        version: 1,
+        version: version.as_u32(),
         remote_metadata,
         wallet_salt,
         nonce: nonce_bytes,
@@ -58,6 +59,7 @@ pub fn decrypt_wallet_backup(
     backup: &EncryptedWalletBackup,
     critical_data_key: &[u8; 32],
 ) -> Result<WalletEntry, CsppError> {
+    let version = backup.backup_version()?;
     let wallet_key = Zeroizing::new(derive_wallet_key(critical_data_key, &backup.wallet_salt));
     let cipher = ChaCha20Poly1305::new((&*wallet_key).into());
 
@@ -67,7 +69,13 @@ pub fn decrypt_wallet_backup(
         cipher.decrypt(nonce, backup.ciphertext.as_slice()).map_err(|_| CsppError::WrongKey)?,
     );
 
-    WalletEntry::from_json_slice(&plaintext).map_err_str(CsppError::Deserialization)
+    let entry = WalletEntry::from_json_slice(&plaintext).map_err_str(CsppError::Deserialization)?;
+
+    if !version.supports(&entry.secret) {
+        return Err(CsppError::WalletBackupVersionMismatch { version: version.as_u32() });
+    }
+
+    Ok(entry)
 }
 
 #[cfg(test)]
@@ -111,6 +119,7 @@ mod tests {
             matches!(decrypted.secret, WalletSecret::Mnemonic(ref m) if m == "abandon abandon abandon")
         );
         assert_eq!(decrypted.wallet_mode, WalletMode::Main);
+        assert_eq!(encrypted.version, 1);
     }
 
     #[test]
@@ -123,7 +132,46 @@ mod tests {
         let encrypted = encrypt_wallet_entry(&entry, &critical_key).unwrap();
         let decrypted = decrypt_wallet_backup(&encrypted, &critical_key).unwrap();
 
+        assert_eq!(encrypted.version, 2);
         assert!(matches!(decrypted.secret, WalletSecret::Xprv(ref value) if value == xprv));
+    }
+
+    #[test]
+    fn version_two_accepts_baseline_secret_content() {
+        let entry = test_entry();
+        let critical_key = [42u8; 32];
+        let mut encrypted = encrypt_wallet_entry(&entry, &critical_key).unwrap();
+        encrypted.version = 2;
+
+        let decrypted = decrypt_wallet_backup(&encrypted, &critical_key).unwrap();
+
+        assert!(matches!(decrypted.secret, WalletSecret::Mnemonic(_)));
+    }
+
+    #[test]
+    fn version_one_rejects_xprv_content() {
+        let mut entry = test_entry();
+        entry.secret = WalletSecret::Xprv("xprv-test".to_string());
+        let critical_key = [42u8; 32];
+        let mut encrypted = encrypt_wallet_entry(&entry, &critical_key).unwrap();
+        encrypted.version = 1;
+
+        let error = decrypt_wallet_backup(&encrypted, &critical_key).unwrap_err();
+
+        assert!(matches!(error, CsppError::WalletBackupVersionMismatch { version: 1 }));
+    }
+
+    #[test]
+    fn unsupported_version_is_rejected_before_decryption() {
+        let entry = test_entry();
+        let critical_key = [42u8; 32];
+        let wrong_key = [99u8; 32];
+        let mut encrypted = encrypt_wallet_entry(&entry, &critical_key).unwrap();
+        encrypted.version = 99;
+
+        let error = decrypt_wallet_backup(&encrypted, &wrong_key).unwrap_err();
+
+        assert!(matches!(error, CsppError::UnsupportedWalletBackupVersion(99)));
     }
 
     #[test]

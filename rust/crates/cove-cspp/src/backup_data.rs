@@ -79,6 +79,61 @@ impl TryFrom<u32> for MasterKeyBackupVersion {
     }
 }
 
+/// Supported encrypted wallet backup versions
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalletBackupVersion {
+    /// Baseline backup format for mnemonic, signer, descriptor, and watch-only wallets
+    V1,
+    /// Backup format adding extended private key support
+    V2,
+}
+
+impl WalletBackupVersion {
+    /// Returns the serialized backup version
+    pub const fn as_u32(self) -> u32 {
+        match self {
+            Self::V1 => 1,
+            Self::V2 => 2,
+        }
+    }
+
+    fn for_secret(secret: &WalletSecret) -> Self {
+        match secret {
+            WalletSecret::Xprv(_) => Self::V2,
+            WalletSecret::Mnemonic(_)
+            | WalletSecret::TapSignerBackup(_)
+            | WalletSecret::Descriptor(_)
+            | WalletSecret::WatchOnly => Self::V1,
+        }
+    }
+
+    pub(crate) fn supports(self, secret: &WalletSecret) -> bool {
+        match self {
+            Self::V1 => !matches!(secret, WalletSecret::Xprv(_)),
+            Self::V2 => true,
+        }
+    }
+}
+
+/// Encrypted wallet backup version not supported by this app
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnsupportedWalletBackupVersion(
+    /// Unsupported numeric backup version
+    pub u32,
+);
+
+impl TryFrom<u32> for WalletBackupVersion {
+    type Error = UnsupportedWalletBackupVersion;
+
+    fn try_from(version: u32) -> Result<Self, Self::Error> {
+        match version {
+            1 => Ok(Self::V1),
+            2 => Ok(Self::V2),
+            version => Err(UnsupportedWalletBackupVersion(version)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PasskeyRegistrationPlatform {
@@ -130,6 +185,10 @@ impl WalletEntry {
         }
 
         Ok(entry)
+    }
+
+    pub(crate) fn backup_version(&self) -> WalletBackupVersion {
+        WalletBackupVersion::for_secret(&self.secret)
     }
 }
 
@@ -190,6 +249,13 @@ pub struct EncryptedWalletBackup {
     /// Encrypted WalletEntry JSON
     #[serde(with = "base64_serde")]
     pub ciphertext: Vec<u8>,
+}
+
+impl EncryptedWalletBackup {
+    /// Returns the parsed backup version when supported by this app
+    pub fn backup_version(&self) -> Result<WalletBackupVersion, UnsupportedWalletBackupVersion> {
+        self.version.try_into()
+    }
 }
 
 /// Encrypted master key backup envelope, uploaded to cloud storage
@@ -338,6 +404,28 @@ mod tests {
         assert_eq!(decoded.wallet_salt, [0xAA; 32]);
         assert_eq!(decoded.nonce, [0xBB; 12]);
         assert_eq!(decoded.ciphertext, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn wallet_backup_versions_are_typed() {
+        assert_eq!(WalletBackupVersion::try_from(1), Ok(WalletBackupVersion::V1));
+        assert_eq!(WalletBackupVersion::try_from(2), Ok(WalletBackupVersion::V2));
+        assert_eq!(WalletBackupVersion::V1.as_u32(), 1);
+        assert_eq!(WalletBackupVersion::V2.as_u32(), 2);
+        assert_eq!(WalletBackupVersion::try_from(3), Err(UnsupportedWalletBackupVersion(3)));
+    }
+
+    #[test]
+    fn encrypted_wallet_backup_reports_typed_version() {
+        let backup = EncryptedWalletBackup {
+            version: 2,
+            remote_metadata: RemotePayloadMetadata::default(),
+            wallet_salt: [0xAA; 32],
+            nonce: [0xBB; 12],
+            ciphertext: vec![],
+        };
+
+        assert_eq!(backup.backup_version(), Ok(WalletBackupVersion::V2));
     }
 
     #[test]

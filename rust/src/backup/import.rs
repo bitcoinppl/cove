@@ -696,6 +696,26 @@ mod tests {
     }
 
     #[test]
+    fn unknown_hot_wallet_secret_is_a_hard_failure() {
+        let result =
+            validate_wallet_type_secret(&WalletType::Hot, &WalletSecret::Unknown, "Hot wallet");
+
+        assert!(
+            matches!(result, Err(BackupError::Restore(message)) if message.contains("hot wallet"))
+        );
+    }
+
+    #[test]
+    fn unknown_non_hot_wallet_secrets_are_degraded() {
+        for wallet_type in [WalletType::Cold, WalletType::XpubOnly, WalletType::WatchOnly] {
+            let result =
+                validate_wallet_type_secret(&wallet_type, &WalletSecret::Unknown, "Public wallet");
+
+            assert_eq!(result.unwrap(), WalletTypeSecretValidation::Degraded);
+        }
+    }
+
+    #[test]
     fn backup_import_restores_valid_custom_block_explorers() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, config) = test_config();
