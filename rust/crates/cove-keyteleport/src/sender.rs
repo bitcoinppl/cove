@@ -22,20 +22,6 @@ impl SenderSession {
         })
     }
 
-    #[cfg(test)]
-    fn with_private_key_and_password(
-        receiver_packet: &ReceiverPacket,
-        code: &NumericCode,
-        private_key: [u8; 32],
-        password: TeleportPassword,
-    ) -> Result<Self> {
-        Ok(Self {
-            receiver_public_key: crypto::decrypt_receiver_pubkey(code, receiver_packet.as_bytes())?,
-            private_key: EphemeralPrivateKey::from_bytes(private_key)?,
-            password,
-        })
-    }
-
     pub fn send(self, payload: Payload) -> Result<SendResponse> {
         let Self { receiver_public_key, private_key, password } = self;
         let packet =
@@ -62,7 +48,7 @@ mod tests {
     fn coldcard_sender_protocol_vector_matches() {
         let receiver = ReceiverSession::from_private_key_bytes(RECEIVER_SECRET).unwrap();
         let request = receiver.request().unwrap();
-        let sender = SenderSession::with_private_key_and_password(
+        let sender = sender_with_private_key_and_password(
             &request.packet,
             &request.numeric_code,
             SENDER_SECRET,
@@ -74,6 +60,19 @@ mod tests {
 
         assert_eq!(response.password.as_display_text(), "CI2FM6E2");
         assert_eq!(hex_string(response.packet.as_bytes()), EXPECTED_SENDER_PACKET);
+    }
+
+    fn sender_with_private_key_and_password(
+        receiver_packet: &ReceiverPacket,
+        code: &NumericCode,
+        private_key: [u8; 32],
+        password: TeleportPassword,
+    ) -> Result<SenderSession> {
+        Ok(SenderSession {
+            receiver_public_key: crypto::decrypt_receiver_pubkey(code, receiver_packet.as_bytes())?,
+            private_key: EphemeralPrivateKey::from_bytes(private_key)?,
+            password,
+        })
     }
 
     fn hex_string(bytes: &[u8]) -> String {
