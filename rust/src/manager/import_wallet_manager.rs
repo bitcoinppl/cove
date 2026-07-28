@@ -203,21 +203,6 @@ fn import_wallet_secret_with_default_name(
 
     let previous_selected_wallet = database.global_config.selected_wallet();
     let secret_created = match existing_secret {
-        None => {
-            if let Err(error) = keychain.save_wallet_secret(&id, secret) {
-                if matches!(error, KeychainError::WalletSecretExists) {
-                    warn!(
-                        "wallet {id} has a stored secret that is present but unreadable, showing duplicate alert"
-                    );
-
-                    return Err(ImportWalletError::WalletAlreadyExists(id));
-                }
-
-                return Err(error.into());
-            }
-
-            true
-        }
         Some(existing_secret) => {
             let existing_fingerprint: Fingerprint =
                 existing_secret.xpub(network).fingerprint().into();
@@ -231,7 +216,22 @@ fn import_wallet_secret_with_default_name(
 
             false
         }
+        None => true,
     };
+
+    if secret_created {
+        keychain
+            .save_wallet_secret(&id, secret)
+            .map_err(|error| match error {
+                KeychainError::WalletSecretExists => {
+                    warn!(
+                        "wallet {id} has a stored secret that is present but unreadable, showing duplicate alert"
+                    );
+                    ImportWalletError::WalletAlreadyExists(id.clone())
+                }
+                error => error.into(),
+            })?;
+    }
 
     // private key material means this wallet can now sign locally
     metadata.wallet_type = WalletType::Hot;
@@ -347,22 +347,21 @@ fn rollback_existing_wallet_upgrade(
         Err(KeychainError::Delete)
     };
 
-    if selection_rollback.is_err() || secret_rollback.is_err() {
-        return Err(ImportWalletError::UpgradeRollback(format!(
-            "metadata update: {cause}; selection rollback: {}; secret rollback: {}",
-            rollback_result(&selection_rollback),
-            rollback_result(&secret_rollback)
-        )));
+    if selection_rollback.is_ok() && secret_rollback.is_ok() {
+        return Ok(());
     }
 
-    Ok(())
-}
+    let mut message = format!("metadata update: {cause}");
 
-fn rollback_result<E: std::fmt::Display>(result: &Result<(), E>) -> String {
-    match result {
-        Ok(()) => "ok".to_string(),
-        Err(error) => error.to_string(),
+    if let Err(error) = selection_rollback {
+        message.push_str(&format!("; selection rollback: {error}"));
     }
+
+    if let Err(error) = secret_rollback {
+        message.push_str(&format!("; secret rollback: {error}"));
+    }
+
+    Err(ImportWalletError::UpgradeRollback(message))
 }
 
 #[cfg(test)]
