@@ -524,14 +524,14 @@ impl Keychain {
         WalletSecret::parse(&wallet_secret).map(Some)
     }
 
-    /// Deletes a wallet secret and any stale versioned entries
+    /// Deletes a wallet secret from the keychain
     pub fn delete_wallet_secret(&self, id: &WalletId) -> bool {
         let _wallet_secret_guard = self.1.lock();
         let keys =
             [wallet_mnemonic_key_name(id), wallet_mnemonic_encryption_and_nonce_key_name(id)];
         let mut deleted_all = true;
 
-        for key in keys.into_iter().chain(stale_wallet_secret_key_names(id)) {
+        for key in keys {
             if self.0.get(key.clone()).is_some() && !self.0.delete(key) {
                 deleted_all = false;
             }
@@ -754,16 +754,6 @@ fn wallet_xpub_key_name(id: &WalletId) -> String {
 
 fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_mnemonic_encryption_key_and_nonce")
-}
-
-fn stale_wallet_secret_key_names(id: &WalletId) -> [String; 5] {
-    [
-        format!("{id}::wallet_secret::v2::active_slot"),
-        format!("{id}::wallet_secret::v2::slot_a::encrypted"),
-        format!("{id}::wallet_secret::v2::slot_a::cryptor"),
-        format!("{id}::wallet_secret::v2::slot_b::encrypted"),
-        format!("{id}::wallet_secret::v2::slot_b::cryptor"),
-    ]
 }
 
 fn wallet_public_descriptor_key_name(id: &WalletId) -> String {
@@ -1129,45 +1119,23 @@ mod tests {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
         keychain.save_wallet_key(&id, mnemonic()).unwrap();
-        let stale_keys = stale_wallet_secret_key_names(&id);
-        for key in &stale_keys {
-            keychain.0.save(key.clone(), "garbage".to_string()).unwrap();
-        }
 
         assert!(keychain.delete_wallet_items(&id));
         assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
-        assert!(
-            stale_keys
-                .into_iter()
-                .chain([
-                    wallet_mnemonic_key_name(&id),
-                    wallet_mnemonic_encryption_and_nonce_key_name(&id),
-                ])
-                .all(|key| keychain.0.get(key).is_none())
-        );
+        assert!(keychain.0.get(wallet_mnemonic_key_name(&id)).is_none());
+        assert!(keychain.0.get(wallet_mnemonic_encryption_and_nonce_key_name(&id)).is_none());
     }
 
     #[test]
-    fn delete_wallet_secret_removes_wallet_mnemonic_and_stale_v2_keys() {
+    fn delete_wallet_secret_removes_wallet_mnemonic_keys() {
         let keychain = make_keychain(MockKeychain::new());
         let id = wallet_id();
         keychain.save_wallet_key(&id, mnemonic()).unwrap();
-        let stale_keys = stale_wallet_secret_key_names(&id);
-        for key in &stale_keys {
-            keychain.0.save(key.clone(), "garbage".to_string()).unwrap();
-        }
 
         assert!(keychain.delete_wallet_secret(&id));
         assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
-        assert!(
-            stale_keys
-                .into_iter()
-                .chain([
-                    wallet_mnemonic_key_name(&id),
-                    wallet_mnemonic_encryption_and_nonce_key_name(&id),
-                ])
-                .all(|key| keychain.0.get(key).is_none())
-        );
+        assert!(keychain.0.get(wallet_mnemonic_key_name(&id)).is_none());
+        assert!(keychain.0.get(wallet_mnemonic_encryption_and_nonce_key_name(&id)).is_none());
     }
 
     #[test]
