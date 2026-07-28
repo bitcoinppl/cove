@@ -983,18 +983,14 @@ impl RustKeyTeleportManager {
         &self,
         packet: Arc<KeyTeleportReceiverPacket>,
     ) -> Result<(), KeyTeleportAlert> {
-        let generation = self.current_generation();
-        let eligible_wallets = eligible_wallets()?;
-        if eligible_wallets.is_empty() {
-            return Err(KeyTeleportAlert::NoEligibleWallets);
-        }
-
-        let selected_wallet = {
+        let (generation, selected_wallet) = {
             let model = self.model.lock();
-            match &model.phase {
+            let selected_wallet = match &model.phase {
                 Phase::SendAwaitReceiver { wallet } => Some(wallet.clone()),
                 _ => None,
-            }
+            };
+
+            (model.generation, selected_wallet)
         };
         if let Some(wallet) = selected_wallet {
             if !self.set_phase_if_current(generation, Phase::SendEnterCode { packet, wallet }) {
@@ -1002,6 +998,11 @@ impl RustKeyTeleportManager {
             }
 
             return Ok(());
+        }
+
+        let eligible_wallets = eligible_wallets()?;
+        if eligible_wallets.is_empty() {
+            return Err(KeyTeleportAlert::NoEligibleWallets);
         }
 
         if !self
@@ -2311,7 +2312,7 @@ mod tests {
     }
 
     #[test]
-    fn eligible_wallet_by_id_ignores_other_wallets_with_unreadable_secrets() {
+    fn fixed_wallet_send_ignores_other_wallets_with_unreadable_secrets() {
         use cove_cspp::CsppStore as _;
 
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
@@ -2338,7 +2339,23 @@ mod tests {
             )
             .unwrap();
 
+        assert!(matches!(eligible_wallets(), Err(KeyTeleportAlert::Keychain(_))));
         assert_eq!(eligible_wallet_by_id(&fixture.wallet.id).unwrap(), fixture.wallet);
+
+        let manager = RustKeyTeleportManager::new();
+        let request = ReceiverSession::from_private_key_bytes([21; 32]).unwrap().request().unwrap();
+        manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
+
+        manager
+            .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(
+                request.packet,
+            )))
+            .unwrap();
+
+        let KeyTeleportManagerState::SendEnterCode(state) = manager.state() else {
+            panic!("expected receiver code entry")
+        };
+        assert_eq!(state.selected_wallet, fixture.wallet);
         assert_eq!(
             eligible_wallet_by_id(&WalletMetadata::preview_new().id),
             Err(KeyTeleportAlert::IneligibleWallet)
