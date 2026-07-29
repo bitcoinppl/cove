@@ -35,6 +35,7 @@ final class KeyboardAccessoryController: ObservableObject {
     private var container: UIView?
     private weak var currentResponder: UIView?
     private var isAttached: Bool = false
+    private var shouldShowAccessory: Bool = false
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var keyboardDidShowObserver: NSObjectProtocol?
     private var keyboardWillHideObserver: NSObjectProtocol?
@@ -89,18 +90,19 @@ final class KeyboardAccessoryController: ObservableObject {
     /// Reattach accessory when keyboard appears after focus transitions.
     /// Handles the case where first responder changes between text fields.
     private func reattachOnKeyboardShow() {
-        guard let container = self.container else { return }
+        guard shouldShowAccessory, !isAttached, let container else { return }
 
         // re-capture first responder
         UIResponder.captureCurrentFirstResponder(from: nil)
         guard let responder = UIResponder.currentFirstResponderView else { return }
 
-        // always reattach when keyboard shows (we track hide state via keyboardWillHide)
+        // record attachment before reloadInputViews can emit another keyboard notification
+        currentResponder = responder
+        isAttached = true
+
         // force rebuild: clear first, then re-set
         self.setAccessory(on: responder, accessoryView: nil, forceReload: false)
         self.setAccessory(on: responder, accessoryView: container, forceReload: true)
-        self.currentResponder = responder
-        self.isAttached = true
     }
 
     deinit {
@@ -116,6 +118,8 @@ final class KeyboardAccessoryController: ObservableObject {
     }
 
     func update(isVisible: Bool, height: CGFloat, @ViewBuilder accessory: () -> AnyView) {
+        shouldShowAccessory = isVisible
+
         guard let responderView = UIResponder.currentFirstResponderView else {
             return
         }
@@ -161,8 +165,7 @@ final class KeyboardAccessoryController: ObservableObject {
         self.hosting = hosting
         self.container = container
 
-        // only set the accessory view when actually visible
-        if isVisible {
+        if needsAttachment {
             // only reload when responder changes, not on first attachment (for smooth animation)
             setAccessory(on: responderView, accessoryView: container, forceReload: responderChanged)
             currentResponder = responderView

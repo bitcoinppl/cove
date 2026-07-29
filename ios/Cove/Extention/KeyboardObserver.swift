@@ -6,7 +6,6 @@ import UIKit
 @MainActor
 final class KeyboardObserver {
     var keyboardIsShowing = false
-    var keyboardHeight: CGFloat = 0
 
     // nonisolated so they can be accessed in deinit
     private nonisolated(unsafe) var showObserver: NSObjectProtocol?
@@ -17,14 +16,12 @@ final class KeyboardObserver {
             forName: UIResponder.keyboardWillShowNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
+        ) { [weak self] _ in
             guard let self else { return }
-            let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
 
             Task { @MainActor in
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.keyboardIsShowing = true
-                    self.keyboardHeight = keyboardFrame?.height ?? 0
                 }
             }
         }
@@ -39,7 +36,6 @@ final class KeyboardObserver {
             Task { @MainActor in
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.keyboardIsShowing = false
-                    self.keyboardHeight = 0
                 }
             }
         }
