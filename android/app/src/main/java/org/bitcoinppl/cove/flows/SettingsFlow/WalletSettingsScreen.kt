@@ -1,35 +1,17 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -43,11 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -55,40 +33,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
-import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
-import org.bitcoinppl.cove.flows.keyteleport.SecureScreenEffect
-import org.bitcoinppl.cove.flows.keyteleport.copyText
-import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
-import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.AutoSizeText
-import org.bitcoinppl.cove.views.MaterialDivider
-import org.bitcoinppl.cove.views.MaterialSection
-import org.bitcoinppl.cove.views.MaterialSettingsItem
-import org.bitcoinppl.cove.views.SectionHeader
-import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.Route
-import org.bitcoinppl.cove_core.SettingsRoute
-import org.bitcoinppl.cove_core.WalletBirthday
-import org.bitcoinppl.cove_core.WalletColor
-import org.bitcoinppl.cove_core.WalletManagerAction
-import org.bitcoinppl.cove_core.WalletSettingsRoute
-import org.bitcoinppl.cove_core.WalletType
-import org.bitcoinppl.cove_core.defaultWalletColors
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-
-private enum class XprvExportAction {
-    REVEAL,
-    KEY_TELEPORT,
-}
-
-private data class PendingXprvExport(
-    val action: XprvExportAction,
-    val credentialGeneration: Long,
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -264,209 +211,44 @@ fun WalletSettingsScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(paddingValues),
             ) {
-                SectionHeader(stringResource(R.string.title_wallet_information), showDivider = false)
-                MaterialSection {
-                    Column {
-                        MaterialSettingsItem(
-                            title = stringResource(R.string.label_wallet_network),
-                            subtitle = metadata.network.toString(),
-                        )
-                        MaterialDivider()
-
-                        metadata.birthday?.let { birthday ->
-                            MaterialSettingsItem(
-                                title = stringResource(R.string.label_wallet_birthday),
-                                subtitle = birthday.displayValue(),
-                            )
-                            MaterialDivider()
-                        }
-
-                        accountNumber?.let { number ->
-                            MaterialSettingsItem(
-                                title = stringResource(R.string.label_wallet_account_number),
-                                subtitle = number.toString(),
-                            )
-                            MaterialDivider()
-                        }
-
-                        // show fingerprint for non-TapSigner wallets
-                        val hardwareMeta = metadata.hardwareMetadata
-                        if (manager.masterFingerprint() != null && hardwareMeta !is org.bitcoinppl.cove_core.HardwareWalletMetadata.TapSigner) {
-                            MaterialSettingsItem(
-                                title = stringResource(R.string.label_wallet_fingerprint),
-                                subtitle = manager.masterFingerprint() ?: "",
-                            )
-                            MaterialDivider()
-                        }
-
-                        // show card identifier for TapSigner wallets
-                        if (hardwareMeta is org.bitcoinppl.cove_core.HardwareWalletMetadata.TapSigner) {
-                            MaterialSettingsItem(
-                                title = "Card Identifier",
-                                subtitle = hardwareMeta.v1.fullCardIdent(),
-                            )
-                            MaterialDivider()
-                        }
-
-                        MaterialSettingsItem(
-                            title = stringResource(R.string.label_wallet_type),
-                            subtitle = metadata.walletType.toString(),
-                        )
-                    }
-                }
-
-                SectionHeader(stringResource(R.string.title_wallet_settings))
-                MaterialSection {
-                    Column {
-                        MaterialSettingsItem(
-                            title = stringResource(R.string.label_wallet_name),
-                            subtitle = metadata.name,
-                            trailingContent = {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
-                                    contentDescription = "Edit",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            },
-                            onClick = {
-                                app.pushRoute(
-                                    Route.Settings(
-                                        SettingsRoute.Wallet(
-                                            id = metadata.id,
-                                            route = WalletSettingsRoute.CHANGE_NAME,
-                                        ),
-                                    ),
-                                )
-                            },
-                        )
-                        MaterialDivider()
-                        WalletColorSelector(
-                            selectedWalletColor = metadata.color,
-                            onColorChange = { color ->
-                                manager.dispatch(WalletManagerAction.UpdateColor(color))
-                            },
-                        )
-                        MaterialDivider()
-                        MaterialSettingsItem(
-                            title = stringResource(R.string.label_wallet_show_transaction_labels),
-                            trailingContent = {
-                                androidx.compose.material3.Switch(
-                                    checked = metadata.showLabels,
-                                    onCheckedChange = { _ ->
-                                        manager.dispatch(WalletManagerAction.ToggleShowLabels)
-                                    },
-                                )
-                            },
-                            onClick = {
-                                manager.dispatch(WalletManagerAction.ToggleShowLabels)
-                            },
-                        )
-                    }
-                }
-
-
-                SectionHeader(stringResource(R.string.title_wallet_danger_zone))
-                MaterialSection {
-                    Column {
-                        var dangerItemCount = 0
-                        if (metadata.walletType == WalletType.HOT) {
-                            if (manager.hasRecoveryWords()) {
-                                MaterialSettingsItem(
-                                    title = stringResource(R.string.label_wallet_view_secrets),
-                                    titleColor = CoveColor.WarningOrange,
-                                    onClick = {
-                                        app.pushRoute(Route.SecretWords(metadata.id))
-                                    },
-                                )
-                                dangerItemCount++
-                            } else if (manager.hasXprvSecret() && !auth.isInDecoyMode()) {
-                                MaterialSettingsItem(
-                                    title = stringResource(R.string.label_wallet_export_private_key),
-                                    titleColor = CoveColor.WarningOrange,
-                                    onClick = { showXprvExportWarning = true },
-                                )
-                                dangerItemCount++
-                            }
-                        }
-                        if (dangerItemCount > 0) MaterialDivider()
-                        MaterialSettingsItem(
-                            title = stringResource(R.string.label_wallet_delete),
-                            titleColor = MaterialTheme.colorScheme.error,
-                            leadingContent = {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            },
-                            onClick = {
-                                requiredConfirmations = requiredDeleteConfirmations()
-                                showFirstDeleteConfirmation = true
-                            },
-                        )
-                    }
-                }
+                WalletSettingsInformationSection(
+                    manager = manager,
+                    metadata = metadata,
+                    accountNumber = accountNumber,
+                )
+                WalletSettingsPreferencesSection(
+                    app = app,
+                    manager = manager,
+                    metadata = metadata,
+                )
+                WalletSettingsDangerSection(
+                    app = app,
+                    manager = manager,
+                    metadata = metadata,
+                    auth = auth,
+                    onExportPrivateKey = { showXprvExportWarning = true },
+                    onDeleteClick = {
+                        requiredConfirmations = requiredDeleteConfirmations()
+                        showFirstDeleteConfirmation = true
+                    },
+                )
             }
         },
     )
 
-    if (showXprvExportWarning) {
-        AlertDialog(
-            onDismissRequest = { showXprvExportWarning = false },
-            title = { Text("Are you sure?") },
-            text = {
-                Text(
-                    "Whoever has access to your extended private key, has access to your bitcoin. " +
-                        "Please keep it safe, don't show it to anyone.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showXprvExportWarning = false
-                        showXprvExportOptions = true
-                    },
-                ) {
-                    Text("Continue")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showXprvExportWarning = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    if (showXprvExportOptions) {
-        AlertDialog(
-            onDismissRequest = { showXprvExportOptions = false },
-            title = { Text("Export Private Key") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = { startXprvExport(XprvExportAction.REVEAL) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Reveal")
-                    }
-                    TextButton(
-                        onClick = { startXprvExport(XprvExportAction.KEY_TELEPORT) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("KeyTeleport")
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showXprvExportOptions = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
+    WalletSettingsXprvExportDialogs(
+        showWarning = showXprvExportWarning,
+        showOptions = showXprvExportOptions,
+        exportError = xprvExportError,
+        onDismissWarning = { showXprvExportWarning = false },
+        onContinueFromWarning = {
+            showXprvExportWarning = false
+            showXprvExportOptions = true
+        },
+        onDismissOptions = { showXprvExportOptions = false },
+        onExport = ::startXprvExport,
+        onDismissError = { xprvExportError = null },
+    )
 
     revealedXprv?.let { xprv ->
         XprvRevealDialog(
@@ -475,279 +257,25 @@ fun WalletSettingsScreen(
         )
     }
 
-    xprvExportError?.let { message ->
-        AlertDialog(
-            onDismissRequest = { xprvExportError = null },
-            title = { Text("Private Key Export") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { xprvExportError = null }) {
-                    Text("OK")
-                }
-            },
-        )
-    }
-
-    // first confirmation dialog for wallet deletion
-    if (showFirstDeleteConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showFirstDeleteConfirmation = false },
-            title = { Text("Are you sure?") },
-            text = { Text(firstDeleteConfirmationMessage()) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showFirstDeleteConfirmation = false
-                        if (requiredConfirmations >= 2u) {
-                            showSecondDeleteConfirmation = true
-                        } else {
-                            deleteWallet()
-                        }
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFirstDeleteConfirmation = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    // second confirmation dialog
-    if (showSecondDeleteConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showSecondDeleteConfirmation = false },
-            title = { Text("Confirm Deletion") },
-            text = { Text("Are you sure you want to delete '${metadata.name}'?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSecondDeleteConfirmation = false
-                        if (requiredConfirmations >= 3u) {
-                            showFinalDeleteConfirmation = true
-                        } else {
-                            deleteWallet()
-                        }
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSecondDeleteConfirmation = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    // final confirmation dialog (for unverified hot wallets)
-    if (showFinalDeleteConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showFinalDeleteConfirmation = false },
-            title = { Text("Final Warning") },
-            text = { Text(finalDeleteConfirmationMessage) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showFinalDeleteConfirmation = false
-                        deleteWallet()
-                    },
-                ) {
-                    Text(finalDeleteButtonTitle, color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFinalDeleteConfirmation = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    // error dialog for deletion failures
-    deleteError?.let { error ->
-        AlertDialog(
-            onDismissRequest = { deleteError = null },
-            title = { Text("Failed to Delete Wallet") },
-            text = { Text(error) },
-            confirmButton = {
-                TextButton(onClick = { deleteError = null }) {
-                    Text("OK")
-                }
-            },
-        )
-    }
-}
-
-private fun WalletBirthday.displayValue(): String =
-    when (this) {
-        is WalletBirthday.BlockHeight -> "Block ${blockHeightFmt()}"
-
-        is WalletBirthday.Timestamp -> {
-            val date = Date(v1.toLong() * 1000)
-            SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(date)
-        }
-    }
-
-internal fun hasFreshMainCredential(
-    currentGeneration: Long,
-    generationAtRequest: Long,
-): Boolean = currentGeneration > generationAtRequest
-
-@Composable
-private fun XprvRevealDialog(
-    xprv: String,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-
-    SecureScreenEffect()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Extended Private Key") },
-        text = {
-            Column {
-                Text(
-                    text = "Keep this private. Anyone with this key can spend this wallet’s bitcoin.",
-                    modifier = Modifier.padding(bottom = 16.dp),
-                )
-                Text(
-                    text = xprv,
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    copyText(
-                        context = context,
-                        label = "Cove extended private key",
-                        text = xprv,
-                        sensitive = true,
-                    )
-                },
-            ) {
-                Icon(Icons.Default.ContentCopy, contentDescription = null)
-                Text("Copy")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done")
-            }
+    WalletSettingsDeleteDialogs(
+        walletName = metadata.name,
+        firstDeleteMessage = firstDeleteConfirmationMessage(),
+        finalDeleteMessage = finalDeleteConfirmationMessage,
+        finalDeleteButtonTitle = finalDeleteButtonTitle,
+        requiredConfirmations = requiredConfirmations,
+        showFirstDeleteConfirmation = showFirstDeleteConfirmation,
+        showSecondDeleteConfirmation = showSecondDeleteConfirmation,
+        showFinalDeleteConfirmation = showFinalDeleteConfirmation,
+        deleteError = deleteError,
+        onDismissFirst = { showFirstDeleteConfirmation = false },
+        onDismissSecond = { showSecondDeleteConfirmation = false },
+        onDismissFinal = { showFinalDeleteConfirmation = false },
+        onDismissError = { deleteError = null },
+        onRequestSecond = { showSecondDeleteConfirmation = true },
+        onRequestFinal = { showFinalDeleteConfirmation = true },
+        onDelete = {
+            showFinalDeleteConfirmation = false
+            deleteWallet()
         },
     )
-}
-
-@Composable
-private fun WalletColorSelector(
-    selectedWalletColor: WalletColor,
-    onColorChange: (WalletColor) -> Unit = {},
-) {
-    var selectedColor by remember(selectedWalletColor) {
-        mutableStateOf(selectedWalletColor)
-    }
-
-    val availableColors =
-        remember {
-            try {
-                defaultWalletColors()
-            } catch (e: Throwable) {
-                Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
-                emptyList()
-            }
-        }
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(
-                start = MaterialSpacing.medium,
-                end = MaterialSpacing.medium,
-                top = MaterialSpacing.medium,
-                bottom = MaterialSpacing.small,
-            ),
-    ) {
-        Text(
-            modifier =
-                Modifier
-                    .fillMaxWidth(),
-            text = stringResource(R.string.label_wallet_color),
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Start,
-        )
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .aspectRatio(1f)
-                    .background(
-                        color = selectedColor.toComposeColor(),
-                        shape = RoundedCornerShape(8.dp),
-                    ).weight(1f),
-            )
-
-            // 5 per row, adjust as needed
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
-                userScrollEnabled = false,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                        .padding(4.dp)
-                        .weight(3f),
-                contentPadding = PaddingValues(2.dp),
-            ) {
-                items(availableColors.size) { index ->
-                    val walletColor = availableColors[index]
-
-                    Box(
-                        modifier =
-                            Modifier
-                                .padding(4.dp)
-                                .aspectRatio(1f)
-                                .size(48.dp) // circle size
-                                .clickable {
-                                    selectedColor = walletColor
-                                    onColorChange(walletColor)
-                                },
-                    ) {
-                        // If selected → border first
-                        if (walletColor == selectedColor) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .matchParentSize()
-                                        .padding(3.dp) // creates space between border and circle
-                                        .border(
-                                            width = 3.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            shape = CircleShape,
-                                        ),
-                            )
-                        }
-
-                        // color circle
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(walletColor.toComposeColor(), CircleShape),
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
