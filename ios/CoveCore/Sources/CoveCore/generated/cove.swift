@@ -30809,6 +30809,11 @@ enum MultiQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
+    /**
+     * A bad frame that did not invalidate the active multipart scan
+     */
+    case RecoverableFrame(String
+    )
     case ParseError(String
     )
     case InvalidUtf8
@@ -30858,18 +30863,21 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
 
 
 
-        case 1: return .ParseError(
+        case 1: return .RecoverableFrame(
             try FfiConverterString.read(from: &buf)
             )
-        case 2: return .InvalidUtf8
-        case 3: return .RequiresStringData
-        case 4: return .InvalidSeedQr(
+        case 2: return .ParseError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .InvalidUtf8
+        case 4: return .RequiresStringData
+        case 5: return .InvalidSeedQr(
             try FfiConverterTypeSeedQrError.read(from: &buf)
             )
-        case 5: return .Ur(
+        case 6: return .Ur(
             try FfiConverterTypeUrError.read(from: &buf)
             )
-        case 6: return .BbqrCborNotSupported
+        case 7: return .BbqrCborNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -30882,31 +30890,36 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
 
 
 
-        case let .ParseError(v1):
+        case let .RecoverableFrame(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .InvalidUtf8:
+        case let .ParseError(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
 
 
-        case .RequiresStringData:
+        case .InvalidUtf8:
             writeInt(&buf, Int32(3))
 
 
-        case let .InvalidSeedQr(v1):
+        case .RequiresStringData:
             writeInt(&buf, Int32(4))
+
+
+        case let .InvalidSeedQr(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeSeedQrError.write(v1, into: &buf)
 
 
         case let .Ur(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeUrError.write(v1, into: &buf)
 
 
         case .BbqrCborNotSupported:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
 
         }
     }
