@@ -64,98 +64,208 @@ struct TransactionsCardView: View {
 
     var body: some View {
         VStack {
-            VStack {
-                HStack {
-                    Text("Transactions")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                    Spacer()
-                }
-                .padding(.bottom, 12)
-
-                if isScanning, !transactions.isEmpty || !unsignedTransactions.isEmpty {
-                    if isScanProgressVisible {
-                        TransactionsScanProgressStrip(progressFraction: scanProgressFraction)
-                            .padding(.bottom, 10)
-                    } else {
-                        TransactionsScanSpinnerStrip(message: scanSpinnerMessage)
-                            .padding(.bottom, 10)
-                    }
-                }
-
-                LazyVStack(alignment: .leading) {
-                    ForEach(Array(unsignedTransactions.enumerated()), id: \.element.id) { index, txn in
-                        VStack(alignment: .leading) {
-                            UnsignedTransactionView(txn: txn, metadata: metadata, index: index)
-                                .contentShape(
-                                    .contextMenuPreview,
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .inset(by: -6)
-                                )
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        do {
-                                            try manager.rust.deleteUnsignedTransaction(txId: txn.id())
-                                        } catch {
-                                            Log.error("Failed to delete unsigned transaction \(txn.id()): \(error)")
-                                            app.alertState = .init(.general(
-                                                title: "Delete Failed",
-                                                message: "Unable to delete transaction: \(error.localizedDescription)"
-                                            ))
-                                        }
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                                .padding(.vertical, 6)
-
-                            Divider().opacity(0.7)
-                        }
-                        .id(txn.id().description)
-                    }
-
-                    ForEach(Array(transactions.enumerated()), id: \.element.id) { index, txn in
-                        TransactionRow(txn: txn, metadata: metadata, index: unsignedTransactions.count + index)
-                            .id(txn.id.description)
-                    }
-                }
-
-                if transactions.isEmpty, unsignedTransactions.isEmpty, isScanning {
-                    if isScanProgressVisible {
-                        EmptyWalletScanState(
-                            scanProgress: scanProgress,
-                            progressFraction: scanProgressFraction
-                        )
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 56)
-                    } else {
-                        EmptyWalletScanSpinnerState(message: scanSpinnerMessage)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 56)
-                    }
-
-                    Spacer()
-                        .frame(minHeight: screenHeight * 0.2)
-                } else if transactions.isEmpty, unsignedTransactions.isEmpty {
-                    VStack {
-                        ContentUnavailableView {
-                            Label("No transactions", systemImage: "bitcoinsign.square.fill")
-                        } description: {
-                            Text("Go buy some bitcoin!")
-                        }
-                        .padding(.top, 20)
-
-                        Spacer()
-                            .frame(minHeight: screenHeight * 0.2)
-                    }
-                }
-            }
+            TransactionsCardContent(
+                transactions: transactions,
+                unsignedTransactions: unsignedTransactions,
+                metadata: metadata,
+                isScanning: isScanning,
+                scanProgress: scanProgress,
+                isScanProgressVisible: isScanProgressVisible,
+                scanProgressFraction: scanProgressFraction,
+                scanSpinnerMessage: scanSpinnerMessage,
+                screenHeight: screenHeight
+            )
             .padding()
             .padding(.top, 5)
         }
-        .onDisappear {
-            Task { await dismissAllPopups() }
+        .onDisappear(perform: dismissPopups)
+    }
+
+    private func dismissPopups() {
+        Task { await dismissAllPopups() }
+    }
+}
+
+private struct TransactionsCardContent: View {
+    let transactions: [CoveCore.Transaction]
+    let unsignedTransactions: [UnsignedTransaction]
+    let metadata: WalletMetadata
+    let isScanning: Bool
+    let scanProgress: WalletScanProgress?
+    let isScanProgressVisible: Bool
+    let scanProgressFraction: Double
+    let scanSpinnerMessage: String?
+    let screenHeight: CGFloat
+
+    var body: some View {
+        VStack {
+            HStack {
+                Text("Transactions")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+            .padding(.bottom, 12)
+
+            if isScanning, !transactions.isEmpty || !unsignedTransactions.isEmpty {
+                TransactionsScanningStrip(
+                    isProgressVisible: isScanProgressVisible,
+                    progressFraction: scanProgressFraction,
+                    spinnerMessage: scanSpinnerMessage
+                )
+            }
+
+            TransactionRows(
+                transactions: transactions,
+                unsignedTransactions: unsignedTransactions,
+                metadata: metadata
+            )
+
+            TransactionsEmptyContent(
+                transactionsAreEmpty: transactions.isEmpty,
+                unsignedTransactionsAreEmpty: unsignedTransactions.isEmpty,
+                isScanning: isScanning,
+                scanProgress: scanProgress,
+                isScanProgressVisible: isScanProgressVisible,
+                scanProgressFraction: scanProgressFraction,
+                scanSpinnerMessage: scanSpinnerMessage,
+                screenHeight: screenHeight
+            )
+        }
+    }
+}
+
+private struct TransactionsScanningStrip: View {
+    let isProgressVisible: Bool
+    let progressFraction: Double
+    let spinnerMessage: String?
+
+    var body: some View {
+        Group {
+            if isProgressVisible {
+                TransactionsScanProgressStrip(progressFraction: progressFraction)
+            } else {
+                TransactionsScanSpinnerStrip(message: spinnerMessage)
+            }
+        }
+        .padding(.bottom, 10)
+    }
+}
+
+private struct TransactionRows: View {
+    let transactions: [CoveCore.Transaction]
+    let unsignedTransactions: [UnsignedTransaction]
+    let metadata: WalletMetadata
+
+    var body: some View {
+        LazyVStack(alignment: .leading) {
+            UnsignedTransactionRows(
+                transactions: unsignedTransactions,
+                metadata: metadata
+            )
+
+            ForEach(Array(transactions.enumerated()), id: \.element.id) { index, transaction in
+                TransactionRow(
+                    txn: transaction,
+                    metadata: metadata,
+                    index: unsignedTransactions.count + index
+                )
+                .id(transaction.id.description)
+            }
+        }
+    }
+}
+
+private struct UnsignedTransactionRows: View {
+    @Environment(AppManager.self) private var app
+    @Environment(WalletManager.self) private var manager
+
+    let transactions: [UnsignedTransaction]
+    let metadata: WalletMetadata
+
+    var body: some View {
+        ForEach(Array(transactions.enumerated()), id: \.element.id) { index, transaction in
+            VStack(alignment: .leading) {
+                UnsignedTransactionView(
+                    txn: transaction,
+                    metadata: metadata,
+                    index: index
+                )
+                .contentShape(
+                    .contextMenuPreview,
+                    RoundedRectangle(cornerRadius: 8)
+                        .inset(by: -6)
+                )
+                .contextMenu {
+                    Button(role: .destructive) {
+                        delete(transaction)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .padding(.vertical, 6)
+
+                Divider().opacity(0.7)
+            }
+            .id(transaction.id().description)
+        }
+    }
+
+    private func delete(_ transaction: UnsignedTransaction) {
+        do {
+            try manager.rust.deleteUnsignedTransaction(txId: transaction.id())
+        } catch {
+            Log.error("Failed to delete unsigned transaction \(transaction.id()): \(error)")
+            app.alertState = .init(.general(
+                title: "Delete Failed",
+                message: "Unable to delete transaction: \(error.localizedDescription)"
+            ))
+        }
+    }
+}
+
+private struct TransactionsEmptyContent: View {
+    let transactionsAreEmpty: Bool
+    let unsignedTransactionsAreEmpty: Bool
+    let isScanning: Bool
+    let scanProgress: WalletScanProgress?
+    let isScanProgressVisible: Bool
+    let scanProgressFraction: Double
+    let scanSpinnerMessage: String?
+    let screenHeight: CGFloat
+
+    var body: some View {
+        if transactionsAreEmpty, unsignedTransactionsAreEmpty, isScanning {
+            VStack {
+                if isScanProgressVisible {
+                    EmptyWalletScanState(
+                        scanProgress: scanProgress,
+                        progressFraction: scanProgressFraction
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 56)
+                } else {
+                    EmptyWalletScanSpinnerState(message: scanSpinnerMessage)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 56)
+                }
+
+                Spacer()
+                    .frame(minHeight: screenHeight * 0.2)
+            }
+        } else if transactionsAreEmpty, unsignedTransactionsAreEmpty {
+            VStack {
+                ContentUnavailableView {
+                    Label("No transactions", systemImage: "bitcoinsign.square.fill")
+                } description: {
+                    Text("Go buy some bitcoin!")
+                }
+                .padding(.top, 20)
+
+                Spacer()
+                    .frame(minHeight: screenHeight * 0.2)
+            }
         }
     }
 }

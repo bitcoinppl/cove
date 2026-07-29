@@ -21,25 +21,75 @@ public struct ChooseWalletTypeView: View {
         foundAddresses.sorted { x1, x2 in x2.type > x1.type }
     }
 
-    func TypeButton(_ foundAddress: FoundAddress) -> some View {
-        Button(action: {
-            Task {
-                // switch the wallet
-                do {
-                    try await manager.rust.switchToDifferentWalletAddressType(
-                        walletAddressType: foundAddress.type
-                    )
-                } catch {
-                    Log.error(error.localizedDescription)
-                    dismiss()
-                    return
-                }
+    public var body: some View {
+        VStack(spacing: 32) {
+            Text("Multiple wallets found, please choose one")
+            Text("Multiple wallets found, please choose one")
+                .font(.title)
+                .fontWeight(.bold)
+                .multilineTextAlignment(.center)
 
-                await MainActor.run {
-                    dismiss()
-                }
+            CurrentWalletTypeButton(
+                address: address?.addressUnformatted() ?? "bc1q",
+                select: selectCurrentWallet
+            )
+
+            ForEach(foundAddressesSorted, id: \.self) { foundAddress in
+                FoundWalletTypeButton(
+                    manager: manager,
+                    foundAddress: foundAddress,
+                    dismiss: dismiss.callAsFunction
+                )
             }
-        }) {
+        }
+        .task {
+            await loadAddress()
+        }
+        .padding()
+    }
+
+    private func selectCurrentWallet() {
+        manager.dispatch(action: .selectCurrentWalletAddressType)
+        dismiss()
+    }
+
+    private func loadAddress() async {
+        let address = try? await manager.firstAddress()
+        guard let address else { return }
+
+        withAnimation {
+            self.address = address
+        }
+    }
+}
+
+private struct CurrentWalletTypeButton: View {
+    let address: String
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            VStack {
+                Text("Keep Current")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.blue)
+
+                Text(address)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct FoundWalletTypeButton: View {
+    let manager: WalletManager
+    let foundAddress: FoundAddress
+    let dismiss: () -> Void
+
+    var body: some View {
+        Button(action: select) {
             VStack {
                 Text(String(foundAddress.type))
                     .font(.title3)
@@ -53,41 +103,22 @@ public struct ChooseWalletTypeView: View {
         .foregroundStyle(.primary)
     }
 
-    public var body: some View {
-        VStack(spacing: 32) {
-            Text("Multiple wallets found, please choose one")
-            Text("Multiple wallets found, please choose one")
-                .font(.title)
-                .fontWeight(.bold)
-                .multilineTextAlignment(.center)
-
-            Button(action: {
-                manager.dispatch(action: .selectCurrentWalletAddressType)
+    private func select() {
+        Task {
+            do {
+                try await manager.rust.switchToDifferentWalletAddressType(
+                    walletAddressType: foundAddress.type
+                )
+            } catch {
+                Log.error(error.localizedDescription)
                 dismiss()
-            }) {
-                VStack {
-                    Text("Keep Current")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.blue)
-
-                    Text(address?.addressUnformatted() ?? "bc1q")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                return
             }
 
-            ForEach(foundAddressesSorted, id: \.self, content: TypeButton)
-        }
-        .task {
-            let address = try? await manager.firstAddress()
-            if let address {
-                withAnimation {
-                    self.address = address
-                }
+            await MainActor.run {
+                dismiss()
             }
         }
-        .padding()
     }
 }
 

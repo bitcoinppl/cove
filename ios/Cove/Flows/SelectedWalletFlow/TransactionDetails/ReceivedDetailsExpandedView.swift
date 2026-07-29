@@ -18,79 +18,130 @@ struct ReceivedDetailsExpandedView: View {
     let retryLockState: () -> Void
     let toggleLockState: () -> Void
 
-    // private
-    @State private var isCopied = false
-    @State private var showingPriceInfo = false
-
-    @ViewBuilder
-    func expandedDetailsRow(header: String, content: String) -> some View {
-        Text(header)
-            .font(.caption)
-            .foregroundColor(.gray)
-            .multilineTextAlignment(.leading)
-
-        Text(content)
-            .fontWeight(.semibold)
-            .multilineTextAlignment(.leading)
-            .padding(.bottom, 14)
-    }
-
     var body: some View {
         VStack(alignment: .leading) {
             Divider().padding(.vertical, 18)
 
-            if transactionDetails.isConfirmed() {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Confirmations")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.leading)
+            ReceivedConfirmationDetails(
+                manager: manager,
+                transactionDetails: transactionDetails,
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                toggleLockState: toggleLockState
+            )
 
-                        if let numberOfConfirmations {
-                            Text(manager.displayConfirmationCount(UInt32(numberOfConfirmations)))
-                                .fontWeight(.semibold)
-                                .multilineTextAlignment(.leading)
-                                .contentTransition(.numericText())
-                        } else {
-                            ProgressView()
-                                .tint(.primary)
-                        }
-                    }
-                    .padding(.bottom, 14)
+            ReceivedAddressDetails(transactionDetails: transactionDetails)
+            ReceivedFiatPriceDetails(transactionDetails: transactionDetails)
+        }
+        .padding(.horizontal, detailsExpandedPadding)
+    }
+}
+
+private struct ReceivedConfirmationDetails: View {
+    let manager: WalletManager
+    let transactionDetails: TransactionDetails
+    let numberOfConfirmations: Int?
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
+    let lockStateLoadError: String?
+    let retryLockState: () -> Void
+    let toggleLockState: () -> Void
+
+    var body: some View {
+        if transactionDetails.isConfirmed() {
+            VStack(alignment: .leading) {
+                HStack(alignment: .top) {
+                    ConfirmationCount(
+                        manager: manager,
+                        numberOfConfirmations: numberOfConfirmations
+                    )
 
                     Spacer()
-
-                    TransactionDetailsLockControl(
-                        lockState: lockState,
-                        isUpdatingLockState: isUpdatingLockState,
-                        showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
-                        lockStateLoadError: lockStateLoadError,
-                        retryLockState: retryLockState,
-                        toggleLockState: toggleLockState
-                    )
-                    .padding(.top, 1)
+                    lockControl
                 }
 
-                expandedDetailsRow(
+                ExpandedDetailsRow(
                     header: "Block Number",
                     content: String(transactionDetails.blockNumberFmt() ?? "")
                 )
-            } else {
-                HStack {
-                    Spacer()
-
-                    TransactionDetailsLockControl(
-                        lockState: lockState,
-                        isUpdatingLockState: isUpdatingLockState,
-                        showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
-                        lockStateLoadError: lockStateLoadError,
-                        retryLockState: retryLockState,
-                        toggleLockState: toggleLockState
-                    )
-                }
             }
+        } else {
+            HStack {
+                Spacer()
+                lockControl
+            }
+        }
+    }
 
+    private var lockControl: some View {
+        TransactionDetailsLockControl(
+            lockState: lockState,
+            isUpdatingLockState: isUpdatingLockState,
+            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+            lockStateLoadError: lockStateLoadError,
+            retryLockState: retryLockState,
+            toggleLockState: toggleLockState
+        )
+        .padding(.top, 1)
+    }
+}
+
+private struct ConfirmationCount: View {
+    let manager: WalletManager
+    let numberOfConfirmations: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Confirmations")
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.leading)
+
+            if let numberOfConfirmations {
+                Text(manager.displayConfirmationCount(UInt32(numberOfConfirmations)))
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.leading)
+                    .contentTransition(.numericText())
+            } else {
+                ProgressView()
+                    .tint(.primary)
+            }
+        }
+        .padding(.bottom, 14)
+    }
+}
+
+private struct ExpandedDetailsRow: View {
+    let header: String
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(header)
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.leading)
+
+            Text(content)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.leading)
+                .padding(.bottom, 14)
+        }
+    }
+}
+
+private struct ReceivedAddressDetails: View {
+    let transactionDetails: TransactionDetails
+
+    @State private var isCopied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Received At")
                 .font(.caption)
                 .foregroundColor(.gray)
@@ -105,20 +156,8 @@ struct ReceivedDetailsExpandedView: View {
                 Spacer()
                 Spacer()
 
-                if let address = transactionDetails.address() {
-                    Button(action: {
-                        UIPasteboard.general.string = address.unformatted()
-                        withAnimation {
-                            isCopied = true
-                        }
-
-                        // Reset the button text after a delay
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                            withAnimation {
-                                isCopied = false
-                            }
-                        }
-                    }) {
+                if transactionDetails.address() != nil {
+                    Button(action: copyAddress) {
                         HStack(spacing: 8) {
                             Image(systemName: "doc.on.doc")
                                 .font(.caption)
@@ -138,10 +177,31 @@ struct ReceivedDetailsExpandedView: View {
                     .buttonStyle(PlainButtonStyle())
                 }
             }
+        }
+    }
 
-            // MARK: - Fiat Price Section
+    private func copyAddress() {
+        guard let address = transactionDetails.address() else { return }
 
-            if transactionDetails.isConfirmed() {
+        UIPasteboard.general.string = address.unformatted()
+        withAnimation {
+            isCopied = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            withAnimation {
+                isCopied = false
+            }
+        }
+    }
+}
+
+private struct ReceivedFiatPriceDetails: View {
+    let transactionDetails: TransactionDetails
+
+    var body: some View {
+        if transactionDetails.isConfirmed() {
+            VStack(alignment: .leading, spacing: 0) {
                 Divider().padding(.vertical, 18)
 
                 HStack(alignment: .top) {
@@ -149,47 +209,66 @@ struct ReceivedDetailsExpandedView: View {
                         .fontWeight(.semibold)
                     Spacer()
 
-                    VStack(alignment: .trailing, spacing: 4) {
-                        // current fiat value
-                        AsyncView(
-                            cachedValue: transactionDetails.amountFiatFmtCached(),
-                            operation: transactionDetails.amountFiatFmt
-                        ) { amount in
-                            Text(amount)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                        }
-
-                        // historical fiat value (when received)
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.caption2)
-                            AsyncView(
-                                cachedValue: transactionDetails.historicalFiatFmtCached(),
-                                operation: transactionDetails.historicalFiatFmt
-                            ) { amount in
-                                Text(amount)
-                                    .font(.caption)
-                                    .foregroundStyle(.primary)
-                            }
-                            Image(systemName: "info.circle")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                                .onTapGesture { showingPriceInfo.toggle() }
-                                .popover(isPresented: $showingPriceInfo) {
-                                    Text("Price at time of transaction")
-                                        .font(.caption)
-                                        .padding(8)
-                                        .presentationCompactAdaptation(.popover)
-                                }
-                        }
-                        .foregroundStyle(.primary)
-                    }
+                    ReceivedFiatPriceValues(transactionDetails: transactionDetails)
                 }
                 .font(.subheadline)
                 .foregroundStyle(.primary)
             }
         }
-        .padding(.horizontal, detailsExpandedPadding)
+    }
+}
+
+private struct ReceivedFiatPriceValues: View {
+    let transactionDetails: TransactionDetails
+
+    @State private var showingPriceInfo = false
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            AsyncView(
+                cachedValue: transactionDetails.amountFiatFmtCached(),
+                operation: transactionDetails.amountFiatFmt
+            ) { amount in
+                Text(amount)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
+
+            ReceivedHistoricalFiatPrice(
+                transactionDetails: transactionDetails,
+                showingPriceInfo: $showingPriceInfo
+            )
+        }
+    }
+}
+
+private struct ReceivedHistoricalFiatPrice: View {
+    let transactionDetails: TransactionDetails
+    @Binding var showingPriceInfo: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock")
+                .font(.caption2)
+            AsyncView(
+                cachedValue: transactionDetails.historicalFiatFmtCached(),
+                operation: transactionDetails.historicalFiatFmt
+            ) { amount in
+                Text(amount)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+            }
+            Image(systemName: "info.circle")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .onTapGesture { showingPriceInfo.toggle() }
+                .popover(isPresented: $showingPriceInfo) {
+                    Text("Price at time of transaction")
+                        .font(.caption)
+                        .padding(8)
+                        .presentationCompactAdaptation(.popover)
+                }
+        }
+        .foregroundStyle(.primary)
     }
 }

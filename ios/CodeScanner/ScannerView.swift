@@ -70,65 +70,24 @@ struct ScannerView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ZStack {
-                if viewLoaded, !showingPermissionAlert, scanError == nil {
-                    CodeScannerView(
-                        codeTypes: codeTypes,
-                        scanMode: scanMode,
-                        scanInterval: scanInterval,
-                        simulatedData: simulatedData,
-                        isTorchOn: showTorchButton ? isTorchOn : false,
-                        videoCaptureDevice: AVCaptureDevice.zoomedCameraForQRCode(withMinimumCodeSize: Float(codeSize)),
-                        completion: completeScan
-                    )
-                }
-
-                // Focus indicator
-                if showFocusIndicator {
-                    Image(systemName: "viewfinder")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .foregroundColor(focusIndicatorColor)
-                        .frame(width: focusIndicatorSize, height: focusIndicatorSize)
-                        .font(.system(size: focusIndicatorSize, weight: .ultraLight))
-                        .position(
-                            x: 0.5 * containerWidth,
-                            y: 0.5 * containerHeight
-                        )
-                }
-
-                HStack(spacing: 25) {
-                    if showTorchButton {
-                        VStack {
-                            Spacer()
-                            Button(action: { isTorchOn.toggle() }) {
-                                Image(systemName: isTorchOn ? "bolt.fill" : "bolt.slash.fill")
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(Color.black.opacity(0.7))
-                                    .clipShape(Circle())
-                            }
-                            .padding(.bottom, 40)
-                        }
-                    }
-
-                    VStack {
-                        Spacer()
-                        Button(action: {
-                            withAnimation {
-                                toggleZoom()
-                            }
-                        }) {
-                            Text(zoomLevel)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Color.black.opacity(0.7))
-                                .clipShape(Circle())
-                        }
-                        .padding(.bottom, 40)
-                    }
-                }
-            }
+            ScannerStage(
+                codeTypes: codeTypes,
+                scanMode: scanMode,
+                scanInterval: scanInterval,
+                simulatedData: simulatedData,
+                showTorchButton: showTorchButton,
+                showFocusIndicator: showFocusIndicator,
+                focusIndicatorSize: focusIndicatorSize,
+                focusIndicatorColor: focusIndicatorColor,
+                codeSize: codeSize,
+                zoomLevel: zoomLevel,
+                containerWidth: containerWidth,
+                containerHeight: containerHeight,
+                isActive: viewLoaded && !showingPermissionAlert && scanError == nil,
+                isTorchOn: $isTorchOn,
+                toggleZoom: toggleZoom,
+                completion: completeScan
+            )
             .onAppear {
                 containerWidth = geo.size.width
                 containerHeight = geo.size.height
@@ -155,6 +114,172 @@ struct ScannerView: View {
                     }
                 )
             }
+        }
+    }
+}
+
+private struct ScannerStage: View {
+    let codeTypes: [AVMetadataObject.ObjectType]
+    let scanMode: ScanMode
+    let scanInterval: Double
+    let simulatedData: String
+    let showTorchButton: Bool
+    let showFocusIndicator: Bool
+    let focusIndicatorSize: CGFloat
+    let focusIndicatorColor: Color
+    let codeSize: CGFloat
+    let zoomLevel: String
+    let containerWidth: CGFloat
+    let containerHeight: CGFloat
+    let isActive: Bool
+    @Binding var isTorchOn: Bool
+    let toggleZoom: () -> Void
+    let completion: (Result<ScanResult, ScanError>) -> Void
+
+    var body: some View {
+        ZStack {
+            ScannerCamera(
+                codeTypes: codeTypes,
+                scanMode: scanMode,
+                scanInterval: scanInterval,
+                simulatedData: simulatedData,
+                codeSize: codeSize,
+                isActive: isActive,
+                isTorchOn: showTorchButton && isTorchOn,
+                completion: completion
+            )
+
+            ScannerFocusIndicator(
+                isVisible: showFocusIndicator,
+                size: focusIndicatorSize,
+                color: focusIndicatorColor,
+                containerWidth: containerWidth,
+                containerHeight: containerHeight
+            )
+
+            ScannerControls(
+                showTorchButton: showTorchButton,
+                isTorchOn: $isTorchOn,
+                zoomLevel: zoomLevel,
+                toggleZoom: toggleZoom
+            )
+        }
+    }
+}
+
+private struct ScannerCamera: View {
+    let codeTypes: [AVMetadataObject.ObjectType]
+    let scanMode: ScanMode
+    let scanInterval: Double
+    let simulatedData: String
+    let codeSize: CGFloat
+    let isActive: Bool
+    let isTorchOn: Bool
+    let completion: (Result<ScanResult, ScanError>) -> Void
+
+    var body: some View {
+        if isActive {
+            CodeScannerView(
+                codeTypes: codeTypes,
+                scanMode: scanMode,
+                scanInterval: scanInterval,
+                simulatedData: simulatedData,
+                isTorchOn: isTorchOn,
+                videoCaptureDevice: AVCaptureDevice.zoomedCameraForQRCode(
+                    withMinimumCodeSize: Float(codeSize)
+                ),
+                completion: completion
+            )
+        }
+    }
+}
+
+private struct ScannerFocusIndicator: View {
+    let isVisible: Bool
+    let size: CGFloat
+    let color: Color
+    let containerWidth: CGFloat
+    let containerHeight: CGFloat
+
+    var body: some View {
+        if isVisible {
+            Image(systemName: "viewfinder")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .foregroundColor(color)
+                .frame(width: size, height: size)
+                .font(.system(size: size, weight: .ultraLight))
+                .position(
+                    x: 0.5 * containerWidth,
+                    y: 0.5 * containerHeight
+                )
+        }
+    }
+}
+
+private struct ScannerControls: View {
+    let showTorchButton: Bool
+    @Binding var isTorchOn: Bool
+    let zoomLevel: String
+    let toggleZoom: () -> Void
+
+    var body: some View {
+        HStack(spacing: 25) {
+            if showTorchButton {
+                ScannerControlButton(
+                    systemImage: isTorchOn ? "bolt.fill" : "bolt.slash.fill",
+                    action: { isTorchOn.toggle() }
+                )
+            }
+
+            ScannerControlButton(title: zoomLevel) {
+                withAnimation {
+                    toggleZoom()
+                }
+            }
+        }
+    }
+}
+
+private struct ScannerControlButton: View {
+    private enum Label {
+        case title(String)
+        case systemImage(String)
+    }
+
+    private let label: Label
+    let action: () -> Void
+
+    init(title: String, action: @escaping () -> Void) {
+        label = .title(title)
+        self.action = action
+    }
+
+    init(systemImage: String, action: @escaping () -> Void) {
+        label = .systemImage(systemImage)
+        self.action = action
+    }
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            Button(action: action) {
+                Group {
+                    switch label {
+                    case let .title(title):
+                        Text(title)
+
+                    case let .systemImage(systemImage):
+                        Image(systemName: systemImage)
+                    }
+                }
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.black.opacity(0.7))
+                .clipShape(Circle())
+            }
+            .padding(.bottom, 40)
         }
     }
 }

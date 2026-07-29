@@ -43,27 +43,7 @@ struct QrExportView: View {
 
     var body: some View {
         VStack {
-            HStack {
-                Spacer()
-                Text(title)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-            .overlay(alignment: .trailing) {
-                if copyData != nil {
-                    Button {
-                        Task { await copyToClipboard() }
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 4)
-                }
-            }
-            .padding(.top, 12)
+            QrExportHeader(title: title, canCopy: copyData != nil, copy: copyToClipboard)
 
             Text(subtitle)
                 .font(.callout)
@@ -75,14 +55,7 @@ struct QrExportView: View {
                 .padding(.horizontal, 40)
 
             if showFormatPicker {
-                Picker("Format", selection: $selectedFormat) {
-                    ForEach(QrExportFormat.allCases, id: \.self) { format in
-                        Text(String(describing: format)).tag(format)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.vertical, 8)
-                .frame(maxWidth: 200)
+                QrExportFormatPicker(selectedFormat: $selectedFormat)
             }
 
             QrExportContent(
@@ -136,6 +109,53 @@ struct QrExportView: View {
         } catch {
             Log.error("Failed to copy data: \(error)")
         }
+    }
+}
+
+private struct QrExportHeader: View {
+    let title: String
+    let canCopy: Bool
+    let copy: () async -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+
+            Text(title)
+                .font(.title3)
+                .fontWeight(.semibold)
+
+            Spacer()
+        }
+        .overlay(alignment: .trailing) {
+            if canCopy {
+                Button {
+                    Task { await copy() }
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+            }
+        }
+        .padding(.top, 12)
+    }
+}
+
+private struct QrExportFormatPicker: View {
+    @Binding var selectedFormat: QrExportFormat
+
+    var body: some View {
+        Picker("Format", selection: $selectedFormat) {
+            ForEach(QrExportFormat.allCases, id: \.self) { format in
+                Text(String(describing: format)).tag(format)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 200)
     }
 }
 

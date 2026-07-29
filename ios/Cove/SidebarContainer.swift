@@ -116,94 +116,39 @@ struct SidebarContainer<Content: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .offset(x: totalOffset)
 
-            if app.isSidebarVisible {
-                Rectangle()
-                    .fill(Color.black)
-                    .background(.black)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .opacity(openPercentage * 0.45)
-                    .onTapGesture {
-                        updateSidebarState(isVisible: false)
-                    }
-                    .gesture(
-                        DragGesture(minimumDistance: 5)
-                            .onChanged { value in
-                                if isVerticalDominantDrag(value) {
-                                    dragTranslation = 0
-                                    return
-                                }
+            SidebarBackdrop(
+                isVisible: app.isSidebarVisible,
+                openPercentage: openPercentage,
+                dragTranslation: $dragTranslation,
+                dragStartedWithSidebarOpen: $dragStartedWithSidebarOpen,
+                isDragging: $isDragging,
+                close: { updateSidebarState(isVisible: false) },
+                isVerticalDominantDrag: isVerticalDominantDrag,
+                closingTranslation: closingTranslation,
+                onDragEnded: onDragEnded
+            )
 
-                                isDragging = true
-                                dragStartedWithSidebarOpen = true
+            SidebarPanel(
+                currentRoute: app.currentRoute,
+                width: sideBarWidth,
+                offset: totalOffset,
+                isVisible: app.isSidebarVisible,
+                dragTranslation: $dragTranslation,
+                dragStartedWithSidebarOpen: $dragStartedWithSidebarOpen,
+                isDragging: $isDragging,
+                isVerticalDominantDrag: isVerticalDominantDrag,
+                closingTranslation: closingTranslation,
+                onDragEnded: onDragEnded
+            )
 
-                                let translation = closingTranslation(from: value)
-                                dragTranslation = translation
-                            }
-                            .onEnded(onDragEnded)
-                    )
-                    .ignoresSafeArea(.all)
-                    .zIndex(1)
-            }
-
-            SidebarView(currentRoute: app.currentRoute)
-                .frame(width: sideBarWidth)
-                .offset(x: -sideBarWidth)
-                .offset(x: totalOffset)
-                .zIndex(2)
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 5)
-                        .onChanged { value in
-                            guard app.isSidebarVisible else { return }
-
-                            if isVerticalDominantDrag(value) {
-                                dragTranslation = 0
-                                return
-                            }
-
-                            isDragging = true
-                            dragStartedWithSidebarOpen = true
-
-                            let translation = closingTranslation(from: value)
-                            dragTranslation = translation
-                        }
-                        .onEnded(onDragEnded)
-                )
-
-            // edge handle for opening sidebar when closed
-            if !app.isSidebarVisible, app.router.routes.isEmpty {
-                Color.clear
-                    .frame(width: 24)
-                    .frame(maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 5)
-                            .onChanged { value in
-                                let translation = value.translation.width
-                                let translationHeight = value.translation.height
-
-                                // only handle horizontal gestures
-                                if abs(translationHeight) > abs(translation) {
-                                    dragTranslation = 0
-                                    return
-                                }
-
-                                isDragging = true
-                                dragStartedWithSidebarOpen = false
-
-                                // only allow opening (positive translation)
-                                if translation < 0 {
-                                    dragTranslation = 0
-                                    return
-                                }
-
-                                let adjustedTranslation = min(
-                                    max(translation * 0.95, 0), sideBarWidth
-                                )
-                                dragTranslation = adjustedTranslation
-                            }
-                            .onEnded(onDragEnded)
-                    )
-            }
+            SidebarOpeningHandle(
+                isVisible: !app.isSidebarVisible && app.router.routes.isEmpty,
+                sideBarWidth: sideBarWidth,
+                dragTranslation: $dragTranslation,
+                dragStartedWithSidebarOpen: $dragStartedWithSidebarOpen,
+                isDragging: $isDragging,
+                onDragEnded: onDragEnded
+            )
         }
         .onAppear {
             syncSidebarState(isVisible: app.isSidebarVisible)
@@ -220,6 +165,118 @@ struct SidebarContainer<Content: View>: View {
 
             updateSidebarState(isVisible: isVisible)
         }
+    }
+}
+
+private struct SidebarBackdrop: View {
+    let isVisible: Bool
+    let openPercentage: Double
+    @Binding var dragTranslation: CGFloat
+    @Binding var dragStartedWithSidebarOpen: Bool
+    @Binding var isDragging: Bool
+    let close: () -> Void
+    let isVerticalDominantDrag: (DragGesture.Value) -> Bool
+    let closingTranslation: (DragGesture.Value) -> CGFloat
+    let onDragEnded: (DragGesture.Value) -> Void
+
+    var body: some View {
+        if isVisible {
+            Rectangle()
+                .fill(Color.black)
+                .background(.black)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(openPercentage * 0.45)
+                .onTapGesture(perform: close)
+                .gesture(
+                    DragGesture(minimumDistance: 5)
+                        .onChanged { value in
+                            guard !isVerticalDominantDrag(value) else {
+                                dragTranslation = 0
+                                return
+                            }
+
+                            isDragging = true
+                            dragStartedWithSidebarOpen = true
+                            dragTranslation = closingTranslation(value)
+                        }
+                        .onEnded(onDragEnded)
+                )
+                .ignoresSafeArea(.all)
+                .zIndex(1)
+        }
+    }
+}
+
+private struct SidebarPanel: View {
+    let currentRoute: Route
+    let width: CGFloat
+    let offset: CGFloat
+    let isVisible: Bool
+    @Binding var dragTranslation: CGFloat
+    @Binding var dragStartedWithSidebarOpen: Bool
+    @Binding var isDragging: Bool
+    let isVerticalDominantDrag: (DragGesture.Value) -> Bool
+    let closingTranslation: (DragGesture.Value) -> CGFloat
+    let onDragEnded: (DragGesture.Value) -> Void
+
+    var body: some View {
+        SidebarView(currentRoute: currentRoute)
+            .frame(width: width)
+            .offset(x: -width)
+            .offset(x: offset)
+            .zIndex(2)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 5)
+                    .onChanged { value in
+                        guard isVisible else { return }
+                        guard !isVerticalDominantDrag(value) else {
+                            dragTranslation = 0
+                            return
+                        }
+
+                        isDragging = true
+                        dragStartedWithSidebarOpen = true
+                        dragTranslation = closingTranslation(value)
+                    }
+                    .onEnded(onDragEnded)
+            )
+    }
+}
+
+private struct SidebarOpeningHandle: View {
+    let isVisible: Bool
+    let sideBarWidth: CGFloat
+    @Binding var dragTranslation: CGFloat
+    @Binding var dragStartedWithSidebarOpen: Bool
+    @Binding var isDragging: Bool
+    let onDragEnded: (DragGesture.Value) -> Void
+
+    var body: some View {
+        if isVisible {
+            Color.clear
+                .frame(width: 24)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 5)
+                        .onChanged(updateDrag)
+                        .onEnded(onDragEnded)
+                )
+        }
+    }
+
+    private func updateDrag(_ value: DragGesture.Value) {
+        let translation = value.translation.width
+        let translationHeight = value.translation.height
+
+        guard abs(translationHeight) <= abs(translation), translation >= 0 else {
+            dragTranslation = 0
+            return
+        }
+
+        isDragging = true
+        dragStartedWithSidebarOpen = false
+        dragTranslation = min(max(translation * 0.95, 0), sideBarWidth)
     }
 }
 

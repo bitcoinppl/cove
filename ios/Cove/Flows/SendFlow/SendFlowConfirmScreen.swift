@@ -55,167 +55,31 @@ struct SendFlowConfirmScreen: View {
     }
 
     var body: some View {
-        // signed psbt has not been finalized yet
         if case let .signedPsbt(psbt) = input, finalizedTransaction == nil {
-            FullPageLoadingView()
-                .task {
-                    do {
-                        finalizedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
-                    } catch let error as WalletManagerError {
-                        app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.description))
-                    } catch {
-                        app.alertState = .init(.general(title: "Unknown error", message: error.localizedDescription))
-                    }
-                }
+            SendFlowFinalizePsbtView(
+                manager: manager,
+                psbt: psbt,
+                finalizedTransaction: $finalizedTransaction
+            )
         } else {
-            VStack(spacing: 0) {
-                // MARK: HEADER
-
-                SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
-
-                // MARK: CONTENT
-
-                GeometryReader { geometry in
-                    ZStack(alignment: .bottom) {
-                        ScrollView {
-                            VStack(spacing: 24) {
-                                // set amount
-                                VStack(spacing: 8) {
-                                    HStack {
-                                        Text("You're sending")
-                                            .font(.headline)
-                                            .fontWeight(.bold)
-
-                                        Spacer()
-                                    }
-                                    .padding(.top, 6)
-
-                                    HStack {
-                                        Text("The amount they will receive")
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary.opacity(0.80))
-                                            .fontWeight(.medium)
-                                        Spacer()
-                                    }
-                                }
-                                .padding(.top, 10)
-
-                                // the amount in sats or btc
-                                VStack(spacing: 8) {
-                                    HStack(alignment: .bottom) {
-                                        Spacer()
-
-                                        Text(manager.amountFmt(details.sendingAmount()))
-                                            .frame(minWidth: screenWidth / 2)
-                                            .font(.system(size: 48, weight: .bold))
-                                            .minimumScaleFactor(0.01)
-                                            .lineLimit(1)
-                                            .multilineTextAlignment(.center)
-
-                                        Button(action: { showingMenu.toggle() }) {
-                                            HStack(spacing: 0) {
-                                                Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-
-                                                Image(systemName: "chevron.down")
-                                                    .font(.caption)
-                                                    .fontWeight(.bold)
-                                                    .padding(.top, 2)
-                                                    .padding(.leading, 4)
-                                            }
-                                            .frame(alignment: .trailing)
-                                        }
-                                        .foregroundStyle(.primary)
-                                        .padding(.vertical, 10)
-                                        .padding(.leading, 16)
-                                        .popover(isPresented: $showingMenu) {
-                                            VStack(alignment: .center, spacing: 0) {
-                                                Button("sats") {
-                                                    manager.dispatch(action: .updateUnit(.sat))
-                                                    showingMenu = false
-                                                }
-                                                .padding(12)
-                                                .buttonStyle(.plain)
-
-                                                Divider()
-
-                                                Button("btc") {
-                                                    manager.dispatch(action: .updateUnit(.btc))
-                                                    showingMenu = false
-                                                }
-                                                .padding(12)
-                                                .buttonStyle(.plain)
-                                            }
-                                            .padding(.vertical, 8)
-                                            .padding(.horizontal, 12)
-                                            .frame(minWidth: 120, maxWidth: 200)
-                                            .presentationCompactAdaptation(.popover)
-                                            .foregroundStyle(.primary.opacity(0.8))
-                                        }
-                                    }
-                                    .frame(alignment: .center)
-
-                                    Text(fiatAmount)
-                                        .font(.title3)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.top, 8)
-
-                                SendFlowAccountSection(manager: manager)
-                                    .padding(.top)
-
-                                Divider()
-
-                                SendFlowDetailsView(manager: manager, details: details, prices: prices)
-                            }
-                            .padding(.horizontal)
-                            .padding(.bottom, sendConfirmationFooterHeight)
-                        }
-                        .scrollIndicators(.hidden)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .background(Color.coveBg)
-
-                        sendConfirmationFooter
-                            .offset(y: -sendConfirmationActionBottomPadding)
-                            .padding(.bottom, sendConfirmationActionBottomPadding)
-                            .background(Color.coveBg)
-                            .onGeometryChange(for: CGFloat.self) { proxy in
-                                proxy.size.height
-                            } action: { height in
-                                if sendConfirmationFooterHeight != height {
-                                    sendConfirmationFooterHeight = height
-                                }
-                            }
-                    }
-                }
-            }
+            SendFlowConfirmationContent(
+                manager: manager,
+                details: details,
+                prices: prices,
+                fiatAmount: fiatAmount,
+                showingMenu: $showingMenu,
+                sendState: $sendState,
+                footerHeight: $sendConfirmationFooterHeight,
+                lockingTask: $lockingTask,
+                walletType: metadata.walletType,
+                confirmSend: confirmSend,
+                lockWallet: auth.lock
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
-            .onDisappear {
-                lockingTask?.cancel()
-                guard let lockedAt = auth.lockedAt else { return }
-                let sinceLocked = Date.now.timeIntervalSince(lockedAt)
-                if sinceLocked < 5 { auth.lockState = .unlocked }
-            }
-            .onChange(of: manager.payjoinTxBroadcast) { _, uuid in
-                // UUID changes each time so this fires reliably across multiple sends
-                guard uuid != nil, case .sending = sendState else { return }
-                sendState = .sent
-                presenter.confirmationAlertState = .init(.sent(id))
-                auth.unlock()
-            }
-            .onChange(of: manager.sendFlowErrorAlert) { _, alert in
-                // payjoin broadcast failure arrives via reconcile (not the catch block),
-                // so we must handle it here to unblock the UI from .sending
-                guard let alert, case .sending = sendState else { return }
-                let errorMessage =
-                    switch alert.item {
-                    case let .signAndBroadcast(error): error
-                    case let .confirmDetails(error): error
-                    }
-                sendState = .error(errorMessage)
-                manager.sendFlowErrorAlert = nil
-                presenter.confirmationAlertState = .init(.broadcastError(errorMessage))
-            }
+            .onDisappear(perform: handleDisappear)
+            .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
+            .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
             .presentingAlert(
                 presenter.confirmationAlertStateBinding,
                 context: confirmationAlertContext,
@@ -224,26 +88,44 @@ struct SendFlowConfirmScreen: View {
         }
     }
 
-    private var sendConfirmationFooter: some View {
-        VStack(spacing: 0) {
-            SwipeToSendView(sendState: $sendState) {
-                sendState = .sending
-                Task { await sendTransaction() }
-            }
-            .padding(.horizontal)
-        }
-        .padding(.top, sendConfirmationActionTopPadding)
-        .frame(maxWidth: .infinity)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color.coveBg)
-        .onAppear {
-            lockingTask = Task {
-                try? await Task.sleep(for: .milliseconds(50))
-                if Task.isCancelled { return }
+    private func confirmSend() {
+        sendState = .sending
+        Task { await sendTransaction() }
+    }
 
-                if metadata.walletType == .hot { auth.lock() }
+    private func handleDisappear() {
+        lockingTask?.cancel()
+        guard let lockedAt = auth.lockedAt else { return }
+
+        let sinceLocked = Date.now.timeIntervalSince(lockedAt)
+        if sinceLocked < 5 { auth.lockState = .unlocked }
+    }
+
+    private func payjoinBroadcastChanged(_: UUID?, _ uuid: UUID?) {
+        // UUID changes each time so this fires reliably across multiple sends
+        guard uuid != nil, case .sending = sendState else { return }
+
+        sendState = .sent
+        presenter.confirmationAlertState = .init(.sent(id))
+        auth.unlock()
+    }
+
+    private func sendFlowErrorChanged(
+        _: TaggedItem<SendFlowErrorAlert>?,
+        _ alert: TaggedItem<SendFlowErrorAlert>?
+    ) {
+        // payjoin broadcast failure arrives via reconcile, so unblock the sending UI here
+        guard let alert, case .sending = sendState else { return }
+
+        let errorMessage =
+            switch alert.item {
+            case let .signAndBroadcast(error): error
+            case let .confirmDetails(error): error
             }
-        }
+
+        sendState = .error(errorMessage)
+        manager.sendFlowErrorAlert = nil
+        presenter.confirmationAlertState = .init(.broadcastError(errorMessage))
     }
 
     @MainActor
@@ -266,7 +148,7 @@ struct SendFlowConfirmScreen: View {
                     psbt: details.psbt(),
                     payjoinEndpoint: payjoinEndpoint
                 )
-                // for payjoin, stay in .sending — PayjoinTxBroadcast reconcile fires sendState = .sent
+                // for payjoin, stay in .sending until PayjoinTxBroadcast reconciles
                 if payjoinEndpoint == nil {
                     sendState = .sent
                     presenter.confirmationAlertState = .init(.sent(id))
@@ -285,6 +167,320 @@ struct SendFlowConfirmScreen: View {
             presenter.confirmationAlertState = .init(
                 .broadcastError(error.localizedDescription)
             )
+        }
+    }
+}
+
+private struct SendFlowFinalizePsbtView: View {
+    @Environment(AppManager.self) private var app
+
+    let manager: WalletManager
+    let psbt: Psbt
+    @Binding var finalizedTransaction: BitcoinTransaction?
+
+    var body: some View {
+        FullPageLoadingView()
+            .task { await finalizePsbt() }
+    }
+
+    private func finalizePsbt() async {
+        do {
+            finalizedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
+        } catch let error as WalletManagerError {
+            app.alertState = .init(.general(
+                title: "Unable to finalize transaction",
+                message: error.description
+            ))
+        } catch {
+            app.alertState = .init(.general(
+                title: "Unknown error",
+                message: error.localizedDescription
+            ))
+        }
+    }
+}
+
+private struct SendFlowConfirmationContent: View {
+    @Bindable var manager: WalletManager
+
+    let details: ConfirmDetails
+    let prices: PriceResponse?
+    let fiatAmount: String
+    @Binding var showingMenu: Bool
+    @Binding var sendState: SendState
+    @Binding var footerHeight: CGFloat
+    @Binding var lockingTask: Task<Void, Never>?
+    let walletType: WalletType
+    let confirmSend: () -> Void
+    let lockWallet: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
+
+            GeometryReader { geometry in
+                SendFlowConfirmationBody(
+                    manager: manager,
+                    details: details,
+                    prices: prices,
+                    fiatAmount: fiatAmount,
+                    showingMenu: $showingMenu,
+                    sendState: $sendState,
+                    footerHeight: $footerHeight,
+                    lockingTask: $lockingTask,
+                    walletType: walletType,
+                    confirmSend: confirmSend,
+                    lockWallet: lockWallet,
+                    size: geometry.size
+                )
+            }
+        }
+    }
+}
+
+private struct SendFlowConfirmationBody: View {
+    @Bindable var manager: WalletManager
+
+    let details: ConfirmDetails
+    let prices: PriceResponse?
+    let fiatAmount: String
+    @Binding var showingMenu: Bool
+    @Binding var sendState: SendState
+    @Binding var footerHeight: CGFloat
+    @Binding var lockingTask: Task<Void, Never>?
+    let walletType: WalletType
+    let confirmSend: () -> Void
+    let lockWallet: () -> Void
+    let size: CGSize
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    SendFlowConfirmationSummary(
+                        manager: manager,
+                        details: details,
+                        fiatAmount: fiatAmount,
+                        showingMenu: $showingMenu
+                    )
+
+                    SendFlowAccountSection(manager: manager)
+                        .padding(.top)
+
+                    Divider()
+
+                    SendFlowDetailsView(manager: manager, details: details, prices: prices)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, footerHeight)
+            }
+            .scrollIndicators(.hidden)
+            .frame(width: size.width, height: size.height)
+            .background(Color.coveBg)
+
+            SendFlowConfirmationFooter(
+                sendState: $sendState,
+                lockingTask: $lockingTask,
+                walletType: walletType,
+                confirmSend: confirmSend,
+                lockWallet: lockWallet
+            )
+            .offset(y: -sendConfirmationActionBottomPadding)
+            .padding(.bottom, sendConfirmationActionBottomPadding)
+            .background(Color.coveBg)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                if footerHeight != height {
+                    footerHeight = height
+                }
+            }
+        }
+    }
+}
+
+private struct SendFlowConfirmationSummary: View {
+    @Bindable var manager: WalletManager
+
+    let details: ConfirmDetails
+    let fiatAmount: String
+    @Binding var showingMenu: Bool
+
+    var body: some View {
+        VStack(spacing: 24) {
+            SendFlowConfirmationTitle()
+                .padding(.top, 10)
+
+            SendFlowConfirmationAmount(
+                amount: manager.amountFmt(details.sendingAmount()),
+                unit: manager.walletMetadata.selectedUnit,
+                fiatAmount: fiatAmount,
+                showingMenu: $showingMenu,
+                selectSats: selectSats,
+                selectBtc: selectBtc
+            )
+        }
+    }
+
+    private func selectSats() {
+        manager.dispatch(action: .updateUnit(.sat))
+        showingMenu = false
+    }
+
+    private func selectBtc() {
+        manager.dispatch(action: .updateUnit(.btc))
+        showingMenu = false
+    }
+}
+
+private struct SendFlowConfirmationTitle: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("You're sending")
+                    .font(.headline)
+                    .fontWeight(.bold)
+
+                Spacer()
+            }
+            .padding(.top, 6)
+
+            HStack {
+                Text("The amount they will receive")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary.opacity(0.80))
+                    .fontWeight(.medium)
+                Spacer()
+            }
+        }
+    }
+}
+
+private struct SendFlowConfirmationAmount: View {
+    let amount: String
+    let unit: Unit
+    let fiatAmount: String
+    @Binding var showingMenu: Bool
+    let selectSats: () -> Void
+    let selectBtc: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom) {
+                Spacer()
+
+                Text(amount)
+                    .frame(minWidth: screenWidth / 2)
+                    .font(.system(size: 48, weight: .bold))
+                    .minimumScaleFactor(0.01)
+                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+
+                SendFlowConfirmationUnitSelector(
+                    unit: unit,
+                    showingMenu: $showingMenu,
+                    selectSats: selectSats,
+                    selectBtc: selectBtc
+                )
+            }
+            .frame(alignment: .center)
+
+            Text(fiatAmount)
+                .font(.title3)
+                .foregroundColor(.secondary)
+        }
+        .padding(.top, 8)
+    }
+}
+
+private struct SendFlowConfirmationUnitSelector: View {
+    let unit: Unit
+    @Binding var showingMenu: Bool
+    let selectSats: () -> Void
+    let selectBtc: () -> Void
+
+    var body: some View {
+        Button(action: toggleMenu) {
+            HStack(spacing: 0) {
+                Text(unit == .sat ? "sats" : "btc")
+
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .padding(.top, 2)
+                    .padding(.leading, 4)
+            }
+            .frame(alignment: .trailing)
+        }
+        .foregroundStyle(.primary)
+        .padding(.vertical, 10)
+        .padding(.leading, 16)
+        .popover(isPresented: $showingMenu) {
+            SendFlowConfirmationUnitMenu(
+                selectSats: selectSats,
+                selectBtc: selectBtc
+            )
+        }
+    }
+
+    private func toggleMenu() {
+        showingMenu.toggle()
+    }
+}
+
+private struct SendFlowConfirmationUnitMenu: View {
+    let selectSats: () -> Void
+    let selectBtc: () -> Void
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 0) {
+            Button("sats", action: selectSats)
+                .padding(12)
+                .buttonStyle(.plain)
+
+            Divider()
+
+            Button("btc", action: selectBtc)
+                .padding(12)
+                .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(minWidth: 120, maxWidth: 200)
+        .presentationCompactAdaptation(.popover)
+        .foregroundStyle(.primary.opacity(0.8))
+    }
+}
+
+private struct SendFlowConfirmationFooter: View {
+    @Binding var sendState: SendState
+    @Binding var lockingTask: Task<Void, Never>?
+
+    let walletType: WalletType
+    let confirmSend: () -> Void
+    let lockWallet: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SwipeToSendView(
+                sendState: $sendState,
+                onConfirm: confirmSend
+            )
+            .padding(.horizontal)
+        }
+        .padding(.top, sendConfirmationActionTopPadding)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Color.coveBg)
+        .onAppear(perform: lockAfterAppearance)
+    }
+
+    private func lockAfterAppearance() {
+        lockingTask = Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            if Task.isCancelled { return }
+
+            if walletType == .hot { lockWallet() }
         }
     }
 }

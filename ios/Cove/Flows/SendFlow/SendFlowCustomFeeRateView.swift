@@ -161,87 +161,143 @@ struct SendFlowCustomFeeRateView: View {
                 .fontWeight(.bold)
                 .padding(.vertical, 12)
 
-            VStack(spacing: 8) {
-                HStack {
-                    Text("satoshi/byte")
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .font(.callout)
-
-                    Spacer()
-                }
-                .offset(y: 4)
-
-                HStack {
-                    TextField(feeRate, text: $feeRate)
-                        .keyboardType(.decimalPad)
-                        .font(.system(size: 34, weight: .semibold))
-
-                    Spacer()
-
-                    SendFlowDurationCapsule(
-                        speed: feeSpeed,
-                        fontColor: .primary,
-                        font: .footnote,
-                        fontWeight: .semibold
-                    )
-                }
-
-                HStack {
-                    let fast3 = feeOptions.fast().satPerVb() * 3
-                    if let erroredFeeRate {
-                        Slider(value: sliderBinding, in: 1 ... min(erroredFeeRate + 0.01, fast3), step: 0.01)
-                    } else {
-                        Slider(value: sliderBinding, in: 1 ... fast3, step: 0.01)
-                    }
-                }
-
-                HStack {
-                    AsyncText(
-                        text: totalSats.map { "\($0) sats" },
-                        font: .caption,
-                        spinnerScale: 0.7
-                    )
-                    .fontWeight(.semibold)
-
-                    if totalSats != nil {
-                        Text(feeInFiat)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-                }
-            }
+            SendFlowCustomFeeEditor(
+                feeRate: $feeRate,
+                feeSpeed: feeSpeed,
+                sliderValue: sliderBinding,
+                maximumFeeRate: feeOptions.fast().satPerVb() * 3,
+                erroredFeeRate: erroredFeeRate,
+                totalSats: totalSats,
+                feeInFiat: feeInFiat
+            )
 
             Divider()
 
-            Button(action: addCustomFeeOption) {
-                Text("Done")
-                    .font(.footnote)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            }
-            .background(Color.midnightBtn)
-            .foregroundColor(.white)
-            .cornerRadius(10)
-            .padding(.horizontal, detailsExpandedPadding)
-            .padding(.top, 14)
+            SendFlowCustomFeeDoneButton(action: addCustomFeeOption)
         }
         .padding(.horizontal)
         .padding(.vertical)
         .padding(.top, 22)
         .onChange(of: feeRate, initial: true, feeRateChanged)
-        .onAppear {
-            feeRate = String(selectedOption.feeRate().satPerVb())
-            withAnimation { loaded = true }
-        }
-        .onDisappear {
-            addCustomFeeOption()
-        }
+        .onAppear(perform: loadSelectedFeeRate)
+        .onDisappear(perform: addCustomFeeOption)
         .navigationBarBackButtonHidden()
         .opacity(loaded ? 1 : 0)
+    }
+
+    private func loadSelectedFeeRate() {
+        feeRate = String(selectedOption.feeRate().satPerVb())
+        withAnimation { loaded = true }
+    }
+}
+
+private struct SendFlowCustomFeeEditor: View {
+    @Binding var feeRate: String
+
+    let feeSpeed: FeeSpeed
+    let sliderValue: Binding<Float>
+    let maximumFeeRate: Float
+    let erroredFeeRate: Float?
+    let totalSats: Int?
+    let feeInFiat: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("satoshi/byte")
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+
+                Spacer()
+            }
+            .offset(y: 4)
+
+            HStack {
+                TextField(feeRate, text: $feeRate)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 34, weight: .semibold))
+
+                Spacer()
+
+                SendFlowDurationCapsule(
+                    speed: feeSpeed,
+                    fontColor: .primary,
+                    font: .footnote,
+                    fontWeight: .semibold
+                )
+            }
+
+            SendFlowCustomFeeSlider(
+                value: sliderValue,
+                maximumFeeRate: maximumFeeRate,
+                erroredFeeRate: erroredFeeRate
+            )
+
+            SendFlowCustomFeeTotal(
+                totalSats: totalSats,
+                feeInFiat: feeInFiat
+            )
+        }
+    }
+}
+
+private struct SendFlowCustomFeeSlider: View {
+    let value: Binding<Float>
+    let maximumFeeRate: Float
+    let erroredFeeRate: Float?
+
+    private var upperBound: Float {
+        min(erroredFeeRate.map { $0 + 0.01 } ?? maximumFeeRate, maximumFeeRate)
+    }
+
+    var body: some View {
+        HStack {
+            Slider(value: value, in: 1 ... upperBound, step: 0.01)
+        }
+    }
+}
+
+private struct SendFlowCustomFeeTotal: View {
+    let totalSats: Int?
+    let feeInFiat: String
+
+    var body: some View {
+        HStack {
+            AsyncText(
+                text: totalSats.map { "\($0) sats" },
+                font: .caption,
+                spinnerScale: 0.7
+            )
+            .fontWeight(.semibold)
+
+            if totalSats != nil {
+                Text(feeInFiat)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+    }
+}
+
+private struct SendFlowCustomFeeDoneButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("Done")
+                .font(.footnote)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .padding()
+        }
+        .background(Color.midnightBtn)
+        .foregroundColor(.white)
+        .cornerRadius(10)
+        .padding(.horizontal, detailsExpandedPadding)
+        .padding(.top, 14)
     }
 }
 

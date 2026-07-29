@@ -276,7 +276,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
 
         return directory.appendingPathComponent(parts.last!)
     }
+}
 
+extension ICloudDriveHelper {
     // MARK: - File coordination
 
     /// Coordinates iCloud-backed filesystem access because ubiquitous items may
@@ -465,10 +467,44 @@ final class ICloudDriveHelper: @unchecked Sendable {
         }
 
         let deadline = Date().addingTimeInterval(defaultTimeout)
+        let resolvedItem = try await resolveDownloadItem(
+            url: url,
+            filename: filename,
+            deadline: deadline
+        )
 
-        let resolvedItem: ResolvedMetadataItem
+        logResolvedDownloadItem(resolvedItem, localURL: url, filename: filename)
+        try triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
+
+        var readState = CoordinatedReadState()
+        switch await attemptCoordinatedRead(
+            from: resolvedItem.url,
+            filename: filename,
+            reason: "initial",
+            attempt: readState.attempt
+        ) {
+        case let .success(data):
+            return data
+        case let .failure(error):
+            readState.lastError = error
+        }
+
+        return try await pollForDownload(
+            resolvedItem: resolvedItem,
+            filename: filename,
+            recordId: recordId,
+            deadline: deadline,
+            readState: readState
+        )
+    }
+
+    private func resolveDownloadItem(
+        url: URL,
+        filename: String,
+        deadline: Date
+    ) async throws -> ResolvedMetadataItem {
         do {
-            resolvedItem = try await waitForMetadataItem(
+            return try await waitForMetadataItem(
                 named: filename,
                 parentDirectoryURL: url.deletingLastPathComponent(),
                 deadline: deadline
@@ -480,42 +516,59 @@ final class ICloudDriveHelper: @unchecked Sendable {
         } catch {
             throw Self.downloadError("iCloud metadata lookup failed for \(filename)", error: error)
         }
+    }
 
-        if resolvedItem.url != url {
+    private func logResolvedDownloadItem(
+        _ resolvedItem: ResolvedMetadataItem,
+        localURL: URL,
+        filename: String
+    ) {
+        if resolvedItem.url != localURL {
             Log.info(
-                "downloadFile: using metadata URL for \(filename) local=\(url.path) metadata=\(resolvedItem.url.path)"
+                "downloadFile: using metadata URL for \(filename) local=\(localURL.path) metadata=\(resolvedItem.url.path)"
             )
         } else {
             Log.info("downloadFile: \(filename) reading via resolved local URL")
         }
+    }
 
-        try triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
-
-        var coordinatedReadAttempt = 1
-        var lastCoordinatedReadError: Error?
-
-        // try a coordinated read before waiting for iCloud status to catch up
+    private func attemptCoordinatedRead(
+        from url: URL,
+        filename: String,
+        reason: String,
+        attempt: Int
+    ) async -> Result<Data, Error> {
         Log.info(
-            "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=initial file=\(filename)"
+            "downloadFile: trying coordinated read attempt=\(attempt) reason=\(reason) file=\(filename)"
         )
 
         do {
-            let data = try await coordinatedReadAsync(from: resolvedItem.url)
+            let data = try await coordinatedReadAsync(from: url)
             Log.info("downloadFile: coordinated read succeeded for \(filename)")
-            return data
+            return .success(data)
         } catch {
-            lastCoordinatedReadError = error
             Log.warn(
-                "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
+                "downloadFile: coordinated read failed attempt=\(attempt): \(error.localizedDescription)"
             )
-        }
 
+            return .failure(error)
+        }
+    }
+
+    private func pollForDownload(
+        resolvedItem: ResolvedMetadataItem,
+        filename: String,
+        recordId: String,
+        deadline: Date,
+        readState initialReadState: CoordinatedReadState
+    ) async throws -> Data {
         // poll with periodic re-triggers and inline coordinated reads because
         // some restored-device placeholders never transition out of
         // not-downloaded even though they can be materialized
         let retriggerInterval: TimeInterval = 5
         var lastRetrigger = Date()
         var lastProgressLog = Date.distantPast
+        var readState = initialReadState
 
         while Date() < deadline {
             let now = Date()
@@ -524,21 +577,18 @@ final class ICloudDriveHelper: @unchecked Sendable {
             if now.timeIntervalSince(lastRetrigger) >= retriggerInterval {
                 try? triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
                 lastRetrigger = now
-                coordinatedReadAttempt += 1
+                readState.attempt += 1
 
-                Log.info(
-                    "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=retry file=\(filename)"
-                )
-
-                do {
-                    let data = try await coordinatedReadAsync(from: resolvedItem.url)
-                    Log.info("downloadFile: coordinated read succeeded for \(filename)")
+                switch await attemptCoordinatedRead(
+                    from: resolvedItem.url,
+                    filename: filename,
+                    reason: "retry",
+                    attempt: readState.attempt
+                ) {
+                case let .success(data):
                     return data
-                } catch {
-                    lastCoordinatedReadError = error
-                    Log.warn(
-                        "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
-                    )
+                case let .failure(error):
+                    readState.lastError = error
                 }
             }
 
@@ -565,11 +615,16 @@ final class ICloudDriveHelper: @unchecked Sendable {
         do {
             return try await coordinatedReadAsync(from: resolvedItem.url)
         } catch {
-            let diagnosticError = lastCoordinatedReadError?.localizedDescription ?? "none"
+            let diagnosticError = readState.lastError?.localizedDescription ?? "none"
             throw CloudStorageError.Offline(
                 "iCloud download timed out after \(defaultTimeout)s (last coordinated read error: \(diagnosticError), final coordinated read failed: \(error.localizedDescription))"
             )
         }
+    }
+
+    private struct CoordinatedReadState {
+        var attempt = 1
+        var lastError: Error?
     }
 
     private func triggerDownload(url: URL, recordId: String, filename _: String) throws {

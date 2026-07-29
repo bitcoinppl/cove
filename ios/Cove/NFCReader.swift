@@ -102,108 +102,115 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
         if reader.isStarted(), !readBytes.isEmpty {
-            // read the first block chunk
-            tag.readMultipleBlocks(
-                requestFlags: .highDataRate, blockRange: NSRange(location: 0, length: blocksToRead)
-            ) { data, error in
-                // error try again
-                if error != nil {
-                    self.retries += 1
-                    if self.retries < 10 {
-                        Log.error("Error reading block: \(error!.localizedDescription)")
-                        self.readBlocks(tag: tag, session: session)
-                    }
-
-                    return
-                }
-
-                // succesful read, reset retries
-                self.retries = 0
-
-                // is resumable set the currentBlock to how much data we already have
-                let data = data.flatMap(\.self)
-                if (try? self.reader.isResumeable(data: Data(data))) != nil {
-                    Log.info("Resuming from block: \(self.currentBlock)")
-                } else {
-                    // reset reader and bytes read
-                    Log.warn("Trying to scan a different NFC message, resetting")
-                    self.resetReader()
-                }
-            }
+            prepareToResumeReading(tag: tag, session: session)
         }
 
-        func readNextBlock() {
-            Log.debug("current block: \(currentBlock)")
-            // already complete
-            if scannedMessage != nil {
-                Log.warn("scanning complete")
-                isScanning = false
-                self.session?.invalidate()
-                self.session = nil
+        readNextBlock(tag: tag, session: session)
+    }
+
+    private func prepareToResumeReading(tag: NFCISO15693Tag, session: NFCTagReaderSession) {
+        // read the first block chunk
+        tag.readMultipleBlocks(
+            requestFlags: .highDataRate,
+            blockRange: NSRange(location: 0, length: blocksToRead)
+        ) { data, error in
+            if let error {
+                self.retries += 1
+                if self.retries < 10 {
+                    Log.error("Error reading block: \(error.localizedDescription)")
+                    self.readBlocks(tag: tag, session: session)
+                }
+
                 return
             }
 
-            let blockRange = NSRange(location: currentBlock, length: blocksToRead)
+            // successful read, reset retries
+            self.retries = 0
 
-            tag.extendedReadMultipleBlocks(requestFlags: .highDataRate, blockRange: blockRange) {
-                data, error in
-                // if there is an error, add it to the result
-                let result: Result<[Data], any Error> = {
-                    if let error {
-                        return .failure(error)
-                    }
-
-                    return .success(data)
-                }()
-
-                switch result {
-                // succesfully read the raw bytes, lets handle the bytes
-                case let .success(data):
-                    self.readingMessage = self.readingMessage.appending(".")
-                    session.alertMessage = self.readingMessage
-
-                    let dataChunk = data.flatMap(\.self)
-                    self.currentBlock = self.currentBlock + self.blocksToRead
-
-                    self.retries = 0
-                    self.readBytes.append(contentsOf: dataChunk)
-
-                    // has read enough data to get the message
-                    if let messageInfo = self.messageInfo,
-                       self.readBytes.count >= messageInfo.fullMessageLength
-                    {
-                        if case .error = self.parseAndHandleResult(session: session) {
-                            return
-                        }
-                    }
-
-                    if self.messageInfo == nil {
-                        if case .error = self.parseAndHandleResult(session: session) {
-                            Log.warn(
-                                "Trying to read TAG in unsupported format, falling back to built in NDEF reader"
-                            )
-                            return self.readNDEF(from: tag, session: session)
-                        }
-                    }
-
-                    readNextBlock()
-
-                // problem physically reading the data, so lets retry
-                case let .failure(error):
-                    if self.retries < 10 {
-                        Log.warn("read error: \(error.localizedDescription), retrying")
-                        self.retries = self.retries + 1
-                        readNextBlock()
-                    } else {
-                        Log.error("read error, retries exhausted: \(error.localizedDescription)")
-                        self.tagReaderSession(session, didInvalidateWithError: error)
-                    }
-                }
+            // if resumable, keep the current block at the amount of data already read
+            let data = data.flatMap(\.self)
+            if (try? self.reader.isResumeable(data: Data(data))) != nil {
+                Log.info("Resuming from block: \(self.currentBlock)")
+            } else {
+                // reset reader and bytes read
+                Log.warn("Trying to scan a different NFC message, resetting")
+                self.resetReader()
             }
-        } // END: ReadNextBlock
+        }
+    }
 
-        // start calling the readNextBlock() recursive function
-        readNextBlock()
+    private func readNextBlock(tag: NFCISO15693Tag, session: NFCTagReaderSession) {
+        Log.debug("current block: \(currentBlock)")
+
+        // already complete
+        guard scannedMessage == nil else {
+            Log.warn("scanning complete")
+            isScanning = false
+            self.session?.invalidate()
+            self.session = nil
+            return
+        }
+
+        let blockRange = NSRange(location: currentBlock, length: blocksToRead)
+        tag.extendedReadMultipleBlocks(requestFlags: .highDataRate, blockRange: blockRange) {
+            data, error in
+            if let error {
+                self.handleBlockReadFailure(error, tag: tag, session: session)
+                return
+            }
+
+            self.handleSuccessfulBlockRead(data, tag: tag, session: session)
+        }
+    }
+
+    private func handleSuccessfulBlockRead(
+        _ data: [Data],
+        tag: NFCISO15693Tag,
+        session: NFCTagReaderSession
+    ) {
+        readingMessage.append(".")
+        session.alertMessage = readingMessage
+
+        let dataChunk = data.flatMap(\.self)
+        currentBlock += blocksToRead
+        retries = 0
+        readBytes.append(contentsOf: dataChunk)
+
+        // has read enough data to get the message
+        if let messageInfo,
+           readBytes.count >= messageInfo.fullMessageLength,
+           case .error = parseAndHandleResult(session: session)
+        {
+            return
+        }
+
+        if messageInfo == nil,
+           case .error = parseAndHandleResult(session: session)
+        {
+            Log.warn(
+                "Trying to read TAG in unsupported format, falling back to built in NDEF reader"
+            )
+            readNDEF(from: tag, session: session)
+            return
+        }
+
+        readNextBlock(tag: tag, session: session)
+    }
+
+    private func handleBlockReadFailure(
+        _ error: any Error,
+        tag: NFCISO15693Tag,
+        session: NFCTagReaderSession
+    ) {
+        if retries < 10 {
+            Log.warn("read error: \(error.localizedDescription), retrying")
+            retries += 1
+            readNextBlock(tag: tag, session: session)
+            return
+        }
+
+        Log.error("read error, retries exhausted: \(error.localizedDescription)")
+        tagReaderSession(session, didInvalidateWithError: error)
     }
 
     private func parseAndHandleResult(session: NFCTagReaderSession) -> ParsingState {

@@ -21,19 +21,8 @@ struct EnterAddressView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack {
-                Text("Enter address")
-                    .font(.headline)
-                    .fontWeight(.bold)
-
-                Spacer()
-
-                Button(action: { presenter.sheetState = TaggedItem(.qr) }) {
-                    Image(systemName: "qrcode")
-                }
-                .foregroundStyle(.secondary)
-            }
-            .id(FocusField.address)
+            EnterAddressHeader(showQrScanner: showQrScanner)
+                .id(FocusField.address)
 
             HStack {
                 Text("Where do you want to send to?")
@@ -68,6 +57,29 @@ struct EnterAddressView: View {
             address = noSpaces
         }
         .padding(.top, 14)
+    }
+
+    private func showQrScanner() {
+        presenter.sheetState = TaggedItem(.qr)
+    }
+}
+
+private struct EnterAddressHeader: View {
+    let showQrScanner: () -> Void
+
+    var body: some View {
+        HStack {
+            Text("Enter address")
+                .font(.headline)
+                .fontWeight(.bold)
+
+            Spacer()
+
+            Button(action: showQrScanner) {
+                Image(systemName: "qrcode")
+            }
+            .foregroundStyle(.secondary)
+        }
     }
 }
 

@@ -8,7 +8,6 @@
 import SwiftUI
 
 struct TapSignerAdvancedChainCode: View {
-    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
     @Environment(TapSignerManager.self) var manager
 
@@ -22,48 +21,52 @@ struct TapSignerAdvancedChainCode: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
+        TapSignerAdaptiveLayout { usesFlexibleSpacing in
+            TapSignerAdvancedChainCodeContent(
+                chainCode: $chainCode,
+                isButtonDisabled: isButtonDisabled,
+                usesFlexibleSpacing: usesFlexibleSpacing,
+                backAction: goBack,
+                generateAction: generateChainCode,
+                continueAction: continueSetup
             )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
-            }
         }
         .contentTransition(.opacity)
         .background(TapSignerResultBackground())
         .navigationBarHidden(true)
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
+    private func goBack() {
+        manager.popRoute()
+    }
+
+    private func generateChainCode() {
+        chainCode = generateRandomChainCode()
+    }
+
+    private func continueSetup() {
+        manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: chainCode))
+    }
+}
+
+private struct TapSignerAdvancedChainCodeContent: View {
+    @Binding var chainCode: String
+
+    let isButtonDisabled: Bool
+    let usesFlexibleSpacing: Bool
+    let backAction: () -> Void
+    let generateAction: () -> Void
+    let continueAction: () -> Void
+
+    var body: some View {
         VStack(spacing: 20) {
-            HStack {
-                Button(action: { manager.popRoute() }) {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
-                }
+            TapSignerTopActionHeader(
+                "Back",
+                systemImage: "chevron.left",
+                action: backAction
+            )
 
-                Spacer()
-            }
-            .padding(.top, 20)
-            .padding(.horizontal, 10)
-            .foregroundStyle(.primary)
-            .fontWeight(.semibold)
-
-            if usesFlexibleSpacing {
-                Spacer()
-            }
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack {
                 Text("Advanced Setup")
@@ -98,7 +101,7 @@ struct TapSignerAdvancedChainCode: View {
             .foregroundStyle(.primary)
             .padding(.top, 10)
 
-            Button(action: { chainCode = generateRandomChainCode() }) {
+            Button(action: generateAction) {
                 Text("Generate new string for me")
                     .font(.footnote)
                     .fontWeight(.semibold)
@@ -107,18 +110,16 @@ struct TapSignerAdvancedChainCode: View {
             .contentShape(Rectangle())
             .padding(.bottom, usesFlexibleSpacing ? screenHeight * 0.1 : 0)
 
-            Button("Continue") {
-                manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: chainCode))
-            }
-            .buttonStyle(
-                DarkButtonStyle(
-                    backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
-                    foregroundColor: isButtonDisabled ? .systemGray6 : .white
+            Button("Continue", action: continueAction)
+                .buttonStyle(
+                    DarkButtonStyle(
+                        backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
+                        foregroundColor: isButtonDisabled ? .systemGray6 : .white
+                    )
                 )
-            )
-            .padding()
-            .padding(.bottom, 30)
-            .disabled(isButtonDisabled)
+                .padding()
+                .padding(.bottom, 30)
+                .disabled(isButtonDisabled)
         }
     }
 }

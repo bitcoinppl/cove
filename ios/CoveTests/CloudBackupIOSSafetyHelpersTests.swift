@@ -575,7 +575,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
 
         XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.5)
     }
+}
 
+extension CloudBackupIOSSafetyHelpersTests {
     func testEventuallyConsistentListingMergesLocalAndMetadataViews() throws {
         let names = try ICloudEventuallyConsistentListing.merged(
             local: ["old-1password"],

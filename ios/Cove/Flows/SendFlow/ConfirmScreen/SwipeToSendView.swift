@@ -66,102 +66,28 @@ struct SwipeToSendView: View {
 
     var body: some View {
         ZStack {
-            // Background capsule
-            Capsule()
-                .fill(Color(.systemGray5))
-                .frame(height: height)
+            SwipeToSendBackground(
+                fillWidth: offset + circleSize,
+                height: height
+            )
 
-            // Blue fill that follows the drag
-            GeometryReader { geometry in
-                Capsule()
-                    .fill(Color.midnightBtn)
-                    .frame(width: offset + circleSize)
-                    .frame(maxWidth: geometry.size.width, alignment: .leading)
-            }
-            .frame(height: height)
+            SwipeToSendPrompt(
+                circleSize: circleSize,
+                fontColor: colorScheme == .dark ? .white : .midnightBtn,
+                fontOpacity: fontOpacity
+            )
 
-            // "Swipe to Send" text
-            HStack(spacing: 0) {
-                Color.clear
-                    .frame(width: circleSize + swipeToSendMinimumTrailingTextPadding)
+            SwipeToSendHandle(
+                sendState: sendState,
+                offset: $offset,
+                isDragging: $isDragging,
+                circleSize: circleSize,
+                containerWidth: containerWidth,
+                maxOffset: maxOffset,
+                onConfirm: onConfirm
+            )
 
-                Text("Swipe to Send")
-                    .foregroundColor(colorScheme == .dark ? .white : .midnightBtn)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-                    .opacity(fontOpacity)
-                    .recordSwipeToSendTextHeight()
-
-                Color.clear
-                    .frame(width: swipeToSendMinimumTrailingTextPadding)
-            }
-
-            // Draggable button
-            Circle()
-                .fill(Color.midnightBtn)
-                .frame(width: circleSize, height: circleSize)
-                .overlay(
-                    Group {
-                        if sendState == .idle {
-                            PulsingSendArrow(isPulsing: !isDragging && offset == 0)
-                        }
-                    }
-                )
-                .offset(x: -containerWidth / 2 + circleSize / 2 + offset)
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            isDragging = true
-                            offset = min(maxOffset, max(0, value.translation.width))
-                        }
-                        .onEnded { _ in
-                            isDragging = false
-                            if offset > maxOffset * 0.8 {
-                                // trigger send action
-                                withAnimation {
-                                    offset = maxOffset
-                                }
-
-                                onConfirm()
-                            } else {
-                                withAnimation {
-                                    offset = 0
-                                }
-                            }
-                        }
-                )
-
-            // Text overlay when sending/sent/error
-            Group {
-                switch sendState {
-                case .idle: EmptyView()
-                case .sending: HStack(spacing: 16) {
-                        Text("sending")
-                            .recordSwipeToSendTextHeight()
-                        ThreeDotsAnimation()
-                    }
-                case .sent: HStack(spacing: 12) {
-                        Text("sent")
-                            .recordSwipeToSendTextHeight()
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.green)
-                    }
-                case .error: HStack(spacing: 10) {
-                        Text("error")
-                            .recordSwipeToSendTextHeight()
-                        Image(systemName: "xmark")
-                            .foregroundColor(.red)
-                            .onAppear {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                    sendState = .idle
-                                }
-                            }
-                    }
-                }
-            }.foregroundStyle(.white)
+            SwipeToSendStatus(sendState: $sendState)
         }
         .frame(height: height)
         .onChange(of: sendState, initial: true, onChangeSendState)
@@ -172,6 +98,164 @@ struct SwipeToSendView: View {
             proxy.frame(in: .global)
         } action: { frame in
             containerWidth = frame.width
+        }
+    }
+}
+
+private struct SwipeToSendBackground: View {
+    let fillWidth: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        ZStack {
+            Capsule()
+                .fill(Color(.systemGray5))
+                .frame(height: height)
+
+            GeometryReader { geometry in
+                Capsule()
+                    .fill(Color.midnightBtn)
+                    .frame(width: fillWidth)
+                    .frame(maxWidth: geometry.size.width, alignment: .leading)
+            }
+            .frame(height: height)
+        }
+    }
+}
+
+private struct SwipeToSendPrompt: View {
+    let circleSize: CGFloat
+    let fontColor: Color
+    let fontOpacity: Double
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Color.clear
+                .frame(width: circleSize + swipeToSendMinimumTrailingTextPadding)
+
+            Text("Swipe to Send")
+                .foregroundColor(fontColor)
+                .fontWeight(.medium)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .opacity(fontOpacity)
+                .recordSwipeToSendTextHeight()
+
+            Color.clear
+                .frame(width: swipeToSendMinimumTrailingTextPadding)
+        }
+    }
+}
+
+private struct SwipeToSendHandle: View {
+    let sendState: SendState
+    @Binding var offset: CGFloat
+    @Binding var isDragging: Bool
+
+    let circleSize: CGFloat
+    let containerWidth: CGFloat
+    let maxOffset: CGFloat
+    let onConfirm: () -> Void
+
+    var body: some View {
+        Circle()
+            .fill(Color.midnightBtn)
+            .frame(width: circleSize, height: circleSize)
+            .overlay {
+                if sendState == .idle {
+                    PulsingSendArrow(isPulsing: !isDragging && offset == 0)
+                }
+            }
+            .offset(x: -containerWidth / 2 + circleSize / 2 + offset)
+            .gesture(
+                DragGesture()
+                    .onChanged(dragChanged)
+                    .onEnded(dragEnded)
+            )
+    }
+
+    private func dragChanged(_ value: DragGesture.Value) {
+        isDragging = true
+        offset = min(maxOffset, max(0, value.translation.width))
+    }
+
+    private func dragEnded(_: DragGesture.Value) {
+        isDragging = false
+
+        guard offset > maxOffset * 0.8 else {
+            withAnimation {
+                offset = 0
+            }
+            return
+        }
+
+        withAnimation {
+            offset = maxOffset
+        }
+
+        onConfirm()
+    }
+}
+
+private struct SwipeToSendStatus: View {
+    @Binding var sendState: SendState
+
+    var body: some View {
+        Group {
+            switch sendState {
+            case .idle:
+                EmptyView()
+            case .sending:
+                SwipeToSendSendingStatus()
+            case .sent:
+                SwipeToSendSentStatus()
+            case .error:
+                SwipeToSendErrorStatus(sendState: $sendState)
+            }
+        }
+        .foregroundStyle(.white)
+    }
+}
+
+private struct SwipeToSendSendingStatus: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("sending")
+                .recordSwipeToSendTextHeight()
+            ThreeDotsAnimation()
+        }
+    }
+}
+
+private struct SwipeToSendSentStatus: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("sent")
+                .recordSwipeToSendTextHeight()
+            Image(systemName: "checkmark")
+                .foregroundColor(.green)
+        }
+    }
+}
+
+private struct SwipeToSendErrorStatus: View {
+    @Binding var sendState: SendState
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("error")
+                .recordSwipeToSendTextHeight()
+            Image(systemName: "xmark")
+                .foregroundColor(.red)
+                .onAppear(perform: resetAfterDelay)
+        }
+    }
+
+    private func resetAfterDelay() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            sendState = .idle
         }
     }
 }

@@ -10,31 +10,61 @@ struct MainSettingsCloudBackupSection: View {
     var body: some View {
         if isVisible {
             Section(header: Text("Cloud Backup")) {
-                switch manager.lifecycle {
-                case .disabled:
-                    SettingsRow(title: "Enable Cloud Backup", symbol: "icloud.and.arrow.up") {
-                        onEnable()
-                    }
-                case .enabling:
-                    MainSettingsCloudBackupEnablingRow()
-                case .restoring:
-                    MainSettingsCloudBackupRestoringRow()
-                case .pendingEnableRecovery:
-                    cloudBackupRecoveryContent()
-                case let .failed(failure):
-                    cloudBackupErrorContent(message: failure.message)
-                case .configured:
-                    MainSettingsCloudBackupEnabledRow(
-                        status: manager.settingsRowStatus,
-                        onOpenDetail: onOpenDetail
-                    )
-                }
+                MainSettingsCloudBackupLifecycleContent(
+                    lifecycle: manager.lifecycle,
+                    status: manager.settingsRowStatus,
+                    onEnable: onEnable,
+                    onOpenDetail: onOpenDetail
+                )
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func cloudBackupRecoveryContent() -> some View {
+private struct MainSettingsCloudBackupLifecycleContent: View {
+    private let content: AnyView
+
+    init(
+        lifecycle: CloudBackupLifecycle,
+        status: CloudBackupSettingsRowStatus,
+        onEnable: @escaping () -> Void,
+        onOpenDetail: @escaping () -> Void
+    ) {
+        content = switch lifecycle {
+        case .disabled:
+            AnyView(SettingsRow(
+                title: "Enable Cloud Backup",
+                symbol: "icloud.and.arrow.up",
+                onTapGesture: onEnable
+            ))
+        case .enabling:
+            AnyView(MainSettingsCloudBackupEnablingRow())
+        case .restoring:
+            AnyView(MainSettingsCloudBackupRestoringRow())
+        case .pendingEnableRecovery:
+            AnyView(MainSettingsCloudBackupRecoveryContent(onReview: onEnable))
+        case let .failed(failure):
+            AnyView(MainSettingsCloudBackupErrorContent(
+                message: failure.message,
+                onReview: onOpenDetail
+            ))
+        case .configured:
+            AnyView(MainSettingsCloudBackupEnabledRow(
+                status: status,
+                onOpenDetail: onOpenDetail
+            ))
+        }
+    }
+
+    var body: some View {
+        content
+    }
+}
+
+private struct MainSettingsCloudBackupRecoveryContent: View {
+    let onReview: () -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: "exclamationmark.icloud")
@@ -46,13 +76,15 @@ struct MainSettingsCloudBackupSection: View {
                 .foregroundStyle(.secondary)
         }
 
-        SettingsRow(title: "Review", symbol: "arrow.right") {
-            onEnable()
-        }
+        SettingsRow(title: "Review", symbol: "arrow.right", onTapGesture: onReview)
     }
+}
 
-    @ViewBuilder
-    private func cloudBackupErrorContent(message: String) -> some View {
+private struct MainSettingsCloudBackupErrorContent: View {
+    let message: String
+    let onReview: () -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: "exclamationmark.icloud")
@@ -64,9 +96,7 @@ struct MainSettingsCloudBackupSection: View {
                 .foregroundStyle(.secondary)
         }
 
-        SettingsRow(title: "Review", symbol: "arrow.right") {
-            onOpenDetail()
-        }
+        SettingsRow(title: "Review", symbol: "arrow.right", onTapGesture: onReview)
     }
 }
 
@@ -110,112 +140,77 @@ struct MainSettingsCloudBackupEnabledRow: View {
 }
 
 struct MainSettingsCloudBackupEnabledStatus: View {
-    let status: CloudBackupSettingsRowStatus
+    private let presentation: MainSettingsCloudBackupStatusPresentation
+
+    init(status: CloudBackupSettingsRowStatus) {
+        presentation = MainSettingsCloudBackupStatusPresentation(status: status)
+    }
 
     var body: some View {
-        switch status {
+        Image(systemName: presentation.symbol)
+            .foregroundStyle(presentation.color)
+
+        VStack(alignment: .leading, spacing: 2) {
+            Text(presentation.title)
+
+            if let message = presentation.message {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(presentation.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct MainSettingsCloudBackupStatusPresentation {
+    let symbol: String
+    let title: String
+    let message: String?
+    let color: Color
+
+    private init(symbol: String, title: String, message: String?, color: Color) {
+        self.symbol = symbol
+        self.title = title
+        self.message = message
+        self.color = color
+    }
+
+    init(status: CloudBackupSettingsRowStatus) {
+        self = switch status {
         case .disabled, .disabling, .settingUp, .restoring:
-            cloudBackupStatusContent(
-                symbol: "icloud",
-                title: "Cloud Backup",
-                color: Color.secondary
-            )
-
+            .inactive
         case .passkeyMissing:
-            cloudBackupStatusContent(
-                symbol: "exclamationmark.icloud.fill",
-                title: "Cloud Backup Passkey Missing",
-                message: "Backups can't be restored until you add a new passkey",
-                color: Color.statusWarning
-            )
-
+            .passkeyMissing
         case .passkeyProviderUnsupported:
-            cloudBackupStatusContent(
-                symbol: "exclamationmark.icloud.fill",
-                title: "Cloud Backup Passkey Unsupported",
-                message: "Open to choose a supported passkey provider",
-                color: Color.statusWarning
-            )
-
+            .passkeyProviderUnsupported
         case .unverified:
-            cloudBackupStatusContent(
-                symbol: "exclamationmark.icloud",
-                title: "Cloud Backup Unverified",
-                color: Color.statusWarning
-            )
-
+            .unverified
         case .confirming:
-            cloudBackupStatusContent(
-                symbol: "arrow.clockwise.icloud",
-                title: "Cloud Backup Confirming",
-                color: Color.statusInfo
-            )
-
+            .confirming
         case .active:
-            cloudBackupStatusContent(
-                symbol: "checkmark.icloud",
-                title: "Cloud Backup Enabled",
-                color: Color.statusSuccess
-            )
-
+            .active
         case .verificationRecommended:
-            cloudBackupStatusContent(
-                symbol: "exclamationmark.icloud",
-                title: "Cloud Backup Enabled",
-                message: "Verification recommended",
-                color: Color.statusWarning
-            )
-
+            .verificationRecommended
         case .checkingSync:
-            cloudBackupStatusContent(
-                symbol: "icloud",
-                title: "Checking Cloud Backup",
-                message: "Checking iCloud sync status",
-                color: Color.secondary
-            )
-
+            .checkingSync
         case .syncing:
-            cloudBackupStatusContent(
-                symbol: "arrow.clockwise.icloud",
-                title: "Cloud Backup Syncing",
-                message: "Uploading latest changes",
-                color: Color.statusInfo
-            )
-
+            .syncing
         case .noFiles:
-            cloudBackupStatusContent(
-                symbol: "icloud.slash",
-                title: "Cloud Backup Needs Attention",
-                message: "No iCloud backup files found",
-                color: Color.statusWarning
-            )
-
+            .noFiles
         case .driveUnavailable:
-            cloudBackupStatusContent(
-                symbol: "exclamationmark.icloud",
-                title: "iCloud Drive Unavailable",
-                message: "Open to review Cloud Backup",
-                color: Color.statusWarning
-            )
-
+            .driveUnavailable
         case .recoveryRequired:
-            cloudBackupStatusContent(
-                symbol: "exclamationmark.icloud",
-                title: "Cloud Backup Needs Recovery",
-                message: "Open to review interrupted setup",
-                color: Color.statusWarning
-            )
-
+            .recoveryRequired
         case let .authorizationRequired(message):
-            cloudBackupStatusContent(
+            .init(
                 symbol: "exclamationmark.icloud",
                 title: "iCloud Access Needed",
                 message: message,
                 color: Color.statusWarning
             )
-
         case let .error(message):
-            cloudBackupStatusContent(
+            .init(
                 symbol: "exclamationmark.icloud",
                 title: "Cloud Backup Error",
                 message: message,
@@ -224,27 +219,78 @@ struct MainSettingsCloudBackupEnabledStatus: View {
         }
     }
 
-    @ViewBuilder
-    private func cloudBackupStatusContent(
-        symbol: String,
-        title: String,
-        message: String? = nil,
-        color: Color
-    ) -> some View {
-        Image(systemName: symbol)
-            .foregroundStyle(color)
-
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-
-            if let message {
-                Text(message)
-                    .font(.caption2)
-                    .foregroundStyle(color)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
+    private static let inactive = Self(
+        symbol: "icloud",
+        title: "Cloud Backup",
+        message: nil,
+        color: Color.secondary
+    )
+    private static let passkeyMissing = Self(
+        symbol: "exclamationmark.icloud.fill",
+        title: "Cloud Backup Passkey Missing",
+        message: "Backups can't be restored until you add a new passkey",
+        color: Color.statusWarning
+    )
+    private static let passkeyProviderUnsupported = Self(
+        symbol: "exclamationmark.icloud.fill",
+        title: "Cloud Backup Passkey Unsupported",
+        message: "Open to choose a supported passkey provider",
+        color: Color.statusWarning
+    )
+    private static let unverified = Self(
+        symbol: "exclamationmark.icloud",
+        title: "Cloud Backup Unverified",
+        message: nil,
+        color: Color.statusWarning
+    )
+    private static let confirming = Self(
+        symbol: "arrow.clockwise.icloud",
+        title: "Cloud Backup Confirming",
+        message: nil,
+        color: Color.statusInfo
+    )
+    private static let active = Self(
+        symbol: "checkmark.icloud",
+        title: "Cloud Backup Enabled",
+        message: nil,
+        color: Color.statusSuccess
+    )
+    private static let verificationRecommended = Self(
+        symbol: "exclamationmark.icloud",
+        title: "Cloud Backup Enabled",
+        message: "Verification recommended",
+        color: Color.statusWarning
+    )
+    private static let checkingSync = Self(
+        symbol: "icloud",
+        title: "Checking Cloud Backup",
+        message: "Checking iCloud sync status",
+        color: Color.secondary
+    )
+    private static let syncing = Self(
+        symbol: "arrow.clockwise.icloud",
+        title: "Cloud Backup Syncing",
+        message: "Uploading latest changes",
+        color: Color.statusInfo
+    )
+    private static let noFiles = Self(
+        symbol: "icloud.slash",
+        title: "Cloud Backup Needs Attention",
+        message: "No iCloud backup files found",
+        color: Color.statusWarning
+    )
+    private static let driveUnavailable = Self(
+        symbol: "exclamationmark.icloud",
+        title: "iCloud Drive Unavailable",
+        message: "Open to review Cloud Backup",
+        color: Color.statusWarning
+    )
+    private static let recoveryRequired = Self(
+        symbol: "exclamationmark.icloud",
+        title: "Cloud Backup Needs Recovery",
+        message: "Open to review interrupted setup",
+        color: Color.statusWarning
+    )
 }
 
 struct MainSettingsCloudBackupRestoringRow: View {

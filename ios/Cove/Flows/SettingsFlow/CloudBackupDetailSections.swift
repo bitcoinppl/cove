@@ -146,68 +146,142 @@ struct DisableCloudBackupSection: View {
     }
 
     var body: some View {
+        DisableCloudBackupFinalAlert(
+            manager: manager,
+            isPresented: $showingFinalConfirmation,
+            content: DisableCloudBackupConfirmationDialog(
+                manager: manager,
+                isPresented: $showingFirstConfirmation,
+                showFinalConfirmation: $showingFinalConfirmation,
+                content: DisableCloudBackupUnavailableAlert(
+                    unavailableMessage: unavailableMessage,
+                    isPresented: $showingUnavailableAlert,
+                    content: DisableCloudBackupControls(
+                        manager: manager,
+                        unavailableMessage: unavailableMessage,
+                        showingUnavailableAlert: $showingUnavailableAlert,
+                        showingFirstConfirmation: $showingFirstConfirmation
+                    )
+                )
+            )
+        )
+    }
+}
+
+private struct DisableCloudBackupControls: View {
+    let manager: CloudBackupManager
+    let unavailableMessage: String?
+    @Binding var showingUnavailableAlert: Bool
+    @Binding var showingFirstConfirmation: Bool
+
+    var body: some View {
         Section {
             if manager.isDisablingCloudBackup {
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 8)
-                    Text("Deleting cloud backups...")
-                        .font(.footnote)
-                }
+                DisableCloudBackupProgress()
             }
 
             if let failure = manager.disableFailure {
-                Text(failure.message)
-                    .font(.caption)
-                    .foregroundStyle(Color.statusError)
-
-                Button {
-                    guard manager.isDetailInventoryComplete else { return }
-
-                    manager.dispatch(action: .disableCloudBackup)
-                } label: {
-                    Label("Try Again", systemImage: "arrow.clockwise")
-                }
-                .disabled(!manager.isDetailInventoryComplete)
-
-                if failure.canKeepEnabled {
-                    Button {
-                        manager.dispatch(action: .keepCloudBackupEnabled)
-                    } label: {
-                        Label("Keep Cloud Backup Enabled", systemImage: "icloud")
-                    }
-                }
+                DisableCloudBackupFailureControls(
+                    manager: manager,
+                    message: failure.message,
+                    canKeepEnabled: failure.canKeepEnabled
+                )
             }
 
-            Button(role: .destructive) {
-                guard manager.isDetailInventoryComplete else { return }
-
-                if unavailableMessage != nil {
-                    showingUnavailableAlert = true
-                } else {
-                    showingFirstConfirmation = true
-                }
-            } label: {
+            Button(role: .destructive, action: requestDisable) {
                 Text("Disable Cloud Backup")
                     .font(.footnote)
             }
             .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
         }
-        .alert("Cloud Backup Can't Be Disabled Yet", isPresented: $showingUnavailableAlert) {
+    }
+
+    private func requestDisable() {
+        guard manager.isDetailInventoryComplete else { return }
+
+        if unavailableMessage != nil {
+            showingUnavailableAlert = true
+        } else {
+            showingFirstConfirmation = true
+        }
+    }
+}
+
+private struct DisableCloudBackupProgress: View {
+    var body: some View {
+        HStack {
+            ProgressView()
+                .padding(.trailing, 8)
+            Text("Deleting cloud backups...")
+                .font(.footnote)
+        }
+    }
+}
+
+private struct DisableCloudBackupFailureControls: View {
+    let manager: CloudBackupManager
+    let message: String
+    let canKeepEnabled: Bool
+
+    var body: some View {
+        Text(message)
+            .font(.caption)
+            .foregroundStyle(Color.statusError)
+
+        Button(action: retryDisable) {
+            Label("Try Again", systemImage: "arrow.clockwise")
+        }
+        .disabled(!manager.isDetailInventoryComplete)
+
+        if canKeepEnabled {
+            Button(action: keepEnabled) {
+                Label("Keep Cloud Backup Enabled", systemImage: "icloud")
+            }
+        }
+    }
+
+    private func retryDisable() {
+        guard manager.isDetailInventoryComplete else { return }
+
+        manager.dispatch(action: .disableCloudBackup)
+    }
+
+    private func keepEnabled() {
+        manager.dispatch(action: .keepCloudBackupEnabled)
+    }
+}
+
+private struct DisableCloudBackupUnavailableAlert<Content: View>: View {
+    let unavailableMessage: String?
+    @Binding var isPresented: Bool
+    let content: Content
+
+    var body: some View {
+        content.alert("Cloud Backup Can't Be Disabled Yet", isPresented: $isPresented) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(unavailableMessage ?? "Cove is waiting for Cloud Backup to finish another operation.")
         }
-        .confirmationDialog(
+    }
+}
+
+private struct DisableCloudBackupConfirmationDialog<Content: View>: View {
+    let manager: CloudBackupManager
+    @Binding var isPresented: Bool
+    @Binding var showFinalConfirmation: Bool
+    let content: Content
+
+    var body: some View {
+        content.confirmationDialog(
             "Disable Cloud Backup?",
-            isPresented: $showingFirstConfirmation,
+            isPresented: $isPresented,
             titleVisibility: .visible
         ) {
             Button("Continue", role: .destructive) {
                 guard manager.isDetailInventoryComplete else { return }
 
-                showingFinalConfirmation = true
+                showFinalConfirmation = true
             }
             .disabled(!manager.isDetailInventoryComplete)
 
@@ -215,7 +289,16 @@ struct DisableCloudBackupSection: View {
         } message: {
             Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.")
         }
-        .alert("Delete Cloud Backups?", isPresented: $showingFinalConfirmation) {
+    }
+}
+
+private struct DisableCloudBackupFinalAlert<Content: View>: View {
+    let manager: CloudBackupManager
+    @Binding var isPresented: Bool
+    let content: Content
+
+    var body: some View {
+        content.alert("Delete Cloud Backups?", isPresented: $isPresented) {
             Button("Delete Cloud Backups and Disable", role: .destructive) {
                 guard manager.isDetailInventoryComplete else { return }
 

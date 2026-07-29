@@ -28,25 +28,12 @@ struct HotWalletSelectScreen: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
-            )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        bottomActionLayout()
-                            .frame(minHeight: proxy.size.height)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    bottomActionLayout()
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                }
-            }
-        }
+        HotWalletSelectionLayout(
+            sizeCategory: sizeCategory,
+            isSheetShown: $isSheetShown,
+            nextScreen: $nextScreen,
+            route: route
+        )
         .background(
             Image(.newWalletPattern)
                 .resizable()
@@ -60,12 +47,55 @@ struct HotWalletSelectScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
     }
+}
 
-    private func bottomActionLayout() -> some View {
+private struct HotWalletSelectionLayout: View {
+    let sizeCategory: ContentSizeCategory
+    @Binding var isSheetShown: Bool
+    @Binding var nextScreen: NextScreenDialog
+    let route: (NumberOfBip39Words, ImportType) -> Route
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        HotWalletSelectionBottomLayout(
+                            isSheetShown: $isSheetShown,
+                            nextScreen: $nextScreen,
+                            route: route
+                        )
+                        .frame(minHeight: proxy.size.height)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    HotWalletSelectionBottomLayout(
+                        isSheetShown: $isSheetShown,
+                        nextScreen: $nextScreen,
+                        route: route
+                    )
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            }
+        }
+    }
+}
+
+private struct HotWalletSelectionBottomLayout: View {
+    @Binding var isSheetShown: Bool
+    @Binding var nextScreen: NextScreenDialog
+    let route: (NumberOfBip39Words, ImportType) -> Route
+
+    var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
 
-            promptContent
+            HotWalletSelectionPrompt()
                 .padding(.horizontal)
                 .padding(.bottom, 28)
 
@@ -73,15 +103,21 @@ struct HotWalletSelectScreen: View {
                 Divider()
                     .overlay(.coveLightGray.opacity(0.50))
 
-                walletChoiceActions
+                HotWalletChoiceActions(
+                    isSheetShown: $isSheetShown,
+                    nextScreen: $nextScreen,
+                    route: route
+                )
             }
             .padding(.horizontal)
             .padding(.top, 16)
             .padding(.bottom, 56)
         }
     }
+}
 
-    private var promptContent: some View {
+private struct HotWalletSelectionPrompt: View {
+    var body: some View {
         VStack(spacing: 28) {
             HStack {
                 DotMenuView(selected: 1, size: 5)
@@ -98,13 +134,49 @@ struct HotWalletSelectScreen: View {
             }
         }
     }
+}
 
-    private var walletChoiceActions: some View {
+private struct HotWalletChoiceActions: View {
+    @Binding var isSheetShown: Bool
+    @Binding var nextScreen: NextScreenDialog
+    let route: (NumberOfBip39Words, ImportType) -> Route
+
+    var body: some View {
         VStack(spacing: 24) {
-            Button(action: {
-                isSheetShown = true
-                nextScreen = .create
-            }) {
+            HotWalletChoiceButtons(
+                createWallet: selectCreateWallet,
+                importWallet: selectImportWallet
+            )
+        }
+        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+            HotWalletWordCountOptions(
+                includesImportOptions: nextScreen == .import_,
+                qrRoute: route(.twentyFour, .qr),
+                nfcRoute: route(.twentyFour, .nfc),
+                twelveWordRoute: route(.twelve, .manual),
+                twentyFourWordRoute: route(.twentyFour, .manual)
+            )
+        }
+    }
+
+    private func selectCreateWallet() {
+        isSheetShown = true
+        nextScreen = .create
+    }
+
+    private func selectImportWallet() {
+        isSheetShown = true
+        nextScreen = .import_
+    }
+}
+
+private struct HotWalletChoiceButtons: View {
+    let createWallet: () -> Void
+    let importWallet: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Button(action: createWallet) {
                 Text("Create new wallet")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -116,10 +188,7 @@ struct HotWalletSelectScreen: View {
                     .cornerRadius(10)
             }
 
-            Button(action: {
-                isSheetShown = true
-                nextScreen = .import_
-            }) {
+            Button(action: importWallet) {
                 Text("Import existing wallet")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -127,22 +196,33 @@ struct HotWalletSelectScreen: View {
                     .foregroundColor(.white)
             }
         }
-        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
-            if nextScreen == .import_ {
-                NavigationLink(value: route(.twentyFour, importType: .qr)) {
-                    Text("Scan QR")
-                }
+    }
+}
 
-                NavigationLink(value: route(.twentyFour, importType: .nfc)) {
-                    Text("NFC")
-                }
+private struct HotWalletWordCountOptions: View {
+    let includesImportOptions: Bool
+    let qrRoute: Route
+    let nfcRoute: Route
+    let twelveWordRoute: Route
+    let twentyFourWordRoute: Route
+
+    var body: some View {
+        if includesImportOptions {
+            NavigationLink(value: qrRoute) {
+                Text("Scan QR")
             }
-            NavigationLink(value: route(.twelve)) {
-                Text("12 Words")
+
+            NavigationLink(value: nfcRoute) {
+                Text("NFC")
             }
-            NavigationLink(value: route(.twentyFour)) {
-                Text("24 Words")
-            }
+        }
+
+        NavigationLink(value: twelveWordRoute) {
+            Text("12 Words")
+        }
+
+        NavigationLink(value: twentyFourWordRoute) {
+            Text("24 Words")
         }
     }
 }

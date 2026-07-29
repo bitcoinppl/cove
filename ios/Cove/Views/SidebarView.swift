@@ -43,7 +43,14 @@ struct SidebarView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(localWallets, id: \.id) { wallet in
-                        walletRow(wallet)
+                        SidebarWalletRow(
+                            wallet: wallet,
+                            isOnlyWallet: localWallets.count == 1,
+                            wallets: $localWallets,
+                            draggedWalletId: $draggedWalletId,
+                            selectWallet: app.closeSidebarAndSelectWallet,
+                            persistOrder: persistWalletOrder
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
@@ -86,10 +93,31 @@ struct SidebarView: View {
         )
     }
 
-    @ViewBuilder
-    private func walletRow(_ wallet: WalletMetadata) -> some View {
-        if localWallets.count > 1 {
-            walletButton(wallet)
+    private func persistWalletOrder(_ wallets: [WalletMetadata]) {
+        app.reorderWallets(walletIds: wallets.map(\.id))
+    }
+
+    private func cancelWalletDrag() {
+        guard draggedWalletId != nil else { return }
+
+        draggedWalletId = nil
+        localWallets = app.wallets
+    }
+}
+
+private struct SidebarWalletRow: View {
+    let wallet: WalletMetadata
+    let isOnlyWallet: Bool
+    @Binding var wallets: [WalletMetadata]
+    @Binding var draggedWalletId: WalletId?
+    let selectWallet: (WalletId) -> Void
+    let persistOrder: ([WalletMetadata]) -> Void
+
+    var body: some View {
+        if isOnlyWallet {
+            SidebarWalletButton(wallet: wallet, selectWallet: selectWallet)
+        } else {
+            SidebarWalletButton(wallet: wallet, selectWallet: selectWallet)
                 .opacity(draggedWalletId == wallet.id ? 0.72 : 1)
                 .onDrag {
                     draggedWalletId = wallet.id
@@ -100,20 +128,23 @@ struct SidebarView: View {
                     of: [.text],
                     delegate: SidebarWalletDropDelegate(
                         wallet: wallet,
-                        wallets: $localWallets,
+                        wallets: $wallets,
                         draggedWalletId: $draggedWalletId,
-                        persistOrder: persistWalletOrder
+                        persistOrder: persistOrder
                     )
                 )
-        } else {
-            walletButton(wallet)
         }
     }
+}
 
-    private func walletButton(_ wallet: WalletMetadata) -> some View {
-        Button(action: {
-            app.closeSidebarAndSelectWallet(wallet.id)
-        }) {
+private struct SidebarWalletButton: View {
+    let wallet: WalletMetadata
+    let selectWallet: (WalletId) -> Void
+
+    var body: some View {
+        Button {
+            selectWallet(wallet.id)
+        } label: {
             HStack(spacing: 10) {
                 Circle()
                     .fill(Color(wallet.color))
@@ -134,17 +165,6 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func persistWalletOrder(_ wallets: [WalletMetadata]) {
-        app.reorderWallets(walletIds: wallets.map(\.id))
-    }
-
-    private func cancelWalletDrag() {
-        guard draggedWalletId != nil else { return }
-
-        draggedWalletId = nil
-        localWallets = app.wallets
     }
 }
 

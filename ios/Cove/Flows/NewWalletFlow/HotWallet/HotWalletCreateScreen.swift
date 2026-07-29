@@ -50,27 +50,15 @@ struct WordsView: View {
                 availableHeight: proxy.size.height
             )
             let layout: RecoveryWordsLayout = scrollableLayout ? .stickyBottom : .inline
-            let contentWidth = max(proxy.size.width - 32, 0)
 
-            VStack(spacing: 0) {
-                ScrollView {
-                    recoveryWordsContent(
-                        layout: layout,
-                        availableWidth: contentWidth
-                    )
-                    .frame(minHeight: layout == .inline ? proxy.size.height : nil)
-                    .padding(.bottom, layout == .stickyBottom ? 24 : 0)
-                }
-                .scrollIndicators(.hidden)
-
-                if layout == .stickyBottom {
-                    compactBottomAction
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .background(
-                Color.midnightBlue
-                    .ignoresSafeArea(.all)
+            RecoveryWordsLayoutView(
+                groupedWords: groupedWords,
+                tabIndex: $tabIndex,
+                lastIndex: lastIndex,
+                layout: layout,
+                availableSize: proxy.size,
+                isSaving: isSaving,
+                saveWallet: saveWallet
             )
         }
         .navigationTitle("Backup your wallet")
@@ -104,19 +92,70 @@ struct WordsView: View {
         .navigationBarBackButtonHidden(true)
     }
 
-    private func recoveryWordsContent(layout: RecoveryWordsLayout, availableWidth: CGFloat) -> some View {
-        RecoveryWordsContent(
-            groupedWords: groupedWords,
-            tabIndex: $tabIndex,
-            lastIndex: lastIndex,
-            layout: layout,
-            availableWidth: availableWidth,
-            isSaving: isSaving,
-            saveWallet: saveWallet
+    private func saveWallet() {
+        guard !isSaving else { return }
+        isSaving = true
+
+        do {
+            let result = try manager.rust.saveWallet()
+            app.resetRoute(to: result.routes)
+        } catch {
+            isSaving = false
+            Log.error("Error \(error)")
+        }
+    }
+}
+
+private struct RecoveryWordsLayoutView: View {
+    let groupedWords: [[GroupedWord]]
+    @Binding var tabIndex: Int
+    let lastIndex: Int
+    let layout: RecoveryWordsLayout
+    let availableSize: CGSize
+    let isSaving: Bool
+    let saveWallet: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                RecoveryWordsContent(
+                    groupedWords: groupedWords,
+                    tabIndex: $tabIndex,
+                    lastIndex: lastIndex,
+                    layout: layout,
+                    availableWidth: max(availableSize.width - 32, 0),
+                    isSaving: isSaving,
+                    saveWallet: saveWallet
+                )
+                .frame(minHeight: layout == .inline ? availableSize.height : nil)
+                .padding(.bottom, layout == .stickyBottom ? 24 : 0)
+            }
+            .scrollIndicators(.hidden)
+
+            if layout == .stickyBottom {
+                RecoveryWordsBottomAction(
+                    tabIndex: $tabIndex,
+                    lastIndex: lastIndex,
+                    isSaving: isSaving,
+                    saveWallet: saveWallet
+                )
+            }
+        }
+        .frame(width: availableSize.width, height: availableSize.height)
+        .background(
+            Color.midnightBlue
+                .ignoresSafeArea(.all)
         )
     }
+}
 
-    private var compactBottomAction: some View {
+private struct RecoveryWordsBottomAction: View {
+    @Binding var tabIndex: Int
+    let lastIndex: Int
+    let isSaving: Bool
+    let saveWallet: () -> Void
+
+    var body: some View {
         VStack(spacing: 16) {
             Divider()
                 .overlay(.coveLightGray.opacity(0.50))
@@ -132,19 +171,6 @@ struct WordsView: View {
         .padding(.top, 12)
         .padding(.bottom, 56)
         .background(Color.midnightBlue)
-    }
-
-    private func saveWallet() {
-        guard !isSaving else { return }
-        isSaving = true
-
-        do {
-            let result = try manager.rust.saveWallet()
-            app.resetRoute(to: result.routes)
-        } catch {
-            isSaving = false
-            Log.error("Error \(error)")
-        }
     }
 }
 
@@ -178,6 +204,41 @@ struct RecoveryWordsContent: View {
                 Spacer()
             }
 
+            RecoveryWordsDescription()
+
+            if layout.showsPrimaryActionInline {
+                Divider()
+                    .overlay(.coveLightGray.opacity(0.50))
+
+                RecoveryWordsPrimaryActionButton(
+                    tabIndex: $tabIndex,
+                    lastIndex: lastIndex,
+                    isSaving: isSaving,
+                    saveWallet: saveWallet
+                )
+            }
+        }
+        .padding()
+        .frame(maxHeight: .infinity)
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .opacity(0.5)
+        )
+        .background(Color.midnightBlue)
+    }
+
+    private var wordGridRowCount: Int {
+        (groupedWords.map(\.count).max() ?? 0) / 2
+    }
+}
+
+private struct RecoveryWordsDescription: View {
+    var body: some View {
+        VStack(spacing: 24) {
             HStack {
                 DotMenuView(selected: 2, size: 5)
                 Spacer()
@@ -215,40 +276,7 @@ struct RecoveryWordsContent: View {
 
                 Spacer()
             }
-
-            if layout.showsPrimaryActionInline {
-                Divider()
-                    .overlay(.coveLightGray.opacity(0.50))
-
-                VStack(spacing: 24) {
-                    primaryActionButton
-                }
-            }
         }
-        .padding()
-        .frame(maxHeight: .infinity)
-        .background(
-            Image(.newWalletPattern)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
-                .frame(maxWidth: .infinity)
-                .opacity(0.5)
-        )
-        .background(Color.midnightBlue)
-    }
-
-    private var primaryActionButton: some View {
-        RecoveryWordsPrimaryActionButton(
-            tabIndex: $tabIndex,
-            lastIndex: lastIndex,
-            isSaving: isSaving,
-            saveWallet: saveWallet
-        )
-    }
-
-    private var wordGridRowCount: Int {
-        (groupedWords.map(\.count).max() ?? 0) / 2
     }
 }
 

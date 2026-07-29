@@ -162,47 +162,27 @@ private struct CatastrophicErrorContent: View {
                 Spacer()
                     .frame(height: 16)
 
-                ZStack {
-                    Circle()
-                        .fill(Color.red.opacity(0.12))
-                        .frame(width: 118, height: 118)
-
-                    Circle()
-                        .stroke(Color.red.opacity(0.18), lineWidth: 1)
-                        .frame(width: 118, height: 118)
-
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 42, weight: .semibold))
-                        .foregroundStyle(.red)
-                }
+                CatastrophicErrorHero()
 
                 Spacer()
                     .frame(height: 40)
 
-                VStack(spacing: 16) {
-                    Text("Encryption Key Error")
-                        .font(OnboardingRecoveryTypography.heroTitle)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-
-                    Text(
-                        "Your app's encryption key doesn't match the stored data. This is unexpected and your local wallet data on this device can’t be opened safely."
-                    )
-                    .font(OnboardingRecoveryTypography.body)
-                    .foregroundStyle(.coveLightGray.opacity(0.76))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 8)
+                CatastrophicErrorIntroduction()
 
                 Spacer()
                     .frame(height: 24)
 
-                cloudProbeContent
+                CatastrophicCloudProbeContent(cloudProbeState: cloudProbeState)
 
                 Spacer(minLength: 26)
 
-                actionButtons
+                CatastrophicErrorActions(
+                    cloudProbeState: cloudProbeState,
+                    onRestoreFromCloud: onRestoreFromCloud,
+                    onRetryCheck: onRetryCheck,
+                    onContactSupport: onContactSupport,
+                    onWipeOnly: onWipeOnly
+                )
             }
             .padding(.horizontal, 28)
             .padding(.top, 12)
@@ -213,9 +193,50 @@ private struct CatastrophicErrorContent: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onboardingRecoveryBackground()
     }
+}
 
-    @ViewBuilder
-    private var cloudProbeContent: some View {
+private struct CatastrophicErrorHero: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.red.opacity(0.12))
+                .frame(width: 118, height: 118)
+
+            Circle()
+                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                .frame(width: 118, height: 118)
+
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 42, weight: .semibold))
+                .foregroundStyle(.red)
+        }
+    }
+}
+
+private struct CatastrophicErrorIntroduction: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Encryption Key Error")
+                .font(OnboardingRecoveryTypography.heroTitle)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text(
+                "Your app's encryption key doesn't match the stored data. This is unexpected and your local wallet data on this device can’t be opened safely."
+            )
+            .font(OnboardingRecoveryTypography.body)
+            .foregroundStyle(.coveLightGray.opacity(0.76))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
+private struct CatastrophicCloudProbeContent: View {
+    let cloudProbeState: CatastrophicErrorView.CloudProbeState
+
+    var body: some View {
         switch cloudProbeState {
         case .checking:
             VStack(spacing: 12) {
@@ -229,53 +250,59 @@ private struct CatastrophicErrorContent: View {
             }
 
         case .available:
-            statusCard(
+            CatastrophicCloudStatusCard(
                 icon: "checkmark.circle.fill",
                 color: .lightGreen,
                 text: "Cloud Backup data is available for this account"
             )
 
         case .noBackup:
-            statusCard(
+            CatastrophicCloudStatusCard(
                 icon: "icloud.slash",
                 color: .coveLightGray,
                 text: "No cloud backup was detected for this account"
             )
 
         case .offline:
-            statusCard(
+            CatastrophicCloudStatusCard(
                 icon: "wifi.exclamationmark",
                 color: .orange,
                 text: "This device appears to be offline. Reconnect and try the cloud backup check again"
             )
 
         case .inconclusive:
-            statusCard(
+            CatastrophicCloudStatusCard(
                 icon: "icloud.slash",
                 color: .orange,
                 text: "We couldn’t confirm whether a cloud backup is available. Retry the check before restoring from cloud backup"
             )
 
         case .unreadable:
-            statusCard(
+            CatastrophicCloudStatusCard(
                 icon: "exclamationmark.triangle.fill",
                 color: .orange,
                 text: "Cloud backup data could not be read. Retry the check before restoring from cloud backup"
             )
         }
     }
+}
 
-    private var actionButtons: some View {
+private struct CatastrophicErrorActions: View {
+    let cloudProbeState: CatastrophicErrorView.CloudProbeState
+    let onRestoreFromCloud: () -> Void
+    let onRetryCheck: () -> Void
+    let onContactSupport: () -> Void
+    let onWipeOnly: () -> Void
+
+    var body: some View {
         VStack(spacing: 14) {
             if cloudProbeState.allowsRestoreAttempt {
-                restoreButton
+                CatastrophicRestoreButton(action: onRestoreFromCloud)
             }
 
             if cloudProbeState.allowsRetry {
-                Button(action: onRetryCheck) {
-                    Text("Retry Check")
-                }
-                .buttonStyle(OnboardingSecondaryButtonStyle())
+                Button("Retry Check", action: onRetryCheck)
+                    .buttonStyle(OnboardingSecondaryButtonStyle())
             }
 
             Button(action: onContactSupport) {
@@ -283,27 +310,35 @@ private struct CatastrophicErrorContent: View {
             }
             .buttonStyle(OnboardingSecondaryButtonStyle())
 
-            Button(role: .destructive, action: onWipeOnly) {
-                Text("Wipe Local Data")
-            }
-            .buttonStyle(
-                OnboardingSecondaryButtonStyle(
-                    backgroundColor: Color.red.opacity(0.12),
-                    foregroundColor: .red.opacity(0.95),
-                    borderColor: Color.red.opacity(0.22)
+            Button("Wipe Local Data", role: .destructive, action: onWipeOnly)
+                .buttonStyle(
+                    OnboardingSecondaryButtonStyle(
+                        backgroundColor: Color.red.opacity(0.12),
+                        foregroundColor: .red.opacity(0.95),
+                        borderColor: Color.red.opacity(0.22)
+                    )
                 )
-            )
         }
     }
+}
 
-    private var restoreButton: some View {
-        Button(action: onRestoreFromCloud) {
+private struct CatastrophicRestoreButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
             Label("Restore from Cloud Backup", systemImage: "icloud.and.arrow.down")
         }
         .buttonStyle(OnboardingPrimaryButtonStyle())
     }
+}
 
-    private func statusCard(icon: String, color: Color, text: String) -> some View {
+private struct CatastrophicCloudStatusCard: View {
+    let icon: String
+    let color: Color
+    let text: String
+
+    var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))

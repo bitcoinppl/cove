@@ -76,35 +76,6 @@ struct NodeSelectionView: View {
         }
     }
 
-    @ViewBuilder
-    var CustomFields: some View {
-        if showCustomUrlField {
-            Section(selectedNodeName) {
-                HStack {
-                    Text("URL")
-                        .frame(width: 60, alignment: .leading)
-
-                    TextField("Enter URL", text: $customUrl)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                }
-                .font(.subheadline)
-
-                HStack {
-                    Text("Name")
-                        .frame(width: 60, alignment: .leading)
-
-                    TextField("Node Name (optional)", text: $customNodeName)
-                        .textInputAutocapitalization(.never)
-                }
-                .font(.subheadline)
-
-                Button("Save Custom Node", action: checkAndSaveNode)
-                    .disabled(customUrl.isEmpty)
-            }
-        }
-    }
-
     func checkAndSaveNode() {
         var node: Node? = nil
 
@@ -142,94 +113,16 @@ struct NodeSelectionView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(nodeList, id: \.name) { (node: NodeSelection) in
-                    HStack {
-                        Text(node.name)
-                            .font(.subheadline)
-
-                        Spacer()
-
-                        if selectedNodeName == node.name {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.blue)
-                                .font(.footnote)
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedNodeName = node.name }
-                }
-
-                HStack {
-                    Text("Custom Electrum")
-                        .font(.subheadline)
-
-                    Spacer()
-
-                    if selectedNodeName == "Custom Electrum" {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.blue)
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { selectedNodeName = "Custom Electrum" }
-
-                HStack {
-                    Text("Custom Esplora")
-                        .font(.subheadline)
-
-                    Spacer()
-
-                    if selectedNodeName == "Custom Esplora" {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.blue)
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { selectedNodeName = "Custom Esplora" }
-            }
-
-            CustomFields
-        }
+        NodeSelectionForm(
+            nodeList: nodeList,
+            selectedNodeName: $selectedNodeName,
+            customUrl: $customUrl,
+            customNodeName: $customNodeName,
+            saveCustomNode: checkAndSaveNode
+        )
         .scrollContentBackground(.hidden)
         .onChange(of: selectedNodeName) { _, newSelectedNodeName in
-            guard nodeSelector.selectedNode().name != newSelectedNodeName else { return }
-
-            if selectedNodeName.hasPrefix("Custom") {
-                if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
-                    if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
-                        customUrl = savedSelectedNode.url
-                        customNodeName = savedSelectedNode.name
-                    }
-
-                    if savedSelectedNode.apiType == .esplora, selectedNodeName.contains("Esplora") {
-                        customUrl = savedSelectedNode.url
-                        customNodeName = savedSelectedNode.name
-                    }
-                }
-
-                return
-            }
-
-            guard let node = try? nodeSelector.selectPresetNode(name: newSelectedNodeName) else { return }
-
-            showLoadingPopup()
-            let task = Task {
-                do {
-                    try await nodeSelector.checkSelectedNode(node: node)
-                    refreshNodeState()
-                    completeLoading(.success("Succesfully connected to \(node.url)"))
-                } catch {
-                    completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
-                }
-            }
-            checkUrlTask = task
+            nodeSelectionChanged(to: newSelectedNodeName)
         }
         .onDisappear {
             // custom esplora or electrum is selected
@@ -246,6 +139,161 @@ struct NodeSelectionView: View {
                 }
             )
         }
+    }
+
+    private func nodeSelectionChanged(to newSelectedNodeName: String) {
+        guard nodeSelector.selectedNode().name != newSelectedNodeName else { return }
+
+        if newSelectedNodeName.hasPrefix("Custom") {
+            restoreCustomNodeFields(for: newSelectedNodeName)
+            return
+        }
+
+        guard let node = try? nodeSelector.selectPresetNode(name: newSelectedNodeName) else { return }
+
+        showLoadingPopup()
+        checkUrlTask = Task {
+            do {
+                try await nodeSelector.checkSelectedNode(node: node)
+                refreshNodeState()
+                completeLoading(.success("Succesfully connected to \(node.url)"))
+            } catch {
+                completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
+            }
+        }
+    }
+
+    private func restoreCustomNodeFields(for selectedNodeName: String) {
+        guard case let .custom(savedSelectedNode) = nodeSelector.selectedNode() else { return }
+
+        let matchesApiType =
+            savedSelectedNode.apiType == .electrum && selectedNodeName.contains("Electrum")
+                || savedSelectedNode.apiType == .esplora && selectedNodeName.contains("Esplora")
+        guard matchesApiType else { return }
+
+        customUrl = savedSelectedNode.url
+        customNodeName = savedSelectedNode.name
+    }
+}
+
+private struct NodeSelectionForm: View {
+    let nodeList: [NodeSelection]
+    @Binding var selectedNodeName: String
+    @Binding var customUrl: String
+    @Binding var customNodeName: String
+    let saveCustomNode: () -> Void
+
+    var body: some View {
+        Form {
+            NodeSelectionPresetSection(
+                nodeList: nodeList,
+                selectedNodeName: $selectedNodeName
+            )
+            NodeSelectionCustomFields(
+                selectedNodeName: selectedNodeName,
+                customUrl: $customUrl,
+                customNodeName: $customNodeName,
+                save: saveCustomNode
+            )
+        }
+    }
+}
+
+private struct NodeSelectionPresetSection: View {
+    let nodeList: [NodeSelection]
+    @Binding var selectedNodeName: String
+
+    var body: some View {
+        Section {
+            ForEach(nodeList, id: \.name) { node in
+                NodeSelectionRow(
+                    name: node.name,
+                    isSelected: selectedNodeName == node.name,
+                    select: { selectedNodeName = node.name }
+                )
+            }
+            NodeSelectionRow(
+                name: "Custom Electrum",
+                isSelected: selectedNodeName == "Custom Electrum",
+                select: { selectedNodeName = "Custom Electrum" }
+            )
+            NodeSelectionRow(
+                name: "Custom Esplora",
+                isSelected: selectedNodeName == "Custom Esplora",
+                select: { selectedNodeName = "Custom Esplora" }
+            )
+        }
+    }
+}
+
+private struct NodeSelectionRow: View {
+    let name: String
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(name)
+                .font(.subheadline)
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+    }
+}
+
+private struct NodeSelectionCustomFields: View {
+    let selectedNodeName: String
+    @Binding var customUrl: String
+    @Binding var customNodeName: String
+    let save: () -> Void
+
+    var body: some View {
+        if selectedNodeName.hasPrefix("Custom") {
+            Section(selectedNodeName) {
+                NodeSelectionTextField(
+                    title: "URL",
+                    placeholder: "Enter URL",
+                    text: $customUrl,
+                    isUrl: true
+                )
+                NodeSelectionTextField(
+                    title: "Name",
+                    placeholder: "Node Name (optional)",
+                    text: $customNodeName,
+                    isUrl: false
+                )
+                Button("Save Custom Node", action: save)
+                    .disabled(customUrl.isEmpty)
+            }
+        }
+    }
+}
+
+private struct NodeSelectionTextField: View {
+    let title: String
+    let placeholder: String
+    @Binding var text: String
+    let isUrl: Bool
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .frame(width: 60, alignment: .leading)
+
+            TextField(placeholder, text: $text)
+                .keyboardType(isUrl ? .URL : .default)
+                .textInputAutocapitalization(.never)
+        }
+        .font(.subheadline)
     }
 }
 

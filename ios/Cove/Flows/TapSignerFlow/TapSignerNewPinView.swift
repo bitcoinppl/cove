@@ -18,90 +18,54 @@ struct TapSignerNewPinView: View {
     @FocusState private var isFocused
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 40) {
-                VStack {
-                    HStack {
-                        Button(action: { manager.popRoute() }) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
+        TapSignerPinScreen(
+            pin: $newPin,
+            focus: $isFocused,
+            spacing: 40,
+            header: TapSignerPinHeader(actionTitle: "Back", action: goBack),
+            description: TapSignerPinDescription(
+                title: "Create New PIN",
+                message: """
+                The PIN code is a security feature that prevents unauthorized access to your key. \
+                Please back it up and keep it safe. You'll need it for signing transactions.
+                """
+            ),
+            indicators: TapSignerPinIndicators(pinCount: newPin.count, focus: $isFocused)
+        )
+        .onAppear(perform: resetPin)
+        .onChange(of: isFocused, keepFocused)
+        .onChange(of: newPin, handlePinChange)
+    }
 
-                        Spacer()
-                    }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 10)
-                    .foregroundStyle(.primary)
-                    .fontWeight(.semibold)
+    private func goBack() {
+        manager.popRoute()
+    }
 
-                    Image(systemName: "lock")
-                        .font(.system(size: 100))
-                        .foregroundColor(.blue)
-                        .padding(.top, 22)
-                }
+    private func resetPin() {
+        newPin = ""
+        isFocused = true
+    }
 
-                VStack(spacing: 20) {
-                    Text("Create New PIN")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+    private func keepFocused(_: Bool, _: Bool) {
+        isFocused = true
+    }
 
-                    Text(
-                        "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions."
-                    )
-                    .font(.subheadline)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
-                        Circle()
-                            .stroke(.primary, lineWidth: 1.3)
-                            .fill(newPin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
-                            .id(index)
-                    }
-                }
-                .fixedSize(horizontal: true, vertical: true)
-                .contentShape(Rectangle())
-                .onTapGesture { isFocused = true }
-
-                TextField("Hidden Input", text: $newPin)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .focused($isFocused)
-                    .keyboardType(.numberPad)
-
-                Spacer()
-            }
-            .onAppear {
-                newPin = ""
-                isFocused = true
-            }
-            .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: newPin) { old, pin in
-                if pin.count == 6 {
-                    return
-                        manager.navigate(
-                            to: .confirmPin(TapSignerConfirmPinArgs(from: args, newPin: pin))
-                        )
-                }
-
-                if pin.count > 6, old.count < 6 {
-                    newPin = old
-                    return
-                }
-
-                if pin.count > 6 {
-                    newPin = String(args.startingPin.prefix(6))
-                    return
-                }
-            }
+    private func handlePinChange(old: String, pin: String) {
+        if pin.count == 6 {
+            manager.navigate(
+                to: .confirmPin(TapSignerConfirmPinArgs(from: args, newPin: pin))
+            )
+            return
         }
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
+
+        if pin.count > 6, old.count < 6 {
+            newPin = old
+            return
+        }
+
+        if pin.count > 6 {
+            newPin = String(args.startingPin.prefix(6))
+        }
     }
 }
 

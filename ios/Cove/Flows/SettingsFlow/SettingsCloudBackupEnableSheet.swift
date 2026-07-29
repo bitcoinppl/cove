@@ -161,38 +161,36 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     var body: some View {
-        ZStack {
-            if let recovery = manager.pendingEnableRecovery {
-                CloudBackupPendingEnableRecoveryView(
-                    recovery: recovery,
-                    onRemoveIncompleteSetup: {
-                        manager.dispatch(action: .confirmPendingEnableCleanup)
-                    },
-                    onCancel: onDismiss
-                )
-            } else if case .awaitingSavedPasskeyConfirmation(.manual) = manager.enableFlow {
-                CloudBackupEnableConfirmationView(
-                    onContinue: {
-                        manager.dispatch(action: .confirmSavedPasskey)
-                    },
-                    onCancel: {
-                        manager.dispatch(action: .discardPendingEnableCloudBackup)
-                        onDismiss()
-                    }
-                )
-            } else {
-                CloudBackupEnableOnboardingView(
-                    onEnable: beginEnableChoice,
-                    onCancel: onDismiss,
-                    message: message,
-                    isBusy: isBusy
-                )
-            }
-
-            if isBusy {
-                CloudBackupEnableBusyOverlay(
+        CloudBackupExistingBackupAlertHost(
+            isPresented: showingExistingBackupPrompt,
+            message: existingBackupMessage,
+            createNewBackup: acceptCreateNewPasskey,
+            useExistingPasskey: acceptExistingPasskey,
+            cancel: discardPendingEnable
+        ) {
+            CloudBackupPasskeyChoiceAlertHost(
+                isPresented: showingPasskeyChoice,
+                existingPasskeyButtonTitle: existingPasskeyButtonTitle(
+                    for: passkeyChoicePresentation?.passkeyHint
+                ),
+                secondaryActionTitle: passkeyChoicePresentation?.secondaryActionTitle,
+                message: passkeyChoicePresentation?.message
+                    ?? "Choose how to continue with Cloud Backup.",
+                useExistingPasskey: acceptExistingPasskey,
+                createNewPasskey: acceptCreateNewPasskey,
+                cancel: dismissPasskeyChoice
+            ) {
+                CloudBackupEnableRootContent(
+                    recovery: manager.pendingEnableRecovery,
                     enableFlow: manager.enableFlow,
-                    verificationPresentation: manager.verificationPresentation
+                    verificationPresentation: manager.verificationPresentation,
+                    message: message,
+                    isBusy: isBusy,
+                    onRemoveIncompleteSetup: confirmPendingEnableCleanup,
+                    onConfirmSavedPasskey: confirmSavedPasskey,
+                    onCancelConfirmation: cancelSavedPasskeyConfirmation,
+                    onEnable: beginEnableChoice,
+                    onCancel: onDismiss
                 )
             }
         }
@@ -204,40 +202,161 @@ struct SettingsCloudBackupEnableSheet: View {
                 ignoreNextPromptDismiss = false
             }
         }
-        .alert(
-            "Passkey Options",
-            isPresented: showingPasskeyChoice
-        ) {
-            Button(existingPasskeyButtonTitle(for: passkeyChoicePresentation?.passkeyHint)) {
-                dispatchPromptAction(.acceptEnablePrompt(.useExisting))
+    }
+
+    private func acceptExistingPasskey() {
+        dispatchPromptAction(.acceptEnablePrompt(.useExisting))
+    }
+
+    private func acceptCreateNewPasskey() {
+        dispatchPromptAction(.acceptEnablePrompt(.createNew))
+    }
+
+    private func dismissPasskeyChoice() {
+        dispatchPromptAction(.dismissPasskeyChoicePrompt)
+    }
+
+    private func discardPendingEnable() {
+        dispatchPromptAction(.discardPendingEnableCloudBackup)
+    }
+
+    private func confirmPendingEnableCleanup() {
+        manager.dispatch(action: .confirmPendingEnableCleanup)
+    }
+
+    private func confirmSavedPasskey() {
+        manager.dispatch(action: .confirmSavedPasskey)
+    }
+
+    private func cancelSavedPasskeyConfirmation() {
+        manager.dispatch(action: .discardPendingEnableCloudBackup)
+        onDismiss()
+    }
+}
+
+private struct CloudBackupEnableRootContent: View {
+    let recovery: CloudBackupPendingEnableRecovery?
+    let enableFlow: CloudBackupEnableFlow?
+    let verificationPresentation: CloudBackupVerificationPresentation
+    let message: String?
+    let isBusy: Bool
+    let onRemoveIncompleteSetup: () -> Void
+    let onConfirmSavedPasskey: () -> Void
+    let onCancelConfirmation: () -> Void
+    let onEnable: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            CloudBackupEnableFlowContent(
+                recovery: recovery,
+                enableFlow: enableFlow,
+                message: message,
+                isBusy: isBusy,
+                onRemoveIncompleteSetup: onRemoveIncompleteSetup,
+                onConfirmSavedPasskey: onConfirmSavedPasskey,
+                onCancelConfirmation: onCancelConfirmation,
+                onEnable: onEnable,
+                onCancel: onCancel
+            )
+
+            if isBusy {
+                CloudBackupEnableBusyOverlay(
+                    enableFlow: enableFlow,
+                    verificationPresentation: verificationPresentation
+                )
             }
-            if let secondaryActionTitle = passkeyChoicePresentation?.secondaryActionTitle {
-                Button(secondaryActionTitle) {
-                    dispatchPromptAction(.acceptEnablePrompt(.createNew))
+        }
+    }
+}
+
+private struct CloudBackupEnableFlowContent: View {
+    private let content: AnyView
+
+    init(
+        recovery: CloudBackupPendingEnableRecovery?,
+        enableFlow: CloudBackupEnableFlow?,
+        message: String?,
+        isBusy: Bool,
+        onRemoveIncompleteSetup: @escaping () -> Void,
+        onConfirmSavedPasskey: @escaping () -> Void,
+        onCancelConfirmation: @escaping () -> Void,
+        onEnable: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        if let recovery {
+            content = AnyView(CloudBackupPendingEnableRecoveryView(
+                recovery: recovery,
+                onRemoveIncompleteSetup: onRemoveIncompleteSetup,
+                onCancel: onCancel
+            ))
+        } else if case .awaitingSavedPasskeyConfirmation(.manual) = enableFlow {
+            content = AnyView(CloudBackupEnableConfirmationView(
+                onContinue: onConfirmSavedPasskey,
+                onCancel: onCancelConfirmation
+            ))
+        } else {
+            content = AnyView(CloudBackupEnableOnboardingView(
+                onEnable: onEnable,
+                onCancel: onCancel,
+                message: message,
+                isBusy: isBusy
+            ))
+        }
+    }
+
+    var body: some View {
+        content
+    }
+}
+
+private struct CloudBackupPasskeyChoiceAlertHost<Content: View>: View {
+    @Binding var isPresented: Bool
+    let existingPasskeyButtonTitle: String
+    let secondaryActionTitle: String?
+    let message: String
+    let useExistingPasskey: () -> Void
+    let createNewPasskey: () -> Void
+    let cancel: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .alert("Passkey Options", isPresented: $isPresented) {
+                Button(existingPasskeyButtonTitle, action: useExistingPasskey)
+
+                if let secondaryActionTitle {
+                    Button(secondaryActionTitle, action: createNewPasskey)
                 }
+
+                Button("Cancel", role: .cancel, action: cancel)
+            } message: {
+                Text(message)
             }
-            Button("Cancel", role: .cancel) {
-                dispatchPromptAction(.dismissPasskeyChoicePrompt)
+    }
+}
+
+private struct CloudBackupExistingBackupAlertHost<Content: View>: View {
+    @Binding var isPresented: Bool
+    let message: String
+    let createNewBackup: () -> Void
+    let useExistingPasskey: () -> Void
+    let cancel: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .alert("Existing Cloud Backup Found", isPresented: $isPresented) {
+                Button(
+                    "Create New Backup",
+                    role: .destructive,
+                    action: createNewBackup
+                )
+                Button("Try Existing Passkey", action: useExistingPasskey)
+                Button("Cancel", role: .cancel, action: cancel)
+            } message: {
+                Text(message)
             }
-        } message: {
-            Text(passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.")
-        }
-        .alert(
-            "Existing Cloud Backup Found",
-            isPresented: showingExistingBackupPrompt
-        ) {
-            Button("Create New Backup", role: .destructive) {
-                dispatchPromptAction(.acceptEnablePrompt(.createNew))
-            }
-            Button("Try Existing Passkey") {
-                dispatchPromptAction(.acceptEnablePrompt(.useExisting))
-            }
-            Button("Cancel", role: .cancel) {
-                dispatchPromptAction(.discardPendingEnableCloudBackup)
-            }
-        } message: {
-            Text(existingBackupMessage)
-        }
     }
 }
 
@@ -264,10 +383,20 @@ struct CloudBackupPendingEnableRecoveryView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    recoveryHeader
-                    recoveryExplanation
-                    supportCodeCard
-                    recoveryActions
+                    CloudBackupRecoveryHeader()
+                    CloudBackupRecoveryExplanation(
+                        canRemoveIncompleteSetup: canRemoveIncompleteSetup
+                    )
+                    CloudBackupRecoverySupportCodeCard(
+                        supportCode: recovery.supportCode,
+                        copy: copySupportCode,
+                        contactSupport: contactSupport
+                    )
+                    CloudBackupRecoveryActions(
+                        isCleaning: isCleaning,
+                        canRemoveIncompleteSetup: canRemoveIncompleteSetup,
+                        showRemovalConfirmation: $showRemovalConfirmation
+                    )
                 }
                 .padding()
             }
@@ -290,24 +419,42 @@ struct CloudBackupPendingEnableRecoveryView: View {
         }
     }
 
-    private var recoveryHeader: some View {
+    private func copySupportCode() {
+        UIPasteboard.general.string = recovery.supportCode
+    }
+
+    private func contactSupport() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        if let url = cloudBackupPendingEnableSupportEmailURL(
+            supportCode: recovery.supportCode,
+            appVersion: version
+        ) {
+            openURL(url)
+        }
+    }
+}
+
+private struct CloudBackupRecoveryHeader: View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Image(systemName: "exclamationmark.icloud.fill")
                 .font(.system(size: 42))
                 .foregroundStyle(Color.statusWarning)
-
             Text("Cloud Backup Needs Recovery")
                 .font(.largeTitle.weight(.semibold))
                 .foregroundStyle(.white)
-
             Text("Cloud Backup setup was interrupted and its local recovery records do not match.")
                 .font(.footnote)
                 .foregroundStyle(.coveLightGray.opacity(0.75))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
+}
 
-    private var recoveryExplanation: some View {
+private struct CloudBackupRecoveryExplanation: View {
+    let canRemoveIncompleteSetup: Bool
+
+    var body: some View {
         Text(
             canRemoveIncompleteSetup
                 ? "Cove verified that the incomplete local setup can be removed without changing your active backup or cloud data."
@@ -320,30 +467,28 @@ struct CloudBackupPendingEnableRecoveryView: View {
         .background(Color.duskBlue.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+}
 
-    private var supportCodeCard: some View {
+private struct CloudBackupRecoverySupportCodeCard: View {
+    let supportCode: String
+    let copy: () -> Void
+    let contactSupport: () -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Support code")
                 .font(.caption)
                 .foregroundStyle(.coveLightGray)
-
-            Text(recovery.supportCode)
+            Text(supportCode)
                 .font(.title3.monospaced().weight(.semibold))
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("cloudBackup.recovery.supportCode")
-
             HStack {
-                Button {
-                    UIPasteboard.general.string = recovery.supportCode
-                } label: {
+                Button(action: copy) {
                     Label("Copy Code", systemImage: "doc.on.doc")
                 }
-
                 Spacer()
-
-                Button {
-                    contactSupport()
-                } label: {
+                Button(action: contactSupport) {
                     Label("Contact Support", systemImage: "envelope")
                 }
             }
@@ -354,9 +499,14 @@ struct CloudBackupPendingEnableRecoveryView: View {
         .background(Color.duskBlue.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+}
 
-    @ViewBuilder
-    private var recoveryActions: some View {
+private struct CloudBackupRecoveryActions: View {
+    let isCleaning: Bool
+    let canRemoveIncompleteSetup: Bool
+    @Binding var showRemovalConfirmation: Bool
+
+    var body: some View {
         if isCleaning {
             HStack {
                 Spacer()
@@ -379,16 +529,6 @@ struct CloudBackupPendingEnableRecoveryView: View {
                 borderColor: Color.red.opacity(0.22)
             ))
             .accessibilityIdentifier("cloudBackup.recovery.removeIncompleteSetup")
-        }
-    }
-
-    private func contactSupport() {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-        if let url = cloudBackupPendingEnableSupportEmailURL(
-            supportCode: recovery.supportCode,
-            appVersion: version
-        ) {
-            openURL(url)
         }
     }
 }

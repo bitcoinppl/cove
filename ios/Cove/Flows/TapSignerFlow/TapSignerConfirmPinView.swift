@@ -87,108 +87,57 @@ struct TapSignerConfirmPinView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 40) {
-                VStack {
-                    HStack {
-                        Button(action: { manager.popRoute() }) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
+        TapSignerPinScreen(
+            pin: $confirmPin,
+            focus: $isFocused,
+            spacing: 40,
+            header: TapSignerPinHeader(actionTitle: "Back", action: goBack),
+            description: TapSignerPinDescription(
+                title: "Confirm New PIN",
+                message: """
+                The PIN code is a security feature that prevents unauthorized access to your key. \
+                Please back it up and keep it safe. You'll need it for signing transactions.
+                """
+            ),
+            indicators: TapSignerShakingPinIndicators(
+                pinCount: confirmPin.count,
+                animateField: animateField,
+                focus: $isFocused
+            )
+        )
+        .onAppear(perform: resetPin)
+        .onChange(of: isFocused, keepFocused)
+        .onChange(of: confirmPin, handlePinChange)
+    }
 
-                        Spacer()
-                    }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 10)
-                    .foregroundStyle(.primary)
-                    .fontWeight(.semibold)
+    private func goBack() {
+        manager.popRoute()
+    }
 
-                    Image(systemName: "lock")
-                        .font(.system(size: 100))
-                        .foregroundColor(.blue)
-                        .padding(.top, 22)
-                }
+    private func resetPin() {
+        confirmPin = ""
+        isFocused = true
+    }
 
-                VStack(spacing: 20) {
-                    Text("Confirm New PIN")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+    private func keepFocused(_: Bool, _: Bool) {
+        isFocused = true
+    }
 
-                    Text(
-                        "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions."
-                    )
-                    .font(.subheadline)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
-                        Circle()
-                            .stroke(.primary, lineWidth: 1.3)
-                            .fill(confirmPin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
-                            .id(index)
-                    }
-                }
-                .keyframeAnimator(
-                    initialValue: CGFloat.zero,
-                    trigger: animateField,
-                    content: { content, value in
-                        content
-                            .offset(x: value)
-                    },
-                    keyframes: { _ in
-                        KeyframeTrack {
-                            CubicKeyframe(30, duration: 0.07)
-                            CubicKeyframe(-30, duration: 0.07)
-                            CubicKeyframe(20, duration: 0.07)
-                            CubicKeyframe(-20, duration: 0.07)
-                            CubicKeyframe(10, duration: 0.07)
-                            CubicKeyframe(-10, duration: 0.07)
-                            CubicKeyframe(0, duration: 0.07)
-                        }
-                    }
-                )
-                .fixedSize(horizontal: true, vertical: true)
-                .contentShape(Rectangle())
-                .onTapGesture { isFocused = true }
-
-                TextField("Hidden Input", text: $confirmPin)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .focused($isFocused)
-                    .keyboardType(.numberPad)
-
-                Spacer()
-            }
-            .onAppear {
-                confirmPin = ""
-                isFocused = true
-            }
-            .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: confirmPin) { old, pin in
-                if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        checkPin()
-                    }
-                }
-
-                if pin.count > 6, old.count < 6 {
-                    confirmPin = old
-                    return
-                }
-
-                if pin.count > 6 {
-                    confirmPin = String(args.startingPin.prefix(6))
-                    return
-                }
+    private func handlePinChange(old: String, pin: String) {
+        if pin.count == 6 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                checkPin()
             }
         }
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
+
+        if pin.count > 6, old.count < 6 {
+            confirmPin = old
+            return
+        }
+
+        if pin.count > 6 {
+            confirmPin = String(args.startingPin.prefix(6))
+        }
     }
 }
 

@@ -42,12 +42,6 @@ struct SendFlowAdvancedDetailsView: View {
         }
     }
 
-    private var divider: some View {
-        Divider()
-            .padding(.vertical, 28)
-            .foregroundStyle(.red)
-    }
-
     private func toTxRows(_ addressAndAmount: [AddressAndAmount]) -> [TxRowModel] {
         addressAndAmount.map {
             TxRowModel(
@@ -61,80 +55,23 @@ struct SendFlowAdvancedDetailsView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            // header
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Advanced Details")
-                        .font(.headline.weight(.semibold))
-
-                    Text("View current transaction breakdown")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top)
-
-                Spacer()
-
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundColor(.primary.opacity(0.8))
-                        .padding(10)
-                        .background(Circle().fill(Color.secondary.opacity(0.15)))
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
+            SendFlowAdvancedDetailsHeader(dismiss: dismiss.callAsFunction)
 
             Divider()
                 .padding(.horizontal, -16)
 
-            // content sections
             ScrollView {
-                VStack(spacing: 0) {
-                    if let splitOutput {
-                        SectionCard(title: "UTXOs Used", rows: toTxRows(details.inputs()))
-                        divider
-
-                        if splitOutput.external.isEmpty {
-                            SectionCard(title: "Sent To Self", rows: toTxRows(splitOutput.internal))
-                            divider
-                        } else {
-                            SectionCard(
-                                title: "Sent To Address", rows: toTxRows(splitOutput.external)
-                            )
-                            divider
-                        }
-
-                        if !splitOutput.external.isEmpty, !splitOutput.internal.isEmpty {
-                            SectionCard(
-                                title: "UTXO Change", rows: toTxRows(splitOutput.internal)
-                            )
-                            divider
-                        }
-                    }
-
-                    // Loading...
-                    if splitOutput == nil {
-                        SectionCard(title: "UTXO Inputs", rows: toTxRows(details.inputs()))
-                        divider
-
-                        SectionCard(title: "UTXO Outputs", rows: toTxRows(details.outputs()))
-                        divider
-                    }
-
-                    HStack {
-                        Text("Fee")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary.opacity(0.75))
-
-                        Spacer()
-                        Text(displayFiatOrBtcAmount(details.feeTotal()))
-                            .font(.footnote)
-                            .fontWeight(.regular)
-                    }
-                    .padding(.horizontal, 12)
-                }
+                SendFlowAdvancedDetailsContent(
+                    inputRows: toTxRows(details.inputs()),
+                    outputRows: toTxRows(details.outputs()),
+                    splitOutput: splitOutput.map {
+                        SendFlowAdvancedDetailsSplitRows(
+                            external: toTxRows($0.external),
+                            internalRows: toTxRows($0.internal)
+                        )
+                    },
+                    feeAmount: displayFiatOrBtcAmount(details.feeTotal())
+                )
             }
             .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
         }
@@ -147,6 +84,129 @@ struct SendFlowAdvancedDetailsView: View {
                 outputs: details.outputs()
             )
         }
+    }
+}
+
+private struct SendFlowAdvancedDetailsHeader: View {
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Advanced Details")
+                    .font(.headline.weight(.semibold))
+
+                Text("View current transaction breakdown")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top)
+
+            Spacer()
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.primary.opacity(0.8))
+                    .padding(10)
+                    .background(Circle().fill(Color.secondary.opacity(0.15)))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct SendFlowAdvancedDetailsSplitRows {
+    let external: [TxRowModel]
+    let internalRows: [TxRowModel]
+}
+
+private struct SendFlowAdvancedDetailsContent: View {
+    let inputRows: [TxRowModel]
+    let outputRows: [TxRowModel]
+    let splitOutput: SendFlowAdvancedDetailsSplitRows?
+    let feeAmount: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let splitOutput {
+                SendFlowAdvancedDetailsLoadedSections(
+                    inputRows: inputRows,
+                    splitOutput: splitOutput
+                )
+            } else {
+                SendFlowAdvancedDetailsLoadingSections(
+                    inputRows: inputRows,
+                    outputRows: outputRows
+                )
+            }
+
+            SendFlowAdvancedDetailsFeeRow(feeAmount: feeAmount)
+        }
+    }
+}
+
+private struct SendFlowAdvancedDetailsLoadedSections: View {
+    let inputRows: [TxRowModel]
+    let splitOutput: SendFlowAdvancedDetailsSplitRows
+
+    var body: some View {
+        SectionCard(title: "UTXOs Used", rows: inputRows)
+        SendFlowAdvancedDetailsDivider()
+
+        if splitOutput.external.isEmpty {
+            SectionCard(title: "Sent To Self", rows: splitOutput.internalRows)
+            SendFlowAdvancedDetailsDivider()
+        } else {
+            SectionCard(title: "Sent To Address", rows: splitOutput.external)
+            SendFlowAdvancedDetailsDivider()
+        }
+
+        if !splitOutput.external.isEmpty, !splitOutput.internalRows.isEmpty {
+            SectionCard(title: "UTXO Change", rows: splitOutput.internalRows)
+            SendFlowAdvancedDetailsDivider()
+        }
+    }
+}
+
+private struct SendFlowAdvancedDetailsLoadingSections: View {
+    let inputRows: [TxRowModel]
+    let outputRows: [TxRowModel]
+
+    var body: some View {
+        SectionCard(title: "UTXO Inputs", rows: inputRows)
+        SendFlowAdvancedDetailsDivider()
+
+        SectionCard(title: "UTXO Outputs", rows: outputRows)
+        SendFlowAdvancedDetailsDivider()
+    }
+}
+
+private struct SendFlowAdvancedDetailsDivider: View {
+    var body: some View {
+        Divider()
+            .padding(.vertical, 28)
+            .foregroundStyle(.red)
+    }
+}
+
+private struct SendFlowAdvancedDetailsFeeRow: View {
+    let feeAmount: String
+
+    var body: some View {
+        HStack {
+            Text("Fee")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary.opacity(0.75))
+
+            Spacer()
+
+            Text(feeAmount)
+                .font(.footnote)
+                .fontWeight(.regular)
+        }
+        .padding(.horizontal, 12)
     }
 }
 

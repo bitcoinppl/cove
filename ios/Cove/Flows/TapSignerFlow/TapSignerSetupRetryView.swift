@@ -9,7 +9,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TapSignerSetupRetry: View {
-    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
@@ -17,97 +16,44 @@ struct TapSignerSetupRetry: View {
     let response: SetupCmdResponse
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
+        TapSignerAdaptiveLayout { usesFlexibleSpacing in
+            TapSignerRetryContent(
+                usesFlexibleSpacing: usesFlexibleSpacing,
+                title: "Could not complete setup",
+                message: """
+                Please try again and hold your TAPSIGNER steady until setup is complete.
+                """,
+                cancelAction: cancel,
+                retryAction: retry
             )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
-            }
         }
         .background(TapSignerResultBackground())
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
-        VStack(spacing: 40) {
-            VStack {
-                HStack {
-                    Button(action: { manager.popRoute() }) {
-                        Text("Cancel")
-                    }
+    private func cancel() {
+        manager.popRoute()
+    }
 
-                    Spacer()
-                }
-                .padding(.top, 20)
-                .padding(.horizontal, 10)
-                .foregroundStyle(.primary)
-                .fontWeight(.semibold)
-            }
+    private func retry() {
+        Task {
+            let nfc = manager.getOrCreateNfc(tapSigner)
 
-            if usesFlexibleSpacing {
-                Spacer()
-            }
-
-            VStack(spacing: 20) {
-                Image(systemName: "x.circle.fill")
-                    .font(.system(size: 100))
-                    .foregroundStyle(.red)
-                    .fontWeight(.light)
-
-                Text("Could not complete setup")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text(
-                    "Please try again and hold your TAPSIGNER steady until setup is complete."
+            switch await nfc.continueSetup(response) {
+            case let .success(.complete(complete)):
+                manager.resetRoute(to: .setupSuccess(tapSigner, complete))
+            case let .success(incomplete):
+                Log.error(
+                    "Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)"
                 )
-                .font(.subheadline)
-                .foregroundStyle(.primary.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal)
-
-            if usesFlexibleSpacing {
-                Spacer()
-            }
-
-            VStack(spacing: 14) {
-                Button("Retry") {
-                    Task {
-                        let nfc = manager.getOrCreateNfc(tapSigner)
-                        switch await nfc.continueSetup(response) {
-                        case let .success(.complete(c)):
-                            manager.resetRoute(to: .setupSuccess(tapSigner, c))
-                        case let .success(incomplete):
-                            Log.error(
-                                "Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)"
-                            )
-                            app.sheetState = nil
-                            app.alertState = .init(
-                                .tapSignerSetupFailed(message: "Failed to setup TapSigner")
-                            )
-                        case let .failure(error):
-                            app.sheetState = nil
-                            app.alertState = .init(.tapSignerSetupFailed(message: error.description))
-                        }
-                    }
-                }
-                .buttonStyle(DarkButtonStyle())
-                .padding(.horizontal)
+                app.sheetState = nil
+                app.alertState = .init(
+                    .tapSignerSetupFailed(message: "Failed to setup TapSigner")
+                )
+            case let .failure(error):
+                app.sheetState = nil
+                app.alertState = .init(.tapSignerSetupFailed(message: error.description))
             }
         }
     }

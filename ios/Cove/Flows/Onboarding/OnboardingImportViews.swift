@@ -19,103 +19,185 @@ struct OnboardingSoftwareImportFlowView: View {
     let onBack: () -> Void
 
     var body: some View {
-        content
-            .cloudRestoreAlert(
-                isPresented: cloudRestoreAlertVisible,
-                onRestore: onRestoreFromCloudBackup,
-                onContinue: onDismissCloudRestoreAlert
-            )
+        OnboardingSoftwareImportContent(
+            errorMessage: errorMessage,
+            onImported: onImported,
+            onCreateWallet: onCreateWallet,
+            onBack: onBack,
+            mode: $mode
+        )
+        .cloudRestoreAlert(
+            isPresented: cloudRestoreAlertVisible,
+            onRestore: onRestoreFromCloudBackup,
+            onContinue: onDismissCloudRestoreAlert
+        )
     }
+}
 
-    @ViewBuilder
-    private var content: some View {
+private struct OnboardingSoftwareImportContent: View {
+    let errorMessage: String?
+    let onImported: (WalletId) -> Void
+    let onCreateWallet: () -> Void
+    let onBack: () -> Void
+
+    @Binding var mode: OnboardingSoftwareImportFlowView.Mode
+
+    var body: some View {
         switch mode {
         case .chooser:
-            OnboardingPromptScreen(
-                icon: "square.and.arrow.down.on.square",
-                title: "Import your software wallet",
-                subtitle: "Choose how you want to bring your existing wallet into Cove."
-            ) {
-                if let errorMessage {
-                    OnboardingInlineMessage(text: errorMessage)
-                }
-
-                VStack(spacing: 14) {
-                    OnboardingChoiceCard(
-                        title: "Enter recovery words",
-                        subtitle: "Import a 12- or 24-word recovery phrase",
-                        systemImage: "keyboard"
-                    ) {
-                        mode = .wordCount
-                    }
-
-                    OnboardingChoiceCard(
-                        title: "Scan QR code",
-                        subtitle: "Scan a mnemonic QR from another wallet",
-                        systemImage: "qrcode.viewfinder"
-                    ) {
-                        mode = .qr
-                    }
-                }
-
-                Button("Back", action: onBack)
-                    .buttonStyle(OnboardingSecondaryButtonStyle())
-
-                Button("Create a new wallet instead", action: onCreateWallet)
-                    .font(OnboardingRecoveryTypography.bodySemibold)
-                    .foregroundStyle(.white.opacity(0.68))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 2)
-                    .contentShape(Rectangle())
-                    .buttonStyle(.plain)
-            }
+            OnboardingSoftwareImportChooser(
+                errorMessage: errorMessage,
+                onCreateWallet: onCreateWallet,
+                onBack: onBack,
+                mode: $mode
+            )
 
         case .wordCount:
-            OnboardingPromptScreen(
-                icon: "list.number",
-                title: "How many words do you have?",
-                subtitle: "Select the recovery phrase length before entering your words."
-            ) {
-                VStack(spacing: 14) {
-                    OnboardingChoiceCard(
-                        title: "12 words",
-                        subtitle: "Most modern wallet backups",
-                        systemImage: "12.circle"
-                    ) {
-                        mode = .words(.twelve)
-                    }
-
-                    OnboardingChoiceCard(
-                        title: "24 words",
-                        subtitle: "Some wallets use a longer phrase",
-                        systemImage: "24.circle"
-                    ) {
-                        mode = .words(.twentyFour)
-                    }
-                }
-
-                Button("Back") { mode = .chooser }
-                    .buttonStyle(OnboardingSecondaryButtonStyle())
-            }
+            OnboardingSoftwareImportWordCount(mode: $mode)
 
         case let .words(numberOfWords):
-            OnboardingEmbeddedNavigation(title: "Import Recovery Words", onBack: {
-                mode = .wordCount
-            }) {
-                HotWalletImportScreen(numberOfWords: numberOfWords, onImported: onImported)
-            }
+            OnboardingSoftwareWordsImport(
+                numberOfWords: numberOfWords,
+                onImported: onImported,
+                mode: $mode
+            )
 
         case .qr:
-            OnboardingEmbeddedNavigation(title: "Scan Recovery QR", onBack: {
-                mode = .chooser
-            }) {
-                HotWalletImportScreen(
-                    numberOfWords: .twelve,
-                    importType: .qr,
-                    autoImportScannedWords: true,
-                    onImported: onImported
+            OnboardingSoftwareQrImport(onImported: onImported, mode: $mode)
+        }
+    }
+}
+
+private struct OnboardingSoftwareImportChooser: View {
+    let errorMessage: String?
+    let onCreateWallet: () -> Void
+    let onBack: () -> Void
+
+    @Binding var mode: OnboardingSoftwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "square.and.arrow.down.on.square",
+            title: "Import your software wallet",
+            subtitle: "Choose how you want to bring your existing wallet into Cove."
+        ) {
+            if let errorMessage {
+                OnboardingInlineMessage(text: errorMessage)
+            }
+
+            VStack(spacing: 14) {
+                OnboardingChoiceCard(
+                    title: "Enter recovery words",
+                    subtitle: "Import a 12- or 24-word recovery phrase",
+                    systemImage: "keyboard",
+                    action: chooseWords
+                )
+
+                OnboardingChoiceCard(
+                    title: "Scan QR code",
+                    subtitle: "Scan a mnemonic QR from another wallet",
+                    systemImage: "qrcode.viewfinder",
+                    action: chooseQr
                 )
             }
+
+            Button("Back", action: onBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+
+            Button("Create a new wallet instead", action: onCreateWallet)
+                .font(OnboardingRecoveryTypography.bodySemibold)
+                .foregroundStyle(.white.opacity(0.68))
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+        }
+    }
+
+    private func chooseWords() {
+        mode = .wordCount
+    }
+
+    private func chooseQr() {
+        mode = .qr
+    }
+}
+
+private struct OnboardingSoftwareImportWordCount: View {
+    @Binding var mode: OnboardingSoftwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "list.number",
+            title: "How many words do you have?",
+            subtitle: "Select the recovery phrase length before entering your words."
+        ) {
+            VStack(spacing: 14) {
+                OnboardingChoiceCard(
+                    title: "12 words",
+                    subtitle: "Most modern wallet backups",
+                    systemImage: "12.circle",
+                    action: chooseTwelve
+                )
+
+                OnboardingChoiceCard(
+                    title: "24 words",
+                    subtitle: "Some wallets use a longer phrase",
+                    systemImage: "24.circle",
+                    action: chooseTwentyFour
+                )
+            }
+
+            Button("Back", action: goBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+
+    private func chooseTwelve() {
+        mode = .words(.twelve)
+    }
+
+    private func chooseTwentyFour() {
+        mode = .words(.twentyFour)
+    }
+
+    private func goBack() {
+        mode = .chooser
+    }
+}
+
+private struct OnboardingSoftwareWordsImport: View {
+    let numberOfWords: NumberOfBip39Words
+    let onImported: (WalletId) -> Void
+
+    @Binding var mode: OnboardingSoftwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingEmbeddedNavigation(
+            title: "Import Recovery Words",
+            onBack: { mode = .wordCount }
+        ) {
+            HotWalletImportScreen(numberOfWords: numberOfWords, onImported: onImported)
+        }
+    }
+}
+
+private struct OnboardingSoftwareQrImport: View {
+    let onImported: (WalletId) -> Void
+
+    @Binding var mode: OnboardingSoftwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingEmbeddedNavigation(
+            title: "Scan Recovery QR",
+            onBack: { mode = .chooser }
+        ) {
+            HotWalletImportScreen(
+                numberOfWords: .twelve,
+                importType: .qr,
+                autoImportScannedWords: true,
+                onImported: onImported
+            )
         }
     }
 }
@@ -137,72 +219,135 @@ struct OnboardingHardwareImportFlowView: View {
     let onBack: () -> Void
 
     var body: some View {
-        content
-            .cloudRestoreAlert(
-                isPresented: cloudRestoreAlertVisible,
-                onRestore: onRestoreFromCloudBackup,
-                onContinue: onDismissCloudRestoreAlert
-            )
+        OnboardingHardwareImportContent(
+            onImported: onImported,
+            onBack: onBack,
+            mode: $mode
+        )
+        .cloudRestoreAlert(
+            isPresented: cloudRestoreAlertVisible,
+            onRestore: onRestoreFromCloudBackup,
+            onContinue: onDismissCloudRestoreAlert
+        )
     }
+}
 
-    @ViewBuilder
-    private var content: some View {
+private struct OnboardingHardwareImportContent: View {
+    let onImported: (WalletId) -> Void
+    let onBack: () -> Void
+
+    @Binding var mode: OnboardingHardwareImportFlowView.Mode
+
+    var body: some View {
         switch mode {
         case .chooser:
-            OnboardingPromptScreen(
-                icon: "arrow.down.doc",
-                title: "Import your hardware wallet",
-                subtitle: "Choose how your hardware wallet exports its public data."
-            ) {
-                VStack(spacing: 14) {
-                    OnboardingChoiceCard(
-                        title: "Scan export QR",
-                        subtitle: "Use the QR export from your hardware wallet",
-                        systemImage: "qrcode.viewfinder"
-                    ) {
-                        mode = .qr
-                    }
-
-                    OnboardingChoiceCard(
-                        title: "Import export file",
-                        subtitle: "Use a wallet export file from your device",
-                        systemImage: "doc"
-                    ) {
-                        mode = .file
-                    }
-
-                    OnboardingChoiceCard(
-                        title: "Scan with NFC",
-                        subtitle: "Hold your hardware wallet or export tag near the top of your iPhone.",
-                        systemImage: "wave.3.right"
-                    ) {
-                        mode = .nfc
-                    }
-                }
-
-                Button("Back", action: onBack)
-                    .buttonStyle(OnboardingSecondaryButtonStyle())
-            }
+            OnboardingHardwareImportChooser(
+                onBack: onBack,
+                mode: $mode
+            )
 
         case .qr:
-            OnboardingEmbeddedNavigation(title: "Scan Hardware QR", onBack: {
-                mode = .chooser
-            }) {
-                QrCodeImportScreen(onImported: onImported)
-            }
+            OnboardingHardwareQrImport(onImported: onImported, mode: $mode)
 
         case .file:
-            OnboardingHardwareFileImportView(
-                onImported: onImported,
-                onBack: { mode = .chooser }
-            )
+            OnboardingHardwareFileImportStep(onImported: onImported, mode: $mode)
 
         case .nfc:
-            OnboardingHardwareNfcImportView(
-                onImported: onImported,
-                onBack: { mode = .chooser }
-            )
+            OnboardingHardwareNfcImportStep(onImported: onImported, mode: $mode)
         }
+    }
+}
+
+private struct OnboardingHardwareImportChooser: View {
+    let onBack: () -> Void
+
+    @Binding var mode: OnboardingHardwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingPromptScreen(
+            icon: "arrow.down.doc",
+            title: "Import your hardware wallet",
+            subtitle: "Choose how your hardware wallet exports its public data."
+        ) {
+            VStack(spacing: 14) {
+                OnboardingChoiceCard(
+                    title: "Scan export QR",
+                    subtitle: "Use the QR export from your hardware wallet",
+                    systemImage: "qrcode.viewfinder",
+                    action: chooseQr
+                )
+
+                OnboardingChoiceCard(
+                    title: "Import export file",
+                    subtitle: "Use a wallet export file from your device",
+                    systemImage: "doc",
+                    action: chooseFile
+                )
+
+                OnboardingChoiceCard(
+                    title: "Scan with NFC",
+                    subtitle: "Hold your hardware wallet or export tag near the top of your iPhone.",
+                    systemImage: "wave.3.right",
+                    action: chooseNfc
+                )
+            }
+
+            Button("Back", action: onBack)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+
+    private func chooseQr() {
+        mode = .qr
+    }
+
+    private func chooseFile() {
+        mode = .file
+    }
+
+    private func chooseNfc() {
+        mode = .nfc
+    }
+}
+
+private struct OnboardingHardwareQrImport: View {
+    let onImported: (WalletId) -> Void
+
+    @Binding var mode: OnboardingHardwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingEmbeddedNavigation(
+            title: "Scan Hardware QR",
+            onBack: { mode = .chooser }
+        ) {
+            QrCodeImportScreen(onImported: onImported)
+        }
+    }
+}
+
+private struct OnboardingHardwareFileImportStep: View {
+    let onImported: (WalletId) -> Void
+
+    @Binding var mode: OnboardingHardwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingHardwareFileImportView(
+            onImported: onImported,
+            onBack: { mode = .chooser }
+        )
+    }
+}
+
+private struct OnboardingHardwareNfcImportStep: View {
+    let onImported: (WalletId) -> Void
+
+    @Binding var mode: OnboardingHardwareImportFlowView.Mode
+
+    var body: some View {
+        OnboardingHardwareNfcImportView(
+            onImported: onImported,
+            onBack: { mode = .chooser }
+        )
     }
 }
 

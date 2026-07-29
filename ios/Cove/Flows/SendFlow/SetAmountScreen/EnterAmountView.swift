@@ -123,86 +123,138 @@ struct EnterAmountView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(alignment: .bottom) {
-                switch metadata.fiatOrBtc {
-                case .btc:
-                    EnterAmountTextField(
-                        text: $enteringBtcAmount,
-                        amountTextColor: amountTextColor,
-                        offset: offset,
-                        focusField: $focusField
-                    )
-                case .fiat:
-                    EnterAmountTextField(
-                        text: $enteringFiatAmount,
-                        amountTextColor: amountTextColor,
-                        offset: offset,
-                        focusField: $focusField
-                    )
-                }
-
-                EnterAmountUnitSelector(
-                    unit: manager.unit,
-                    isPresented: $showingMenu,
-                    showsSelector: metadata.fiatOrBtc == .btc,
-                    selectSats: selectSats,
-                    selectBtc: selectBtc
-                )
-            }
-            .onChange(of: enteringBtcAmount, initial: false) { oldValue, newValue in
-                handleBtcAmountChange(oldValue: oldValue, newValue: newValue)
-            }
-            .onChange(of: enteringFiatAmount, initial: false) { oldValue, newValue in
-                handleFiatAmountChange(oldValue: oldValue, newValue: newValue)
-            }
-            .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { oldValue, newValue in
-                Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount))")
-                guard enteringBtcAmount != newValue else { return }
-                enteringBtcAmount = newValue
-            }
-            .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) { oldValue, newValue in
-                Log.debug("enteringFiatAmount \(oldValue) -> \(newValue) (\(enteringFiatAmount))")
-                guard enteringFiatAmount != newValue else { return }
-                enteringFiatAmount = newValue
-            }
-            .onChange(of: presenter.focusField, initial: true) { _, new in
-                focusField = new
-            }
-            .onChange(of: focusField, initial: true) { _, new in
-                if auth.lockState == .locked {
-                    focusField = .none
-                    presenter.focusField = .none
-                    return
-                }
-
-                if new == .none {
-                    focusField = presenter.focusField
-                } else {
-                    presenter.focusField = new
-                }
-            }
-            .onChange(of: auth.lockState, initial: true) { _, new in
-                if new == .unlocked {
-                    if !sendFlowManager.rust.validateAmount() {
-                        sendFlowManager.dispatch(.changeSetAmountFocusField(.amount))
-                        return
-                    }
-
-                    if !sendFlowManager.rust.validateAddress() {
-                        sendFlowManager.dispatch(.changeSetAmountFocusField(.address))
-                        return
-                    }
-                }
-            }
-            .onChange(of: exceedsBalance) { _, newValue in
-                handleExceedsBalanceChange(newValue: newValue)
-            }
+            EnterAmountPrimaryRow(
+                fiatOrBtc: metadata.fiatOrBtc,
+                enteringBtcAmount: $enteringBtcAmount,
+                enteringFiatAmount: $enteringFiatAmount,
+                amountTextColor: amountTextColor,
+                offset: offset,
+                focusField: $focusField,
+                unit: manager.unit,
+                showingMenu: $showingMenu,
+                selectSats: selectSats,
+                selectBtc: selectBtc
+            )
+            .onChange(of: enteringBtcAmount, initial: false, handleBtcAmountChange)
+            .onChange(of: enteringFiatAmount, initial: false, handleFiatAmountChange)
+            .onChange(
+                of: sendFlowManager.enteringBtcAmount,
+                initial: true,
+                syncEnteringBtcAmount
+            )
+            .onChange(
+                of: sendFlowManager.enteringFiatAmount,
+                initial: true,
+                syncEnteringFiatAmount
+            )
+            .onChange(of: presenter.focusField, initial: true, syncPresenterFocus)
+            .onChange(of: focusField, initial: true, focusChanged)
+            .onChange(of: auth.lockState, initial: true, lockStateChanged)
+            .onChange(of: exceedsBalance, exceedsBalanceChanged)
 
             EnterAmountSecondaryAmountRow(
                 amount: metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc,
                 unit: manager.unit,
                 showsUnit: metadata.fiatOrBtc == .fiat,
                 toggleAmountUnit: toggleSecondaryAmount
+            )
+        }
+    }
+
+    private func syncEnteringBtcAmount(_ oldValue: String, _ newValue: String) {
+        Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount))")
+        guard enteringBtcAmount != newValue else { return }
+
+        enteringBtcAmount = newValue
+    }
+
+    private func syncEnteringFiatAmount(_ oldValue: String, _ newValue: String) {
+        Log.debug("enteringFiatAmount \(oldValue) -> \(newValue) (\(enteringFiatAmount))")
+        guard enteringFiatAmount != newValue else { return }
+
+        enteringFiatAmount = newValue
+    }
+
+    private func syncPresenterFocus(
+        _: SendFlowPresenter.FocusField?,
+        _ newValue: SendFlowPresenter.FocusField?
+    ) {
+        focusField = newValue
+    }
+
+    private func focusChanged(
+        _: SendFlowPresenter.FocusField?,
+        _ newValue: SendFlowPresenter.FocusField?
+    ) {
+        if auth.lockState == .locked {
+            focusField = .none
+            presenter.focusField = .none
+            return
+        }
+
+        if newValue == .none {
+            focusField = presenter.focusField
+        } else {
+            presenter.focusField = newValue
+        }
+    }
+
+    private func lockStateChanged(_: LockState, _ newValue: LockState) {
+        guard newValue == .unlocked else { return }
+
+        if !sendFlowManager.rust.validateAmount() {
+            sendFlowManager.dispatch(.changeSetAmountFocusField(.amount))
+            return
+        }
+
+        if !sendFlowManager.rust.validateAddress() {
+            sendFlowManager.dispatch(.changeSetAmountFocusField(.address))
+        }
+    }
+
+    private func exceedsBalanceChanged(_: Bool, _ newValue: Bool) {
+        handleExceedsBalanceChange(newValue: newValue)
+    }
+}
+
+private struct EnterAmountPrimaryRow: View {
+    let fiatOrBtc: FiatOrBtc
+    @Binding var enteringBtcAmount: String
+    @Binding var enteringFiatAmount: String
+
+    let amountTextColor: Color
+    let offset: CGFloat
+    let focusField: FocusState<SendFlowPresenter.FocusField?>.Binding
+    let unit: String
+    @Binding var showingMenu: Bool
+    let selectSats: () -> Void
+    let selectBtc: () -> Void
+
+    var body: some View {
+        HStack(alignment: .bottom) {
+            switch fiatOrBtc {
+            case .btc:
+                EnterAmountTextField(
+                    text: $enteringBtcAmount,
+                    amountTextColor: amountTextColor,
+                    offset: offset,
+                    focusField: focusField
+                )
+            case .fiat:
+                EnterAmountTextField(
+                    text: $enteringFiatAmount,
+                    amountTextColor: amountTextColor,
+                    offset: offset,
+                    focusField: focusField
+                )
+            }
+
+            EnterAmountUnitSelector(
+                unit: unit,
+                isPresented: $showingMenu,
+                showsSelector: fiatOrBtc == .btc,
+                selectSats: selectSats,
+                selectBtc: selectBtc
             )
         }
     }

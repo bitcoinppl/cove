@@ -83,92 +83,15 @@ struct QrCodeImportScreen: View {
     }
 
     var body: some View {
-        VStack {
-            if !scanComplete {
-                ZStack {
-                    ScannerView(
-                        codeTypes: [.qr],
-                        scanMode: .oncePerCode,
-                        scanInterval: 0.1,
-                        showAlert: false,
-                        completion: handleScan
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea(.all)
-
-                    VStack {
-                        Spacer()
-
-                        Text("Scan Wallet Export QR Code")
-                            .font(.title2)
-                            .foregroundStyle(.white)
-                            .fontWeight(.semibold)
-
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-
-                        if let progress {
-                            VStack(spacing: 8) {
-                                Text(progress.displayText())
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .padding(.top, 8)
-
-                                if let detailText = progress.detailText() {
-                                    Text(detailText)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .fontWeight(.bold)
-                                }
-                            }
-                            .foregroundStyle(.white)
-                        }
-
-                        Spacer()
-                    }
-                }
-            }
-        }
+        QrCodeScannerContent(
+            scanComplete: scanComplete,
+            progress: progress,
+            handleScan: handleScan
+        )
         .alert(item: $alert) { alert in
             alert.type.alert
         }
-        .onChange(of: scannedMultiFormat) { _, scannedMultiFormat in
-            guard let multiFormat = scannedMultiFormat?.item else { return }
-            do {
-                let wallet: Wallet
-                switch multiFormat {
-                case let .hardwareExport(export):
-                    wallet = try Wallet.newFromExport(export: export)
-                default:
-                    Log.warn("Unexpected format for wallet import: \(multiFormat)")
-                    alert = AlertItem(type: .error("Unexpected format for wallet import"))
-                    // reset state so user can retry
-                    scanComplete = false
-                    self.scannedMultiFormat = nil
-                    scanner.reset()
-                    return
-                }
-                let id = wallet.id()
-                Log.debug("Imported Wallet: \(id)")
-                if let onImported {
-                    onImported(id)
-                } else {
-                    try app.selectWalletOrThrow(id)
-                    app.alertState = TaggedItem(.importedSuccessfully)
-                }
-            } catch let WalletError.MultiFormat(error) {
-                app.popRoute()
-                self.alert = AlertItem(type: .error(error.description, "Invalid Format"))
-            } catch let WalletError.WalletAlreadyExists(id) {
-                handleWalletAlreadyExists(id)
-            } catch {
-                Log.warn("Error importing hardware wallet: \(error)")
-                alert = AlertItem(type: .error(error.localizedDescription))
-            }
-        }
+        .onChange(of: scannedMultiFormat, handleScannedMultiFormat)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("?") {
@@ -185,6 +108,44 @@ struct QrCodeImportScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.all)
+    }
+
+    private func handleScannedMultiFormat(_: TaggedItem<MultiFormat>?, _ scannedMultiFormat: TaggedItem<MultiFormat>?) {
+        guard let multiFormat = scannedMultiFormat?.item else { return }
+
+        do {
+            let wallet: Wallet
+            switch multiFormat {
+            case let .hardwareExport(export):
+                wallet = try Wallet.newFromExport(export: export)
+            default:
+                Log.warn("Unexpected format for wallet import: \(multiFormat)")
+                alert = AlertItem(type: .error("Unexpected format for wallet import"))
+
+                // reset state so user can retry
+                scanComplete = false
+                self.scannedMultiFormat = nil
+                scanner.reset()
+                return
+            }
+
+            let id = wallet.id()
+            Log.debug("Imported Wallet: \(id)")
+            if let onImported {
+                onImported(id)
+            } else {
+                try app.selectWalletOrThrow(id)
+                app.alertState = TaggedItem(.importedSuccessfully)
+            }
+        } catch let WalletError.MultiFormat(error) {
+            app.popRoute()
+            self.alert = AlertItem(type: .error(error.description, "Invalid Format"))
+        } catch let WalletError.WalletAlreadyExists(id) {
+            handleWalletAlreadyExists(id)
+        } catch {
+            Log.warn("Error importing hardware wallet: \(error)")
+            alert = AlertItem(type: .error(error.localizedDescription))
+        }
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
@@ -257,6 +218,80 @@ struct QrCodeImportScreen: View {
             app.popRoute()
             self.alert = AlertItem(type: .error("Unable to select wallet"))
         }
+    }
+}
+
+private struct QrCodeScannerContent: View {
+    let scanComplete: Bool
+    let progress: ScanProgress?
+    let handleScan: (Result<ScanResult, ScanError>) -> Void
+
+    var body: some View {
+        VStack {
+            if !scanComplete {
+                ZStack {
+                    ScannerView(
+                        codeTypes: [.qr],
+                        scanMode: .oncePerCode,
+                        scanInterval: 0.1,
+                        showAlert: false,
+                        completion: handleScan
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.all)
+
+                    QrCodeScannerOverlay(progress: progress)
+                }
+            }
+        }
+    }
+}
+
+private struct QrCodeScannerOverlay: View {
+    let progress: ScanProgress?
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            Text("Scan Wallet Export QR Code")
+                .font(.title2)
+                .foregroundStyle(.white)
+                .fontWeight(.semibold)
+
+            Spacer()
+            Spacer()
+            Spacer()
+            Spacer()
+            Spacer()
+
+            if let progress {
+                QrCodeScanProgressView(progress: progress)
+            }
+
+            Spacer()
+        }
+    }
+}
+
+private struct QrCodeScanProgressView: View {
+    let progress: ScanProgress
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(progress.displayText())
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .padding(.top, 8)
+
+            if let detailText = progress.detailText() {
+                Text(detailText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fontWeight(.bold)
+            }
+        }
+        .foregroundStyle(.white)
     }
 }
 

@@ -10,7 +10,6 @@ import MijickPopups
 import SwiftUI
 
 struct ReceiveView: View {
-    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -32,11 +31,39 @@ struct ReceiveView: View {
         manager.receiveAddressPresentation
     }
 
-    var addressLoaded: Bool {
+    private var addressLoaded: Bool {
         addressInfo != nil
     }
 
-    func copyText() {
+    var body: some View {
+        ReceiveViewContent(
+            walletName: manager.walletMetadata.name,
+            receiveState: receiveState,
+            addressInfo: addressInfo,
+            presentation: presentation,
+            colorScheme: colorScheme,
+            addressLoaded: addressLoaded,
+            isLoading: manager.receiveAddressIsLoading,
+            dismiss: dismiss.callAsFunction,
+            copyAddress: copyText,
+            createNewAddress: nextAddressSync
+        )
+        .background(Color(.systemBackground))
+        .task {
+            await openReceiveAddress()
+        }
+        .onDisappear(perform: closeReceiveAddress)
+        .onChange(of: manager.receiveAddressError, handleReceiveAddressError)
+        .modifier(
+            PaidAddressCopyConfirmationModifier(
+                isPresented: $showPaidCopyConfirmation,
+                createNewAddress: nextAddressSync,
+                copyAnyway: copyVisibleAddressAndDismiss
+            )
+        )
+    }
+
+    private func copyText() {
         if presentation.copyPolicy == .confirmPaidAddress {
             showPaidCopyConfirmation = true
             return
@@ -45,9 +72,10 @@ struct ReceiveView: View {
         copyVisibleAddressAndDismiss()
     }
 
-    func copyVisibleAddressAndDismiss() {
+    private func copyVisibleAddressAndDismiss() {
         if let addressInfo {
             pasteboard.string = addressInfo.addressUnformatted()
+
             Task { @MainActor in
                 await FloaterPopup(text: "Address Copied")
                     .dismissAfter(2)
@@ -58,139 +86,241 @@ struct ReceiveView: View {
         dismiss()
     }
 
-    func nextAddressSync() {
+    private func nextAddressSync() {
         manager.dispatch(.createNewReceiveAddress)
     }
 
-    func closeReceiveAddress() {
+    private func openReceiveAddress() async {
+        manager.dispatch(.openReceiveAddress)
+    }
+
+    private func closeReceiveAddress() {
         guard let requestId = receiveState?.requestId else { return }
 
         manager.dispatch(.closeReceiveAddress(requestId))
     }
 
+    private func handleReceiveAddressError(
+        _: TaggedItem<String>?,
+        _ error: TaggedItem<String>?
+    ) {
+        guard let error else { return }
+
+        Log.error("Unable to update receive address: \(error.value)")
+        if !addressLoaded {
+            dismiss()
+        }
+        app.alertState = .init(.unableToGetAddress(error: error.value))
+    }
+}
+
+private struct ReceiveViewContent: View {
+    let walletName: String
+    let receiveState: ReceiveAddressState?
+    let addressInfo: AddressInfoWithDerivation?
+    let presentation: ReceiveAddressPresentation
+    let colorScheme: ColorScheme
+    let addressLoaded: Bool
+    let isLoading: Bool
+    let dismiss: () -> Void
+    let copyAddress: () -> Void
+    let createNewAddress: () -> Void
+
     var body: some View {
         VStack {
-            // Navigation bar substitute ("Done" button)
-            HStack {
-                Button("Done") { dismiss() }
-                    .font(.headline)
-                Spacer()
-            }
-            .padding([.top, .horizontal])
+            ReceiveNavigationBar(dismiss: dismiss)
 
             Spacer(minLength: 32)
 
-            // ----- Card -----
             DynamicHeightScrollView(idealHeight: nil) {
-                VStack(spacing: 0) {
-                    // Top section – QR code & title
-                    VStack(spacing: 24) {
-                        Text(manager.walletMetadata.name)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-
-                        AddressView(addressInfo: addressInfo)
-
-                        if receiveState?.status == .paymentReceived {
-                            Text("Payment Received")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.white)
-                        } else if presentation.refreshState == .refreshing {
-                            Text("Refreshing...")
-                                .font(.footnote)
-                                .foregroundStyle(.white.opacity(0.65))
-                        }
-
-                        if let path = addressInfo?.derivationPath() {
-                            Text("Derivation: \(path)")
-                                .font(.footnote)
-                                .foregroundStyle(.white.opacity(0.3))
-                                .padding(.top, 6)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-                    .background(colorScheme == .light ? .duskBlue : .duskBlue.opacity(0.4))
-
-                    // Bottom strip – Address text
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let address = addressInfo {
-                            Text("Wallet Address")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(.white.opacity(0.7))
-
-                            Text(address.addressSpacedOut())
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(.white)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            if addressLoaded, presentation.refreshState == .failed {
-                                Text("Unable to refresh address")
-                                    .font(.footnote)
-                                    .foregroundStyle(.white.opacity(0.65))
-                                    .padding(.top, 4)
-                            }
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        colorScheme == .light
-                            ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4)
-                    )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .padding(.horizontal)
+                ReceiveAddressCard(
+                    walletName: walletName,
+                    receiveState: receiveState,
+                    addressInfo: addressInfo,
+                    presentation: presentation,
+                    colorScheme: colorScheme,
+                    addressLoaded: addressLoaded
+                )
 
                 Spacer(minLength: 32)
 
-                // ----- Copy button -----
-                Button(action: copyText) {
-                    Text("Copy Address")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .foregroundStyle(.white)
-                        .background(Color.midnightBtn)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                ReceiveCopyAddressButton(
+                    addressLoaded: addressLoaded,
+                    isLoading: isLoading,
+                    copyAddress: copyAddress
+                )
+
+                ReceiveNewAddressButton(
+                    isLoading: isLoading,
+                    createNewAddress: createNewAddress
+                )
+            }
+        }
+    }
+}
+
+private struct ReceiveNavigationBar: View {
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack {
+            Button("Done", action: dismiss)
+                .font(.headline)
+            Spacer()
+        }
+        .padding([.top, .horizontal])
+    }
+}
+
+private struct ReceiveAddressCard: View {
+    let walletName: String
+    let receiveState: ReceiveAddressState?
+    let addressInfo: AddressInfoWithDerivation?
+    let presentation: ReceiveAddressPresentation
+    let colorScheme: ColorScheme
+    let addressLoaded: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ReceiveAddressCardTop(
+                walletName: walletName,
+                receiveState: receiveState,
+                addressInfo: addressInfo,
+                refreshState: presentation.refreshState,
+                colorScheme: colorScheme
+            )
+
+            ReceiveAddressCardBottom(
+                addressInfo: addressInfo,
+                refreshState: presentation.refreshState,
+                colorScheme: colorScheme,
+                addressLoaded: addressLoaded
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal)
+    }
+}
+
+private struct ReceiveAddressCardTop: View {
+    let walletName: String
+    let receiveState: ReceiveAddressState?
+    let addressInfo: AddressInfoWithDerivation?
+    let refreshState: ReceiveAddressRefreshState
+    let colorScheme: ColorScheme
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text(walletName)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            AddressView(addressInfo: addressInfo)
+
+            if receiveState?.status == .paymentReceived {
+                Text("Payment Received")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+            } else if refreshState == .refreshing {
+                Text("Refreshing...")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+
+            if let path = addressInfo?.derivationPath() {
+                Text("Derivation: \(path)")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.3))
+                    .padding(.top, 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .background(colorScheme == .light ? .duskBlue : .duskBlue.opacity(0.4))
+    }
+}
+
+private struct ReceiveAddressCardBottom: View {
+    let addressInfo: AddressInfoWithDerivation?
+    let refreshState: ReceiveAddressRefreshState
+    let colorScheme: ColorScheme
+    let addressLoaded: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let address = addressInfo {
+                Text("Wallet Address")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.7))
+
+                Text(address.addressSpacedOut())
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if addressLoaded, refreshState == .failed {
+                    Text("Unable to refresh address")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.65))
+                        .padding(.top, 4)
                 }
-                .padding(.horizontal)
-                .disabled(!addressLoaded || manager.receiveAddressIsLoading)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            colorScheme == .light
+                ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4)
+        )
+    }
+}
 
-                // Secondary action
-                Button("Create New Address", action: nextAddressSync)
-                    .font(.headline.weight(.semibold))
-                    .padding(.top, 8)
-                    .disabled(manager.receiveAddressIsLoading)
-            }
-        }
-        .background(Color(.systemBackground))
-        .task {
-            manager.dispatch(.openReceiveAddress)
-        }
-        .onDisappear {
-            closeReceiveAddress()
-        }
-        .onChange(of: manager.receiveAddressError) { _, error in
-            guard let error else { return }
+private struct ReceiveCopyAddressButton: View {
+    let addressLoaded: Bool
+    let isLoading: Bool
+    let copyAddress: () -> Void
 
-            Log.error("Unable to update receive address: \(error.value)")
-            if !addressLoaded {
-                dismiss()
-            }
-            app.alertState = .init(.unableToGetAddress(error: error.value))
+    var body: some View {
+        Button(action: copyAddress) {
+            Text("Copy Address")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .foregroundStyle(.white)
+                .background(Color.midnightBtn)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .alert("Copy paid address?", isPresented: $showPaidCopyConfirmation) {
-            Button("Create New Address", role: .cancel) {
-                nextAddressSync()
+        .padding(.horizontal)
+        .disabled(!addressLoaded || isLoading)
+    }
+}
+
+private struct ReceiveNewAddressButton: View {
+    let isLoading: Bool
+    let createNewAddress: () -> Void
+
+    var body: some View {
+        Button("Create New Address", action: createNewAddress)
+            .font(.headline.weight(.semibold))
+            .padding(.top, 8)
+            .disabled(isLoading)
+    }
+}
+
+private struct PaidAddressCopyConfirmationModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let createNewAddress: () -> Void
+    let copyAnyway: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Copy paid address?", isPresented: $isPresented) {
+                Button("Create New Address", role: .cancel, action: createNewAddress)
+                Button("Copy Anyway", role: .destructive, action: copyAnyway)
+            } message: {
+                Text("This address has already received funds. For better privacy, create a new address before sharing.")
             }
-            Button("Copy Anyway", role: .destructive) {
-                copyVisibleAddressAndDismiss()
-            }
-        } message: {
-            Text("This address has already received funds. For better privacy, create a new address before sharing.")
-        }
     }
 }
 

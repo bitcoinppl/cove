@@ -29,208 +29,61 @@ struct BackupExportView: View {
         backupManager.isPasswordValid(password: password)
     }
 
-    var body: some View {
-        Form {
-            if let generated = generatedPassword {
-                Section {
-                    Text(generated)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-
-                    Button(action: {
-                        UIPasteboard.general.setItems(
-                            [["public.utf8-plain-text": generated]],
-                            options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)]
-                        )
-                    }) {
-                        Label("Copy Password", systemImage: "doc.on.doc")
-                    }
-
-                    Button(action: saveToPasswords) {
-                        Label("Save to Apple Passwords", systemImage: "lock.shield")
-                    }
-
-                    Button(role: .destructive, action: clearGeneratedPassword) {
-                        Label("Clear", systemImage: "xmark.circle")
-                    }
-                } header: {
-                    Text("Generated Backup Password")
-                } footer: {
-                    Text("Using a third-party password manager? Copy the password and save it manually")
-                }
-            }
-
-            Section {
-                if isManualPasswordEntryVisible {
-                    HStack {
-                        if isPasswordVisible {
-                            TextField("Password", text: $password)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                                .textContentType(.newPassword)
-                                .focused($isManualPasswordFieldFocused)
-                        } else {
-                            SecureField("Password", text: $password)
-                                .textContentType(.newPassword)
-                                .focused($isManualPasswordFieldFocused)
-                        }
-                        Button(action: { isPasswordVisible.toggle() }) {
-                            Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-
-                if generatedPassword == nil, !password.isEmpty {
-                    Label(passwordStatusText, systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-
-                if generatedPassword == nil {
-                    Button(action: prepareGeneratedPassword) {
-                        Label("Generate 12-Word Password", systemImage: "key.horizontal")
-                    }
-                }
-
-                Button(action: retrieveFromPasswords) {
-                    Label("Retrieve from Password Manager", systemImage: "key.fill")
-                }
-
-                Button(action: showManualPasswordEntry) {
-                    Label(isManualPasswordEntryVisible ? "Hide Manual Password Entry" : "Enter Password Manually", systemImage: "keyboard")
-                }
-
-                if generatedPassword == nil, !password.isEmpty {
-                    Button(action: {
-                        UIPasteboard.general.setItems(
-                            [["public.utf8-plain-text": password]],
-                            options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)]
-                        )
-                    }) {
-                        Label("Copy Password", systemImage: "doc.on.doc")
-                    }
-                }
-            } header: {
-                if generatedPassword == nil {
-                    Text("Backup Password")
-                }
-            } footer: {
-                if !password.isEmpty, !isPasswordValid, generatedPassword == nil {
-                    Text("Password must be at least 20 characters")
-                        .foregroundColor(.red)
-                }
-            }
-
-            Section {
-                Label {
-                    Text("This backup contains all your wallet private keys. Keep the file and password secure.")
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                }
-            }
-
-            Section {
-                Button(action: handleExportTapped) {
-                    if isExporting {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
-                        }
-                    } else {
-                        HStack {
-                            Spacer()
-                            Text("Export Backup")
-                                .fontWeight(.semibold)
-                            Spacer()
-                        }
-                    }
-                }
-                .disabled(isExporting)
-            }
-        }
-        .onDisappear {
-            exportTask?.cancel()
-            password = ""
-            if let url = tempFileURL {
-                do {
-                    try FileManager.default.removeItem(at: url)
-                } catch {
-                    Log.warn("Failed to delete temp backup file: \(error.localizedDescription)")
-                }
-                tempFileURL = nil
-            }
-        }
-        .alert("Export Backup?", isPresented: $showConfirmation) {
-            Button("Export", role: .destructive) { exportBackup() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This backup will contain all your wallet private keys. Make sure you keep the file and password secure.")
-        }
-        .alert("Export Failed", isPresented: .init(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "Unknown error")
-        }
-        .alert("Export Warnings", isPresented: .init(
-            get: { warningMessage != nil },
-            set: { if !$0 { warningMessage = nil } }
-        )) {
-            Button("OK") { warningMessage = nil }
-        } message: {
-            Text(warningMessage ?? "")
-        }
-        .alert("Save to Apple Passwords?", isPresented: $showSaveToPasswords) {
-            Button("Save") {
-                saveToPasswords()
-            }
-            Button("Skip", role: .cancel) {
-                continuePendingExportIfReady()
-            }
-        } message: {
-            Text("Save the backup password to Apple Passwords so you can retrieve it later during import. If you use a third-party password manager, copy the password and save it manually instead.")
-        }
-        .confirmationDialog("Choose Backup Password", isPresented: $showPasswordSetupOptions, titleVisibility: .visible) {
-            Button("Generate 12-Word Password") {
-                prepareGeneratedPassword()
-            }
-            Button("Retrieve from Password Manager") {
-                retrieveFromPasswords()
-            }
-            Button("Enter Password Manually") {
-                showManualPasswordEntry()
-            }
-            Button("Cancel", role: .cancel) {
-                pendingExportAfterPasswordSetup = false
-            }
-        } message: {
-            Text("Choose how you want to provide the backup password before exporting.")
-        }
-        .alert("Password Copied", isPresented: .init(
-            get: { passwordCopiedMessage != nil },
-            set: {
-                if !$0 {
-                    passwordCopiedMessage = nil
-                    continuePendingExportIfReady()
-                }
-            }
-        )) {
-            Button("OK") { passwordCopiedMessage = nil }
-        } message: {
-            Text(passwordCopiedMessage ?? "")
-        }
-    }
-
     private var passwordStatusText: String {
         if isManualPasswordEntryVisible {
             return "Manual backup password ready"
         }
 
         return "Backup password ready"
+    }
+
+    var body: some View {
+        PasswordCopiedAlert(
+            message: $passwordCopiedMessage,
+            continueExport: continuePendingExportIfReady,
+            content: PasswordSetupOptionsDialog(
+                isPresented: $showPasswordSetupOptions,
+                generate: prepareGeneratedPassword,
+                retrieve: retrieveFromPasswords,
+                enterManually: showManualPasswordEntry,
+                cancel: cancelPendingExport,
+                content: SaveToPasswordsAlert(
+                    isPresented: $showSaveToPasswords,
+                    save: saveToPasswords,
+                    skip: continuePendingExportIfReady,
+                    content: ExportWarningAlert(
+                        message: $warningMessage,
+                        content: ExportFailureAlert(
+                            message: $errorMessage,
+                            content: ExportConfirmationAlert(
+                                isPresented: $showConfirmation,
+                                export: exportBackup,
+                                content: BackupExportForm(
+                                    password: $password,
+                                    isPasswordVisible: $isPasswordVisible,
+                                    isManualPasswordEntryVisible: isManualPasswordEntryVisible,
+                                    isManualPasswordFieldFocused: $isManualPasswordFieldFocused,
+                                    generatedPassword: generatedPassword,
+                                    isPasswordValid: isPasswordValid,
+                                    passwordStatusText: passwordStatusText,
+                                    isExporting: isExporting,
+                                    actions: BackupPasswordActions(
+                                        generate: prepareGeneratedPassword,
+                                        retrieve: retrieveFromPasswords,
+                                        toggleManualEntry: showManualPasswordEntry,
+                                        copy: copyPassword
+                                    ),
+                                    saveToPasswords: saveToPasswords,
+                                    clearGeneratedPassword: clearGeneratedPassword,
+                                    export: handleExportTapped
+                                )
+                                .onDisappear(perform: handleDisappear)
+                            )
+                        )
+                    )
+                )
+            )
+        )
     }
 
     private func prepareGeneratedPassword() {
@@ -243,6 +96,13 @@ struct BackupExportView: View {
     private func clearGeneratedPassword() {
         generatedPassword = nil
         password = ""
+    }
+
+    private func copyPassword() {
+        UIPasteboard.general.setItems(
+            [["public.utf8-plain-text": password]],
+            options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)]
+        )
     }
 
     private func showManualPasswordEntry() {
@@ -289,6 +149,24 @@ struct BackupExportView: View {
             await Task.yield()
             showConfirmation = true
         }
+    }
+
+    private func cancelPendingExport() {
+        pendingExportAfterPasswordSetup = false
+    }
+
+    private func handleDisappear() {
+        exportTask?.cancel()
+        password = ""
+
+        guard let url = tempFileURL else { return }
+
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            Log.warn("Failed to delete temp backup file: \(error.localizedDescription)")
+        }
+        tempFileURL = nil
     }
 
     private func saveToPasswords() {
@@ -386,5 +264,428 @@ struct BackupExportView: View {
                 }
             }
         }
+    }
+}
+
+private struct BackupExportForm: View {
+    @Binding var password: String
+    @Binding var isPasswordVisible: Bool
+
+    let isManualPasswordEntryVisible: Bool
+    let isManualPasswordFieldFocused: FocusState<Bool>.Binding
+    let generatedPassword: String?
+    let isPasswordValid: Bool
+    let passwordStatusText: String
+    let isExporting: Bool
+    let actions: BackupPasswordActions
+    let saveToPasswords: () -> Void
+    let clearGeneratedPassword: () -> Void
+    let export: () -> Void
+
+    var body: some View {
+        Form {
+            if let generated = generatedPassword {
+                GeneratedBackupPasswordSection(
+                    password: generated,
+                    saveToPasswords: saveToPasswords,
+                    clearPassword: clearGeneratedPassword
+                )
+            }
+
+            BackupExportPasswordSection(
+                password: $password,
+                isPasswordVisible: $isPasswordVisible,
+                isManualPasswordEntryVisible: isManualPasswordEntryVisible,
+                isManualPasswordFieldFocused: isManualPasswordFieldFocused,
+                generatedPassword: generatedPassword,
+                isPasswordValid: isPasswordValid,
+                passwordStatusText: passwordStatusText,
+                actions: actions
+            )
+
+            BackupSecurityWarningSection()
+
+            BackupExportActionSection(
+                isExporting: isExporting,
+                export: export
+            )
+        }
+    }
+}
+
+private struct GeneratedBackupPasswordSection: View {
+    let password: String
+    let saveToPasswords: () -> Void
+    let clearPassword: () -> Void
+
+    var body: some View {
+        Section {
+            Text(password)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+
+            Button(action: copyPassword) {
+                Label("Copy Password", systemImage: "doc.on.doc")
+            }
+
+            Button(action: saveToPasswords) {
+                Label("Save to Apple Passwords", systemImage: "lock.shield")
+            }
+
+            Button(role: .destructive, action: clearPassword) {
+                Label("Clear", systemImage: "xmark.circle")
+            }
+        } header: {
+            Text("Generated Backup Password")
+        } footer: {
+            Text("Using a third-party password manager? Copy the password and save it manually")
+        }
+    }
+
+    private func copyPassword() {
+        UIPasteboard.general.setItems(
+            [["public.utf8-plain-text": password]],
+            options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(120)]
+        )
+    }
+}
+
+private struct BackupPasswordActions {
+    let generate: () -> Void
+    let retrieve: () -> Void
+    let toggleManualEntry: () -> Void
+    let copy: () -> Void
+}
+
+private struct BackupExportPasswordSection: View {
+    @Binding var password: String
+    @Binding var isPasswordVisible: Bool
+
+    let isManualPasswordEntryVisible: Bool
+    let isManualPasswordFieldFocused: FocusState<Bool>.Binding
+    let generatedPassword: String?
+    let isPasswordValid: Bool
+    let passwordStatusText: String
+    let actions: BackupPasswordActions
+
+    var body: some View {
+        Section {
+            BackupPasswordSectionContent(
+                password: $password,
+                isPasswordVisible: $isPasswordVisible,
+                isManualPasswordEntryVisible: isManualPasswordEntryVisible,
+                isManualPasswordFieldFocused: isManualPasswordFieldFocused,
+                generatedPassword: generatedPassword,
+                passwordStatusText: passwordStatusText,
+                actions: actions
+            )
+        } header: {
+            BackupPasswordSectionHeader(hasGeneratedPassword: generatedPassword != nil)
+        } footer: {
+            BackupPasswordSectionFooter(
+                password: password,
+                isPasswordValid: isPasswordValid,
+                hasGeneratedPassword: generatedPassword != nil
+            )
+        }
+    }
+}
+
+private struct BackupPasswordSectionContent: View {
+    @Binding var password: String
+    @Binding var isPasswordVisible: Bool
+
+    let isManualPasswordEntryVisible: Bool
+    let isManualPasswordFieldFocused: FocusState<Bool>.Binding
+    let generatedPassword: String?
+    let passwordStatusText: String
+    let actions: BackupPasswordActions
+
+    var body: some View {
+        if isManualPasswordEntryVisible {
+            ManualBackupPasswordField(
+                password: $password,
+                isPasswordVisible: $isPasswordVisible,
+                isFocused: isManualPasswordFieldFocused
+            )
+        }
+
+        if generatedPassword == nil, !password.isEmpty {
+            Label(passwordStatusText, systemImage: "checkmark.circle.fill")
+                .foregroundColor(.secondary)
+        }
+
+        BackupPasswordActionButtons(
+            canGenerate: generatedPassword == nil,
+            canCopy: generatedPassword == nil && !password.isEmpty,
+            isManualPasswordEntryVisible: isManualPasswordEntryVisible,
+            actions: actions
+        )
+    }
+}
+
+private struct ManualBackupPasswordField: View {
+    @Binding var password: String
+    @Binding var isPasswordVisible: Bool
+
+    let isFocused: FocusState<Bool>.Binding
+
+    var body: some View {
+        HStack {
+            if isPasswordVisible {
+                TextField("Password", text: $password)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .textContentType(.newPassword)
+                    .focused(isFocused)
+            } else {
+                SecureField("Password", text: $password)
+                    .textContentType(.newPassword)
+                    .focused(isFocused)
+            }
+
+            Button(action: togglePasswordVisibility) {
+                Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private func togglePasswordVisibility() {
+        isPasswordVisible.toggle()
+    }
+}
+
+private struct BackupPasswordActionButtons: View {
+    let canGenerate: Bool
+    let canCopy: Bool
+    let isManualPasswordEntryVisible: Bool
+    let actions: BackupPasswordActions
+
+    var body: some View {
+        if canGenerate {
+            Button(action: actions.generate) {
+                Label("Generate 12-Word Password", systemImage: "key.horizontal")
+            }
+        }
+
+        Button(action: actions.retrieve) {
+            Label("Retrieve from Password Manager", systemImage: "key.fill")
+        }
+
+        Button(action: actions.toggleManualEntry) {
+            Label(
+                isManualPasswordEntryVisible ? "Hide Manual Password Entry" : "Enter Password Manually",
+                systemImage: "keyboard"
+            )
+        }
+
+        if canCopy {
+            Button(action: actions.copy) {
+                Label("Copy Password", systemImage: "doc.on.doc")
+            }
+        }
+    }
+}
+
+private struct BackupPasswordSectionHeader: View {
+    let hasGeneratedPassword: Bool
+
+    var body: some View {
+        if !hasGeneratedPassword {
+            Text("Backup Password")
+        }
+    }
+}
+
+private struct BackupPasswordSectionFooter: View {
+    let password: String
+    let isPasswordValid: Bool
+    let hasGeneratedPassword: Bool
+
+    var body: some View {
+        if !password.isEmpty, !isPasswordValid, !hasGeneratedPassword {
+            Text("Password must be at least 20 characters")
+                .foregroundColor(.red)
+        }
+    }
+}
+
+private struct BackupSecurityWarningSection: View {
+    var body: some View {
+        Section {
+            Label {
+                Text("This backup contains all your wallet private keys. Keep the file and password secure.")
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+}
+
+private struct BackupExportActionSection: View {
+    let isExporting: Bool
+    let export: () -> Void
+
+    var body: some View {
+        Section {
+            Button(action: export) {
+                if isExporting {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else {
+                    HStack {
+                        Spacer()
+                        Text("Export Backup")
+                            .fontWeight(.semibold)
+                        Spacer()
+                    }
+                }
+            }
+            .disabled(isExporting)
+        }
+    }
+}
+
+private struct ExportConfirmationAlert<Content: View>: View {
+    @Binding var isPresented: Bool
+
+    let export: () -> Void
+    let content: Content
+
+    var body: some View {
+        content.alert("Export Backup?", isPresented: $isPresented) {
+            Button("Export", role: .destructive, action: export)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This backup will contain all your wallet private keys. Make sure you keep the file and password secure.")
+        }
+    }
+}
+
+private struct ExportFailureAlert<Content: View>: View {
+    @Binding var message: String?
+    let content: Content
+
+    var isPresented: Binding<Bool> {
+        Binding(
+            get: { message != nil },
+            set: { if !$0 { message = nil } }
+        )
+    }
+
+    var body: some View {
+        content.alert("Export Failed", isPresented: isPresented) {
+            Button("OK", action: clearMessage)
+        } message: {
+            Text(message ?? "Unknown error")
+        }
+    }
+
+    private func clearMessage() {
+        message = nil
+    }
+}
+
+private struct ExportWarningAlert<Content: View>: View {
+    @Binding var message: String?
+    let content: Content
+
+    var isPresented: Binding<Bool> {
+        Binding(
+            get: { message != nil },
+            set: { if !$0 { message = nil } }
+        )
+    }
+
+    var body: some View {
+        content.alert("Export Warnings", isPresented: isPresented) {
+            Button("OK", action: clearMessage)
+        } message: {
+            Text(message ?? "")
+        }
+    }
+
+    private func clearMessage() {
+        message = nil
+    }
+}
+
+private struct SaveToPasswordsAlert<Content: View>: View {
+    @Binding var isPresented: Bool
+
+    let save: () -> Void
+    let skip: () -> Void
+    let content: Content
+
+    var body: some View {
+        content.alert("Save to Apple Passwords?", isPresented: $isPresented) {
+            Button("Save", action: save)
+            Button("Skip", role: .cancel, action: skip)
+        } message: {
+            Text("Save the backup password to Apple Passwords so you can retrieve it later during import. If you use a third-party password manager, copy the password and save it manually instead.")
+        }
+    }
+}
+
+private struct PasswordSetupOptionsDialog<Content: View>: View {
+    @Binding var isPresented: Bool
+
+    let generate: () -> Void
+    let retrieve: () -> Void
+    let enterManually: () -> Void
+    let cancel: () -> Void
+    let content: Content
+
+    var body: some View {
+        content.confirmationDialog(
+            "Choose Backup Password",
+            isPresented: $isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Generate 12-Word Password", action: generate)
+            Button("Retrieve from Password Manager", action: retrieve)
+            Button("Enter Password Manually", action: enterManually)
+            Button("Cancel", role: .cancel, action: cancel)
+        } message: {
+            Text("Choose how you want to provide the backup password before exporting.")
+        }
+    }
+}
+
+private struct PasswordCopiedAlert<Content: View>: View {
+    @Binding var message: String?
+
+    let continueExport: () -> Void
+    let content: Content
+
+    var isPresented: Binding<Bool> {
+        Binding(
+            get: { message != nil },
+            set: handlePresentationChange
+        )
+    }
+
+    var body: some View {
+        content.alert("Password Copied", isPresented: isPresented) {
+            Button("OK", action: clearMessage)
+        } message: {
+            Text(message ?? "")
+        }
+    }
+
+    private func handlePresentationChange(_ isPresented: Bool) {
+        guard !isPresented else { return }
+
+        message = nil
+        continueExport()
+    }
+
+    private func clearMessage() {
+        message = nil
     }
 }
