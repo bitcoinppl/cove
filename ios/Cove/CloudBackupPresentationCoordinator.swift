@@ -446,6 +446,49 @@ struct CloudBackupPresentationHost<Content: View>: View {
         app.pushRoute(route)
     }
 
+    private func createNewBackup() {
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .acceptEnablePrompt(.createNew))
+    }
+
+    private func useExistingBackup() {
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .acceptEnablePrompt(.useExisting))
+    }
+
+    private func cancelExistingBackupPrompt() {
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .discardPendingEnableCloudBackup)
+    }
+
+    private func chooseExistingPasskey() {
+        handlePasskeyChoice(existing: true)
+    }
+
+    private func chooseSecondaryPasskeyAction() {
+        handlePasskeyChoice(existing: false)
+    }
+
+    private func cancelPasskeyChoice() {
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .dismissPasskeyChoicePrompt)
+    }
+
+    private func dismissMissingPasskeyReminder() {
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .dismissMissingPasskeyReminder)
+    }
+
+    private func dismissVerificationPrompt() {
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .dismissVerificationPrompt)
+    }
+
+    private func verifyCloudBackup() {
+        coordinator.dismissCurrentPresentation()
+        manager.startVerification(source: .rootPrompt)
+    }
+
     private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
         guard let hint else { return "Use Existing Passkey" }
         return "Use Existing Passkey (\(hint.nameSuffix))"
@@ -485,24 +528,6 @@ struct CloudBackupPresentationHost<Content: View>: View {
         successFloater = nil
     }
 
-    @ViewBuilder
-    private var successFloaterOverlay: some View {
-        if let successFloater {
-            FloaterPopupView(text: successFloater.text)
-                .padding(.top, 14)
-                .gesture(
-                    DragGesture()
-                        .onEnded { gesture in
-                            if abs(gesture.translation.width) > 40 || abs(gesture.translation.height) > 40 {
-                                dismissSuccessFloater(id: successFloater.id)
-                            }
-                        }
-                )
-                .transition(reduceMotion ? .identity : .move(edge: .top).combined(with: .opacity))
-                .zIndex(1)
-        }
-    }
-
     private func handleVerificationPresentation(_ presentation: CloudBackupVerificationPresentation) {
         guard let feedback = cloudBackupVerificationFeedback(for: presentation) else { return }
 
@@ -517,92 +542,180 @@ struct CloudBackupPresentationHost<Content: View>: View {
     var body: some View {
         content
             .overlay(alignment: .top) {
-                successFloaterOverlay
+                CloudBackupSuccessFloaterOverlay(
+                    floater: successFloater,
+                    reduceMotion: reduceMotion,
+                    dismiss: dismissSuccessFloater
+                )
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: successFloater)
             .environment(coordinator)
+            .modifier(CloudBackupObservationModifier(
+                presentationContext: presentationContext,
+                rootPrompt: manager.rootPrompt,
+                verificationState: manager.verificationState,
+                verificationPresentation: manager.verificationPresentation,
+                updateContext: coordinator.update,
+                reconcile: coordinator.reconcile,
+                handleVerificationPresentation: handleVerificationPresentation,
+                onDisappear: dismissSuccessFloater
+            ))
+            .modifier(ExistingBackupAlertModifier(
+                isPresented: showingExistingBackupPrompt,
+                message: existingBackupMessage(for: existingBackupPasskeyHint),
+                createNew: createNewBackup,
+                useExisting: useExistingBackup,
+                cancel: cancelExistingBackupPrompt
+            ))
+            .modifier(PasskeyChoiceAlertModifier(
+                isPresented: showingPasskeyChoicePrompt,
+                presentation: passkeyChoicePresentation,
+                existingButtonTitle: existingPasskeyButtonTitle(
+                    for: passkeyChoicePresentation?.passkeyHint
+                ),
+                chooseExisting: chooseExistingPasskey,
+                chooseSecondary: chooseSecondaryPasskeyAction,
+                cancel: cancelPasskeyChoice
+            ))
+            .modifier(MissingPasskeyAlertModifier(
+                isPresented: showingMissingPasskeyReminder,
+                openCloudBackup: openCloudBackupScreen,
+                dismiss: dismissMissingPasskeyReminder
+            ))
+            .modifier(VerificationPromptModifier(
+                isPresented: showingVerificationPrompt,
+                dismiss: dismissVerificationPrompt,
+                verify: verifyCloudBackup
+            ))
+    }
+}
+
+private struct CloudBackupSuccessFloaterOverlay: View {
+    let floater: CloudBackupSuccessFloater?
+    let reduceMotion: Bool
+    let dismiss: (UUID?) -> Void
+
+    var body: some View {
+        if let floater {
+            FloaterPopupView(text: floater.text)
+                .padding(.top, 14)
+                .gesture(
+                    DragGesture()
+                        .onEnded { gesture in
+                            let horizontalDistance = abs(gesture.translation.width)
+                            let verticalDistance = abs(gesture.translation.height)
+                            guard horizontalDistance > 40 || verticalDistance > 40 else { return }
+
+                            dismiss(floater.id)
+                        }
+                )
+                .transition(reduceMotion ? .identity : .move(edge: .top).combined(with: .opacity))
+                .zIndex(1)
+        }
+    }
+}
+
+private struct CloudBackupObservationModifier: ViewModifier {
+    let presentationContext: CloudBackupPresentationContext
+    let rootPrompt: CloudBackupRootPrompt
+    let verificationState: CloudBackupVerificationState?
+    let verificationPresentation: CloudBackupVerificationPresentation
+    let updateContext: (CloudBackupPresentationContext) -> Void
+    let reconcile: () -> Void
+    let handleVerificationPresentation: (CloudBackupVerificationPresentation) -> Void
+    let onDisappear: (UUID?) -> Void
+
+    func body(content: Content) -> some View {
+        content
             .onChange(of: presentationContext, initial: true) { _, context in
-                coordinator.update(context: context)
+                updateContext(context)
             }
-            .onChange(of: manager.rootPrompt) { _, _ in
-                coordinator.reconcile()
+            .onChange(of: rootPrompt) { _, _ in
+                reconcile()
             }
-            .onChange(of: manager.verificationState) { _, _ in
-                coordinator.reconcile()
+            .onChange(of: verificationState) { _, _ in
+                reconcile()
             }
-            .onChange(of: manager.verificationPresentation) { _, presentation in
+            .onChange(of: verificationPresentation) { _, presentation in
                 handleVerificationPresentation(presentation)
             }
             .onDisappear {
-                dismissSuccessFloater()
+                onDisappear(nil)
             }
-            .alert(
-                "Existing Cloud Backup Found",
-                isPresented: showingExistingBackupPrompt
-            ) {
-                Button("Create New Backup", role: .destructive) {
-                    coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .acceptEnablePrompt(.createNew))
-                }
-                Button("Try Existing Passkey") {
-                    coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .acceptEnablePrompt(.useExisting))
-                }
-                Button("Cancel", role: .cancel) {
-                    coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .discardPendingEnableCloudBackup)
-                }
-            } message: {
-                Text(existingBackupMessage(for: existingBackupPasskeyHint))
+    }
+}
+
+private struct ExistingBackupAlertModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let message: String
+    let createNew: () -> Void
+    let useExisting: () -> Void
+    let cancel: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert("Existing Cloud Backup Found", isPresented: $isPresented) {
+            Button("Create New Backup", role: .destructive, action: createNew)
+            Button("Try Existing Passkey", action: useExisting)
+            Button("Cancel", role: .cancel, action: cancel)
+        } message: {
+            Text(message)
+        }
+    }
+}
+
+private struct PasskeyChoiceAlertModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let presentation: CloudBackupPasskeyChoicePresentation?
+    let existingButtonTitle: String
+    let chooseExisting: () -> Void
+    let chooseSecondary: () -> Void
+    let cancel: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert("Passkey Options", isPresented: $isPresented) {
+            Button(existingButtonTitle, action: chooseExisting)
+
+            if let secondaryActionTitle = presentation?.secondaryActionTitle {
+                Button(secondaryActionTitle, action: chooseSecondary)
             }
-            .alert(
-                "Passkey Options",
-                isPresented: showingPasskeyChoicePrompt
-            ) {
-                Button(existingPasskeyButtonTitle(for: passkeyChoicePresentation?.passkeyHint)) {
-                    handlePasskeyChoice(existing: true)
-                }
-                if let secondaryActionTitle = passkeyChoicePresentation?.secondaryActionTitle {
-                    Button(secondaryActionTitle) {
-                        handlePasskeyChoice(existing: false)
-                    }
-                }
-                Button("Cancel", role: .cancel) {
-                    coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .dismissPasskeyChoicePrompt)
-                }
-            } message: {
-                Text(passkeyChoicePresentation?.message ?? "Choose how to continue with Cloud Backup.")
-            }
-            .alert(
-                "Cloud Backup Passkey Missing",
-                isPresented: showingMissingPasskeyReminder
-            ) {
-                Button("Open Cloud Backup") {
-                    openCloudBackupScreen()
-                }
-                Button("Not Now", role: .cancel) {
-                    coordinator.dismissCurrentPresentation()
-                    manager.dispatch(action: .dismissMissingPasskeyReminder)
-                }
-            } message: {
-                Text(
-                    "Add a new passkey to restore access to your cloud backup. Until you do, your backups can't be restored."
-                )
-            }
-            .fullScreenCover(isPresented: showingVerificationPrompt) {
-                CloudBackupVerificationPromptView(
-                    onDismiss: {
-                        coordinator.dismissCurrentPresentation()
-                        manager.dispatch(action: .dismissVerificationPrompt)
-                    },
-                    onVerify: {
-                        coordinator.dismissCurrentPresentation()
-                        manager.startVerification(source: .rootPrompt)
-                    }
-                )
-                .interactiveDismissDisabled(true)
-            }
+
+            Button("Cancel", role: .cancel, action: cancel)
+        } message: {
+            Text(presentation?.message ?? "Choose how to continue with Cloud Backup.")
+        }
+    }
+}
+
+private struct MissingPasskeyAlertModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let openCloudBackup: () -> Void
+    let dismiss: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert("Cloud Backup Passkey Missing", isPresented: $isPresented) {
+            Button("Open Cloud Backup", action: openCloudBackup)
+            Button("Not Now", role: .cancel, action: dismiss)
+        } message: {
+            Text(
+                "Add a new passkey to restore access to your cloud backup. Until you do, your backups can't be restored."
+            )
+        }
+    }
+}
+
+private struct VerificationPromptModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let dismiss: () -> Void
+    let verify: () -> Void
+
+    func body(content: Content) -> some View {
+        content.fullScreenCover(isPresented: $isPresented) {
+            CloudBackupVerificationPromptView(
+                onDismiss: dismiss,
+                onVerify: verify
+            )
+            .interactiveDismissDisabled(true)
+        }
     }
 }
 
@@ -654,69 +767,60 @@ private struct CloudBackupVerificationPromptView: View {
     }
 
     var body: some View {
+        CloudBackupVerificationPromptContent(
+            title: title,
+            message: message,
+            primaryButtonTitle: primaryButtonTitle,
+            heroIconName: heroIconName,
+            heroTint: heroTint,
+            heroFillColor: heroFillColor,
+            isVerifying: isVerifying,
+            onDismiss: onDismiss,
+            onVerify: onVerify
+        )
+        .background(CloudBackupVerificationBackground(heroTint: heroTint))
+    }
+}
+
+private struct CloudBackupVerificationPromptContent: View {
+    let title: String
+    let message: String
+    let primaryButtonTitle: String
+    let heroIconName: String
+    let heroTint: Color
+    let heroFillColor: Color
+    let isVerifying: Bool
+    let onDismiss: () -> Void
+    let onVerify: () -> Void
+
+    var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.headline)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .frame(width: 44, height: 44)
-                    }
-                }
-                .padding(.top, 4)
+                CloudBackupVerificationCloseButton(action: onDismiss)
 
                 Spacer()
                     .frame(height: 20)
 
-                heroView
+                CloudBackupVerificationHero(
+                    iconName: heroIconName,
+                    tint: heroTint,
+                    fillColor: heroFillColor
+                )
 
                 Spacer()
                     .frame(height: 36)
 
-                VStack(spacing: 12) {
-                    HStack {
-                        Text(title)
-                            .font(.system(size: 38, weight: .semibold))
-                            .foregroundStyle(.white)
-
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text(message)
-                            .font(OnboardingRecoveryTypography.body)
-                            .foregroundStyle(.coveLightGray.opacity(0.76))
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
-                }
+                CloudBackupVerificationCopy(title: title, message: message)
 
                 Spacer()
                     .frame(height: 28)
 
-                VStack(spacing: 12) {
-                    Button(action: onVerify) {
-                        HStack {
-                            if isVerifying {
-                                ProgressView()
-                                    .tint(.midnightBlue)
-                                    .padding(.trailing, 6)
-                            }
-
-                            Text(primaryButtonTitle)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(OnboardingPrimaryButtonStyle())
-                    .disabled(isVerifying)
-
-                    Button(isVerifying ? "Hide" : "Not Now", action: onDismiss)
-                        .buttonStyle(OnboardingSecondaryButtonStyle())
-                }
+                CloudBackupVerificationActions(
+                    primaryButtonTitle: primaryButtonTitle,
+                    isVerifying: isVerifying,
+                    verify: onVerify,
+                    dismiss: onDismiss
+                )
 
                 Spacer()
                     .frame(height: 20)
@@ -724,26 +828,102 @@ private struct CloudBackupVerificationPromptView: View {
             .padding(.horizontal)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(backgroundView)
     }
+}
 
-    private var heroView: some View {
+private struct CloudBackupVerificationCloseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+
+            Button(action: action) {
+                Image(systemName: "xmark")
+                    .font(.headline)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+private struct CloudBackupVerificationHero: View {
+    let iconName: String
+    let tint: Color
+    let fillColor: Color
+
+    var body: some View {
         ZStack {
             Circle()
-                .fill(heroFillColor)
+                .fill(fillColor)
                 .frame(width: 108, height: 108)
 
             Circle()
-                .stroke(heroTint.opacity(0.36), lineWidth: 1)
+                .stroke(tint.opacity(0.36), lineWidth: 1)
                 .frame(width: 108, height: 108)
 
-            Image(systemName: heroIconName)
+            Image(systemName: iconName)
                 .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(heroTint)
+                .foregroundStyle(tint)
         }
     }
+}
 
-    private var backgroundView: some View {
+private struct CloudBackupVerificationCopy: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 38, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(message)
+                .font(OnboardingRecoveryTypography.body)
+                .foregroundStyle(.coveLightGray.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct CloudBackupVerificationActions: View {
+    let primaryButtonTitle: String
+    let isVerifying: Bool
+    let verify: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Button(action: verify) {
+                HStack {
+                    if isVerifying {
+                        ProgressView()
+                            .tint(.midnightBlue)
+                            .padding(.trailing, 6)
+                    }
+
+                    Text(primaryButtonTitle)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle())
+            .disabled(isVerifying)
+
+            Button(isVerifying ? "Hide" : "Not Now", action: dismiss)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
+private struct CloudBackupVerificationBackground: View {
+    let heroTint: Color
+
+    var body: some View {
         ZStack {
             Color.midnightBlue
 

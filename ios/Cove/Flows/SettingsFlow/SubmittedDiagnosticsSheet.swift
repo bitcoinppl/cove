@@ -85,46 +85,10 @@ struct SubmittedDiagnosticsSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch loadState {
-                case .loading:
-                    ProgressView("Loading submitted diagnostics...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                case let .failed(message):
-                    VStack(spacing: 12) {
-                        Text("Submitted diagnostics unavailable")
-                            .font(.headline)
-
-                        Text(message)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        Button("Retry") {
-                            reloadHistory()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                case let .loaded(records) where records.isEmpty:
-                    VStack(spacing: 8) {
-                        Text("No submitted diagnostics")
-                            .font(.headline)
-                        Text("Submitted report IDs will appear here.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                case let .loaded(records):
-                    List(records, id: \.reportId) { record in
-                        SubmittedDiagnosticsRow(record: record)
-                    }
-                }
-            }
+            SubmittedDiagnosticsContent(
+                loadState: loadState,
+                retry: reloadHistory
+            )
             .navigationTitle("Submitted Diagnostics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -141,24 +105,26 @@ struct SubmittedDiagnosticsSheet: View {
             }
         }
         .alert(item: $alertState) { alert in
-            switch alert {
-            case .confirmClear:
-                Alert(
-                    title: Text("Clear Submitted Diagnostics?"),
-                    message: Text("This removes saved report IDs from this device."),
-                    primaryButton: .destructive(Text("Clear")) {
-                        clearHistory()
-                    },
-                    secondaryButton: .cancel()
-                )
+            submittedDiagnosticsAlert(alert)
+        }
+    }
 
-            case let .error(message):
-                Alert(
-                    title: Text("Something went wrong"),
-                    message: Text(message),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
+    private func submittedDiagnosticsAlert(_ alert: SubmittedDiagnosticsAlert) -> Alert {
+        switch alert {
+        case .confirmClear:
+            Alert(
+                title: Text("Clear Submitted Diagnostics?"),
+                message: Text("This removes saved report IDs from this device."),
+                primaryButton: .destructive(Text("Clear"), action: clearHistory),
+                secondaryButton: .cancel()
+            )
+
+        case let .error(message):
+            Alert(
+                title: Text("Something went wrong"),
+                message: Text(message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -187,6 +153,75 @@ struct SubmittedDiagnosticsSheet: View {
         try await Task.detached {
             try Database().diagnosticsReports().clear()
         }.value
+    }
+}
+
+private struct SubmittedDiagnosticsContent: View {
+    private let content: AnyView
+
+    init(loadState: SubmittedDiagnosticsLoadState, retry: @escaping () -> Void) {
+        content = switch loadState {
+        case .loading:
+            AnyView(
+                ProgressView("Loading submitted diagnostics...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            )
+        case let .failed(message):
+            AnyView(SubmittedDiagnosticsFailureView(message: message, retry: retry))
+        case let .loaded(records) where records.isEmpty:
+            AnyView(SubmittedDiagnosticsEmptyView())
+        case let .loaded(records):
+            AnyView(SubmittedDiagnosticsList(records: records))
+        }
+    }
+
+    var body: some View {
+        content
+    }
+}
+
+private struct SubmittedDiagnosticsFailureView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Submitted diagnostics unavailable")
+                .font(.headline)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button("Retry", action: retry)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct SubmittedDiagnosticsEmptyView: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("No submitted diagnostics")
+                .font(.headline)
+            Text("Submitted report IDs will appear here.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct SubmittedDiagnosticsList: View {
+    let records: [DiagnosticsReportRecord]
+
+    var body: some View {
+        List(records, id: \.reportId) { record in
+            SubmittedDiagnosticsRow(record: record)
+        }
     }
 }
 

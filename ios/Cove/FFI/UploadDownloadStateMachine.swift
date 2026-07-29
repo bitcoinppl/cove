@@ -195,8 +195,48 @@ struct UploadDownloadStateMachine {
         }
 
         let deadline = clock.now().addingTimeInterval(defaultTimeout)
+        let resolvedItem = try resolveDownloadItem(
+            url: url,
+            filename: filename,
+            deadline: deadline,
+            waitForMetadataItem: waitForMetadataItem
+        )
 
+        try triggerDownload(resolvedItem.url, recordId, filename)
+
+        var readState = CoordinatedReadState()
+
+        // try a coordinated read before waiting for iCloud status to catch up
+        if let data = attemptCoordinatedRead(
+            url: resolvedItem.url,
+            filename: filename,
+            reason: "initial",
+            state: &readState,
+            coordinatedRead: coordinatedRead
+        ) {
+            return data
+        }
+
+        return try pollForDownload(
+            resolvedItem: resolvedItem,
+            filename: filename,
+            recordId: recordId,
+            deadline: deadline,
+            state: &readState,
+            downloadState: downloadState,
+            triggerDownload: triggerDownload,
+            coordinatedRead: coordinatedRead
+        )
+    }
+
+    private func resolveDownloadItem(
+        url: URL,
+        filename: String,
+        deadline: Date,
+        waitForMetadataItem: (String, URL, Date) throws -> ResolvedMetadataItem
+    ) throws -> ResolvedMetadataItem {
         let resolvedItem: ResolvedMetadataItem
+
         do {
             resolvedItem = try waitForMetadataItem(
                 filename,
@@ -218,27 +258,43 @@ struct UploadDownloadStateMachine {
             Log.info("downloadFile: \(filename) reading via resolved local URL")
         }
 
-        try triggerDownload(resolvedItem.url, recordId, filename)
+        return resolvedItem
+    }
 
-        var coordinatedReadAttempt = 1
-        var lastCoordinatedReadError: Error?
-
-        // try a coordinated read before waiting for iCloud status to catch up
+    private func attemptCoordinatedRead(
+        url: URL,
+        filename: String,
+        reason: String,
+        state: inout CoordinatedReadState,
+        coordinatedRead: (URL) throws -> Data
+    ) -> Data? {
         Log.info(
-            "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=initial file=\(filename)"
+            "downloadFile: trying coordinated read attempt=\(state.attempt) reason=\(reason) file=\(filename)"
         )
 
         do {
-            let data = try coordinatedRead(resolvedItem.url)
+            let data = try coordinatedRead(url)
             Log.info("downloadFile: coordinated read succeeded for \(filename)")
             return data
         } catch {
-            lastCoordinatedReadError = error
+            state.lastError = error
             Log.warn(
-                "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
+                "downloadFile: coordinated read failed attempt=\(state.attempt): \(error.localizedDescription)"
             )
+            return nil
         }
+    }
 
+    private func pollForDownload(
+        resolvedItem: ResolvedMetadataItem,
+        filename: String,
+        recordId: String,
+        deadline: Date,
+        state: inout CoordinatedReadState,
+        downloadState: (URL) -> DownloadState,
+        triggerDownload: (URL, String, String) throws -> Void,
+        coordinatedRead: (URL) throws -> Data
+    ) throws -> Data {
         // poll with periodic re-triggers and inline coordinated reads because
         // some restored-device placeholders never transition out of
         // not-downloaded even though they can be materialized
@@ -248,42 +304,37 @@ struct UploadDownloadStateMachine {
 
         while clock.now() < deadline {
             let now = clock.now()
-            let state = downloadState(resolvedItem.url)
+            let downloadStatus = downloadState(resolvedItem.url)
 
             if now.timeIntervalSince(lastRetrigger) >= retriggerInterval {
                 try? triggerDownload(resolvedItem.url, recordId, filename)
                 lastRetrigger = now
-                coordinatedReadAttempt += 1
+                state.attempt += 1
 
-                Log.info(
-                    "downloadFile: trying coordinated read attempt=\(coordinatedReadAttempt) reason=retry file=\(filename)"
-                )
-
-                do {
-                    let data = try coordinatedRead(resolvedItem.url)
-                    Log.info("downloadFile: coordinated read succeeded for \(filename)")
+                if let data = attemptCoordinatedRead(
+                    url: resolvedItem.url,
+                    filename: filename,
+                    reason: "retry",
+                    state: &state,
+                    coordinatedRead: coordinatedRead
+                ) {
                     return data
-                } catch {
-                    lastCoordinatedReadError = error
-                    Log.warn(
-                        "downloadFile: coordinated read failed attempt=\(coordinatedReadAttempt): \(error.localizedDescription)"
-                    )
                 }
             }
 
             if now.timeIntervalSince(lastProgressLog) >= progressLogInterval {
                 Log.info(
-                    "downloadFile: \(filename) state=\(state) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>")"
+                    "downloadFile: \(filename) state=\(downloadStatus) metadataPath=\(resolvedItem.metadataPath ?? "<unknown>")"
                 )
                 lastProgressLog = now
             }
 
-            if case .current = state {
+            if case .current = downloadStatus {
                 Log.info("downloadFile: poll path won for \(filename)")
                 return try coordinatedRead(resolvedItem.url)
             }
 
-            if case let .failed(error) = state {
+            if case let .failed(error) = downloadStatus {
                 throw FileCoordinationClient.downloadError("iCloud download failed", error: error)
             }
 
@@ -294,10 +345,15 @@ struct UploadDownloadStateMachine {
         do {
             return try coordinatedRead(resolvedItem.url)
         } catch {
-            let diagnosticError = lastCoordinatedReadError?.localizedDescription ?? "none"
+            let diagnosticError = state.lastError?.localizedDescription ?? "none"
             throw CloudStorageError.Offline(
                 "iCloud download timed out after \(defaultTimeout)s (last coordinated read error: \(diagnosticError), final coordinated read failed: \(error.localizedDescription))"
             )
         }
+    }
+
+    private struct CoordinatedReadState {
+        var attempt = 1
+        var lastError: Error?
     }
 }

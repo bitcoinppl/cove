@@ -4,7 +4,6 @@
 //
 //  Created by Praveen Perera on 12/11/24.
 //
-import LocalAuthentication
 import SwiftUI
 
 struct NumberPadPinView: View {
@@ -52,151 +51,211 @@ struct NumberPadPinView: View {
         animateField = false
     }
 
-    private var isBiometricAvailable: Bool {
-        // Lock Context
-        let context = LAContext()
-        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
-    }
-
     var body: some View {
         VStack(spacing: 16) {
-            Text(title)
-                .font(.title.bold())
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(.white)
-                .padding(.vertical)
+            NumberPadPinTitle(title: title)
 
             Spacer()
 
-            // Adding Wiggling Animation for Wrong Password With Keyframe Animator
-            HStack(spacing: 10) {
-                ForEach(0 ..< pinLength, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 10)
-                        .frame(width: 40, height: 45)
-                        .foregroundStyle(.white)
-                        // Showing Pin at each box with the help of Index
-                        .overlay {
-                            // Safe Check
-                            if pin.count > index {
-                                let index = pin.index(pin.startIndex, offsetBy: index)
-                                let string = showPin ? String(pin[index]) : "●"
-
-                                Text(string)
-                                    .font(showPin ? .title : .body)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(.black)
-                            }
-                        }
-                }
-            }
-            .keyframeAnimator(
-                initialValue: CGFloat.zero,
-                trigger: animateField,
-                content: { content, value in
-                    content
-                        .offset(x: value)
-                },
-                keyframes: { _ in
-                    KeyframeTrack {
-                        CubicKeyframe(30, duration: 0.07)
-                        CubicKeyframe(-30, duration: 0.07)
-                        CubicKeyframe(20, duration: 0.07)
-                        CubicKeyframe(-20, duration: 0.07)
-                        CubicKeyframe(10, duration: 0.07)
-                        CubicKeyframe(-10, duration: 0.07)
-                        CubicKeyframe(0, duration: 0.07)
-                    }
-                }
+            PinEntryDisplay(
+                pin: $pin,
+                animateField: $animateField,
+                showPin: showPin,
+                pinLength: pinLength,
+                onWrongPin: onWrongPin
             )
-            // run onEnd call back after keyframe animation
-            .onChange(of: animateField) { _, _ in
-                let pin = pin
-                self.pin = ""
-
-                let totalDuration = 7 * 0.07
-                DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) {
-                    onWrongPin(pin)
-                }
-            }
-            .padding(.top, 15)
 
             Spacer()
             Spacer()
 
-            // Custom Number Pad
-            LazyVGrid(columns: Array(repeating: GridItem(), count: 3), content: {
-                ForEach(1 ... 9, id: \.self) { number in
-                    Button(action: {
-                        guard pin.count < pinLength else { return }
-                        pin.append(String(number))
-                    }, label: {
-                        Text(String(number))
-                            .font(.title)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20)
-                            .contentShape(.rect)
-                    })
-                    .tint(.white)
-                }
-
-                // show back button if enabled
-                Group {
-                    if backEnabled {
-                        Button(action: backAction) {
-                            Text("Cancel")
-                        }
-                        .foregroundStyle(.white)
-                    } else {
-                        // take up space
-                        Button(action: {}) {}
-                    }
-                }
-
-                Button(action: {
-                    guard pin.count < pinLength else { return }
-                    pin.append("0")
-                }, label: {
-                    Text("0")
-                        .font(.title)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .contentShape(.rect)
-                })
-                .tint(.white)
-
-                // 0 and Back Button
-                Button(action: {
-                    if !pin.isEmpty { pin.removeLast() }
-                }, label: {
-                    Image(systemName: "delete.backward")
-                        .font(.title)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .contentShape(.rect)
-                })
-                .tint(.white)
-            })
-            .padding(.vertical)
-            .onChange(of: pin) { _, newValue in
-                if newValue.count == pinLength {
-                    let pin = newValue
-
-                    // Validate Pin
-                    if isPinCorrect(pin) {
-                        withAnimation(.snappy, completionCriteria: .logicallyComplete) {
-                            lockState = .unlocked
-                        } completion: {
-                            onUnlock(pin)
-                            self.pin = ""
-                        }
-                    } else {
-                        animateField.toggle()
-                    }
-                }
-            }
+            PinNumberPad(
+                pin: $pin,
+                animateField: $animateField,
+                lockState: $lockState,
+                pinLength: pinLength,
+                backEnabled: backEnabled,
+                backAction: backAction,
+                isPinCorrect: isPinCorrect,
+                onUnlock: onUnlock
+            )
         }
         .padding()
         .background(.midnightBlue)
+    }
+}
+
+private struct NumberPadPinTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.title.bold())
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(.white)
+            .padding(.vertical)
+    }
+}
+
+private struct PinEntryDisplay: View {
+    @Binding var pin: String
+    @Binding var animateField: Bool
+    let showPin: Bool
+    let pinLength: Int
+    let onWrongPin: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(0 ..< pinLength, id: \.self) { index in
+                PinDigitBox(pin: pin, index: index, showPin: showPin)
+            }
+        }
+        .keyframeAnimator(
+            initialValue: CGFloat.zero,
+            trigger: animateField,
+            content: { content, value in
+                content.offset(x: value)
+            },
+            keyframes: { _ in
+                KeyframeTrack {
+                    CubicKeyframe(30, duration: 0.07)
+                    CubicKeyframe(-30, duration: 0.07)
+                    CubicKeyframe(20, duration: 0.07)
+                    CubicKeyframe(-20, duration: 0.07)
+                    CubicKeyframe(10, duration: 0.07)
+                    CubicKeyframe(-10, duration: 0.07)
+                    CubicKeyframe(0, duration: 0.07)
+                }
+            }
+        )
+        .onChange(of: animateField) { _, _ in
+            let wrongPin = pin
+            pin = ""
+
+            let totalDuration = 7 * 0.07
+            DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) {
+                onWrongPin(wrongPin)
+            }
+        }
+        .padding(.top, 15)
+    }
+}
+
+private struct PinDigitBox: View {
+    let pin: String
+    let index: Int
+    let showPin: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .frame(width: 40, height: 45)
+            .foregroundStyle(.white)
+            .overlay {
+                if pin.count > index {
+                    let pinIndex = pin.index(pin.startIndex, offsetBy: index)
+                    let string = showPin ? String(pin[pinIndex]) : "●"
+
+                    Text(string)
+                        .font(showPin ? .title : .body)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.black)
+                }
+            }
+    }
+}
+
+private struct PinNumberPad: View {
+    @Binding var pin: String
+    @Binding var animateField: Bool
+    @Binding var lockState: LockState
+    let pinLength: Int
+    let backEnabled: Bool
+    let backAction: () -> Void
+    let isPinCorrect: (String) -> Bool
+    let onUnlock: (String) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(), count: 3)) {
+            ForEach(1 ... 9, id: \.self) { number in
+                PinNumberButton(number: number, pin: $pin, pinLength: pinLength)
+            }
+
+            PinCancelButton(isEnabled: backEnabled, action: backAction)
+            PinNumberButton(number: 0, pin: $pin, pinLength: pinLength)
+            PinDeleteButton(pin: $pin)
+        }
+        .padding(.vertical)
+        .onChange(of: pin) { _, newValue in
+            validate(newValue)
+        }
+    }
+
+    private func validate(_ newValue: String) {
+        guard newValue.count == pinLength else { return }
+
+        if isPinCorrect(newValue) {
+            withAnimation(.snappy, completionCriteria: .logicallyComplete) {
+                lockState = .unlocked
+            } completion: {
+                onUnlock(newValue)
+                pin = ""
+            }
+        } else {
+            animateField.toggle()
+        }
+    }
+}
+
+private struct PinNumberButton: View {
+    let number: Int
+    @Binding var pin: String
+    let pinLength: Int
+
+    var body: some View {
+        Button {
+            guard pin.count < pinLength else { return }
+
+            pin.append(String(number))
+        } label: {
+            Text(String(number))
+                .font(.title)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .contentShape(.rect)
+        }
+        .tint(.white)
+    }
+}
+
+private struct PinCancelButton: View {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        if isEnabled {
+            Button("Cancel", action: action)
+                .foregroundStyle(.white)
+        } else {
+            Button(action: {}) {}
+        }
+    }
+}
+
+private struct PinDeleteButton: View {
+    @Binding var pin: String
+
+    var body: some View {
+        Button {
+            guard !pin.isEmpty else { return }
+
+            pin.removeLast()
+        } label: {
+            Image(systemName: "delete.backward")
+                .font(.title)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .contentShape(.rect)
+        }
+        .tint(.white)
     }
 }
 

@@ -367,37 +367,11 @@ struct HotWalletImportScreen: View {
         .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
         .modifier(ConditionalTintModifier())
         .onAppear(perform: initOnAppear)
-        .onChange(of: sheetState, initial: true) { oldState, newState in
-            if oldState != nil, newState == nil {
-                if enteredWords[0][0] == "" {
-                    focusField = ImportFieldNumber(0)
-                    return
-                }
-
-                let focusField =
-                    autocomplete.nextFieldNumber(
-                        currentFieldNumber: UInt8(1),
-                        enteredWords: enteredWords.flatMap(\.self)
-                    )
-
-                self.focusField = ImportFieldNumber(focusField)
-            }
-        }
+        .onChange(of: sheetState, initial: true, handleSheetStateChange)
         .onChange(of: focusField, initial: false, onChangeFocusField)
         .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
-        .onChange(of: enteredWords) {
-            if isAllWordsValid {
-                focusField = nil
-            }
-        }
-        .onDisappear {
-            focusField = nil
-            nfcReader.resetReader()
-            nfcReader.session = nil
-            for task in tasks {
-                task.cancel()
-            }
-        }
+        .onChange(of: enteredWords, handleEnteredWordsChange)
+        .onDisappear(perform: handleDisappear)
         .background(
             Image(.newWalletPattern)
                 .resizable()
@@ -411,6 +385,41 @@ struct HotWalletImportScreen: View {
     }
 
     // MARK: OnChange Functions
+
+    private func handleSheetStateChange(
+        _ oldState: TaggedItem<HotWalletImportSheetState>?,
+        _ newState: TaggedItem<HotWalletImportSheetState>?
+    ) {
+        guard oldState != nil, newState == nil else { return }
+
+        if enteredWords[0][0] == "" {
+            focusField = ImportFieldNumber(0)
+            return
+        }
+
+        let focusField =
+            autocomplete.nextFieldNumber(
+                currentFieldNumber: UInt8(1),
+                enteredWords: enteredWords.flatMap(\.self)
+            )
+
+        self.focusField = ImportFieldNumber(focusField)
+    }
+
+    private func handleEnteredWordsChange(_: [[String]], _: [[String]]) {
+        if isAllWordsValid {
+            focusField = nil
+        }
+    }
+
+    private func handleDisappear() {
+        focusField = nil
+        nfcReader.resetReader()
+        nfcReader.session = nil
+        for task in tasks {
+            task.cancel()
+        }
+    }
 
     func onChangeFocusField(_: ImportFieldNumber?, _ new: ImportFieldNumber?) {
         filteredSuggestions = []

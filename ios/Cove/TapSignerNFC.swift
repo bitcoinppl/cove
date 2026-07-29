@@ -113,8 +113,57 @@ class TapSignerNFC {
         var errorCount = 0
         var lastError: TapSignerReaderError? = nil
 
+        let response = try await startSetupTapSigner(
+            factoryPin: factoryPin,
+            newPin: newPin,
+            chainCode: chainCode
+        )
+
+        switch response {
+        case .complete:
+            nfc.session?.invalidate()
+            return response
+        case let incomplete:
+            while true {
+                var incompleteResponse = incomplete
+                lastResponse_ = .setup(incompleteResponse)
+
+                // convert this to a result type
+                let response = await continueSetup(incompleteResponse)
+                switch response {
+                case let .success(.complete(complete)):
+                    nfc.session?.invalidate()
+                    return .complete(complete)
+
+                case let .success(other):
+                    errorCount += 1
+                    lastError = other.error
+                    incompleteResponse = other
+
+                case let .failure(error):
+                    nfc.session?.invalidate()
+                    Log.error("Error count: \(errorCount), last error: \(error)")
+                    return incompleteResponse
+                }
+
+                if errorCount > 5 {
+                    nfc.session?.invalidate()
+                    Log.error(
+                        "Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))"
+                    )
+                    return incompleteResponse
+                }
+            }
+        }
+    }
+
+    private func startSetupTapSigner(
+        factoryPin: String,
+        newPin: String,
+        chainCode: Data?
+    ) async throws -> SetupCmdResponse {
         // Create a continuation to bridge between async world and property changes
-        let response = try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { continuation in
             // Set up observation tracking before starting the operation
             Task {
                 withObservationTracking {
@@ -148,43 +197,6 @@ class TapSignerNFC {
                     throw error
                 } catch {
                     throw TapSignerReaderError.Unknown(error.localizedDescription)
-                }
-            }
-        }
-
-        switch response {
-        case .complete:
-            nfc.session?.invalidate()
-            return response
-        case let incomplete:
-            while true {
-                var incompleteResponse = incomplete
-                lastResponse_ = .setup(incompleteResponse)
-
-                // convert this to a result type
-                let response = await continueSetup(incompleteResponse)
-                switch response {
-                case let .success(.complete(c)):
-                    nfc.session?.invalidate()
-                    return .complete(c)
-
-                case let .success(other):
-                    errorCount += 1
-                    lastError = other.error
-                    incompleteResponse = other
-
-                case let .failure(error):
-                    nfc.session?.invalidate()
-                    Log.error("Error count: \(errorCount), last error: \(error)")
-                    return incompleteResponse
-                }
-
-                if errorCount > 5 {
-                    nfc.session?.invalidate()
-                    Log.error(
-                        "Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))"
-                    )
-                    return incompleteResponse
                 }
             }
         }

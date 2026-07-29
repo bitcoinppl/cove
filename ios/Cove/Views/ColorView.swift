@@ -236,68 +236,54 @@ struct ColorRow: View {
     var body: some View {
         VStack {
             HStack {
-                HStack {
-                    Text(color.name)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.3)
-                }
+                Text(color.name)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.3)
 
                 Spacer()
 
-                if color.color.hasDarkVariant {
-                    HStack {
-                        VStack {
-                            Rectangle()
-                                .frame(width: 75, height: 30)
-                                .foregroundColor(color.color)
-                                .border(Color.black, width: 3)
-
-                            HStack(spacing: 0) {
-                                Text(color.color.toHexStringAndOpacity(colorScheme: .light))
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .environment(\.colorScheme, .light)
-
-                        VStack {
-                            Rectangle()
-                                .frame(width: 75, height: 30)
-                                .foregroundColor(color.color)
-                                .border(Color.black, width: 3)
-
-                            HStack(spacing: 0) {
-                                Text(color.color.toHexStringAndOpacity(colorScheme: .dark))
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.gray)
-                            }
-                        }
-                        .environment(\.colorScheme, .dark)
-                    }
-                }
-
-                if !color.color.hasDarkVariant {
-                    VStack {
-                        Rectangle()
-                            .frame(width: 75 * 2 + 10, height: 30)
-                            .foregroundColor(color.color)
-                            .border(Color.black, width: 3)
-
-                        HStack(spacing: 0) {
-                            Text(color.color.toHexStringAndOpacity(colorScheme: .light))
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .environment(\.colorScheme, .light)
-                }
+                ColorSwatches(color: color.color)
             }
+
             Divider()
         }
         .padding(.vertical, 2)
         .font(.caption)
+    }
+}
+
+private struct ColorSwatches: View {
+    let color: Color
+
+    var body: some View {
+        if color.hasDarkVariant {
+            HStack {
+                ColorSwatch(color: color, colorScheme: .light, width: 75)
+                ColorSwatch(color: color, colorScheme: .dark, width: 75)
+            }
+        } else {
+            ColorSwatch(color: color, colorScheme: .light, width: 160)
+        }
+    }
+}
+
+private struct ColorSwatch: View {
+    let color: Color
+    let colorScheme: ColorScheme
+    let width: CGFloat
+
+    var body: some View {
+        VStack {
+            Rectangle()
+                .frame(width: width, height: 30)
+                .foregroundColor(color)
+                .border(Color.black, width: 3)
+
+            Text(color.toHexStringAndOpacity(colorScheme: colorScheme))
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundStyle(colorScheme == .dark ? .gray : .secondary)
+        }
+        .environment(\.colorScheme, colorScheme)
     }
 }

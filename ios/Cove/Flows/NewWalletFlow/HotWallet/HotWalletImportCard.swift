@@ -267,105 +267,114 @@ private struct AutocompleteField: View {
                     .keyboardType(.asciiCapable)
                     .focused($focusField, equals: ImportFieldNumber(number))
                     .tint(colorScheme == .dark ? .white : .black)
-                    .onChange(of: isFocused) {
-                        if !isFocused {
-                            showSuggestions = false
-                            return
-                        }
-
-                        filteredSuggestions = autocomplete.autocomplete(
-                            word: text,
-                            allWords: allEnteredWords
-                        )
-                    }
-                    .onChange(of: focusField) { _, _ in
-                        if text == "" { return }
-
-                        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
-                            state = .valid
-                        } else {
-                            state = .invalid
-                        }
-                    }
-                    .introspect(.textField, on: .iOS(.v18, .v26)) { textField in
-                        // only set up handler once, capturing original delegate
-                        if returnHandler == nil {
-                            let handler = TextFieldReturnHandler(
-                                onReturn: { [self] in submitFocusField() },
-                                onPasteMnemonic: onPasteMnemonic,
-                                originalDelegate: textField.delegate
-                            )
-                            returnHandler = handler
-                            textField.delegate = handler
-                        }
-                    }
-                    .onChange(of: text, initial: true) { oldText, newText in
-                        text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                        // handle programmatic text changes (e.g., paste)
-                        if oldText == newText {
-                            if !newText.isEmpty {
-                                state = autocomplete.isValidWord(
-                                    word: newText,
-                                    allWords: allEnteredWords
-                                ) ? .valid : .invalid
-                            }
-                            return
-                        }
-
-                        filteredSuggestions = autocomplete.autocomplete(
-                            word: newText,
-                            allWords: allEnteredWords
-                        )
-
-                        // initial set to typing
-                        if newText.count > oldText.count { state = .typing }
-
-                        // erasing, reset state to typing
-                        if oldText.count > newText.count, !filteredSuggestions.contains(newText) {
-                            return state = .typing
-                        }
-
-                        // set to valid if it matches a word
-                        if filteredSuggestions.contains(newText) { state = .valid }
-
-                        // empty is always initial, or typing
-                        if newText.isEmpty, isFocused { return state = .typing }
-                        if newText.isEmpty, !isFocused { return state = .initial }
-
-                        // invalid, no words match
-                        if filteredSuggestions.isEmpty { return state = .invalid }
-
-                        // if only one suggestion left and if we added a letter (not backspace)
-                        // then auto select the first selection, because we want auto selection
-                        // but also allow the user to fix a wrong word
-                        if let word = filteredSuggestions.last,
-                           filteredSuggestions.count == 1, oldText.count < newText.count
-                        {
-                            state = .valid
-                            filteredSuggestions = []
-
-                            if text != word {
-                                text = word
-                            }
-
-                            submitFocusField()
-                            return
-                        }
-                    }
+                    .onChange(of: isFocused, handleFocusChange)
+                    .onChange(of: focusField, validateText)
+                    .introspect(.textField, on: .iOS(.v18, .v26), customize: setUpReturnHandler)
+                    .onChange(of: text, initial: true, handleTextChange)
                     .offset(y: state == .typing ? -4 : 0)
             }
         }
-        .onAppear {
-            if !text.isEmpty {
-                state = autocomplete.isValidWord(word: text, allWords: allEnteredWords) ? .valid : .invalid
-            }
-        }
+        .onAppear(perform: validateInitialText)
         .frame(maxWidth: .infinity)
     }
 
     var isLastWord: Bool {
         number == numberOfWords.toWordCount()
+    }
+
+    private func handleFocusChange(_: Bool, _ isFocused: Bool) {
+        if !isFocused {
+            showSuggestions = false
+            return
+        }
+
+        filteredSuggestions = autocomplete.autocomplete(
+            word: text,
+            allWords: allEnteredWords
+        )
+    }
+
+    private func validateText(_: ImportFieldNumber?, _: ImportFieldNumber?) {
+        if text == "" { return }
+
+        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
+            state = .valid
+        } else {
+            state = .invalid
+        }
+    }
+
+    private func setUpReturnHandler(_ textField: UITextField) {
+        // only set up handler once, capturing original delegate
+        guard returnHandler == nil else { return }
+
+        let handler = TextFieldReturnHandler(
+            onReturn: { [self] in submitFocusField() },
+            onPasteMnemonic: onPasteMnemonic,
+            originalDelegate: textField.delegate
+        )
+        returnHandler = handler
+        textField.delegate = handler
+    }
+
+    private func handleTextChange(_ oldText: String, _ newText: String) {
+        text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // handle programmatic text changes (e.g., paste)
+        if oldText == newText {
+            if !newText.isEmpty {
+                state = autocomplete.isValidWord(
+                    word: newText,
+                    allWords: allEnteredWords
+                ) ? .valid : .invalid
+            }
+            return
+        }
+
+        filteredSuggestions = autocomplete.autocomplete(
+            word: newText,
+            allWords: allEnteredWords
+        )
+
+        // initial set to typing
+        if newText.count > oldText.count { state = .typing }
+
+        // erasing, reset state to typing
+        if oldText.count > newText.count, !filteredSuggestions.contains(newText) {
+            return state = .typing
+        }
+
+        // set to valid if it matches a word
+        if filteredSuggestions.contains(newText) { state = .valid }
+
+        // empty is always initial, or typing
+        if newText.isEmpty, isFocused { return state = .typing }
+        if newText.isEmpty, !isFocused { return state = .initial }
+
+        // invalid, no words match
+        if filteredSuggestions.isEmpty { return state = .invalid }
+
+        // if only one suggestion left and if we added a letter (not backspace)
+        // then auto select the first selection, because we want auto selection
+        // but also allow the user to fix a wrong word
+        if let word = filteredSuggestions.last,
+           filteredSuggestions.count == 1, oldText.count < newText.count
+        {
+            state = .valid
+            filteredSuggestions = []
+
+            if text != word {
+                text = word
+            }
+
+            submitFocusField()
+        }
+    }
+
+    private func validateInitialText() {
+        if !text.isEmpty {
+            state = autocomplete.isValidWord(word: text, allWords: allEnteredWords) ? .valid : .invalid
+        }
     }
 
     func submitFocusField() {

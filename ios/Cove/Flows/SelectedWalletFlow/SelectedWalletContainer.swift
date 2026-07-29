@@ -99,34 +99,43 @@ private struct SelectedWalletLoadingScreen: View {
         return false
     }
 
-    private var toolbarTextColor: Color {
-        .white
-    }
-
-    private var titleContent: some View {
-        HStack(spacing: 10) {
-            if metadata.walletType == .cold || metadata.walletType == .xpubOnly {
-                BitcoinShieldIcon(width: 13, color: toolbarTextColor)
-            }
-
-            Text(metadata.name)
-                .foregroundStyle(toolbarTextColor)
-                .font(.callout)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+    var body: some View {
+        ScrollView {
+            SelectedWalletLoadingContent(
+                metadata: metadata,
+                reduceTransparency: reduceTransparency
+            )
+            .background(
+                SelectedWalletLoadingScrollBackground(screenHeight: screenHeight)
+            )
         }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 28)
+        .contentMargins(
+            .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
+        )
+        .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .scrollIndicators(.hidden)
+        .modifier(HiddenTopScrollEdgeModifier())
+        .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .onAppear(perform: resetHeaderState)
+        .onDisappear(perform: resetHeaderState)
     }
+
+    private func resetHeaderState() {
+        app.isPastHeader = false
+    }
+}
+
+private struct SelectedWalletLoadingContent: View {
+    @Environment(AppManager.self) private var app
+
+    let metadata: WalletMetadata
+    let reduceTransparency: Bool
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             HStack(spacing: 5) {
-                Button(action: {
-                    app.sheetState = .init(.qr)
-                }) {
+                Button(action: showQrCode) {
                     Image(systemName: "qrcode")
                         .adaptiveToolbarItemStyle(isPastHeader: false)
                         .font(.callout)
@@ -144,7 +153,7 @@ private struct SelectedWalletLoadingScreen: View {
         }
     }
 
-    private var content: some View {
+    var body: some View {
         VStack(spacing: 0) {
             WalletBalanceLoadingHeaderView(metadata: metadata)
 
@@ -157,35 +166,48 @@ private struct SelectedWalletLoadingScreen: View {
         }
         .background(Color.coveBg)
         .toolbar { toolbarContent }
-        .navigationTitleView { titleContent }
+        .navigationTitleView {
+            SelectedWalletLoadingTitle(metadata: metadata)
+        }
         .adaptiveToolbarStyle(showNavBar: false, reduceTransparency: reduceTransparency)
     }
 
+    private func showQrCode() {
+        app.sheetState = .init(.qr)
+    }
+}
+
+private struct SelectedWalletLoadingTitle: View {
+    let metadata: WalletMetadata
+
     var body: some View {
-        ScrollView {
-            content
-                .background(
-                    VStack(spacing: 0) {
-                        Color.midnightBlue
-                            .frame(height: screenHeight * 0.40 + 500)
-                        Color.coveBg
-                    }
-                    .offset(y: -500)
-                )
+        HStack(spacing: 10) {
+            if metadata.walletType == .cold || metadata.walletType == .xpubOnly {
+                BitcoinShieldIcon(width: 13, color: .white)
+            }
+
+            Text(metadata.name)
+                .foregroundStyle(.white)
+                .font(.callout)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .contentMargins(
-            .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
-        )
-        .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
-        .scrollIndicators(.hidden)
-        .modifier(HiddenTopScrollEdgeModifier())
-        .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
-        .onAppear {
-            app.isPastHeader = false
+        .padding(.vertical, 20)
+        .padding(.horizontal, 28)
+    }
+}
+
+private struct SelectedWalletLoadingScrollBackground: View {
+    let screenHeight: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.midnightBlue
+                .frame(height: screenHeight * 0.40 + 500)
+            Color.coveBg
         }
-        .onDisappear {
-            app.isPastHeader = false
-        }
+        .offset(y: -500)
     }
 }
 

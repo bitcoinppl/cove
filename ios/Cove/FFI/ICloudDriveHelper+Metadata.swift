@@ -415,51 +415,6 @@ extension ICloudDriveHelper {
     ) throws -> ResolvedMetadataItem {
         let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
         let predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, name)
-        let finish = {
-            (
-                session: MetadataQuerySession<Result<ResolvedMetadataItem, MetadataLookupError>>,
-                item: ResolvedMetadataItem?,
-                error: MetadataLookupError?
-            ) in
-            if let error {
-                session.finish(.failure(error))
-                return
-            }
-
-            if let item {
-                session.finish(.success(item))
-                return
-            }
-
-            session.finish(
-                .failure(.missingURL("iCloud metadata query finished without a URL for \(name)"))
-            )
-        }
-
-        let evaluate = {
-            (
-                session: MetadataQuerySession<Result<ResolvedMetadataItem, MetadataLookupError>>,
-                reason: String
-            ) in
-            if let item = Self.resolvedItem(
-                named: name,
-                under: resolvedParent,
-                in: session.query
-            ) {
-                Log.info(
-                    "metadataLookup: resolved name=\(name) reason=\(reason) url=\(item.url.path) metadataPath=\(item.metadataPath ?? "<unknown>")"
-                )
-                finish(session, item, nil)
-                return
-            }
-
-            Log.info(
-                "metadataLookup: no match yet name=\(name) reason=\(reason) count=\(session.query.resultCount) parent=\(resolvedParent)"
-            )
-            for summary in Self.metadataItemSummaries(in: session.query) {
-                Log.info("metadataLookup: item \(summary)")
-            }
-        }
 
         Log.info(
             "metadataLookup: starting name=\(name) parent=\(resolvedParent) predicate=\(predicate.predicateFormat)"
@@ -469,10 +424,13 @@ extension ICloudDriveHelper {
             predicate: predicate,
             timeout: deadline.timeIntervalSinceNow,
             onStartFailure: { session in
-                finish(
+                Self.finishMetadataLookup(
                     session,
-                    nil,
-                    .startFailed("failed to start iCloud metadata query for \(name)")
+                    item: nil,
+                    error: .startFailed(
+                        "failed to start iCloud metadata query for \(name)"
+                    ),
+                    name: name
                 )
             },
             onTimeout: { session in
@@ -481,10 +439,20 @@ extension ICloudDriveHelper {
                 )
             },
             onFinishGathering: { session in
-                evaluate(session, "finish")
+                Self.evaluateMetadataLookup(
+                    session,
+                    name: name,
+                    resolvedParent: resolvedParent,
+                    reason: "finish"
+                )
             },
             onUpdate: { session in
-                evaluate(session, "update")
+                Self.evaluateMetadataLookup(
+                    session,
+                    name: name,
+                    resolvedParent: resolvedParent,
+                    reason: "update"
+                )
             }
         )
 
@@ -496,6 +464,53 @@ extension ICloudDriveHelper {
         case let .success(resolvedItem):
             return resolvedItem
         }
+    }
+
+    private static func evaluateMetadataLookup(
+        _ session: MetadataQuerySession<Result<ResolvedMetadataItem, MetadataLookupError>>,
+        name: String,
+        resolvedParent: String,
+        reason: String
+    ) {
+        if let item = resolvedItem(
+            named: name,
+            under: resolvedParent,
+            in: session.query
+        ) {
+            Log.info(
+                "metadataLookup: resolved name=\(name) reason=\(reason) url=\(item.url.path) metadataPath=\(item.metadataPath ?? "<unknown>")"
+            )
+            finishMetadataLookup(session, item: item, error: nil, name: name)
+            return
+        }
+
+        Log.info(
+            "metadataLookup: no match yet name=\(name) reason=\(reason) count=\(session.query.resultCount) parent=\(resolvedParent)"
+        )
+        for summary in metadataItemSummaries(in: session.query) {
+            Log.info("metadataLookup: item \(summary)")
+        }
+    }
+
+    private static func finishMetadataLookup(
+        _ session: MetadataQuerySession<Result<ResolvedMetadataItem, MetadataLookupError>>,
+        item: ResolvedMetadataItem?,
+        error: MetadataLookupError?,
+        name: String
+    ) {
+        if let error {
+            session.finish(.failure(error))
+            return
+        }
+
+        if let item {
+            session.finish(.success(item))
+            return
+        }
+
+        session.finish(
+            .failure(.missingURL("iCloud metadata query finished without a URL for \(name)"))
+        )
     }
 
     func resolvedMetadataItemIfPresent(

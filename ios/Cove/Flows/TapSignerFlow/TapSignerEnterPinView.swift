@@ -141,87 +141,52 @@ struct TapSignerEnterPin: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 40) {
-                VStack {
-                    HStack {
-                        Button(action: { app.sheetState = .none }) {
-                            Text("Cancel")
-                        }
+        TapSignerPinScreen(
+            pin: $pin,
+            focus: $isFocused,
+            spacing: 40,
+            header: TapSignerPinHeader(actionTitle: "Cancel", systemImage: nil, action: cancel),
+            description: TapSignerPinDescription(
+                title: "Enter TAPSIGNER PIN",
+                message: message
+            ),
+            indicators: TapSignerPinIndicators(pinCount: pin.count, focus: $isFocused)
+        )
+        .onAppear(perform: resetPin)
+        .onChange(of: isFocused, keepFocused)
+        .onChange(of: pin, handlePinChange)
+    }
 
-                        Spacer()
-                    }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 10)
-                    .foregroundStyle(.primary)
-                    .fontWeight(.semibold)
+    private func cancel() {
+        app.sheetState = .none
+    }
 
-                    Image(systemName: "lock")
-                        .font(.system(size: 100))
-                        .foregroundColor(.blue)
-                        .padding(.top, 22)
-                }
+    private func resetPin() {
+        pin = ""
+        isFocused = true
+    }
 
-                VStack(spacing: 20) {
-                    Text("Enter TAPSIGNER PIN")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+    private func keepFocused(_: Bool, _: Bool) {
+        isFocused = true
+    }
 
-                    Text(message)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal)
+    private func handlePinChange(old: String, newPin: String) {
+        let nfc = manager.getOrCreateNfc(tapSigner)
 
-                HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
-                        Circle()
-                            .stroke(.primary, lineWidth: 1.3)
-                            .fill(pin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
-                            .id(index)
-                    }
-                }
-                .fixedSize(horizontal: true, vertical: true)
-                .contentShape(Rectangle())
-                .onTapGesture { isFocused = true }
-
-                TextField("Hidden Input", text: $pin)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .focused($isFocused)
-                    .keyboardType(.numberPad)
-
-                Spacer()
-            }
-            .onAppear {
-                pin = ""
-                isFocused = true
-            }
-            .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: pin) { old, newPin in
-                let nfc = manager.getOrCreateNfc(tapSigner)
-
-                if newPin.count == 6 {
-                    manager.enteredPin = newPin
-                    return runAction(nfc, newPin)
-                }
-
-                if newPin.count > 6, old.count < 6 {
-                    pin = old
-                    return
-                }
-
-                if newPin.count > 6 {
-                    pin = String(pin.prefix(6))
-                    return
-                }
-            }
+        if newPin.count == 6 {
+            manager.enteredPin = newPin
+            runAction(nfc, newPin)
+            return
         }
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
+
+        if newPin.count > 6, old.count < 6 {
+            pin = old
+            return
+        }
+
+        if newPin.count > 6 {
+            pin = String(pin.prefix(6))
+        }
     }
 }
 

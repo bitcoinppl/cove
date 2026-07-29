@@ -37,47 +37,133 @@ struct VerificationSection: View {
     var body: some View {
         switch manager.verificationState {
         case nil, .notVerified, .required:
-            Section {
-                Text("Run verification to confirm your cloud backup can be decrypted and restored")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Button {
-                    manager.startVerification()
-                } label: {
-                    Label("Verify Now", systemImage: "checkmark.shield")
-                }
-                .disabled(isBusy)
-            }
+            CloudBackupVerificationStartSection(
+                isBusy: isBusy,
+                onVerify: startVerification
+            )
         case .running:
-            Section {
-                HStack {
-                    ProgressView()
-                        .padding(.trailing, 8)
-                    Text("Verifying backup integrity...")
-                }
-            }
+            CloudBackupVerificationProgressSection()
         case let .verified(report: report, lastVerifiedAt: _):
             if let report {
-                verifiedSection(report)
+                CloudBackupVerifiedSection(
+                    report: report,
+                    isBusy: isBusy,
+                    needsSync: manager.detail?.needsSync.isEmpty == false,
+                    syncState: manager.syncState,
+                    onSync: syncUnsynced,
+                    onVerify: startVerification
+                )
             } else {
-                CloudBackupPasskeyConfirmedSection(manager: manager, isBusy: isBusy)
+                CloudBackupPasskeyConfirmedSection(
+                    isBusy: isBusy,
+                    onVerify: startVerification
+                )
             }
         case .awaitingUploadConfirmation:
             CloudBackupUploadConfirmationPendingSection()
         case let .failed(failure):
-            failureSection(failure)
+            CloudBackupVerificationFailureSection(
+                failure: failure,
+                passkeyRepairState: manager.passkeyRepairState,
+                isBusy: isBusy,
+                isDetailInventoryComplete: manager.isDetailInventoryComplete,
+                destructiveOperationState: manager.destructiveOperationState,
+                onRetry: retry,
+                onRepairPasskey: repairPasskey,
+                onRecreate: onRecreate,
+                onReinitialize: onReinitialize
+            )
         }
     }
 
-    @ViewBuilder
-    private func verifiedSection(_ report: DeepVerificationReport) -> some View {
+    private func startVerification() {
+        manager.startVerification()
+    }
+
+    private func retry(_ retryAction: CloudBackupRetryAction?) {
+        if retryAction == .verifyDiscoverable {
+            manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
+        } else {
+            manager.startVerification(source: .cloudBackupDetail)
+        }
+    }
+
+    private func repairPasskey() {
+        manager.dispatch(action: .repairPasskeyNoDiscovery)
+    }
+
+    private func syncUnsynced() {
+        manager.dispatch(action: .syncUnsynced)
+    }
+}
+
+private struct CloudBackupVerificationStartSection: View {
+    let isBusy: Bool
+    let onVerify: () -> Void
+
+    var body: some View {
+        Section {
+            Text("Run verification to confirm your cloud backup can be decrypted and restored")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button(action: onVerify) {
+                Label("Verify Now", systemImage: "checkmark.shield")
+            }
+            .disabled(isBusy)
+        }
+    }
+}
+
+private struct CloudBackupVerificationProgressSection: View {
+    var body: some View {
+        Section {
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+                Text("Verifying backup integrity...")
+            }
+        }
+    }
+}
+
+private struct CloudBackupVerifiedSection: View {
+    let report: DeepVerificationReport
+    let isBusy: Bool
+    let needsSync: Bool
+    let syncState: CloudBackupSyncState?
+    let onSync: () -> Void
+    let onVerify: () -> Void
+
+    private var summary: String? {
+        var parts: [String] = []
+
+        if report.credentialRecovered {
+            parts.append("Passkey recovered")
+        }
+
+        if report.masterKeyWrapperRepaired {
+            parts.append("Cloud master key protection repaired")
+        }
+
+        if report.localMasterKeyRepaired {
+            parts.append("Local backup credentials repaired")
+        }
+
+        if report.walletsVerified > 0 {
+            parts.append("\(report.walletsVerified) wallet(s) verified")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    var body: some View {
         Section {
             Label("Backup verified", systemImage: "checkmark.shield.fill")
                 .foregroundStyle(Color.statusSuccess)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
-            if let summary = verifiedSummary(report) {
+            if let summary {
                 Text(summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -102,66 +188,108 @@ struct VerificationSection: View {
             }
         }
 
-        CloudBackupVerificationActionButtons(manager: manager, isBusy: isBusy)
+        CloudBackupVerificationActionButtons(
+            isBusy: isBusy,
+            needsSync: needsSync,
+            syncState: syncState,
+            onSync: onSync,
+            onVerify: onVerify
+        )
+    }
+}
+
+private struct CloudBackupVerificationFailureSection: View {
+    let failure: DeepVerificationFailure
+    let passkeyRepairState: CloudBackupPasskeyRepairState?
+    let isBusy: Bool
+    let isDetailInventoryComplete: Bool
+    let destructiveOperationState: CloudBackupDestructiveOperationState
+    let onRetry: (CloudBackupRetryAction?) -> Void
+    let onRepairPasskey: () -> Void
+    let onRecreate: () -> Void
+    let onReinitialize: () -> Void
+
+    private var passkeyRepairError: String? {
+        guard case let .failed(error) = passkeyRepairState else { return nil }
+
+        return error
     }
 
-    private func verifiedSummary(_ report: DeepVerificationReport) -> String? {
-        var parts: [String] = []
-
-        if report.credentialRecovered {
-            parts.append("Passkey recovered")
-        }
-
-        if report.masterKeyWrapperRepaired {
-            parts.append("Cloud master key protection repaired")
-        }
-
-        if report.localMasterKeyRepaired {
-            parts.append("Local backup credentials repaired")
-        }
-
-        if report.walletsVerified > 0 {
-            parts.append("\(report.walletsVerified) wallet(s) verified")
-        }
-
-        return parts.isEmpty ? nil : parts.joined(separator: ", ")
-    }
-
-    @ViewBuilder
-    private func failureSection(_ failure: DeepVerificationFailure) -> some View {
+    var body: some View {
         Section {
             switch failure {
             case let .retry(message, _, retryAction):
-                retryFailureContent(message, retryAction: retryAction)
+                CloudBackupRetryFailureContent(
+                    message: message,
+                    retryAction: retryAction,
+                    isBusy: isBusy,
+                    isRecoveringPasskey: passkeyRepairState.isRecovering,
+                    onRetry: onRetry,
+                    onRepairPasskey: onRepairPasskey
+                )
             case let .recreateManifest(message, warning, _):
-                recreateManifestContent(message: message, warning: warning)
+                CloudBackupRecreateManifestFailureContent(
+                    message: message,
+                    warning: warning,
+                    isBusy: isBusy,
+                    isDetailInventoryComplete: isDetailInventoryComplete,
+                    destructiveOperationState: destructiveOperationState,
+                    onRecreate: onRecreate
+                )
             case let .reinitializeBackup(message, warning, _):
-                reinitializeBackupContent(message: message, warning: warning)
+                CloudBackupReinitializeFailureContent(
+                    message: message,
+                    warning: warning,
+                    isBusy: isBusy,
+                    isDetailInventoryComplete: isDetailInventoryComplete,
+                    destructiveOperationState: destructiveOperationState,
+                    onReinitialize: onReinitialize
+                )
             case let .unsupportedVersion(message, _):
-                unsupportedVersionContent(message)
+                CloudBackupUnsupportedVersionFailureContent(message: message)
             }
         }
 
-        if case let .failed(error) = manager.passkeyRepairState {
-            Section {
-                Label(error, systemImage: "xmark.circle.fill")
-                    .foregroundStyle(Color.statusError)
-                    .font(.caption)
-            }
-        }
+        CloudBackupPasskeyRepairErrorSection(error: passkeyRepairError)
     }
+}
 
-    @ViewBuilder
-    private func retryFailureContent(_ message: String, retryAction: CloudBackupRetryAction?) -> some View {
+private struct CloudBackupRetryFailureContent: View {
+    let message: String
+    let retryAction: CloudBackupRetryAction?
+    let isBusy: Bool
+    let isRecoveringPasskey: Bool
+    let onRetry: (CloudBackupRetryAction?) -> Void
+    let onRepairPasskey: () -> Void
+
+    var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
-        retryButton(retryAction: retryAction)
-        CloudBackupRepairPasskeyButton(manager: manager, isBusy: isBusy)
-    }
+        Button {
+            onRetry(retryAction)
+        } label: {
+            Label("Try Again", systemImage: "arrow.clockwise")
+        }
+        .disabled(isBusy)
 
-    @ViewBuilder
-    private func recreateManifestContent(message: String, warning: String) -> some View {
+        CloudBackupRepairPasskeyButton(
+            isBusy: isBusy,
+            isRecovering: isRecoveringPasskey,
+            onRepair: onRepairPasskey
+        )
+    }
+}
+
+private struct CloudBackupRecreateManifestFailureContent: View {
+    let message: String
+    let warning: String
+    let isBusy: Bool
+    let isDetailInventoryComplete: Bool
+    let destructiveOperationState: CloudBackupDestructiveOperationState
+    let onRecreate: () -> Void
+
+    var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusError)
 
@@ -169,17 +297,28 @@ struct VerificationSection: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-        destructiveActionButton(
+        CloudBackupDestructiveActionButton(
             title: "Recreate Backup Index",
             progressTitle: "Recreating...",
             systemImage: "arrow.clockwise",
             operation: .recreatingManifest,
+            currentOperation: destructiveOperationState,
+            isBusy: isBusy,
+            isDetailInventoryComplete: isDetailInventoryComplete,
             action: onRecreate
         )
     }
+}
 
-    @ViewBuilder
-    private func reinitializeBackupContent(message: String, warning: String) -> some View {
+private struct CloudBackupReinitializeFailureContent: View {
+    let message: String
+    let warning: String
+    let isBusy: Bool
+    let isDetailInventoryComplete: Bool
+    let destructiveOperationState: CloudBackupDestructiveOperationState
+    let onReinitialize: () -> Void
+
+    var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusError)
 
@@ -187,17 +326,23 @@ struct VerificationSection: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-        destructiveActionButton(
+        CloudBackupDestructiveActionButton(
             title: "Reinitialize Cloud Backup",
             progressTitle: "Reinitializing...",
             systemImage: "arrow.counterclockwise",
             operation: .reinitializingBackup,
+            currentOperation: destructiveOperationState,
+            isBusy: isBusy,
+            isDetailInventoryComplete: isDetailInventoryComplete,
             action: onReinitialize
         )
     }
+}
 
-    @ViewBuilder
-    private func unsupportedVersionContent(_ message: String) -> some View {
+private struct CloudBackupUnsupportedVersionFailureContent: View {
+    let message: String
+
+    var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
@@ -205,20 +350,25 @@ struct VerificationSection: View {
             .font(.caption)
             .foregroundStyle(.secondary)
     }
+}
 
-    private func destructiveActionButton(
-        title: String,
-        progressTitle: String,
-        systemImage: String,
-        operation: CloudBackupDestructiveOperationState,
-        action: @escaping () -> Void
-    ) -> some View {
+private struct CloudBackupDestructiveActionButton: View {
+    let title: String
+    let progressTitle: String
+    let systemImage: String
+    let operation: CloudBackupDestructiveOperationState
+    let currentOperation: CloudBackupDestructiveOperationState
+    let isBusy: Bool
+    let isDetailInventoryComplete: Bool
+    let action: () -> Void
+
+    var body: some View {
         Button(role: .destructive) {
-            guard manager.isDetailInventoryComplete else { return }
+            guard isDetailInventoryComplete else { return }
 
             action()
         } label: {
-            if manager.destructiveOperationState == operation {
+            if currentOperation == operation {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 4)
@@ -228,20 +378,21 @@ struct VerificationSection: View {
                 Label(title, systemImage: systemImage)
             }
         }
-        .disabled(isBusy || !manager.isDetailInventoryComplete)
+        .disabled(isBusy || !isDetailInventoryComplete)
     }
+}
 
-    private func retryButton(retryAction: CloudBackupRetryAction?) -> some View {
-        Button {
-            if retryAction == .verifyDiscoverable {
-                manager.dispatch(action: .startVerificationDiscoverable(.cloudBackupDetail))
-            } else {
-                manager.startVerification(source: .cloudBackupDetail)
+private struct CloudBackupPasskeyRepairErrorSection: View {
+    let error: String?
+
+    var body: some View {
+        if let error {
+            Section {
+                Label(error, systemImage: "xmark.circle.fill")
+                    .foregroundStyle(Color.statusError)
+                    .font(.caption)
             }
-        } label: {
-            Label("Try Again", systemImage: "arrow.clockwise")
         }
-        .disabled(isBusy)
     }
 }
 
@@ -259,8 +410,8 @@ private struct CloudBackupUploadConfirmationPendingSection: View {
 }
 
 private struct CloudBackupPasskeyConfirmedSection: View {
-    let manager: CloudBackupManager
     let isBusy: Bool
+    let onVerify: () -> Void
 
     var body: some View {
         Section {
@@ -271,9 +422,7 @@ private struct CloudBackupPasskeyConfirmedSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Button {
-                manager.startVerification()
-            } label: {
+            Button(action: onVerify) {
                 Label("Run Full Verification", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
@@ -282,18 +431,22 @@ private struct CloudBackupPasskeyConfirmedSection: View {
 }
 
 private struct CloudBackupVerificationActionButtons: View {
-    let manager: CloudBackupManager
     let isBusy: Bool
+    let needsSync: Bool
+    let syncState: CloudBackupSyncState?
+    let onSync: () -> Void
+    let onVerify: () -> Void
 
     var body: some View {
         Section {
-            if manager.detail?.needsSync.isEmpty == false {
-                CloudBackupVerificationSyncButton(manager: manager)
+            if needsSync {
+                CloudBackupVerificationSyncButton(
+                    syncState: syncState,
+                    onSync: onSync
+                )
             }
 
-            Button {
-                manager.startVerification()
-            } label: {
+            Button(action: onVerify) {
                 Label("Verify Again", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
@@ -302,14 +455,13 @@ private struct CloudBackupVerificationActionButtons: View {
 }
 
 private struct CloudBackupVerificationSyncButton: View {
-    let manager: CloudBackupManager
+    let syncState: CloudBackupSyncState?
+    let onSync: () -> Void
 
     var body: some View {
-        Button {
-            manager.dispatch(action: .syncUnsynced)
-        } label: {
+        Button(action: onSync) {
             HStack {
-                if case .syncing = manager.syncState {
+                if case .syncing = syncState {
                     ProgressView()
                         .padding(.trailing, 8)
                     Text("Syncing...")
@@ -319,9 +471,9 @@ private struct CloudBackupVerificationSyncButton: View {
                 }
             }
         }
-        .disabled(manager.syncState == .syncing)
+        .disabled(syncState == .syncing)
 
-        if case let .failed(error) = manager.syncState {
+        if case let .failed(error) = syncState {
             Text(error)
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
@@ -330,14 +482,13 @@ private struct CloudBackupVerificationSyncButton: View {
 }
 
 private struct CloudBackupRepairPasskeyButton: View {
-    let manager: CloudBackupManager
     let isBusy: Bool
+    let isRecovering: Bool
+    let onRepair: () -> Void
 
     var body: some View {
-        Button {
-            manager.dispatch(action: .repairPasskeyNoDiscovery)
-        } label: {
-            if manager.passkeyRepairState.isRecovering {
+        Button(action: onRepair) {
+            if isRecovering {
                 HStack {
                     ProgressView()
                         .padding(.trailing, 4)

@@ -45,24 +45,15 @@ struct SecretWordsScreen: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let compactLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
-            )
-
-            ScrollView {
-                mainContent(usesFlexibleSpacing: !compactLayout)
-                    .frame(minHeight: proxy.size.height, alignment: .top)
-                    .safeAreaPadding(.bottom, 24)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .onAppear {
-            auth.lock()
-            guard words == nil else { return }
-            do { words = try Mnemonic(id: id) } catch { errorMessage = error.localizedDescription }
-        }
+        SecretWordsLayout(
+            sizeCategory: sizeCategory,
+            words: words,
+            errorMessage: errorMessage,
+            rowHeight: rowHeight,
+            numberOfRows: numberOfRows,
+            numberOfColumns: numberOfColumns
+        )
+        .onAppear(perform: loadWords)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .adaptiveToolbarStyle()
         .toolbar {
@@ -74,109 +65,216 @@ struct SecretWordsScreen: View {
                 .accessibilityLabel("Show Seed QR")
             }
         }
-        .alert("Show Seed QR?", isPresented: $showSeedQrAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Show QR Code") { showSeedQrSheet = true }
-        } message: {
-            Text(
-                "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to."
+        .modifier(
+            SeedQrPresentationModifier(
+                words: words,
+                showAlert: $showSeedQrAlert,
+                showSheet: $showSeedQrSheet
             )
-        }
-        .sheet(isPresented: $showSeedQrSheet) {
-            if let words {
-                SeedQrSheetView(words: words)
-            }
-        }
-        .background(
-            Image(.newWalletPattern)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
-                .frame(maxWidth: .infinity)
-                .opacity(0.5)
         )
+        .background(SecretWordsPatternBackground())
         .background(Color.midnightBlue)
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
+    private func loadWords() {
+        auth.lock()
+        guard words == nil else { return }
+
+        do {
+            words = try Mnemonic(id: id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct SecretWordsLayout: View {
+    let sizeCategory: ContentSizeCategory
+    let words: Mnemonic?
+    let errorMessage: String?
+    let rowHeight: Double
+    let numberOfRows: Int
+    let numberOfColumns: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compactLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            ScrollView {
+                SecretWordsContent(
+                    words: words,
+                    errorMessage: errorMessage,
+                    rowHeight: rowHeight,
+                    numberOfRows: numberOfRows,
+                    numberOfColumns: numberOfColumns,
+                    usesFlexibleSpacing: !compactLayout
+                )
+                .frame(minHeight: proxy.size.height, alignment: .top)
+                .safeAreaPadding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+}
+
+private struct SecretWordsContent: View {
+    let words: Mnemonic?
+    let errorMessage: String?
+    let rowHeight: Double
+    let numberOfRows: Int
+    let numberOfColumns: Int
+    let usesFlexibleSpacing: Bool
+
+    var body: some View {
         VStack {
             if usesFlexibleSpacing {
                 Spacer()
             }
 
-            Group {
-                if let words {
-                    GroupBox {
-                        ColumnMajorGrid(items: words.allWords(), numberOfColumns: numberOfColumns) { _, word in
-                            HStack {
-                                Text("\(word.number).")
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.secondary)
-                                    .fontDesign(.monospaced)
-                                    .multilineTextAlignment(.leading)
-                                    .minimumScaleFactor(0.5)
+            SecretWordsGrid(
+                words: words,
+                errorMessage: errorMessage,
+                rowHeight: rowHeight,
+                numberOfRows: numberOfRows,
+                numberOfColumns: numberOfColumns
+            )
 
-                                Text(word.word)
-                                    .fontWeight(.bold)
-                                    .fontDesign(.monospaced)
-                                    .multilineTextAlignment(.leading)
-                                    .minimumScaleFactor(0.75)
-                                    .lineLimit(1)
-                                    .fixedSize()
-
-                                Spacer()
-                            }
-                        }
-                    }
-                    .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 32)
-                    .frame(width: screenWidth * 0.9)
-                    .font(.caption)
-                } else {
-                    Text(errorMessage ?? "Loading...")
-                }
-
-                if usesFlexibleSpacing {
-                    Spacer()
-                    Spacer()
-                    Spacer()
-                }
-
-                VStack(spacing: 12) {
-                    HStack {
-                        Text("Recovery Words")
-                            .font(.system(size: 36, weight: .semibold))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.leading)
-
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text(
-                            "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin."
-                        )
-                        .multilineTextAlignment(.leading)
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.75))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
-
-                    HStack {
-                        Text("Please save these words in a secure location.")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.leading)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .opacity(0.9)
-
-                        Spacer()
-                    }
-                }
+            if usesFlexibleSpacing {
+                Spacer()
+                Spacer()
+                Spacer()
             }
+
+            SecretWordsRecoveryCopy()
         }
         .padding()
+    }
+}
+
+private struct SecretWordsGrid: View {
+    let words: Mnemonic?
+    let errorMessage: String?
+    let rowHeight: Double
+    let numberOfRows: Int
+    let numberOfColumns: Int
+
+    var body: some View {
+        if let words {
+            GroupBox {
+                ColumnMajorGrid(
+                    items: words.allWords(),
+                    numberOfColumns: numberOfColumns
+                ) { _, word in
+                    SecretWordRow(number: word.number, word: word.word)
+                }
+            }
+            .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 32)
+            .frame(width: screenWidth * 0.9)
+            .font(.caption)
+        } else {
+            Text(errorMessage ?? "Loading...")
+        }
+    }
+}
+
+private struct SecretWordRow: View {
+    let number: UInt8
+    let word: String
+
+    var body: some View {
+        HStack {
+            Text("\(number).")
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+                .fontDesign(.monospaced)
+                .multilineTextAlignment(.leading)
+                .minimumScaleFactor(0.5)
+
+            Text(word)
+                .fontWeight(.bold)
+                .fontDesign(.monospaced)
+                .multilineTextAlignment(.leading)
+                .minimumScaleFactor(0.75)
+                .lineLimit(1)
+                .fixedSize()
+
+            Spacer()
+        }
+    }
+}
+
+private struct SecretWordsRecoveryCopy: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Recovery Words")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.leading)
+
+                Spacer()
+            }
+
+            HStack {
+                Text(
+                    "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin."
+                )
+                .multilineTextAlignment(.leading)
+                .font(.footnote)
+                .foregroundStyle(.coveLightGray.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+
+                Spacer()
+            }
+
+            HStack {
+                Text("Please save these words in a secure location.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.leading)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.white)
+                    .opacity(0.9)
+
+                Spacer()
+            }
+        }
+    }
+}
+
+private struct SecretWordsPatternBackground: View {
+    var body: some View {
+        Image(.newWalletPattern)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+            .frame(maxWidth: .infinity)
+            .opacity(0.5)
+    }
+}
+
+private struct SeedQrPresentationModifier: ViewModifier {
+    let words: Mnemonic?
+    @Binding var showAlert: Bool
+    @Binding var showSheet: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Show Seed QR?", isPresented: $showAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Show QR Code") { showSheet = true }
+            } message: {
+                Text(
+                    "Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to."
+                )
+            }
+            .sheet(isPresented: $showSheet) {
+                if let words {
+                    SeedQrSheetView(words: words)
+                }
+            }
     }
 }
 

@@ -20,92 +20,21 @@ struct TransactionReceivedDetailsSection: View {
     let requestUnlockLockedUtxos: () -> Void
     let toggleLockState: () -> Void
 
-    private var headerIcon: HeaderIcon {
-        HeaderIcon(
-            isSent: transactionDetails.isSent(),
-            isConfirmed: transactionDetails.isConfirmed(),
-            numberOfConfirmations: numberOfConfirmations
-        )
-    }
-
     var body: some View {
-        VStack {
-            headerIcon
+        TransactionDetailsHeader(
+            transactionDetails: transactionDetails,
+            manager: manager,
+            numberOfConfirmations: numberOfConfirmations,
+            lockState: lockState,
+            isUpdatingLockState: isUpdatingLockState,
+            requestUnlockLockedUtxos: requestUnlockLockedUtxos,
+            direction: .received
+        )
 
-            VStack(spacing: 4) {
-                Text(transactionDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
-                    .font(.title)
-                    .fontWeight(.semibold)
-                    .padding(.top, 8)
-
-                TransactionDetailsHeaderLabelRow(
-                    transactionDetails: transactionDetails,
-                    manager: manager,
-                    lockState: lockState,
-                    isUpdatingLockState: isUpdatingLockState,
-                    requestUnlockLockedUtxos: requestUnlockLockedUtxos
-                )
-            }
-        }
-
-        if transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction was successfully received")
-                    .foregroundColor(.secondary)
-
-                Text(transactionDetails.confirmationDateTime() ?? "Unknown")
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        if !transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction is pending. ")
-                    .foregroundColor(.secondary)
-
-                Text("Please check back soon for an update.")
-                    .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        VStack(spacing: 8) {
-            Text(transactionDetails.displayAmount(metadata: metadata))
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top, 12)
-
-            AsyncView(
-                cachedValue: transactionDetails.amountFiatFmtCached(),
-                operation: transactionDetails.amountFiatFmt
-            ) { amount in
-                Text(amount).foregroundStyle(.primary.opacity(0.8))
-            }
-        }
-
-        Group {
-            if transactionDetails.isConfirmed() {
-                TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .statusSuccess)
-            } else {
-                TransactionCapsule(
-                    text: "Receiving",
-                    icon: "arrow.down.left",
-                    color: .coolGray,
-                    textColor: .black.opacity(0.8)
-                )
-            }
-        }
-        .padding(.top, 12)
-
-        if let confirmations = numberOfConfirmations, confirmations < 3 {
-            VStack {
-                Divider().padding(.vertical, 18)
-                ConfirmationIndicatorView(current: confirmations)
-            }
-            .padding(.horizontal, detailsExpandedPadding)
-        }
+        ReceivedTransactionStatus(transactionDetails: transactionDetails)
+        TransactionDetailsAmount(transactionDetails: transactionDetails, metadata: metadata)
+        ReceivedTransactionCapsule(isConfirmed: transactionDetails.isConfirmed())
+        TransactionConfirmationProgress(numberOfConfirmations: numberOfConfirmations)
 
         if metadata.detailsExpanded {
             ReceivedDetailsExpandedView(
@@ -136,23 +65,80 @@ struct TransactionSentDetailsSection: View {
     let requestUnlockLockedUtxos: () -> Void
     let toggleLockState: () -> Void
 
-    private var headerIcon: HeaderIcon {
-        HeaderIcon(
-            isSent: transactionDetails.isSent(),
-            isConfirmed: transactionDetails.isConfirmed(),
-            numberOfConfirmations: numberOfConfirmations
+    var body: some View {
+        TransactionDetailsHeader(
+            transactionDetails: transactionDetails,
+            manager: manager,
+            numberOfConfirmations: numberOfConfirmations,
+            lockState: lockState,
+            isUpdatingLockState: isUpdatingLockState,
+            requestUnlockLockedUtxos: requestUnlockLockedUtxos,
+            direction: .sent
         )
+
+        SentTransactionStatus(transactionDetails: transactionDetails)
+        TransactionDetailsAmount(transactionDetails: transactionDetails, metadata: metadata)
+        SentTransactionCapsule(isConfirmed: transactionDetails.isConfirmed())
+        TransactionConfirmationProgress(numberOfConfirmations: numberOfConfirmations)
+
+        if metadata.detailsExpanded {
+            SentDetailsExpandedView(
+                manager: manager,
+                transactionDetails: transactionDetails,
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                toggleLockState: toggleLockState
+            )
+        }
+    }
+}
+
+private enum TransactionDetailsDirection {
+    case received
+    case sent
+
+    var titleTopPadding: CGFloat {
+        switch self {
+        case .received:
+            8
+        case .sent:
+            6
+        }
+    }
+}
+
+private struct TransactionDetailsHeader: View {
+    let transactionDetails: TransactionDetails
+    let manager: WalletManager
+    let numberOfConfirmations: Int?
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let requestUnlockLockedUtxos: () -> Void
+    let direction: TransactionDetailsDirection
+
+    private var title: String {
+        guard transactionDetails.isConfirmed() else { return "Transaction Pending" }
+
+        return direction == .received ? "Transaction Received" : "Transaction Sent"
     }
 
     var body: some View {
         VStack {
-            headerIcon
+            HeaderIcon(
+                isSent: transactionDetails.isSent(),
+                isConfirmed: transactionDetails.isConfirmed(),
+                numberOfConfirmations: numberOfConfirmations
+            )
 
             VStack(spacing: 4) {
-                Text(transactionDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
+                Text(title)
                     .font(.title)
                     .fontWeight(.semibold)
-                    .padding(.top, 6)
+                    .padding(.top, direction.titleTopPadding)
 
                 TransactionDetailsHeaderLabelRow(
                     transactionDetails: transactionDetails,
@@ -163,21 +149,46 @@ struct TransactionSentDetailsSection: View {
                 )
             }
         }
+    }
+}
 
-        if transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
+private struct ReceivedTransactionStatus: View {
+    let transactionDetails: TransactionDetails
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            if transactionDetails.isConfirmed() {
+                Text("Your transaction was successfully received")
+                    .foregroundColor(.secondary)
+
+                Text(transactionDetails.confirmationDateTime() ?? "Unknown")
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Your transaction is pending. ")
+                    .foregroundColor(.secondary)
+
+                Text("Please check back soon for an update.")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+    }
+}
+
+private struct SentTransactionStatus: View {
+    let transactionDetails: TransactionDetails
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            if transactionDetails.isConfirmed() {
                 Text("Your transaction was sent on")
                     .foregroundColor(.secondary)
 
                 Text(transactionDetails.confirmationDateTime() ?? "Unknown")
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
-            }
-            .multilineTextAlignment(.center)
-        }
-
-        if !transactionDetails.isConfirmed() {
-            VStack(alignment: .center, spacing: 4) {
+            } else {
                 Text("Your transaction is pending. ")
                     .foregroundColor(.secondary)
 
@@ -185,9 +196,16 @@ struct TransactionSentDetailsSection: View {
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
             }
-            .multilineTextAlignment(.center)
         }
+        .multilineTextAlignment(.center)
+    }
+}
 
+private struct TransactionDetailsAmount: View {
+    let transactionDetails: TransactionDetails
+    let metadata: WalletMetadata
+
+    var body: some View {
         VStack(spacing: 8) {
             Text(transactionDetails.displayAmount(metadata: metadata))
                 .font(.largeTitle)
@@ -201,9 +219,35 @@ struct TransactionSentDetailsSection: View {
                 Text(amount).foregroundStyle(.primary.opacity(0.8))
             }
         }
+    }
+}
 
+private struct ReceivedTransactionCapsule: View {
+    let isConfirmed: Bool
+
+    var body: some View {
         Group {
-            if transactionDetails.isConfirmed() {
+            if isConfirmed {
+                TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .statusSuccess)
+            } else {
+                TransactionCapsule(
+                    text: "Receiving",
+                    icon: "arrow.down.left",
+                    color: .coolGray,
+                    textColor: .black.opacity(0.8)
+                )
+            }
+        }
+        .padding(.top, 12)
+    }
+}
+
+private struct SentTransactionCapsule: View {
+    let isConfirmed: Bool
+
+    var body: some View {
+        Group {
+            if isConfirmed {
                 TransactionCapsule(
                     text: "Sent",
                     icon: "arrow.up.right",
@@ -220,27 +264,19 @@ struct TransactionSentDetailsSection: View {
             }
         }
         .padding(.top, 12)
+    }
+}
 
+private struct TransactionConfirmationProgress: View {
+    let numberOfConfirmations: Int?
+
+    var body: some View {
         if let confirmations = numberOfConfirmations, confirmations < 3 {
             VStack {
                 Divider().padding(.vertical, 18)
                 ConfirmationIndicatorView(current: confirmations)
             }
             .padding(.horizontal, detailsExpandedPadding)
-        }
-
-        if metadata.detailsExpanded {
-            SentDetailsExpandedView(
-                manager: manager,
-                transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations,
-                lockState: lockState,
-                isUpdatingLockState: isUpdatingLockState,
-                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
-                lockStateLoadError: lockStateLoadError,
-                retryLockState: retryLockState,
-                toggleLockState: toggleLockState
-            )
         }
     }
 }

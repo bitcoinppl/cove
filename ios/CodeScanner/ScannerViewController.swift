@@ -483,28 +483,7 @@
                 return
             }
 
-            let data: ScanResultData? = {
-                switch (readableObject.stringValue, readableObject.descriptor) {
-                case (nil, nil): return .none
-                case let (.some(stringValue), _): return .string(stringValue)
-                case let (_, .some(descriptor)):
-                    if let descriptor = descriptor as? CIQRCodeDescriptor {
-                        let decoder = BinaryDecoder()
-
-                        let payload = descriptor.errorCorrectedPayload
-                        let symbolVersion = descriptor.symbolVersion
-
-                        let data = decoder.decodeQRErrorCorrectedBytes(
-                            payload, symbolVersion: symbolVersion
-                        )!
-                        return ScanResultData.data(data)
-                    } else {
-                        return .none
-                    }
-                }
-            }()
-
-            guard let data else { return }
+            guard let data = scanResultData(from: readableObject) else { return }
 
             handler = { [weak self] image in
                 guard let self else { return }
@@ -513,34 +492,7 @@
                     corners: readableObject.corners
                 )
 
-                switch parentView.scanMode {
-                case .once:
-                    found(result)
-                    // make sure we only trigger scan once per use
-                    didFinishScanning = true
-
-                case .manual:
-                    if !didFinishScanning, isWithinManualCaptureInterval {
-                        found(result)
-                        didFinishScanning = true
-                    }
-
-                case .oncePerCode:
-                    if !codesFound.contains(data) {
-                        codesFound.insert(data)
-                        found(result)
-                    }
-
-                case .continuous:
-                    if isPastScanInterval {
-                        found(result)
-                    }
-
-                case let .continuousExcept(ignoredList):
-                    if isPastScanInterval, !ignoredList.contains(data) {
-                        found(result)
-                    }
-                }
+                handleScan(result, data: data)
             }
 
             if parentView.requiresPhotoOutput {
@@ -548,6 +500,61 @@
                 photoOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
             } else {
                 handler?(nil)
+            }
+        }
+
+        private func scanResultData(
+            from readableObject: AVMetadataMachineReadableCodeObject
+        ) -> ScanResultData? {
+            switch (readableObject.stringValue, readableObject.descriptor) {
+            case (nil, nil):
+                return nil
+            case let (.some(stringValue), _):
+                return .string(stringValue)
+            case let (_, .some(descriptor)):
+                guard let descriptor = descriptor as? CIQRCodeDescriptor else {
+                    return nil
+                }
+
+                let decoder = BinaryDecoder()
+                let data = decoder.decodeQRErrorCorrectedBytes(
+                    descriptor.errorCorrectedPayload,
+                    symbolVersion: descriptor.symbolVersion
+                )!
+
+                return .data(data)
+            }
+        }
+
+        private func handleScan(_ result: ScanResult, data: ScanResultData) {
+            switch parentView.scanMode {
+            case .once:
+                found(result)
+
+                // make sure we only trigger scan once per use
+                didFinishScanning = true
+
+            case .manual:
+                if !didFinishScanning, isWithinManualCaptureInterval {
+                    found(result)
+                    didFinishScanning = true
+                }
+
+            case .oncePerCode:
+                if !codesFound.contains(data) {
+                    codesFound.insert(data)
+                    found(result)
+                }
+
+            case .continuous:
+                if isPastScanInterval {
+                    found(result)
+                }
+
+            case let .continuousExcept(ignoredList):
+                if isPastScanInterval, !ignoredList.contains(data) {
+                    found(result)
+                }
             }
         }
     }

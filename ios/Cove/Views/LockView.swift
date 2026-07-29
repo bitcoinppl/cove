@@ -119,48 +119,20 @@ struct LockView<Content: View>: View {
     }
 
     var body: some View {
-        GeometryReader {
-            let size = $0.size
-
-            content
-                .frame(width: size.width, height: size.height)
-
-            if lockState.wrappedValue == .locked {
-                ZStack {
-                    Rectangle()
-                        .fill(.black)
-                        .ignoresSafeArea()
-
-                    switch (screen, lockType, isBiometricAvailable) {
-                    case (_, .biometric, false):
-                        LockPermissionsNeededView()
-                    case (_, .biometric, true):
-                        LockBiometricView(
-                            lockType: lockType,
-                            unlock: tryUnlockingView,
-                            showPin: { screen = .pin }
-                        )
-                    case (.biometric, .both, true):
-                        LockBiometricView(
-                            lockType: lockType,
-                            unlock: tryUnlockingView,
-                            showPin: { screen = .pin }
-                        )
-                    case (_, .pin, _):
-                        numberPadPinView
-                    case (.biometric, .both, false):
-                        numberPadPinView
-                    case (.pin, .both, _):
-                        numberPadPinView
-                    case (_, .none, _):
-                        let _ = Log.error("inalid lock type none for screen")
-                        EmptyView()
-                    }
-                }
-                .environment(\.colorScheme, .dark)
-                .transition(.offset(y: size.height + 100))
-            }
-        }
+        LockContentLayer(
+            content: content,
+            lockState: lockState,
+            screen: $screen,
+            lockType: lockType,
+            isPinCorrect: isPinCorrect,
+            showPin: showPin,
+            pinLength: pinLength,
+            backEnabled: backEnabled,
+            backAction: backAction,
+            onUnlock: onUnlock,
+            onWrongPin: onWrongPin,
+            unlockWithBiometrics: tryUnlockingView
+        )
         .onChange(of: lockState.wrappedValue) { _, state in
             if state == .locked { tryUnlockingView() }
         }
@@ -176,19 +148,6 @@ struct LockView<Content: View>: View {
         .onAppear {
             tryUnlockingView()
         }
-    }
-
-    var numberPadPinView: NumberPadPinView {
-        NumberPadPinView(
-            title: "Enter Cove PIN",
-            lockState: lockState,
-            isPinCorrect: isPinCorrect,
-            showPin: showPin,
-            pinLength: pinLength,
-            backAction: backEnabled ? backAction : nil,
-            onUnlock: onUnlock,
-            onWrongPin: onWrongPin
-        )
     }
 
     private func bioMetricUnlock() async throws -> Bool {
@@ -224,6 +183,126 @@ struct LockView<Content: View>: View {
             } else {
                 await MainActor.run { auth.isUsingBiometrics = false }
             }
+        }
+    }
+}
+
+private struct LockContentLayer<Content: View>: View {
+    let content: Content
+    @Binding var lockState: LockState
+    @Binding var screen: Screen
+    let lockType: AuthType
+    let isPinCorrect: (String) -> Bool
+    let showPin: Bool
+    let pinLength: Int
+    let backEnabled: Bool
+    let backAction: () -> Void
+    let onUnlock: (String) -> Void
+    let onWrongPin: (String) -> Void
+    let unlockWithBiometrics: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            content
+                .frame(width: geometry.size.width, height: geometry.size.height)
+
+            if lockState == .locked {
+                LockOverlay(
+                    screen: $screen,
+                    lockState: $lockState,
+                    lockType: lockType,
+                    isPinCorrect: isPinCorrect,
+                    showPin: showPin,
+                    pinLength: pinLength,
+                    backEnabled: backEnabled,
+                    backAction: backAction,
+                    onUnlock: onUnlock,
+                    onWrongPin: onWrongPin,
+                    unlockWithBiometrics: unlockWithBiometrics
+                )
+                .transition(.offset(y: geometry.size.height + 100))
+            }
+        }
+    }
+}
+
+private struct LockOverlay: View {
+    @Binding var screen: Screen
+    @Binding var lockState: LockState
+    let lockType: AuthType
+    let isPinCorrect: (String) -> Bool
+    let showPin: Bool
+    let pinLength: Int
+    let backEnabled: Bool
+    let backAction: () -> Void
+    let onUnlock: (String) -> Void
+    let onWrongPin: (String) -> Void
+    let unlockWithBiometrics: () -> Void
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.black)
+                .ignoresSafeArea()
+
+            LockMethodView(
+                screen: $screen,
+                lockState: $lockState,
+                lockType: lockType,
+                isPinCorrect: isPinCorrect,
+                showPin: showPin,
+                pinLength: pinLength,
+                backEnabled: backEnabled,
+                backAction: backAction,
+                onUnlock: onUnlock,
+                onWrongPin: onWrongPin,
+                unlockWithBiometrics: unlockWithBiometrics
+            )
+        }
+        .environment(\.colorScheme, .dark)
+    }
+}
+
+private struct LockMethodView: View {
+    @Binding var screen: Screen
+    @Binding var lockState: LockState
+    let lockType: AuthType
+    let isPinCorrect: (String) -> Bool
+    let showPin: Bool
+    let pinLength: Int
+    let backEnabled: Bool
+    let backAction: () -> Void
+    let onUnlock: (String) -> Void
+    let onWrongPin: (String) -> Void
+    let unlockWithBiometrics: () -> Void
+
+    var body: some View {
+        switch (screen, lockType, isBiometricAvailable) {
+        case (_, .biometric, false):
+            LockPermissionsNeededView()
+
+        case (_, .biometric, true), (.biometric, .both, true):
+            LockBiometricView(
+                lockType: lockType,
+                unlock: unlockWithBiometrics,
+                showPin: { screen = .pin }
+            )
+
+        case (_, .pin, _), (.biometric, .both, false), (.pin, .both, _):
+            NumberPadPinView(
+                title: "Enter Cove PIN",
+                lockState: $lockState,
+                isPinCorrect: isPinCorrect,
+                showPin: showPin,
+                pinLength: pinLength,
+                backAction: backEnabled ? backAction : nil,
+                onUnlock: onUnlock,
+                onWrongPin: onWrongPin
+            )
+
+        case (_, .none, _):
+            let _ = Log.error("invalid lock type none for screen")
+            EmptyView()
         }
     }
 }

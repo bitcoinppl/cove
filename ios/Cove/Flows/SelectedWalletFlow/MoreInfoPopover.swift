@@ -19,15 +19,48 @@ struct MoreInfoPopover: View {
         labelManager.hasLabels()
     }
 
-    var labelManager: LabelManager {
+    private var labelManager: LabelManager {
         manager.rust.labelManager()
     }
 
-    var metadata: WalletMetadata {
+    private var metadata: WalletMetadata {
         manager.walletMetadata
     }
 
-    func exportTransactions() {
+    @State private var tapSignerBackup: Data? = nil
+    @State private var tapSignerBackupError: Error? = nil
+
+    var body: some View {
+        VStack {
+            MoreInfoBasicActions(
+                hasLabels: hasLabels,
+                hasTransactions: manager.hasTransactions,
+                scanNfc: app.nfcReader.scan,
+                importLabels: importLabels,
+                exportLabels: exportLabels,
+                exportTransactions: exportTransactions,
+                exportXpub: exportXpub
+            )
+
+            if case let .tapSigner(tapSigner) = metadata.hardwareMetadata {
+                TapSignerMoreInfoActions(
+                    tapSigner: tapSigner,
+                    backup: tapSignerBackup,
+                    backupError: tapSignerBackupError
+                )
+            }
+
+            MoreInfoWalletActions(
+                hasTransactions: manager.hasTransactions,
+                manageUtxos: manageUtxos,
+                openWalletSettings: openWalletSettings
+            )
+        }
+        .tint(Color(uiColor: .label))
+        .onAppear(perform: loadTapSignerBackup)
+    }
+
+    private func exportTransactions() {
         Task {
             do {
                 let result = try await manager.rust.exportTransactionsCsv()
@@ -41,58 +74,37 @@ struct MoreInfoPopover: View {
         }
     }
 
-    @ViewBuilder
-    func ChangePinButton(_ t: TapSigner) -> some View {
-        let route = TapSignerRoute.enterPin(tapSigner: t, action: .change)
-        let action = { app.sheetState = .init(.tapSigner(route)) }
-        Button(action: action) {
-            Label("Change PIN", systemImage: "key")
-        }
-    }
+    private func loadTapSignerBackup() {
+        guard case let .tapSigner(tapSigner) = metadata.hardwareMetadata else { return }
 
-    @State private var tapSignerBackup: Data? = nil
-    @State private var tapSignerBackupError: Error? = nil
-
-    @ViewBuilder
-    func DownloadBackupButton(_ t: TapSigner) -> some View {
-        if let backup = tapSignerBackup {
-            let content = hexEncode(bytes: backup)
-            let prefix = t.identFileNamePrefix()
-            let filename = "\(prefix)_backup.txt"
-
-            Button(action: { ShareSheet.presentFromMenu(data: content, filename: filename) }) {
-                Label("Download Backup", systemImage: "square.and.arrow.down")
-            }
-        } else if let backupError = tapSignerBackupError {
-            Button(action: {
-                app.alertState = .init(.general(
-                    title: "Backup Error",
-                    message: "Failed to retrieve backup: \(backupError.localizedDescription)"
-                ))
-            }) {
-                Label("Download Backup", systemImage: "square.and.arrow.down")
-            }
-        } else {
-            Button(action: {
-                let route = TapSignerRoute.enterPin(tapSigner: t, action: .backup)
-                app.sheetState = .init(.tapSigner(route))
-            }) {
-                Label("Download Backup", systemImage: "square.and.arrow.down")
-            }
-        }
-    }
-
-    func loadTapSignerBackup(_ t: TapSigner) {
         do {
-            tapSignerBackup = try app.getTapSignerBackup(t)
+            tapSignerBackup = try app.getTapSignerBackup(tapSigner)
         } catch {
             tapSignerBackupError = error
         }
     }
 
+    private func manageUtxos() {
+        app.pushRoute(.coinControl(.list(metadata.id)))
+    }
+
+    private func openWalletSettings() {
+        app.pushRoute(.settings(.wallet(id: metadata.id, route: .main)))
+    }
+}
+
+private struct MoreInfoBasicActions: View {
+    let hasLabels: Bool
+    let hasTransactions: Bool
+    let scanNfc: () -> Void
+    let importLabels: () -> Void
+    let exportLabels: () -> Void
+    let exportTransactions: () -> Void
+    let exportXpub: () -> Void
+
     var body: some View {
         VStack {
-            Button(action: app.nfcReader.scan) {
+            Button(action: scanNfc) {
                 Label("Scan NFC", systemImage: "wave.3.right")
             }
 
@@ -106,7 +118,7 @@ struct MoreInfoPopover: View {
                 }
             }
 
-            if manager.hasTransactions {
+            if hasTransactions {
                 Button(action: exportTransactions) {
                     Label("Export Transactions", systemImage: "arrow.up.arrow.down")
                 }
@@ -115,29 +127,96 @@ struct MoreInfoPopover: View {
             Button(action: exportXpub) {
                 Label("Export Xpub", systemImage: "key.horizontal")
             }
+        }
+    }
+}
 
-            if case let .tapSigner(t) = metadata.hardwareMetadata {
-                ChangePinButton(t)
-                DownloadBackupButton(t)
+private struct TapSignerMoreInfoActions: View {
+    @Environment(AppManager.self) private var app
+
+    let tapSigner: TapSigner
+    let backup: Data?
+    let backupError: Error?
+
+    var body: some View {
+        VStack {
+            Button(action: changePin) {
+                Label("Change PIN", systemImage: "key")
             }
 
-            if manager.hasTransactions {
-                Button(action: {
-                    app.pushRoute(.coinControl(.list(metadata.id)))
-                }) {
+            TapSignerBackupButton(
+                tapSigner: tapSigner,
+                backup: backup,
+                backupError: backupError
+            )
+        }
+    }
+
+    private func changePin() {
+        let route = TapSignerRoute.enterPin(tapSigner: tapSigner, action: .change)
+        app.sheetState = .init(.tapSigner(route))
+    }
+}
+
+private struct TapSignerBackupButton: View {
+    @Environment(AppManager.self) private var app
+
+    let tapSigner: TapSigner
+    let backup: Data?
+    let backupError: Error?
+
+    var body: some View {
+        if let backup {
+            Button(action: { download(backup) }) {
+                Label("Download Backup", systemImage: "square.and.arrow.down")
+            }
+        } else if let backupError {
+            Button(action: { showError(backupError) }) {
+                Label("Download Backup", systemImage: "square.and.arrow.down")
+            }
+        } else {
+            Button(action: requestBackup) {
+                Label("Download Backup", systemImage: "square.and.arrow.down")
+            }
+        }
+    }
+
+    private func download(_ backup: Data) {
+        let content = hexEncode(bytes: backup)
+        let prefix = tapSigner.identFileNamePrefix()
+        let filename = "\(prefix)_backup.txt"
+
+        ShareSheet.presentFromMenu(data: content, filename: filename)
+    }
+
+    private func showError(_ error: Error) {
+        app.alertState = .init(.general(
+            title: "Backup Error",
+            message: "Failed to retrieve backup: \(error.localizedDescription)"
+        ))
+    }
+
+    private func requestBackup() {
+        let route = TapSignerRoute.enterPin(tapSigner: tapSigner, action: .backup)
+        app.sheetState = .init(.tapSigner(route))
+    }
+}
+
+private struct MoreInfoWalletActions: View {
+    let hasTransactions: Bool
+    let manageUtxos: () -> Void
+    let openWalletSettings: () -> Void
+
+    var body: some View {
+        VStack {
+            if hasTransactions {
+                Button(action: manageUtxos) {
                     Label("Manage UTXOs", systemImage: "circlebadge.2")
                 }
             }
 
-            // wallet settings last button
-            Button(action: { app.pushRoute(.settings(.wallet(id: metadata.id, route: .main))) }) {
+            Button(action: openWalletSettings) {
                 Label("Wallet Settings", systemImage: "gear")
-            }
-        }
-        .tint(Color(uiColor: .label))
-        .onAppear {
-            if case let .tapSigner(t) = metadata.hardwareMetadata {
-                loadTapSignerBackup(t)
             }
         }
     }

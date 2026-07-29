@@ -47,203 +47,35 @@ struct TorSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: useTor) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Use Tor")
-
-                        Text("Route network traffic through Tor for enhanced privacy")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .disabled(isUpdatingConfig)
-            }
-
-            if tor.isEnabled {
-                autoStartSuppressedSection
-                modeSection
-
-                if isExternal {
-                    externalProxySection
-                }
-
-                statusSection
-                connectionTestSection
+        TorErrorAlertHost(errorMessage: $errorMessage) {
+            TorDisableWarningAlertHost(
+                disableWarning: $disableWarning,
+                message: disableWarningMessage,
+                confirmDisable: disableTorConfirmed
+            ) {
+                TorSettingsForm(
+                    isEnabled: useTor,
+                    isUpdatingConfig: isUpdatingConfig,
+                    autoStartSuppressed: tor.autoStartSuppressed,
+                    selectedMode: selectedMode,
+                    isExternal: isExternal,
+                    externalHost: $externalHost,
+                    externalPort: $externalPort,
+                    status: tor.status,
+                    isBuiltIn: isBuiltIn,
+                    connectionTestStates: tor.connectionTestStates,
+                    connectionTestError: tor.connectionTestError,
+                    isConnectionTestRunning: isDispatchingTest || tor.isConnectionTestRunning,
+                    startBuiltInTor: enableTor,
+                    saveExternalProxy: saveExternalProxy,
+                    runConnectionTest: runConnectionTest
+                )
             }
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("Tor")
         .onChange(of: tor.config, initial: true) { _, config in
             syncExternalFields(with: config)
-        }
-        .alert("Disable Tor?", isPresented: Binding(
-            get: { disableWarning != nil },
-            set: { if !$0 { disableWarning = nil } }
-        )) {
-            Button("Disable and Switch Node", role: .destructive) {
-                disableWarning = nil
-                Task { await disableTorConfirmed() }
-            }
-
-            Button("Cancel", role: .cancel) {
-                disableWarning = nil
-            }
-        } message: {
-            Text(disableWarningMessage)
-        }
-        .alert("Unable to Update Tor", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                errorMessage = nil
-            }
-        } message: {
-            Text(errorMessage ?? "")
-        }
-    }
-
-    @ViewBuilder
-    private var autoStartSuppressedSection: some View {
-        if tor.autoStartSuppressed {
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Built-in Tor auto-start is paused after repeated failures")
-
-                    Text(
-                        "Cove stopped starting Tor automatically because it failed to launch several times in a row. Network requests stay blocked until Tor starts."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                Button("Start Built-in Tor") {
-                    Task { await enableTor() }
-                }
-                .disabled(isUpdatingConfig)
-            }
-        }
-    }
-
-    private var modeSection: some View {
-        Section("Connection Mode") {
-            Picker("Mode", selection: selectedMode) {
-                ForEach(TorSettingsMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(isUpdatingConfig)
-        }
-    }
-
-    private var externalProxySection: some View {
-        Section {
-            TextField("Host", text: $externalHost)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-            TextField("Port", text: $externalPort)
-                .keyboardType(.numberPad)
-
-            Button("Save Proxy") {
-                Task { await saveExternalProxy() }
-            }
-            .disabled(isUpdatingConfig || externalHost.isEmpty || externalPort.isEmpty)
-        } header: {
-            Text("External SOCKS5 Proxy")
-        } footer: {
-            Text("Enter the host and port of a SOCKS5 proxy managed outside Cove.")
-        }
-    }
-
-    private var statusSection: some View {
-        Section("Connection Status") {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 10, height: 10)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(statusTitle)
-
-                    if let detail = statusDetail {
-                        Text(detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            if isBuiltIn, case let .bootstrapping(percent, message) = tor.status {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Bootstrap Progress")
-                        Spacer()
-                        Text("\(percent)%")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ProgressView(value: Double(percent), total: 100)
-
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-        }
-    }
-
-    private var connectionTestSection: some View {
-        Section {
-            testStepRow(.proxyReachable)
-            testStepRow(.nodeReachableViaTor)
-
-            Button("Test Connection") {
-                Task { await runConnectionTest() }
-            }
-            .disabled(isDispatchingTest || tor.isConnectionTestRunning)
-        } header: {
-            Text("Connection Test")
-        } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(
-                    "Tests the SOCKS5 proxy and your selected node through the configured Tor route."
-                )
-
-                if let connectionTestError = tor.connectionTestError {
-                    Text("The last test could not finish: \(connectionTestError)")
-                        .foregroundStyle(Color.statusError)
-                }
-            }
-        }
-    }
-
-    private func testStepRow(_ step: TorTestStep) -> some View {
-        let state = tor.connectionTestStates[step]
-
-        return HStack(spacing: 12) {
-            Image(systemName: testStepSymbol(state))
-                .foregroundStyle(testStepColor(state))
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(testStepTitle(step))
-
-                Text(testStepDetail(state))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            if state == .running {
-                ProgressView()
-            }
         }
     }
 
@@ -365,8 +197,252 @@ struct TorSettingsView: View {
         return "Your selected nodes on \(names) use onion addresses. Cove will switch them to clearnet servers before turning Tor off."
     }
 
+    private func torErrorMessage(_ error: Error) -> String {
+        if let error = error as? TorError {
+            return error.description
+        }
+
+        return error.localizedDescription
+    }
+}
+
+private struct TorDisableWarningAlertHost<Content: View>: View {
+    @Binding var disableWarning: TorDisableWarning?
+    let message: String
+    let confirmDisable: () async -> Void
+    @ViewBuilder let content: Content
+
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { disableWarning != nil },
+            set: { if !$0 { disableWarning = nil } }
+        )
+    }
+
+    var body: some View {
+        content
+            .alert("Disable Tor?", isPresented: isPresented) {
+                Button("Disable and Switch Node", role: .destructive) {
+                    disableWarning = nil
+                    Task { await confirmDisable() }
+                }
+                Button("Cancel", role: .cancel) {
+                    disableWarning = nil
+                }
+            } message: {
+                Text(message)
+            }
+    }
+}
+
+private struct TorErrorAlertHost<Content: View>: View {
+    @Binding var errorMessage: String?
+    @ViewBuilder let content: Content
+
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )
+    }
+
+    var body: some View {
+        content
+            .alert("Unable to Update Tor", isPresented: isPresented) {
+                Button("OK", role: .cancel) {
+                    errorMessage = nil
+                }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+    }
+}
+
+private struct TorSettingsForm: View {
+    @Binding var isEnabled: Bool
+    let isUpdatingConfig: Bool
+    let autoStartSuppressed: Bool
+    @Binding var selectedMode: TorSettingsMode
+    let isExternal: Bool
+    @Binding var externalHost: String
+    @Binding var externalPort: String
+    let status: TorStatus
+    let isBuiltIn: Bool
+    let connectionTestStates: [TorTestStep: TorTestState]
+    let connectionTestError: String?
+    let isConnectionTestRunning: Bool
+    let startBuiltInTor: () async -> Void
+    let saveExternalProxy: () async -> Void
+    let runConnectionTest: () async -> Void
+
+    var body: some View {
+        Form {
+            TorEnableSection(isEnabled: $isEnabled, isUpdatingConfig: isUpdatingConfig)
+
+            if isEnabled {
+                TorAutoStartSuppressedSection(
+                    isVisible: autoStartSuppressed,
+                    isUpdatingConfig: isUpdatingConfig,
+                    startBuiltInTor: startBuiltInTor
+                )
+                TorModeSection(
+                    selectedMode: $selectedMode,
+                    isUpdatingConfig: isUpdatingConfig
+                )
+
+                if isExternal {
+                    TorExternalProxySection(
+                        host: $externalHost,
+                        port: $externalPort,
+                        isUpdatingConfig: isUpdatingConfig,
+                        save: saveExternalProxy
+                    )
+                }
+
+                TorConnectionStatusSection(
+                    status: status,
+                    isBuiltIn: isBuiltIn,
+                    isExternal: isExternal
+                )
+                TorConnectionTestSection(
+                    states: connectionTestStates,
+                    errorMessage: connectionTestError,
+                    isRunning: isConnectionTestRunning,
+                    run: runConnectionTest
+                )
+            }
+        }
+    }
+}
+
+private struct TorEnableSection: View {
+    @Binding var isEnabled: Bool
+    let isUpdatingConfig: Bool
+
+    var body: some View {
+        Section {
+            Toggle(isOn: $isEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Use Tor")
+                    Text("Route network traffic through Tor for enhanced privacy")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(isUpdatingConfig)
+        }
+    }
+}
+
+private struct TorAutoStartSuppressedSection: View {
+    let isVisible: Bool
+    let isUpdatingConfig: Bool
+    let startBuiltInTor: () async -> Void
+
+    var body: some View {
+        if isVisible {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Built-in Tor auto-start is paused after repeated failures")
+                    Text(
+                        "Cove stopped starting Tor automatically because it failed to launch several times in a row. Network requests stay blocked until Tor starts."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
+                Button("Start Built-in Tor") {
+                    Task { await startBuiltInTor() }
+                }
+                .disabled(isUpdatingConfig)
+            }
+        }
+    }
+}
+
+private struct TorModeSection: View {
+    @Binding var selectedMode: TorSettingsMode
+    let isUpdatingConfig: Bool
+
+    var body: some View {
+        Section("Connection Mode") {
+            Picker("Mode", selection: $selectedMode) {
+                ForEach(TorSettingsMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(isUpdatingConfig)
+        }
+    }
+}
+
+private struct TorExternalProxySection: View {
+    @Binding var host: String
+    @Binding var port: String
+    let isUpdatingConfig: Bool
+    let save: () async -> Void
+
+    var body: some View {
+        Section {
+            TextField("Host", text: $host)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            TextField("Port", text: $port)
+                .keyboardType(.numberPad)
+            Button("Save Proxy") {
+                Task { await save() }
+            }
+            .disabled(isUpdatingConfig || host.isEmpty || port.isEmpty)
+        } header: {
+            Text("External SOCKS5 Proxy")
+        } footer: {
+            Text("Enter the host and port of a SOCKS5 proxy managed outside Cove.")
+        }
+    }
+}
+
+private struct TorConnectionStatusSection: View {
+    let status: TorStatus
+    let isBuiltIn: Bool
+    let isExternal: Bool
+
+    var body: some View {
+        Section("Connection Status") {
+            TorConnectionStatusRow(status: status, isExternal: isExternal)
+
+            if isBuiltIn, case let .bootstrapping(percent, message) = status {
+                TorBootstrapProgress(percent: percent, message: message)
+            }
+        }
+    }
+}
+
+private struct TorConnectionStatusRow: View {
+    let status: TorStatus
+    let isExternal: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 10, height: 10)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(statusTitle)
+
+                if let statusDetail {
+                    Text(statusDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     private var statusTitle: String {
-        switch tor.status {
+        switch status {
         case .off:
             "Off"
         case let .bootstrapping(percent, _):
@@ -383,7 +459,7 @@ struct TorSettingsView: View {
     }
 
     private var statusDetail: String? {
-        switch tor.status {
+        switch status {
         case let .bootstrapping(_, message), let .failed(message):
             message
         case .stopped where isExternal:
@@ -394,7 +470,7 @@ struct TorSettingsView: View {
     }
 
     private var statusColor: Color {
-        switch tor.status {
+        switch status {
         case .off, .stopped:
             .secondary
         case .bootstrapping:
@@ -405,8 +481,84 @@ struct TorSettingsView: View {
             .statusError
         }
     }
+}
 
-    private func testStepTitle(_ step: TorTestStep) -> String {
+private struct TorBootstrapProgress: View {
+    let percent: UInt8
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Bootstrap Progress")
+                Spacer()
+                Text("\(percent)%")
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: Double(percent), total: 100)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct TorConnectionTestSection: View {
+    let states: [TorTestStep: TorTestState]
+    let errorMessage: String?
+    let isRunning: Bool
+    let run: () async -> Void
+
+    var body: some View {
+        Section {
+            TorTestStepRow(step: .proxyReachable, state: states[.proxyReachable])
+            TorTestStepRow(step: .nodeReachableViaTor, state: states[.nodeReachableViaTor])
+            Button("Test Connection") {
+                Task { await run() }
+            }
+            .disabled(isRunning)
+        } header: {
+            Text("Connection Test")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tests the SOCKS5 proxy and your selected node through the configured Tor route.")
+
+                if let errorMessage {
+                    Text("The last test could not finish: \(errorMessage)")
+                        .foregroundStyle(Color.statusError)
+                }
+            }
+        }
+    }
+}
+
+private struct TorTestStepRow: View {
+    let step: TorTestStep
+    let state: TorTestState?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .foregroundStyle(color)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if state == .running {
+                ProgressView()
+            }
+        }
+    }
+
+    private var title: String {
         switch step {
         case .proxyReachable:
             "SOCKS5 Proxy"
@@ -415,7 +567,7 @@ struct TorSettingsView: View {
         }
     }
 
-    private func testStepDetail(_ state: TorTestState?) -> String {
+    private var detail: String {
         switch state {
         case nil:
             "Not tested"
@@ -428,7 +580,7 @@ struct TorSettingsView: View {
         }
     }
 
-    private func testStepSymbol(_ state: TorTestState?) -> String {
+    private var symbol: String {
         switch state {
         case nil:
             "circle"
@@ -441,7 +593,7 @@ struct TorSettingsView: View {
         }
     }
 
-    private func testStepColor(_ state: TorTestState?) -> Color {
+    private var color: Color {
         switch state {
         case nil:
             .secondary
@@ -452,14 +604,6 @@ struct TorSettingsView: View {
         case .failed:
             .statusError
         }
-    }
-
-    private func torErrorMessage(_ error: Error) -> String {
-        if let error = error as? TorError {
-            return error.description
-        }
-
-        return error.localizedDescription
     }
 }
 

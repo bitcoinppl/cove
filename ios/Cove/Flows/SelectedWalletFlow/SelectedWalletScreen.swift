@@ -275,109 +275,6 @@ struct SelectedWalletScreen: View {
         return .white
     }
 
-    @ToolbarContentBuilder
-    var MainToolBar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
-            HStack(spacing: 5) {
-                if tor.isEnabled {
-                    Button {
-                        showTorStatus.toggle()
-                    } label: {
-                        ZStack(alignment: .bottomTrailing) {
-                            Image(systemName: "network.badge.shield.half.filled")
-                                .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
-                                .font(.callout)
-
-                            Circle()
-                                .fill(torStatusColor)
-                                .frame(width: 7, height: 7)
-                                .overlay {
-                                    Circle().stroke(.background, lineWidth: 1)
-                                }
-                        }
-                    }
-                    .accessibilityLabel("Tor status: \(torStatusTitle)")
-                    .popover(isPresented: $showTorStatus) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label(torStatusTitle, systemImage: "network.badge.shield.half.filled")
-                                .font(.headline)
-
-                            if let detail = torStatusDetail {
-                                Text(detail)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Button("Open Tor Settings") {
-                                showTorStatus = false
-                                app.pushRoute(.settings(.tor))
-                            }
-                        }
-                        .padding()
-                        .frame(maxWidth: 300, alignment: .leading)
-                        .presentationCompactAdaptation(.popover)
-                    }
-                }
-
-                Button(action: {
-                    app.sheetState = .init(.qr)
-                }) {
-                    Image(systemName: "qrcode")
-                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
-                        .font(.callout)
-                }
-
-                Menu {
-                    MoreInfoPopover(
-                        manager: manager,
-                        importLabels: {
-                            presentationState = TaggedItem(.labelsFileImport)
-                        },
-                        exportLabels: {
-                            presentationState = TaggedItem(.exportLabelsConfirmation)
-                        },
-                        exportXpub: {
-                            presentationState = TaggedItem(.exportXpubConfirmation)
-                        }
-                    )
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
-                        .font(.callout)
-                }
-                .accessibilityIdentifier("selectedWallet.more")
-                .confirmationDialog(
-                    "Export Labels",
-                    isPresented: exportLabelsConfirmationIsPresented
-                ) {
-                    Button("QR Code") {
-                        showQrExport()
-                    }
-
-                    Button("Share...") {
-                        shareLabelsFile()
-                    }
-
-                    Button("Cancel", role: .cancel) {}
-                }
-                .confirmationDialog(
-                    "Export Xpub",
-                    isPresented: exportXpubConfirmationIsPresented
-                ) {
-                    Button("QR Code") {
-                        presentXpubQrExport()
-                    }
-
-                    Button("Share...") {
-                        shareXpubFile()
-                    }
-
-                    Button("Cancel", role: .cancel) {}
-                }
-            }
-        }
-    }
-
     /// Tracks the retained connectivity state rather than alert presence, so dismissing the
     /// node-error alert cannot make the indicator claim a healthy connection
     private var walletNodeConnectionFailed: Bool {
@@ -448,58 +345,6 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    private func selectedWalletMainContent() -> some View {
-        SelectedWalletMainContent(
-            manager: manager,
-            screenHeight: screenHeight,
-            cloudBackupIsConfigured: cloudBackupManager.isConfigured,
-            updater: updater,
-            showReceiveSheet: showReceiveSheet,
-            headerBottomChanged: handleHeaderBottomChanged
-        )
-        .toolbar { MainToolBar }
-        .navigationTitleView {
-            SelectedWalletTitleContent(
-                metadata: metadata,
-                toolbarTextColor: toolbarTextColor,
-                changeName: showRenameFromTitleMenu
-            )
-        }
-        .adaptiveToolbarStyle(
-            showNavBar: shouldShowNavBar,
-            reduceTransparency: reduceTransparency
-        )
-        .presentingSheet(sheetPresentationState, context: presentationContext)
-        .fileImporter(
-            isPresented: labelsFileImportIsPresented,
-            allowedContentTypes: [.plainText, .json]
-        ) { result in
-            do {
-                let file = try result.get()
-                let fileContents = try FileReader(for: file).read()
-                try labelManager.import(jsonl: fileContents)
-
-                app.alertState = .init(
-                    .general(
-                        title: "Success!",
-                        message: "Labels have been imported successfully."
-                    )
-                )
-
-                // when labels are imported, we need to get the transactions again with the updated labels
-                Task { await manager.rust.getTransactions() }
-            } catch {
-                app.alertState = .init(
-                    .general(
-                        title: "Oops something went wrong!",
-                        message: "Unable to import labels \(error.localizedDescription)"
-                    )
-                )
-            }
-        }
-        .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
-    }
-
     func handleScrollToTransaction(proxy: ScrollViewProxy) {
         guard let targetId = manager.scrolledTransactionId else { return }
         if case .loading = manager.loadState { return }
@@ -548,88 +393,447 @@ struct SelectedWalletScreen: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                selectedWalletMainContent()
-                    .background(
-                        VStack(spacing: 0) {
-                            Color.midnightBlue
-                                .frame(height: screenHeight * 0.40 + 500)
-                            Color.coveBg
-                        }
-                        .offset(y: -500)
-                    )
-            }
-            .contentMargins(
-                .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
-            )
-            .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
-            .refreshable {
-                // nothing to do – let the indicator disappear right away
-                guard refreshableTransactions != nil else { return }
-                let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
-
-                // wait for the task to complete
-                let _ = await task.result
-                runPostRefresh = true // mark for later
-            }
-            .task(id: runPostRefresh) {
-                guard runPostRefresh else { return }
-                defer { runPostRefresh = false }
-                guard let txns = refreshableTransactions else { return }
-
-                self.manager.loadState = .scanning(txns)
-                await manager.rust.forceWalletScan()
-                let _ = try? await manager.rust.forceUpdateHeight()
-                await manager.updateWalletBalance()
-            }
-            .introspect(.scrollView, on: .iOS(.v18, .v26)) { scrollView in
-                configureRefreshControl(in: scrollView)
-            }
-            .onAppear {
-                // Reset SendFlowManager so new send flow is fresh
-                UIRefreshControl.appearance().tintColor = refreshControlTintColor
-                app.clearSendFlowManager(id: manager.id)
-                handleScrollToTransaction(proxy: proxy)
-            }
-            .onChange(of: manager.loadState, initial: true) {
-                handleScrollToTransaction(proxy: proxy)
-            }
-            .scrollIndicators(.hidden)
-            .modifier(SoftScrollEdgeModifier())
-        }
+        SelectedWalletScrollReader(
+            manager: manager,
+            safeAreaTop: safeAreaInsets.top,
+            navBarAndScrollInsets: navBarAndScrollInsets,
+            iOS26OrLater: iOS26OrLater,
+            runPostRefresh: $runPostRefresh,
+            content: SelectedWalletPresentedContent(
+                manager: manager,
+                screenHeight: screenHeight,
+                cloudBackupIsConfigured: cloudBackupManager.isConfigured,
+                shouldShowNavBar: shouldShowNavBar,
+                reduceTransparency: reduceTransparency,
+                toolbarTextColor: toolbarTextColor,
+                tor: tor,
+                showTorStatus: $showTorStatus,
+                presentationState: $presentationState,
+                sheetPresentationState: sheetPresentationState,
+                labelsFileImportIsPresented: labelsFileImportIsPresented,
+                exportLabelsConfirmationIsPresented: exportLabelsConfirmationIsPresented,
+                exportXpubConfirmationIsPresented: exportXpubConfirmationIsPresented,
+                scannedLabels: scannedLabels,
+                presentationContext: presentationContext,
+                updater: updater,
+                showReceiveSheet: showReceiveSheet,
+                headerBottomChanged: handleHeaderBottomChanged,
+                changeName: showRenameFromTitleMenu,
+                importLabelsFile: importLabelsFile,
+                scannedLabelsChanged: onChangeOfScannedLabels,
+                showLabelsQrExport: showQrExport,
+                shareLabelsFile: shareLabelsFile,
+                showXpubQrExport: presentXpubQrExport,
+                shareXpubFile: shareXpubFile,
+                torStatusTitle: torStatusTitle,
+                torStatusDetail: torStatusDetail,
+                torStatusColor: torStatusColor
+            ),
+            refresh: beginRefresh,
+            performPostRefresh: performPostRefresh,
+            configureRefreshControl: configureRefreshControl,
+            prepareScroll: prepareScroll,
+            scrollToTransaction: handleScrollToTransaction
+        )
         .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
-        .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
-            setSheetState(newValue)
-        }
-        .onAppear { setSheetState(manager.walletMetadata.discoveryState) }
-        .onAppear {
-            // make sure the wallet is marked as selected
-            if Database().globalConfig().selectedWallet() != metadata.id {
-                Log.warn(
-                    "Wallet was not selected, but when to selected wallet screen, updating database"
-                )
-                try? Database().globalConfig().selectWallet(id: metadata.id)
-            }
-        }
+        .onChange(of: manager.walletMetadata.discoveryState, discoveryStateChanged)
+        .onAppear(perform: initializePresentation)
+        .onAppear(perform: ensureWalletIsSelected)
         .onAppear(perform: manager.validateMetadata)
-        .onAppear {
-            shouldShowNavBar = false
-            app.isPastHeader = false
-        }
-        .onDisappear {
-            pendingRenameNavigationTask?.cancel()
-            pendingRenameNavigationTask = nil
-
-            app.isPastHeader = false
-            UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
-        }
+        .onAppear(perform: resetHeaderState)
+        .onDisappear(perform: cleanUp)
         .presentingAlert(
             Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
             context: presentationContext,
             defaultTitle: "Error"
         )
         .environment(manager)
+    }
+
+    private func importLabelsFile(_ result: Result<URL, Error>) {
+        do {
+            let file = try result.get()
+            let fileContents = try FileReader(for: file).read()
+            try labelManager.import(jsonl: fileContents)
+
+            app.alertState = .init(
+                .general(
+                    title: "Success!",
+                    message: "Labels have been imported successfully."
+                )
+            )
+
+            Task { await manager.rust.getTransactions() }
+        } catch {
+            app.alertState = .init(
+                .general(
+                    title: "Oops something went wrong!",
+                    message: "Unable to import labels \(error.localizedDescription)"
+                )
+            )
+        }
+    }
+
+    private func beginRefresh() async {
+        guard refreshableTransactions != nil else { return }
+
+        let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
+        _ = await task.result
+        runPostRefresh = true
+    }
+
+    private func performPostRefresh() async {
+        guard runPostRefresh else { return }
+        defer { runPostRefresh = false }
+        guard let transactions = refreshableTransactions else { return }
+
+        manager.loadState = .scanning(transactions)
+        await manager.rust.forceWalletScan()
+        _ = try? await manager.rust.forceUpdateHeight()
+        await manager.updateWalletBalance()
+    }
+
+    private func prepareScroll(_ proxy: ScrollViewProxy) {
+        UIRefreshControl.appearance().tintColor = refreshControlTintColor
+        app.clearSendFlowManager(id: manager.id)
+        handleScrollToTransaction(proxy: proxy)
+    }
+
+    private func initializePresentation() {
+        setSheetState(manager.walletMetadata.discoveryState)
+    }
+
+    private func discoveryStateChanged(_: DiscoveryState, _ newValue: DiscoveryState) {
+        setSheetState(newValue)
+    }
+
+    private func ensureWalletIsSelected() {
+        guard Database().globalConfig().selectedWallet() != metadata.id else { return }
+
+        Log.warn(
+            "Wallet was not selected, but when to selected wallet screen, updating database"
+        )
+        try? Database().globalConfig().selectWallet(id: metadata.id)
+    }
+
+    private func resetHeaderState() {
+        shouldShowNavBar = false
+        app.isPastHeader = false
+    }
+
+    private func cleanUp() {
+        pendingRenameNavigationTask?.cancel()
+        pendingRenameNavigationTask = nil
+
+        app.isPastHeader = false
+        UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
+    }
+}
+
+private struct SelectedWalletPresentedContent: View {
+    let manager: WalletManager
+    let screenHeight: CGFloat
+    let cloudBackupIsConfigured: Bool
+    let shouldShowNavBar: Bool
+    let reduceTransparency: Bool
+    let toolbarTextColor: Color
+    let tor: TorManager
+    @Binding var showTorStatus: Bool
+    @Binding var presentationState: TaggedItem<SelectedWalletPresentationState>?
+    let sheetPresentationState: Binding<TaggedItem<SelectedWalletPresentationState>?>
+    let labelsFileImportIsPresented: Binding<Bool>
+    let exportLabelsConfirmationIsPresented: Binding<Bool>
+    let exportXpubConfirmationIsPresented: Binding<Bool>
+    let scannedLabels: TaggedItem<MultiFormat>?
+    let presentationContext: SelectedWalletPresentationContext
+    let updater: (WalletManagerAction) -> Void
+    let showReceiveSheet: () -> Void
+    let headerBottomChanged: (CGFloat) -> Void
+    let changeName: () -> Void
+    let importLabelsFile: (Result<URL, Error>) -> Void
+    let scannedLabelsChanged: (
+        TaggedItem<MultiFormat>?,
+        TaggedItem<MultiFormat>?
+    ) -> Void
+    let showLabelsQrExport: () -> Void
+    let shareLabelsFile: () -> Void
+    let showXpubQrExport: () -> Void
+    let shareXpubFile: () -> Void
+    let torStatusTitle: String
+    let torStatusDetail: String?
+    let torStatusColor: Color
+
+    var body: some View {
+        SelectedWalletMainContent(
+            manager: manager,
+            screenHeight: screenHeight,
+            cloudBackupIsConfigured: cloudBackupIsConfigured,
+            updater: updater,
+            showReceiveSheet: showReceiveSheet,
+            headerBottomChanged: headerBottomChanged
+        )
+        .toolbar {
+            SelectedWalletToolbar(
+                manager: manager,
+                shouldShowNavBar: shouldShowNavBar,
+                tor: tor,
+                showTorStatus: $showTorStatus,
+                presentationState: $presentationState,
+                exportLabelsConfirmationIsPresented: exportLabelsConfirmationIsPresented,
+                exportXpubConfirmationIsPresented: exportXpubConfirmationIsPresented,
+                showLabelsQrExport: showLabelsQrExport,
+                shareLabelsFile: shareLabelsFile,
+                showXpubQrExport: showXpubQrExport,
+                shareXpubFile: shareXpubFile,
+                torStatusTitle: torStatusTitle,
+                torStatusDetail: torStatusDetail,
+                torStatusColor: torStatusColor
+            )
+        }
+        .navigationTitleView {
+            SelectedWalletTitleContent(
+                metadata: manager.walletMetadata,
+                toolbarTextColor: toolbarTextColor,
+                changeName: changeName
+            )
+        }
+        .adaptiveToolbarStyle(
+            showNavBar: shouldShowNavBar,
+            reduceTransparency: reduceTransparency
+        )
+        .presentingSheet(sheetPresentationState, context: presentationContext)
+        .fileImporter(
+            isPresented: labelsFileImportIsPresented,
+            allowedContentTypes: [.plainText, .json],
+            onCompletion: importLabelsFile
+        )
+        .onChange(of: scannedLabels, initial: false, scannedLabelsChanged)
+    }
+}
+
+private struct SelectedWalletToolbar: ToolbarContent {
+    @Environment(AppManager.self) private var app
+
+    let manager: WalletManager
+    let shouldShowNavBar: Bool
+    let tor: TorManager
+    @Binding var showTorStatus: Bool
+    @Binding var presentationState: TaggedItem<SelectedWalletPresentationState>?
+    let exportLabelsConfirmationIsPresented: Binding<Bool>
+    let exportXpubConfirmationIsPresented: Binding<Bool>
+    let showLabelsQrExport: () -> Void
+    let shareLabelsFile: () -> Void
+    let showXpubQrExport: () -> Void
+    let shareXpubFile: () -> Void
+    let torStatusTitle: String
+    let torStatusDetail: String?
+    let torStatusColor: Color
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            HStack(spacing: 5) {
+                if tor.isEnabled {
+                    Button(action: toggleTorStatus) {
+                        ZStack(alignment: .bottomTrailing) {
+                            Image(systemName: "network.badge.shield.half.filled")
+                                .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
+                                .font(.callout)
+
+                            Circle()
+                                .fill(torStatusColor)
+                                .frame(width: 7, height: 7)
+                                .overlay {
+                                    Circle().stroke(.background, lineWidth: 1)
+                                }
+                        }
+                    }
+                    .accessibilityLabel("Tor status: \(torStatusTitle)")
+                    .popover(isPresented: $showTorStatus) {
+                        TorStatusPopover(
+                            title: torStatusTitle,
+                            detail: torStatusDetail,
+                            openSettings: openTorSettings
+                        )
+                    }
+                }
+
+                Button(action: showQrCode) {
+                    Image(systemName: "qrcode")
+                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
+                        .font(.callout)
+                }
+
+                Menu {
+                    MoreInfoPopover(
+                        manager: manager,
+                        importLabels: showLabelsFileImport,
+                        exportLabels: showLabelsExportConfirmation,
+                        exportXpub: showXpubExportConfirmation
+                    )
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .adaptiveToolbarItemStyle(isPastHeader: shouldShowNavBar)
+                        .font(.callout)
+                }
+                .accessibilityIdentifier("selectedWallet.more")
+                .confirmationDialog(
+                    "Export Labels",
+                    isPresented: exportLabelsConfirmationIsPresented
+                ) {
+                    Button("QR Code", action: showLabelsQrExport)
+                    Button("Share...", action: shareLabelsFile)
+                    Button("Cancel", role: .cancel) {}
+                }
+                .confirmationDialog(
+                    "Export Xpub",
+                    isPresented: exportXpubConfirmationIsPresented
+                ) {
+                    Button("QR Code", action: showXpubQrExport)
+                    Button("Share...", action: shareXpubFile)
+                    Button("Cancel", role: .cancel) {}
+                }
+            }
+        }
+    }
+
+    private func toggleTorStatus() {
+        showTorStatus.toggle()
+    }
+
+    private func openTorSettings() {
+        showTorStatus = false
+        app.pushRoute(.settings(.tor))
+    }
+
+    private func showQrCode() {
+        app.sheetState = .init(.qr)
+    }
+
+    private func showLabelsFileImport() {
+        presentationState = TaggedItem(.labelsFileImport)
+    }
+
+    private func showLabelsExportConfirmation() {
+        presentationState = TaggedItem(.exportLabelsConfirmation)
+    }
+
+    private func showXpubExportConfirmation() {
+        presentationState = TaggedItem(.exportXpubConfirmation)
+    }
+}
+
+private struct TorStatusPopover: View {
+    let title: String
+    let detail: String?
+    let openSettings: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: "network.badge.shield.half.filled")
+                .font(.headline)
+
+            if let detail {
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button("Open Tor Settings", action: openSettings)
+        }
+        .padding()
+        .frame(maxWidth: 300, alignment: .leading)
+        .presentationCompactAdaptation(.popover)
+    }
+}
+
+private struct SelectedWalletScrollReader<Content: View>: View {
+    let manager: WalletManager
+    let safeAreaTop: CGFloat
+    let navBarAndScrollInsets: CGFloat
+    let iOS26OrLater: Bool
+    @Binding var runPostRefresh: Bool
+    let content: Content
+    let refresh: () async -> Void
+    let performPostRefresh: () async -> Void
+    let configureRefreshControl: (UIScrollView) -> Void
+    let prepareScroll: (ScrollViewProxy) -> Void
+    let scrollToTransaction: (ScrollViewProxy) -> Void
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            SelectedWalletScrollContent(
+                manager: manager,
+                safeAreaTop: safeAreaTop,
+                navBarAndScrollInsets: navBarAndScrollInsets,
+                iOS26OrLater: iOS26OrLater,
+                runPostRefresh: runPostRefresh,
+                content: content,
+                refresh: refresh,
+                performPostRefresh: performPostRefresh,
+                configureRefreshControl: configureRefreshControl,
+                prepareScroll: { prepareScroll(proxy) },
+                scrollToTransaction: { scrollToTransaction(proxy) }
+            )
+        }
+    }
+}
+
+private struct SelectedWalletScrollContent<Content: View>: View {
+    let manager: WalletManager
+    let safeAreaTop: CGFloat
+    let navBarAndScrollInsets: CGFloat
+    let iOS26OrLater: Bool
+    let runPostRefresh: Bool
+    let content: Content
+    let refresh: () async -> Void
+    let performPostRefresh: () async -> Void
+    let configureRefreshControl: (UIScrollView) -> Void
+    let prepareScroll: () -> Void
+    let scrollToTransaction: () -> Void
+
+    var body: some View {
+        ScrollView {
+            content
+                .background(
+                    SelectedWalletScrollBackground(
+                        screenHeight: UIScreen.main.bounds.height
+                    )
+                )
+        }
+        .contentMargins(
+            .top, -(safeAreaTop + navBarAndScrollInsets), for: .scrollContent
+        )
+        .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .refreshable {
+            await refresh()
+        }
+        .task(id: runPostRefresh) {
+            await performPostRefresh()
+        }
+        .introspect(
+            .scrollView,
+            on: .iOS(.v18, .v26),
+            customize: configureRefreshControl
+        )
+        .onAppear(perform: prepareScroll)
+        .onChange(of: manager.loadState, initial: true) {
+            scrollToTransaction()
+        }
+        .scrollIndicators(.hidden)
+        .modifier(SoftScrollEdgeModifier())
+    }
+}
+
+private struct SelectedWalletScrollBackground: View {
+    let screenHeight: CGFloat
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.midnightBlue
+                .frame(height: screenHeight * 0.40 + 500)
+            Color.coveBg
+        }
+        .offset(y: -500)
     }
 }
 

@@ -544,7 +544,9 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
             "expected large recovery words screen to show Save Wallet, got:\n\(recognizedText)"
         )
     }
+}
 
+private extension HotWalletCreateScreenLayoutTests {
     private func bootstrapIfNeeded() async throws {
         do {
             _ = try await bootstrap()

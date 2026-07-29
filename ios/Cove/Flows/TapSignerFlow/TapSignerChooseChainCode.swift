@@ -8,53 +8,49 @@
 import SwiftUI
 
 struct TapSignerChooseChainCode: View {
-    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) var app
     @Environment(TapSignerManager.self) var manager
 
     let tapSigner: TapSigner
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
+        TapSignerAdaptiveLayout { usesFlexibleSpacing in
+            TapSignerChooseChainCodeContent(
+                usesFlexibleSpacing: usesFlexibleSpacing,
+                cancelAction: cancel,
+                automaticSetupAction: automaticSetup,
+                advancedSetupAction: advancedSetup
             )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
-            }
         }
         .contentTransition(.opacity)
         .background(TapSignerResultBackground())
         .navigationBarHidden(true)
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
-        VStack {
-            HStack {
-                Button(action: { app.sheetState = .none }) {
-                    Text("Cancel")
-                }
-                Spacer()
-            }
-            .padding(.top, 20)
-            .padding(.horizontal, 10)
-            .foregroundStyle(.primary)
-            .fontWeight(.semibold)
+    private func cancel() {
+        app.sheetState = .none
+    }
 
-            if usesFlexibleSpacing {
-                Spacer()
-            }
+    private func automaticSetup() {
+        manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: nil))
+    }
+
+    private func advancedSetup() {
+        manager.navigate(to: .initAdvanced(tapSigner))
+    }
+}
+
+private struct TapSignerChooseChainCodeContent: View {
+    let usesFlexibleSpacing: Bool
+    let cancelAction: () -> Void
+    let automaticSetupAction: () -> Void
+    let advancedSetupAction: () -> Void
+
+    var body: some View {
+        VStack {
+            TapSignerTopActionHeader("Cancel", action: cancelAction)
+
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack {
                 Text("Setup Chain Code")
@@ -77,51 +73,53 @@ struct TapSignerChooseChainCode: View {
             .padding(.top, 20)
 
             // Automatic Setup Button
-            Button(action: {
-                manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: nil))
-            }) {
-                VStack(spacing: 4) {
-                    HStack {
-                        Text("Automatic Setup")
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+            TapSignerAutomaticSetupButton(action: automaticSetupAction)
+                .foregroundStyle(.primary)
+                .padding(.top, 50)
 
-                        Spacer()
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.gray)
-                    }
-
-                    HStack {
-                        Text("Let the app create a chain code for you")
-                            .font(.footnote)
-                            .foregroundStyle(.primary)
-
-                        Spacer()
-                    }
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-                .padding(.horizontal, 20)
-            }
-            .foregroundStyle(.primary)
-            .padding(.top, 50)
-
-            if usesFlexibleSpacing {
-                Spacer()
-            }
-
-            Button(action: {
-                manager.navigate(to: .initAdvanced(tapSigner))
-            }) {
+            Button(action: advancedSetupAction) {
                 Text("Advanced Setup")
                     .font(.footnote)
                     .fontWeight(.semibold)
                     .padding(.bottom, 30)
             }
             .contentShape(Rectangle())
+        }
+    }
+}
+
+private struct TapSignerAutomaticSetupButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                HStack {
+                    Text("Automatic Setup")
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.gray)
+                }
+
+                HStack {
+                    Text("Let the app create a chain code for you")
+                        .font(.footnote)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+            .padding(.horizontal, 20)
         }
     }
 }

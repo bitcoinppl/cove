@@ -28,6 +28,14 @@ struct AboutScreen: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
     }
 
+    private var gitBranch: String {
+        #if DEBUG
+            app.rust.gitBranch()
+        #else
+            ""
+        #endif
+    }
+
     private var presentationContext: AboutPresentationContext {
         AboutPresentationContext(
             alertState: $alertState,
@@ -38,94 +46,20 @@ struct AboutScreen: View {
 
     var body: some View {
         Form {
-            Section {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text(appVersion)
-                        .foregroundStyle(.secondary)
-                }
+            AboutVersionSection(
+                appVersion: appVersion,
+                buildNumber: buildNumber,
+                gitCommit: app.rust.gitShortHash(),
+                gitBranch: gitBranch,
+                onBuildNumberTapped: handleBuildNumberTap
+            )
 
-                HStack {
-                    Text("Build Number")
-                    Spacer()
-                    Text(buildNumber)
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    buildTapCount += 1
-                    buildTapTimer?.invalidate()
-                    buildTapTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
-                        buildTapCount = 0
-                    }
-
-                    if buildTapCount >= 5 {
-                        buildTapCount = 0
-                        buildTapTimer?.invalidate()
-                        if isBetaEnabled {
-                            alertState = .init(.confirmBetaDisable)
-                        } else {
-                            alertState = .init(.confirmBetaEnable)
-                        }
-                    }
-                }
-
-                HStack {
-                    Text("Git Commit")
-                    Spacer()
-                    Text(app.rust.gitShortHash())
-                        .foregroundStyle(.secondary)
-                }
-
-                #if DEBUG
-                    HStack {
-                        Text("Git Branch")
-                        Spacer()
-                        Text(app.rust.gitBranch())
-                            .foregroundStyle(.secondary)
-                    }
-                #endif
-            }
-
-            Section {
-                Link(destination: URL(string: "mailto:feedback@covebitcoinwallet.com")!) {
-                    HStack {
-                        Text("Feedback")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Text("feedback@covebitcoinwallet.com")
-                            .foregroundStyle(.secondary)
-                            .font(.footnote)
-                    }
-                }
-
-                if !auth.isInDecoyMode() {
-                    Button {
-                        isSendDiagnosticsPresented = true
-                    } label: {
-                        HStack {
-                            Text("Send Diagnostics")
-                                .foregroundStyle(.primary)
-                        }
-                    }
-
-                    if submittedDiagnosticsLoadState.shouldShowSubmittedDiagnostics {
-                        Button {
-                            isSubmittedDiagnosticsPresented = true
-                        } label: {
-                            HStack {
-                                Text("Submitted Diagnostics")
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(submittedDiagnosticsLoadState.submittedDiagnosticsSummary)
-                                    .foregroundStyle(.secondary)
-                                    .font(.footnote)
-                            }
-                        }
-                    }
-                }
-            }
+            AboutSupportSection(
+                isInDecoyMode: auth.isInDecoyMode(),
+                submittedDiagnosticsLoadState: submittedDiagnosticsLoadState,
+                onSendDiagnostics: presentSendDiagnostics,
+                onSubmittedDiagnostics: presentSubmittedDiagnostics
+            )
         }
         .navigationTitle("About")
         .task { refreshSubmittedDiagnostics() }
@@ -150,6 +84,28 @@ struct AboutScreen: View {
         .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
     }
 
+    private func handleBuildNumberTap() {
+        buildTapCount += 1
+        buildTapTimer?.invalidate()
+        buildTapTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
+            buildTapCount = 0
+        }
+
+        guard buildTapCount >= 5 else { return }
+
+        buildTapCount = 0
+        buildTapTimer?.invalidate()
+        alertState = .init(isBetaEnabled ? .confirmBetaDisable : .confirmBetaEnable)
+    }
+
+    private func presentSendDiagnostics() {
+        isSendDiagnosticsPresented = true
+    }
+
+    private func presentSubmittedDiagnostics() {
+        isSubmittedDiagnosticsPresented = true
+    }
+
     private func refreshSubmittedDiagnostics() {
         guard !auth.isInDecoyMode() else {
             submittedDiagnosticsLoadState = .loaded([])
@@ -166,6 +122,115 @@ struct AboutScreen: View {
             }
 
             submittedDiagnosticsLoadState = loadState
+        }
+    }
+}
+
+private struct AboutVersionSection: View {
+    let appVersion: String
+    let buildNumber: String
+    let gitCommit: String
+    let gitBranch: String
+    let onBuildNumberTapped: () -> Void
+
+    var body: some View {
+        Section {
+            AboutInfoRow(title: "Version", value: appVersion)
+
+            AboutInfoRow(title: "Build Number", value: buildNumber)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onBuildNumberTapped)
+
+            AboutInfoRow(title: "Git Commit", value: gitCommit)
+
+            #if DEBUG
+                AboutInfoRow(title: "Git Branch", value: gitBranch)
+            #endif
+        }
+    }
+}
+
+private struct AboutInfoRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct AboutSupportSection: View {
+    let isInDecoyMode: Bool
+    let submittedDiagnosticsLoadState: SubmittedDiagnosticsLoadState
+    let onSendDiagnostics: () -> Void
+    let onSubmittedDiagnostics: () -> Void
+
+    var body: some View {
+        Section {
+            FeedbackLink()
+
+            if !isInDecoyMode {
+                AboutActionButton(title: "Send Diagnostics", action: onSendDiagnostics)
+
+                if submittedDiagnosticsLoadState.shouldShowSubmittedDiagnostics {
+                    SubmittedDiagnosticsButton(
+                        summary: submittedDiagnosticsLoadState.submittedDiagnosticsSummary,
+                        action: onSubmittedDiagnostics
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct FeedbackLink: View {
+    var body: some View {
+        Link(destination: URL(string: "mailto:feedback@covebitcoinwallet.com")!) {
+            HStack {
+                Text("Feedback")
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text("feedback@covebitcoinwallet.com")
+                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+            }
+        }
+    }
+}
+
+private struct AboutActionButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+}
+
+private struct SubmittedDiagnosticsButton: View {
+    let summary: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text("Submitted Diagnostics")
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(summary)
+                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+            }
         }
     }
 }

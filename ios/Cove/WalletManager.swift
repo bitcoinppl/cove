@@ -439,48 +439,79 @@ private struct WalletManagerBootstrap {
 
     func apply(_ message: Message) {
         switch message {
+        case .walletScanStatusChanged, .ledgerStateChanged, .scanComplete:
+            applyScanLifecycleMessage(message)
+        case .availableTransactions, .updatedTransactions, .transactionUpdated,
+             .transactionDetailsUpdated:
+            applyTransactionMessage(message)
+        case .walletBalanceChanged, .unsignedTransactionsChanged, .walletMetadataChanged,
+             .walletScannerResponse, .nodeConnectionFailed, .walletError, .unknownError,
+             .sendFlowError, .hotWalletKeyMissing, .payjoinTxBroadcast:
+            applyWalletStateMessage(message)
+        case .receiveAddressUpdated, .receiveAddressPresentationUpdated,
+             .receiveAddressLoadingChanged, .receiveAddressError, .receiveAddressClosed:
+            applyReceiveAddressMessage(message)
+        }
+    }
+
+    private func applyScanLifecycleMessage(_ message: Message) {
+        switch message {
         case let .walletScanStatusChanged(status):
-            self.scanStatus = status
-            self.balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
+            scanStatus = status
+            balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
             if status.isActive {
-                switch self.loadState {
+                switch loadState {
                 case .scanning:
                     break
-                case let .loaded(txns):
-                    self.loadState = .scanning(txns)
+                case let .loaded(transactions):
+                    loadState = .scanning(transactions)
                 case .loading:
-                    self.loadState = .scanning([])
+                    loadState = .scanning([])
                 }
-            } else if case let .scanning(txns) = self.loadState {
-                if ledgerState.initialScanComplete {
-                    self.loadState = .loaded(txns)
-                }
+            } else if case let .scanning(transactions) = loadState,
+                      ledgerState.initialScanComplete
+            {
+                loadState = .loaded(transactions)
             }
             notifyInitialScanLifecycleChanged()
 
         case let .ledgerStateChanged(ledgerState):
             self.ledgerState = ledgerState
-            self.balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
+            balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
             reconcileLoadStateWithLedgerState()
             notifyInitialScanLifecycleChanged()
 
+        // a completed scan is the only reconcile message that proves the node was reached
+        case let .scanComplete(transactions):
+            errorAlert = nil
+            nodeConnectionFailed = false
+            loadState = loadStateForTransactions(transactions)
+            notifyInitialScanLifecycleChanged()
+
+        default:
+            preconditionFailure("Expected a wallet scan lifecycle reconcile message")
+        }
+    }
+
+    private func applyTransactionMessage(_ message: Message) {
+        switch message {
         // a cache replay proves nothing about the network, so it must not clear `errorAlert`
-        case let .availableTransactions(txns):
-            switch self.loadState {
+        case let .availableTransactions(transactions):
+            switch loadState {
             case .loading:
-                self.loadState = loadStateForTransactions(txns)
-            case let .scanning(current) where txns.count >= current.count:
-                self.loadState = loadStateForTransactions(txns)
+                loadState = loadStateForTransactions(transactions)
+            case let .scanning(current) where transactions.count >= current.count:
+                loadState = loadStateForTransactions(transactions)
             case .scanning:
                 break
-            case let .loaded(current) where txns.count >= current.count:
-                self.loadState = loadStateForTransactions(txns)
+            case let .loaded(current) where transactions.count >= current.count:
+                loadState = loadStateForTransactions(transactions)
             case .loaded:
                 break
             }
 
-        case let .updatedTransactions(txns):
-            self.loadState = loadStateForTransactions(txns)
+        case let .updatedTransactions(transactions):
+            loadState = loadStateForTransactions(transactions)
 
         case let .transactionUpdated(transaction):
             replaceTransactionInLoadState(transaction)
@@ -488,66 +519,76 @@ private struct WalletManagerBootstrap {
         case let .transactionDetailsUpdated(presentation):
             transactionDetailsPresentations[presentation.txId()] = presentation
 
-        // a completed scan is the only reconcile message that proves the node was reached
-        case let .scanComplete(txns):
-            errorAlert = nil
-            nodeConnectionFailed = false
-            self.loadState = loadStateForTransactions(txns)
-            notifyInitialScanLifecycleChanged()
+        default:
+            preconditionFailure("Expected a wallet transaction reconcile message")
+        }
+    }
 
+    private func applyWalletStateMessage(_ message: Message) {
+        switch message {
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
 
         case .unsignedTransactionsChanged:
             do {
-                self.unsignedTransactions = try rust.getUnsignedTransactions()
+                unsignedTransactions = try rust.getUnsignedTransactions()
             } catch {
                 logger.error(
                     "Unable to refresh unsigned transactions: \(error.localizedDescription)"
                 )
-                self.unsignedTransactions = []
+                unsignedTransactions = []
             }
 
         case let .walletMetadataChanged(metadata):
-            withAnimation { self.walletMetadata = metadata }
+            withAnimation { walletMetadata = metadata }
             setWalletMetadata(metadata)
 
         case let .walletScannerResponse(scannerResponse):
-            self.logger.debug("walletScannerResponse: \(scannerResponse)")
+            logger.debug("walletScannerResponse: \(scannerResponse)")
             if case let .foundAddresses(addressTypes) = scannerResponse {
-                self.foundAddresses = addressTypes
+                foundAddresses = addressTypes
             }
 
         case let .nodeConnectionFailed(error):
-            self.nodeConnectionFailed = true
-            self.errorAlert = TaggedItem(WalletErrorAlert.nodeConnectionFailed(error))
-            self.logger.error(error)
-            self.logger.error("set errorAlert")
+            nodeConnectionFailed = true
+            errorAlert = TaggedItem(WalletErrorAlert.nodeConnectionFailed(error))
+            logger.error(error)
+            logger.error("set errorAlert")
 
         case let .walletError(error):
-            self.logger.error("WalletError \(error)")
+            logger.error("WalletError \(error)")
 
         case let .unknownError(error):
             // TODO: show to user
-            self.logger.error("Unknown error \(error)")
+            logger.error("Unknown error \(error)")
 
         case let .sendFlowError(error):
-            self.sendFlowErrorAlert = TaggedItem(error)
+            sendFlowErrorAlert = TaggedItem(error)
 
         case let .hotWalletKeyMissing(walletId):
             delegate?.showWalletAlert(.hotWalletKeyMissing(walletId: walletId))
 
+        case .payjoinTxBroadcast:
+            payjoinTxBroadcast = UUID()
+
+        default:
+            preconditionFailure("Expected a wallet state reconcile message")
+        }
+    }
+
+    private func applyReceiveAddressMessage(_ message: Message) {
+        switch message {
         case let .receiveAddressUpdated(state):
-            self.receiveAddressState = state
+            receiveAddressState = state
 
         case let .receiveAddressPresentationUpdated(presentation):
-            self.receiveAddressPresentation = presentation
+            receiveAddressPresentation = presentation
 
         case let .receiveAddressLoadingChanged(isLoading):
-            self.receiveAddressIsLoading = isLoading
+            receiveAddressIsLoading = isLoading
 
         case let .receiveAddressError(error):
-            self.receiveAddressError = TaggedString(error)
+            receiveAddressError = TaggedString(error)
 
         case let .receiveAddressClosed(requestId):
             if receiveAddressState?.requestId == requestId {
@@ -560,8 +601,8 @@ private struct WalletManagerBootstrap {
                 receiveAddressError = nil
             }
 
-        case .payjoinTxBroadcast:
-            self.payjoinTxBroadcast = UUID()
+        default:
+            preconditionFailure("Expected a receive address reconcile message")
         }
     }
 

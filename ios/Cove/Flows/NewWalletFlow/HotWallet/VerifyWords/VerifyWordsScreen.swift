@@ -55,79 +55,24 @@ private struct VerifyWordsLoadedView: View {
     @State private var loadingError: Error?
 
     var body: some View {
-        Group {
-            if let stateMachine {
-                loadedScreen(stateMachine: stateMachine)
-                    .background(
-                        Color.midnightBlue
-                            .ignoresSafeArea(.all)
-                    )
-                    .adaptiveToolbarStyle()
-            } else if let loadingError {
-                loadingErrorView(error: loadingError)
-            } else {
-                Text("Loading....")
-            }
-        }
+        VerifyWordsLoadStateContent(
+            stateMachine: stateMachine,
+            loadingError: loadingError,
+            manager: manager,
+            onVerified: onVerified,
+            verificationComplete: $verificationComplete,
+            retry: retryLoading,
+            returnToWallet: app.trySelectLatestOrNewWallet
+        )
         .task(id: ObjectIdentifier(manager)) {
             await loadStateMachine()
         }
     }
 
-    @ViewBuilder
-    private func loadedScreen(stateMachine: WordVerifyStateMachine) -> some View {
-        if verificationComplete {
-            VerificationCompleteScreen(manager: manager, onVerified: onVerified)
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    )
-                )
-        } else {
-            VerifyWordsScreen(
-                manager: manager,
-                stateMachine: stateMachine,
-                verificationComplete: $verificationComplete
-            )
-            .transition(
-                .asymmetric(
-                    insertion: .move(edge: .trailing),
-                    removal: .move(edge: .leading)
-                )
-            )
+    private func retryLoading() {
+        Task {
+            await loadStateMachine()
         }
-    }
-
-    private func loadingErrorView(error: Error) -> some View {
-        VStack(spacing: 16) {
-            Text("Unable to load recovery word verification")
-                .font(.headline)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-
-            Text(error.localizedDescription)
-                .font(.footnote)
-                .foregroundStyle(.coveLightGray.opacity(0.75))
-                .multilineTextAlignment(.center)
-
-            VStack(spacing: 12) {
-                Button("Try Again") {
-                    Task {
-                        await loadStateMachine()
-                    }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-
-                Button("Return to Wallet") {
-                    app.trySelectLatestOrNewWallet()
-                }
-                .buttonStyle(DarkButtonStyle())
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.midnightBlue.ignoresSafeArea())
     }
 
     @MainActor
@@ -143,6 +88,82 @@ private struct VerifyWordsLoadedView: View {
             stateMachine = nil
             loadingError = error
         }
+    }
+}
+
+private struct VerifyWordsLoadStateContent: View {
+    let stateMachine: WordVerifyStateMachine?
+    let loadingError: Error?
+    let manager: WalletManager
+    let onVerified: (() -> Void)?
+    @Binding var verificationComplete: Bool
+    let retry: () -> Void
+    let returnToWallet: () -> Void
+
+    var body: some View {
+        if let stateMachine {
+            Group {
+                if verificationComplete {
+                    VerificationCompleteScreen(manager: manager, onVerified: onVerified)
+                } else {
+                    VerifyWordsScreen(
+                        manager: manager,
+                        stateMachine: stateMachine,
+                        verificationComplete: $verificationComplete
+                    )
+                }
+            }
+            .transition(
+                .asymmetric(
+                    insertion: .move(edge: .trailing),
+                    removal: .move(edge: .leading)
+                )
+            )
+            .background(
+                Color.midnightBlue
+                    .ignoresSafeArea(.all)
+            )
+            .adaptiveToolbarStyle()
+        } else if let loadingError {
+            VerifyWordsLoadingErrorView(
+                error: loadingError,
+                retry: retry,
+                returnToWallet: returnToWallet
+            )
+        } else {
+            Text("Loading....")
+        }
+    }
+}
+
+private struct VerifyWordsLoadingErrorView: View {
+    let error: Error
+    let retry: () -> Void
+    let returnToWallet: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Unable to load recovery word verification")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text(error.localizedDescription)
+                .font(.footnote)
+                .foregroundStyle(.coveLightGray.opacity(0.75))
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                Button("Try Again", action: retry)
+                    .buttonStyle(PrimaryButtonStyle())
+
+                Button("Return to Wallet", action: returnToWallet)
+                    .buttonStyle(DarkButtonStyle())
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.midnightBlue.ignoresSafeArea())
     }
 }
 
@@ -338,29 +359,26 @@ struct VerifyWordsScreen: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
-            )
-
-            Group {
-                if scrollableLayout {
-                    VStack(spacing: 0) {
-                        ScrollView {
-                            mainContent(usesFlexibleMiddleSpacer: false, includesActions: false)
-                                .padding(.bottom, 24)
-                        }
-                        .scrollIndicators(.hidden)
-
-                        compactBottomActions
-                    }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                } else {
-                    mainContent(usesFlexibleMiddleSpacer: true, includesActions: true)
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                }
-            }
+        VerifyWordsLayout(
+            sizeCategory: sizeCategory,
+            wordNumber: wordNumber,
+            currentWord: currentWord,
+            possibleWords: possibleWords,
+            columns: columns,
+            checkState: checkState,
+            checkingWordColor: checkingWordColor,
+            checkingWordBackground: checkingWordBg,
+            isDisabled: isDisabled,
+            isReturning: isReturning,
+            namespace: namespace,
+            matchedGeometryId: matchedGeoId,
+            selectWord: selectWord,
+            deselectWord: deselectCheckingWord,
+            showWords: showWordsAlert,
+            skipVerification: showSkipAlert
+        )
+        .alert(item: $activeAlert) { alertType in
+            DisplayAlert(for: alertType)
         }
         .background(
             Image(.newWalletPattern)
@@ -373,7 +391,189 @@ struct VerifyWordsScreen: View {
         .background(Color.midnightBlue)
     }
 
-    private func mainContent(usesFlexibleMiddleSpacer: Bool, includesActions: Bool) -> some View {
+    private func deselectCheckingWord() {
+        guard case .checking = checkState else { return }
+
+        deselectWord()
+    }
+
+    private func showWordsAlert() {
+        activeAlert = .words
+    }
+
+    private func showSkipAlert() {
+        activeAlert = .skip
+    }
+
+    private var isReturning: Bool {
+        if case .returning = checkState { return true }
+        return false
+    }
+}
+
+private struct VerifyWordsLayout: View {
+    let sizeCategory: ContentSizeCategory
+    let wordNumber: Int
+    let currentWord: String?
+    let possibleWords: [String]
+    let columns: [GridItem]
+    let checkState: WordCheckState
+    let checkingWordColor: Color
+    let checkingWordBackground: Color
+    let isDisabled: Bool
+    let isReturning: Bool
+    let namespace: Namespace.ID
+    let matchedGeometryId: (String) -> String
+    let selectWord: (String) -> Void
+    let deselectWord: () -> Void
+    let showWords: () -> Void
+    let skipVerification: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    VStack(spacing: 0) {
+                        ScrollView {
+                            VerifyWordsMainContent(
+                                wordNumber: wordNumber,
+                                currentWord: currentWord,
+                                possibleWords: possibleWords,
+                                columns: columns,
+                                checkState: checkState,
+                                checkingWordColor: checkingWordColor,
+                                checkingWordBackground: checkingWordBackground,
+                                isDisabled: isDisabled,
+                                isReturning: isReturning,
+                                namespace: namespace,
+                                matchedGeometryId: matchedGeometryId,
+                                selectWord: selectWord,
+                                deselectWord: deselectWord,
+                                usesFlexibleMiddleSpacer: false,
+                                includesActions: false,
+                                showWords: showWords,
+                                skipVerification: skipVerification
+                            )
+                            .padding(.bottom, 24)
+                        }
+                        .scrollIndicators(.hidden)
+
+                        VerifyWordsCompactActions(
+                            showWords: showWords,
+                            skipVerification: skipVerification
+                        )
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                } else {
+                    VerifyWordsMainContent(
+                        wordNumber: wordNumber,
+                        currentWord: currentWord,
+                        possibleWords: possibleWords,
+                        columns: columns,
+                        checkState: checkState,
+                        checkingWordColor: checkingWordColor,
+                        checkingWordBackground: checkingWordBackground,
+                        isDisabled: isDisabled,
+                        isReturning: isReturning,
+                        namespace: namespace,
+                        matchedGeometryId: matchedGeometryId,
+                        selectWord: selectWord,
+                        deselectWord: deselectWord,
+                        usesFlexibleMiddleSpacer: true,
+                        includesActions: true,
+                        showWords: showWords,
+                        skipVerification: skipVerification
+                    )
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            }
+        }
+    }
+}
+
+private struct VerifyWordsMainContent: View {
+    let wordNumber: Int
+    let currentWord: String?
+    let possibleWords: [String]
+    let columns: [GridItem]
+    let checkState: WordCheckState
+    let checkingWordColor: Color
+    let checkingWordBackground: Color
+    let isDisabled: Bool
+    let isReturning: Bool
+    let namespace: Namespace.ID
+    let matchedGeometryId: (String) -> String
+    let selectWord: (String) -> Void
+    let deselectWord: () -> Void
+    let usesFlexibleMiddleSpacer: Bool
+    let includesActions: Bool
+    let showWords: () -> Void
+    let skipVerification: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            VerifyWordsSelection(
+                wordNumber: wordNumber,
+                currentWord: currentWord,
+                possibleWords: possibleWords,
+                columns: columns,
+                checkState: checkState,
+                checkingWordColor: checkingWordColor,
+                checkingWordBackground: checkingWordBackground,
+                isDisabled: isDisabled,
+                isReturning: isReturning,
+                namespace: namespace,
+                matchedGeometryId: matchedGeometryId,
+                selectWord: selectWord,
+                deselectWord: deselectWord
+            )
+
+            if usesFlexibleMiddleSpacer {
+                Spacer()
+            }
+
+            VerifyWordsIntroduction()
+
+            if !isMiniDevice {
+                Spacer()
+            }
+
+            if includesActions {
+                Divider()
+                    .overlay(.coveLightGray.opacity(0.50))
+
+                VerifyWordsActionButtons(
+                    showWords: showWords,
+                    skipVerification: skipVerification
+                )
+                .safeAreaPadding(.bottom, 30)
+            }
+        }
+        .padding()
+    }
+}
+
+private struct VerifyWordsSelection: View {
+    let wordNumber: Int
+    let currentWord: String?
+    let possibleWords: [String]
+    let columns: [GridItem]
+    let checkState: WordCheckState
+    let checkingWordColor: Color
+    let checkingWordBackground: Color
+    let isDisabled: Bool
+    let isReturning: Bool
+    let namespace: Namespace.ID
+    let matchedGeometryId: (String) -> String
+    let selectWord: (String) -> Void
+    let deselectWord: () -> Void
+
+    var body: some View {
         VStack(spacing: 24) {
             Text("What is word #\(wordNumber)?")
                 .foregroundStyle(.white)
@@ -382,10 +582,7 @@ struct VerifyWordsScreen: View {
 
             VStack(spacing: 10) {
                 if let checkingWord = currentWord {
-                    Button(action: {
-                        guard case .checking = checkState else { return }
-                        deselectWord()
-                    }) {
+                    Button(action: deselectWord) {
                         Text(checkingWord)
                             .font(.caption)
                             .fontWeight(.medium)
@@ -396,11 +593,11 @@ struct VerifyWordsScreen: View {
                             .lineLimit(1)
                             .padding(.horizontal)
                             .padding(.vertical, 12)
-                            .background(checkingWordBg)
+                            .background(checkingWordBackground)
                             .cornerRadius(10)
                     }
                     .matchedGeometryEffect(
-                        id: matchedGeoId(for: checkingWord),
+                        id: matchedGeometryId(checkingWord),
                         in: namespace,
                         isSource: checkState != .none && !isReturning
                     )
@@ -433,7 +630,7 @@ struct VerifyWordsScreen: View {
                     .background(Color.btnPrimary)
                     .cornerRadius(10)
                     .matchedGeometryEffect(
-                        id: matchedGeoId(for: word),
+                        id: matchedGeometryId(word),
                         in: namespace,
                         isSource: checkState == .none || isReturning
                     )
@@ -441,11 +638,13 @@ struct VerifyWordsScreen: View {
                 }
             }
             .padding(.vertical)
+        }
+    }
+}
 
-            if usesFlexibleMiddleSpacer {
-                Spacer()
-            }
-
+private struct VerifyWordsIntroduction: View {
+    var body: some View {
+        VStack(spacing: 24) {
             HStack {
                 DotMenuView(selected: 3, size: 5)
                 Spacer()
@@ -472,31 +671,22 @@ struct VerifyWordsScreen: View {
                     Spacer()
                 }
             }
-
-            if !isMiniDevice { Spacer() }
-
-            if includesActions {
-                Divider()
-                    .overlay(.coveLightGray.opacity(0.50))
-
-                actionButtons
-                    .safeAreaPadding(.bottom, 30)
-            }
-        }
-        .padding()
-        .alert(item: $activeAlert) { alertType in
-            DisplayAlert(for: alertType)
         }
     }
+}
 
-    private var actionButtons: some View {
+private struct VerifyWordsActionButtons: View {
+    let showWords: () -> Void
+    let skipVerification: () -> Void
+
+    var body: some View {
         VStack(spacing: 16) {
-            Button(action: { activeAlert = .words }) {
+            Button(action: showWords) {
                 Text("Show Words")
             }
             .buttonStyle(PrimaryButtonStyle())
 
-            Button(action: { activeAlert = .skip }) {
+            Button(action: skipVerification) {
                 Text("Skip Verification")
                     .foregroundStyle(.white)
                     .font(.caption)
@@ -504,23 +694,26 @@ struct VerifyWordsScreen: View {
             }
         }
     }
+}
 
-    private var compactBottomActions: some View {
+private struct VerifyWordsCompactActions: View {
+    let showWords: () -> Void
+    let skipVerification: () -> Void
+
+    var body: some View {
         VStack(spacing: 16) {
             Divider()
                 .overlay(.coveLightGray.opacity(0.50))
 
-            actionButtons
+            VerifyWordsActionButtons(
+                showWords: showWords,
+                skipVerification: skipVerification
+            )
         }
         .padding(.horizontal)
         .padding(.top, 12)
         .padding(.bottom, 56)
         .background(Color.midnightBlue)
-    }
-
-    private var isReturning: Bool {
-        if case .returning = checkState { return true }
-        return false
     }
 }
 

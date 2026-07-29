@@ -1,6 +1,49 @@
 import SwiftUI
 
 extension WalletColor {
+    private var standardColor: Color? {
+        switch self {
+        case .red: .red
+        case .blue: .blue
+        case .green: .green
+        case .yellow: .yellow
+        case .orange: .orange
+        case .purple: .purple
+        case .pink: .pink
+        case .coolGray,
+             .wPastelTeal,
+             .wLightPastelYellow,
+             .wLightMint,
+             .wPastelBlue,
+             .wPastelNavy,
+             .wPastelRed,
+             .wPastelYellow,
+             .wAlmostGray,
+             .wAlmostWhite,
+             .wBeige,
+             .custom:
+            nil
+        }
+    }
+
+    private var walletPaletteColor: Color? {
+        switch self {
+        case .coolGray: .coolGray
+        case .wPastelTeal: .pastelTeal
+        case .wLightPastelYellow: .lightPastelYellow
+        case .wLightMint: .lightMint
+        case .wPastelBlue: .pastelBlue
+        case .wPastelNavy: .pastelNavy
+        case .wPastelRed: .pastelRed
+        case .wPastelYellow: .pastelYellow
+        case .wAlmostGray: .almostGray
+        case .wAlmostWhite: .almostWhite
+        case .wBeige: .beige
+        case .red, .blue, .green, .yellow, .orange, .purple, .pink, .custom:
+            nil
+        }
+    }
+
     func all() -> [WalletColor] {
         [
             .red,
@@ -39,45 +82,36 @@ extension WalletColor {
     }
 
     func toColor() -> Color {
+        if let standardColor {
+            return standardColor
+        }
+
+        if let walletPaletteColor {
+            return walletPaletteColor
+        }
+
         switch self {
-        case .red:
-            .red
-        case .blue:
-            .blue
-        case .green:
-            .green
-        case .yellow:
-            .yellow
-        case .orange:
-            .orange
-        case .purple:
-            .purple
-        case .pink:
-            .pink
-        case .coolGray:
-            .coolGray
-        case .wPastelTeal:
-            .pastelTeal
-        case .wLightPastelYellow:
-            .lightPastelYellow
-        case .wLightMint:
-            .lightMint
-        case .wPastelBlue:
-            .pastelBlue
-        case .wPastelNavy:
-            .pastelNavy
-        case .wPastelRed:
-            .pastelRed
-        case .wPastelYellow:
-            .pastelYellow
-        case .wAlmostGray:
-            .almostGray
-        case .wAlmostWhite:
-            .almostWhite
-        case .wBeige:
-            .beige
         case let .custom(r, g, b):
-            Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
+            return Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
+        case .red,
+             .blue,
+             .green,
+             .yellow,
+             .orange,
+             .purple,
+             .pink,
+             .coolGray,
+             .wPastelTeal,
+             .wLightPastelYellow,
+             .wLightMint,
+             .wPastelBlue,
+             .wPastelNavy,
+             .wPastelRed,
+             .wPastelYellow,
+             .wAlmostGray,
+             .wAlmostWhite,
+             .wBeige:
+            preconditionFailure("WalletColor palette cases must be resolved before custom colors")
         }
     }
 }

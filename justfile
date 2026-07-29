@@ -290,10 +290,13 @@ lint-android *flags="":
     ./gradlew ktlintCheck {{ flags }}
     ./gradlew detekt
 
-# [quick] Lint Swift code
+# [bounded] Lint Swift code and Cove-specific SwiftUI structure
 [group('lint')]
 lint-swift *flags="":
     swiftformat --lint ios --swiftversion 6 {{ flags }}
+    swiftlint lint --config .swiftlint.yml
+    swift test --package-path tools/cove-swift-lint
+    swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
 
 # [quick] Run clippy
 [group('lint')]

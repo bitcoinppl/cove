@@ -50,12 +50,12 @@ private struct DeviceRestoreContent: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
 
-                heroIcon
+                DeviceRestoreHero(restoreState: restoreState)
 
                 Spacer()
                     .frame(height: 44)
 
-                titleContent
+                DeviceRestoreTitle(restoreState: restoreState)
 
                 if isRestoring {
                     Spacer()
@@ -66,7 +66,12 @@ private struct DeviceRestoreContent: View {
 
                 Spacer(minLength: 28)
 
-                bottomContent
+                DeviceRestoreBottomContent(
+                    restoreState: restoreState,
+                    onDone: onDone,
+                    onRetry: onRetry,
+                    onContinueWithoutBackup: onContinueWithoutBackup
+                )
             }
             .padding(.horizontal, 28)
             .padding(.top, 18)
@@ -86,15 +91,26 @@ private struct DeviceRestoreContent: View {
             false
         }
     }
+}
 
-    @ViewBuilder
-    private var heroIcon: some View {
+private struct DeviceRestoreHero: View {
+    let restoreState: OnboardingRestoreState
+
+    var body: some View {
         switch restoreState {
         case .idle:
-            restoringHeroIcon(pulse: false)
+            OnboardingStatusHero(
+                systemImage: "icloud.and.arrow.down",
+                pulse: false,
+                iconSize: 22
+            )
 
         case .restoring:
-            restoringHeroIcon(pulse: true)
+            OnboardingStatusHero(
+                systemImage: "icloud.and.arrow.down",
+                pulse: true,
+                iconSize: 22
+            )
 
         case .complete:
             OnboardingStatusHero(
@@ -120,105 +136,153 @@ private struct DeviceRestoreContent: View {
             }
         }
     }
+}
 
-    private func restoringHeroIcon(pulse: Bool) -> some View {
-        OnboardingStatusHero(systemImage: "icloud.and.arrow.down", pulse: pulse, iconSize: 22)
-    }
+private struct DeviceRestoreTitle: View {
+    let restoreState: OnboardingRestoreState
 
-    @ViewBuilder
-    private var titleContent: some View {
+    var body: some View {
         switch restoreState {
         case .idle, .restoring:
-            VStack(spacing: 10) {
-                Text("Restoring from iCloud...")
-                    .font(OnboardingRecoveryTypography.compactTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                Text("This might take a few minutes")
-                    .font(OnboardingRecoveryTypography.body)
-                    .foregroundStyle(.coveLightGray.opacity(0.7))
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, 12)
+            DeviceRestoreProgressTitle()
 
         case let .complete(report):
-            let failedCount = Int(report.walletsFailed)
-            VStack(spacing: 10) {
-                Text(failedCount == 0 ? "You’re all set" : "Some wallets were restored")
-                    .font(OnboardingRecoveryTypography.compactTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
+            DeviceRestoreCompleteTitle(failedCount: Int(report.walletsFailed))
 
-                Text(
-                    failedCount == 0
-                        ? "Your wallets have been restored."
-                        : "^[\(failedCount) wallet](inflect: true) could not be restored. You can retry from backup settings."
-                )
+        case .failed:
+            DeviceRestoreFailedTitle()
+        }
+    }
+}
+
+private struct DeviceRestoreProgressTitle: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("Restoring from iCloud...")
+                .font(OnboardingRecoveryTypography.compactTitle)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text("This might take a few minutes")
                 .font(OnboardingRecoveryTypography.body)
                 .foregroundStyle(.coveLightGray.opacity(0.7))
                 .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, 12)
-
-        case .failed:
-            VStack(spacing: 12) {
-                Text("Restore Failed")
-                    .font(OnboardingRecoveryTypography.heroTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-
-                Text("Something went wrong while restoring your wallets")
-                    .font(OnboardingRecoveryTypography.body)
-                    .foregroundStyle(.coveLightGray.opacity(0.76))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 8)
         }
+        .padding(.horizontal, 12)
     }
+}
 
-    @ViewBuilder
-    private var bottomContent: some View {
+private struct DeviceRestoreCompleteTitle: View {
+    let failedCount: Int
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(failedCount == 0 ? "You’re all set" : "Some wallets were restored")
+                .font(OnboardingRecoveryTypography.compactTitle)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text(
+                failedCount == 0
+                    ? "Your wallets have been restored."
+                    : "^[\(failedCount) wallet](inflect: true) could not be restored. You can retry from backup settings."
+            )
+            .font(OnboardingRecoveryTypography.body)
+            .foregroundStyle(.coveLightGray.opacity(0.7))
+            .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 12)
+    }
+}
+
+private struct DeviceRestoreFailedTitle: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Restore Failed")
+                .font(OnboardingRecoveryTypography.heroTitle)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text("Something went wrong while restoring your wallets")
+                .font(OnboardingRecoveryTypography.body)
+                .foregroundStyle(.coveLightGray.opacity(0.76))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 8)
+    }
+}
+
+private struct DeviceRestoreBottomContent: View {
+    let restoreState: OnboardingRestoreState
+    let onDone: () -> Void
+    let onRetry: () -> Void
+    let onContinueWithoutBackup: () -> Void
+
+    var body: some View {
         switch restoreState {
         case .idle, .restoring:
             EmptyView()
 
         case let .complete(report):
-            VStack(spacing: 16) {
-                if report.walletsFailed > 0 {
-                    warningCard(message: "\(report.walletsFailed) wallet(s) could not be restored")
-                }
-                if !report.labelsFailedWalletNames.isEmpty {
-                    warningCard(
-                        message: "\(report.labelsFailedWalletNames.count) restored wallet(s) had labels that could not be imported"
-                    )
-                }
-
-                Button(action: onDone) {
-                    Text("Done")
-                }
-                .buttonStyle(OnboardingPrimaryButtonStyle())
-            }
+            DeviceRestoreCompleteActions(report: report, onDone: onDone)
 
         case let .failed(message):
-            VStack(spacing: 18) {
-                warningCard(message: message)
-
-                Button(action: onRetry) {
-                    Text("Retry")
-                }
-                .buttonStyle(OnboardingPrimaryButtonStyle())
-
-                Button(action: onContinueWithoutBackup) {
-                    Text("Continue without backup")
-                }
-                .buttonStyle(OnboardingSecondaryButtonStyle())
-            }
+            DeviceRestoreFailedActions(
+                message: message,
+                onRetry: onRetry,
+                onContinueWithoutBackup: onContinueWithoutBackup
+            )
         }
     }
+}
 
-    private func warningCard(message: String) -> some View {
+private struct DeviceRestoreCompleteActions: View {
+    let report: CloudBackupRestoreReport
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if report.walletsFailed > 0 {
+                DeviceRestoreWarningCard(
+                    message: "\(report.walletsFailed) wallet(s) could not be restored"
+                )
+            }
+
+            if !report.labelsFailedWalletNames.isEmpty {
+                DeviceRestoreWarningCard(
+                    message: "\(report.labelsFailedWalletNames.count) restored wallet(s) had labels that could not be imported"
+                )
+            }
+
+            Button("Done", action: onDone)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+        }
+    }
+}
+
+private struct DeviceRestoreFailedActions: View {
+    let message: String
+    let onRetry: () -> Void
+    let onContinueWithoutBackup: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            DeviceRestoreWarningCard(message: message)
+
+            Button("Retry", action: onRetry)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+
+            Button("Continue without backup", action: onContinueWithoutBackup)
+                .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
+private struct DeviceRestoreWarningCard: View {
+    let message: String
+
+    var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 14, weight: .semibold))

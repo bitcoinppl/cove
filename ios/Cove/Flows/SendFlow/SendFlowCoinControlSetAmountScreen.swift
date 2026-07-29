@@ -95,158 +95,29 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: HEADER
-
-            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
-
-            // MARK: CONTENT
-
-            ZStack {
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Set amount, header and text
-                        SendFlowAmountInfoSection()
-
-                        // Amount input
-                        SendFlowCoinControlAmountSection(
-                            totalSending: totalSending,
-                            sendAmountFiat: sendFlowManager.sendAmountFiat,
-                            unit: manager.unit,
-                            offset: offset,
-                            canEditCustomAmount: sendFlowManager.feeSelection != nil,
-                            showCustomAmount: showCustomAmount,
-                            updateUnit: { manager.dispatch(action: .updateUnit($0)) }
-                        )
-
-                        // Address Section
-                        VStack {
-                            Divider()
-                            EnterAddressView(address: sendFlowManager.enteringAddress)
-                            Divider()
-                        }
-
-                        // Account Section
-                        SendFlowAccountSection(manager: manager, showsTitle: true)
-
-                        if sendFlowManager.feeSelection != nil,
-                           sendFlowManager.address != nil
-                        {
-                            // Network Fee Section
-                            SendFlowNetworkFeeSection(
-                                selectedFeeRate: selectedFeeRate,
-                                totalFeeString: totalFeeString,
-                                showFeeSelection: showFeeSelection
-                            )
-
-                            // Total Spending Section
-                            SendFlowCoinControlTotalSpendingSection(
-                                utxoCount: utxos.count,
-                                totalSpentBtc: totalSpentBtc,
-                                totalSpentInFiat: totalSpentInFiat,
-                                showCustomAmount: showCustomAmount
-                            )
-
-                            // Next Button
-                            SendFlowNextButton(action: next)
-                        }
-                    }
-
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            SendFlowCoinControlToolbar(
-                                focusField: presenter.focusField,
-                                addressIsEmpty: sendFlowManager.enteringAddress.wrappedValue.isEmpty,
-                                addressIsValid: validateAddress(),
-                                amountIsValid: validateAmount(),
-                                pasteAddress: pasteAddress,
-                                focusAmount: { presenter.focusField = .amount },
-                                showQrScanner: { presenter.sheetState = TaggedItem(.qr) },
-                                clearAddress: clearAddress,
-                                dismissIfValid: dismissIfValid
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .frame(maxWidth: .infinity)
-                .background(colorScheme == .light ? .white : .black)
-                .scrollIndicators(.hidden)
-
-                if isLoading {
-                    ZStack {
-                        Rectangle()
-                            .fill(.black)
-                            .opacity(loadingOpacity)
-                            .ignoresSafeArea()
-
-                        ProgressView()
-                            .tint(.primary)
-                            .opacity(loadingOpacity)
-                    }
-                }
-            }
-        }
+        SendFlowCoinControlContent(
+            utxos: utxos,
+            isLoading: isLoading,
+            loadingOpacity: loadingOpacity,
+            next: next,
+            dismissIfValid: dismissIfValid,
+            showCustomAmount: showCustomAmount,
+            showFeeSelection: showFeeSelection
+        )
         .padding(.top, 0)
         .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-        .onChange(of: metadata.selectedUnit, initial: false) { oldUnit, newUnit in
-            sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
+        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+        .onChange(of: app.prices, initial: true, pricesChanged)
+        .task { await prepareScreen() }
+        .onAppear(perform: screenAppeared)
+        .sheet(item: presenter.sheetStateBinding) { state in
+            SendFlowCoinControlSheetContent(
+                state: state.item,
+                scannedCode: $scannedCode,
+                selectedPresentationDetent: $selectedPresentationDetent
+            )
         }
-        .onChange(of: app.prices, initial: true) { _, newPrices in
-            guard let prices = newPrices else { return }
-            sendFlowManager.dispatch(.notifyPricesChanged(prices))
-        }
-        .task {
-            let isAlreadyValid = validate()
-            if !isAlreadyValid || utxos == sendFlowManager.rust.utxos() {
-                Task {
-                    await MainActor.run {
-                        withAnimation(
-                            .easeInOut(duration: 1.5).delay(0.4),
-                            completionCriteria: .removed
-                        ) {
-                            loadingOpacity = 0
-                        } completion: {
-                            isLoading = false
-                            if validate() { presenter.focusField = .none }
-                        }
-                    }
-                }
-            } else {
-                presenter.focusField = .none
-            }
-
-            // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            if !isAlreadyValid || utxos == sendFlowManager.rust.utxos() {
-                try? await Task.sleep(for: .milliseconds(700))
-            }
-
-            await MainActor.run {
-                if !isAlreadyValid { presenter.focusField = .address }
-                if validate() { presenter.focusField = .none }
-                if sendFlowManager.address != nil {
-                    let _ = self.validateAddress(displayAlert: true)
-                }
-            }
-        }
-        .onAppear {
-            sendFlowManager.dispatch(.setCoinControlMode(utxos))
-            if validate(), utxos == sendFlowManager.rust.utxos() {
-                isLoading = false
-                loadingOpacity = 0
-                presenter.focusField = .none
-            } else {
-                presenter.focusField = .address
-            }
-
-            if metadata.walletType == .watchOnly {
-                app.alertState = .init(.cantSendOnWatchOnlyWallet)
-                app.popRoute()
-                return
-            }
-        }
-        .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .sheet(isPresented: $customAmountSheetIsPresented) {
             SendFlowUtxoCustomAmountSheetView(utxos: utxos)
         }
@@ -278,6 +149,64 @@ struct SendFlowCoinControlSetAmountScreen: View {
     private func selectedUnitChanged(oldUnit: Unit, newUnit: Unit) {
         Log.debug("selectedUnitChanged \(oldUnit) -> \(newUnit)")
         sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
+    }
+
+    private func pricesChanged(_: PriceResponse?, _ newPrices: PriceResponse?) {
+        guard let newPrices else { return }
+
+        sendFlowManager.dispatch(.notifyPricesChanged(newPrices))
+    }
+
+    private func prepareScreen() async {
+        let isAlreadyValid = validate()
+        let shouldShowLoading = !isAlreadyValid || utxos == sendFlowManager.rust.utxos()
+
+        if shouldShowLoading {
+            Task {
+                await MainActor.run {
+                    withAnimation(
+                        .easeInOut(duration: 1.5).delay(0.4),
+                        completionCriteria: .removed
+                    ) {
+                        loadingOpacity = 0
+                    } completion: {
+                        isLoading = false
+                        if validate() { presenter.focusField = .none }
+                    }
+                }
+            }
+        } else {
+            presenter.focusField = .none
+        }
+
+        // HACK: Bug in SwiftUI where keyboard toolbar is broken
+        if shouldShowLoading {
+            try? await Task.sleep(for: .milliseconds(700))
+        }
+
+        await MainActor.run {
+            if !isAlreadyValid { presenter.focusField = .address }
+            if validate() { presenter.focusField = .none }
+            if sendFlowManager.address != nil {
+                _ = validateAddress(displayAlert: true)
+            }
+        }
+    }
+
+    private func screenAppeared() {
+        sendFlowManager.dispatch(.setCoinControlMode(utxos))
+        if validate(), utxos == sendFlowManager.rust.utxos() {
+            isLoading = false
+            loadingOpacity = 0
+            presenter.focusField = .none
+        } else {
+            presenter.focusField = .address
+        }
+
+        if metadata.walletType == .watchOnly {
+            app.alertState = .init(.cantSendOnWatchOnlyWallet)
+            app.popRoute()
+        }
     }
 
     /// presenter focus field changed
@@ -319,37 +248,204 @@ struct SendFlowCoinControlSetAmountScreen: View {
             action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item)
         )
     }
+}
 
-    @ViewBuilder
-    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
-        switch state.item {
+private struct SendFlowCoinControlContent: View {
+    @Environment(SendFlowManager.self) private var sendFlowManager
+    @Environment(WalletManager.self) private var manager
+    @Environment(\.colorScheme) private var colorScheme
+
+    let utxos: [Utxo]
+    let isLoading: Bool
+    let loadingOpacity: CGFloat
+    let next: () -> Void
+    let dismissIfValid: () -> Void
+    let showCustomAmount: () -> Void
+    let showFeeSelection: () -> Void
+
+    private var presenter: SendFlowPresenter {
+        sendFlowManager.presenter
+    }
+
+    private var offset: CGFloat {
+        let metadata = manager.walletMetadata
+        if metadata.fiatOrBtc == .fiat { return 0 }
+
+        return metadata.selectedUnit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
+
+            ZStack {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        SendFlowAmountInfoSection()
+
+                        SendFlowCoinControlAmountSection(
+                            totalSending: sendFlowManager.sendAmountBtc,
+                            sendAmountFiat: sendFlowManager.sendAmountFiat,
+                            unit: manager.unit,
+                            offset: offset,
+                            canEditCustomAmount: sendFlowManager.feeSelection != nil,
+                            showCustomAmount: showCustomAmount,
+                            updateUnit: updateUnit
+                        )
+
+                        SendFlowCoinControlAddressSection(
+                            address: sendFlowManager.enteringAddress
+                        )
+                        SendFlowAccountSection(manager: manager, showsTitle: true)
+
+                        if sendFlowManager.feeSelection != nil,
+                           sendFlowManager.address != nil
+                        {
+                            SendFlowNetworkFeeSection(
+                                selectedFeeRate: sendFlowManager.selectedFeeRate,
+                                totalFeeString: sendFlowManager.totalFeeString,
+                                showFeeSelection: showFeeSelection
+                            )
+
+                            SendFlowCoinControlTotalSpendingSection(
+                                utxoCount: utxos.count,
+                                totalSpentBtc: sendFlowManager.totalSpentInBtc,
+                                totalSpentInFiat: sendFlowManager.totalSpentInFiat,
+                                showCustomAmount: showCustomAmount
+                            )
+
+                            SendFlowNextButton(action: next)
+                        }
+                    }
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            SendFlowCoinControlToolbar(
+                                focusField: presenter.focusField,
+                                addressIsEmpty: sendFlowManager.enteringAddress.wrappedValue.isEmpty,
+                                addressIsValid: sendFlowManager.validateAddress(),
+                                amountIsValid: sendFlowManager.validateAmount(),
+                                pasteAddress: pasteAddress,
+                                focusAmount: focusAmount,
+                                showQrScanner: showQrScanner,
+                                clearAddress: clearAddress,
+                                dismissIfValid: dismissIfValid
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .frame(maxWidth: .infinity)
+                .background(colorScheme == .light ? .white : .black)
+                .scrollIndicators(.hidden)
+
+                if isLoading {
+                    SendFlowCoinControlLoadingOverlay(opacity: loadingOpacity)
+                }
+            }
+        }
+    }
+
+    private func updateUnit(_ unit: Unit) {
+        manager.dispatch(action: .updateUnit(unit))
+    }
+
+    private func pasteAddress() {
+        let address = UIPasteboard.general.string ?? ""
+        sendFlowManager.dispatch(action: .changeEnteringAddress(address))
+    }
+
+    private func focusAmount() {
+        presenter.focusField = .amount
+    }
+
+    private func showQrScanner() {
+        presenter.sheetState = TaggedItem(.qr)
+    }
+
+    private func clearAddress() {
+        sendFlowManager.dispatch(action: .clearAddress)
+    }
+}
+
+private struct SendFlowCoinControlAddressSection: View {
+    let address: Binding<String>
+
+    var body: some View {
+        VStack {
+            Divider()
+            EnterAddressView(address: address)
+            Divider()
+        }
+    }
+}
+
+private struct SendFlowCoinControlLoadingOverlay: View {
+    let opacity: CGFloat
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.black)
+                .opacity(opacity)
+                .ignoresSafeArea()
+
+            ProgressView()
+                .tint(.primary)
+                .opacity(opacity)
+        }
+    }
+}
+
+private struct SendFlowCoinControlSheetContent: View {
+    @Environment(AppManager.self) private var app
+    @Environment(WalletManager.self) private var manager
+    @Environment(SendFlowManager.self) private var sendFlowManager
+
+    let state: SheetState
+    @Binding var scannedCode: TaggedString?
+    @Binding var selectedPresentationDetent: PresentationDetent
+
+    var body: some View {
+        switch state {
         case .qr:
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
                 .presentationDetents([.large])
         case .fee:
-            if let localFeeSelection = sendFlowManager.feeSelection {
-                SendFlowSelectFeeRateView(
+            if let feeSelection = sendFlowManager.feeSelection {
+                SendFlowCoinControlFeeSelectionSheet(
                     manager: manager,
-                    feeOptions: Binding(
-                        get: { sendFlowManager.feeSelection?.options ?? localFeeSelection.options },
-                        set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
-                    ),
-                    selectedOption: Binding(
-                        get: {
-                            sendFlowManager.feeSelection?.selected ?? localFeeSelection.selected
-                        },
-                        set: { newValue in
-                            sendFlowManager.dispatch(action: .selectFeeRate(newValue))
-                        }
-                    ),
+                    sendFlowManager: sendFlowManager,
+                    feeSelection: feeSelection,
                     selectedPresentationDetent: $selectedPresentationDetent
-                )
-                .presentationDetents(
-                    [.height(440), .height(550), .large],
-                    selection: $selectedPresentationDetent
                 )
             }
         }
+    }
+}
+
+private struct SendFlowCoinControlFeeSelectionSheet: View {
+    let manager: WalletManager
+    let sendFlowManager: SendFlowManager
+    let feeSelection: FeeSelection
+    @Binding var selectedPresentationDetent: PresentationDetent
+
+    var body: some View {
+        SendFlowSelectFeeRateView(
+            manager: manager,
+            feeOptions: Binding(
+                get: { sendFlowManager.feeSelection?.options ?? feeSelection.options },
+                set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
+            ),
+            selectedOption: Binding(
+                get: { sendFlowManager.feeSelection?.selected ?? feeSelection.selected },
+                set: { sendFlowManager.dispatch(action: .selectFeeRate($0)) }
+            ),
+            selectedPresentationDetent: $selectedPresentationDetent
+        )
+        .presentationDetents(
+            [.height(440), .height(550), .large],
+            selection: $selectedPresentationDetent
+        )
     }
 }
 

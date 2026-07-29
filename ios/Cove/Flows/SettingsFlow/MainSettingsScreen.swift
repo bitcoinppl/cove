@@ -219,43 +219,24 @@ struct MainSettingsScreen: View {
     }
 
     var body: some View {
-        Form {
-            MainSettingsGeneralSection()
-            WalletSettingsSection()
-            MainSettingsSecuritySection(
-                canUseBiometrics: canUseBiometrics(),
-                toggleBiometric: toggleBiometric,
-                togglePin: togglePin,
-                toggleWipeMePin: toggleWipeMePin,
-                toggleDecoyPin: toggleDecoyPin
-            ) {
-                sheetState = .init(.changePin)
-            }
-            MainSettingsBackupSection(
-                isVisible: shouldShowBackupSection,
-                exportAll: exportAllBackups,
-                importAll: { sheetState = .init(.backupImport) },
-                verifyBackup: { sheetState = .init(.backupVerify) }
-            )
-            MainSettingsCloudBackupSection(
-                isVisible: !auth.isInDecoyMode(),
-                onEnable: {
-                    sheetState = .init(.cloudBackupOnboarding)
-                },
-                onOpenDetail: {
-                    app.pushRoute(Route.settings(.cloudBackup))
-                }
-            )
-            MainSettingsBetaToggleSection(
-                isVisible: shouldShowBetaToggleSection,
-                betaToggle: betaToggle,
-                betaImportExportToggle: betaImportExportToggle
-            )
-
-            Section {
-                SettingsRow(title: "About", route: .about, symbol: "info.circle")
-            }
-        }
+        MainSettingsForm(
+            canUseBiometrics: canUseBiometrics(),
+            toggleBiometric: toggleBiometric,
+            togglePin: togglePin,
+            toggleWipeMePin: toggleWipeMePin,
+            toggleDecoyPin: toggleDecoyPin,
+            shouldShowBackupSection: shouldShowBackupSection,
+            shouldShowCloudBackupSection: !auth.isInDecoyMode(),
+            shouldShowBetaToggleSection: shouldShowBetaToggleSection,
+            betaToggle: betaToggle,
+            betaImportExportToggle: betaImportExportToggle,
+            changePin: { sheetState = .init(.changePin) },
+            exportAllBackups: exportAllBackups,
+            importAllBackups: { sheetState = .init(.backupImport) },
+            verifyBackup: { sheetState = .init(.backupVerify) },
+            enableCloudBackup: { sheetState = .init(.cloudBackupOnboarding) },
+            openCloudBackupDetail: { app.pushRoute(Route.settings(.cloudBackup)) }
+        )
         .scrollContentBackground(.hidden)
         .onAppear {
             isBetaEnabled = Database().globalFlag().getBoolConfig(key: .betaFeaturesEnabled)
@@ -307,6 +288,65 @@ struct MainSettingsScreen: View {
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
             alertState = .init(.extraSetPinError(error.description))
+        }
+    }
+}
+
+private struct MainSettingsForm: View {
+    let canUseBiometrics: Bool
+    @Binding var toggleBiometric: Bool
+    @Binding var togglePin: Bool
+    @Binding var toggleWipeMePin: Bool
+    @Binding var toggleDecoyPin: Bool
+    let shouldShowBackupSection: Bool
+    let shouldShowCloudBackupSection: Bool
+    let shouldShowBetaToggleSection: Bool
+    @Binding var betaToggle: Bool
+    @Binding var betaImportExportToggle: Bool
+    let changePin: () -> Void
+    let exportAllBackups: () -> Void
+    let importAllBackups: () -> Void
+    let verifyBackup: () -> Void
+    let enableCloudBackup: () -> Void
+    let openCloudBackupDetail: () -> Void
+
+    var body: some View {
+        Form {
+            MainSettingsGeneralSection()
+            WalletSettingsSection()
+            MainSettingsSecuritySection(
+                canUseBiometrics: canUseBiometrics,
+                toggleBiometric: $toggleBiometric,
+                togglePin: $togglePin,
+                toggleWipeMePin: $toggleWipeMePin,
+                toggleDecoyPin: $toggleDecoyPin,
+                onChangePin: changePin
+            )
+            MainSettingsBackupSection(
+                isVisible: shouldShowBackupSection,
+                exportAll: exportAllBackups,
+                importAll: importAllBackups,
+                verifyBackup: verifyBackup
+            )
+            MainSettingsCloudBackupSection(
+                isVisible: shouldShowCloudBackupSection,
+                onEnable: enableCloudBackup,
+                onOpenDetail: openCloudBackupDetail
+            )
+            MainSettingsBetaToggleSection(
+                isVisible: shouldShowBetaToggleSection,
+                betaToggle: $betaToggle,
+                betaImportExportToggle: $betaImportExportToggle
+            )
+            MainSettingsAboutSection()
+        }
+    }
+}
+
+private struct MainSettingsAboutSection: View {
+    var body: some View {
+        Section {
+            SettingsRow(title: "About", route: .about, symbol: "info.circle")
         }
     }
 }

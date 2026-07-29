@@ -59,48 +59,22 @@ struct SendDiagnosticsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                switch loadState {
-                case .loading:
-                    ProgressView("Building diagnostics...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                case let .failed(message):
-                    VStack(spacing: 16) {
-                        Text("Diagnostics Unavailable")
-                            .font(.headline)
-
-                        Text(message)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        Button("Retry") {
-                            Task { await rebuildReport(clearStoredLogs: false) }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                case .ready:
-                    readyContent
-                }
-            }
-            .navigationTitle("Send Diagnostics")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        guard !isSubmitting else { return }
-
-                        dismiss()
-                    }
-                    .disabled(isSubmitting)
-                }
-            }
-        }
+        SendDiagnosticsNavigationContent(
+            loadState: loadState,
+            description: $description,
+            previewChunks: previewChunks,
+            reportSize: reportSize,
+            reportId: reportId,
+            submissionWarning: submissionWarning,
+            isReady: isReady,
+            isSubmitting: isSubmitting,
+            canSubmit: report != nil && reportId == nil,
+            retry: retryBuildReport,
+            share: shareDiagnostics,
+            clear: { alertState = .confirmClear },
+            submit: submitReport,
+            done: { dismiss() }
+        )
         .task {
             if report == nil {
                 await rebuildReport(clearStoredLogs: false)
@@ -113,131 +87,34 @@ struct SendDiagnosticsSheet: View {
             previewRefreshTask?.cancel()
         }
         .alert(item: $alertState) { alert in
-            switch alert {
-            case .confirmClear:
-                Alert(
-                    title: Text("Clear Stored Logs?"),
-                    message: Text("This deletes stored diagnostics logs on this device and rebuilds the preview."),
-                    primaryButton: .destructive(Text("Clear")) {
-                        Task { await rebuildReport(clearStoredLogs: true) }
-                    },
-                    secondaryButton: .cancel()
-                )
-
-            case let .error(message):
-                Alert(
-                    title: Text("Something went wrong"),
-                    message: Text(message),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
+            diagnosticsAlert(alert)
         }
         .interactiveDismissDisabled(isSubmitting)
     }
 
-    private var readyContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Description")
-                    .font(.headline)
+    private func retryBuildReport() {
+        Task { await rebuildReport(clearStoredLogs: false) }
+    }
 
-                TextEditor(text: $description)
-                    .frame(minHeight: 84, maxHeight: 120)
-                    .padding(8)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
+    private func diagnosticsAlert(_ alert: SendDiagnosticsAlert) -> Alert {
+        switch alert {
+        case .confirmClear:
+            Alert(
+                title: Text("Clear Stored Logs?"),
+                message: Text("This deletes stored diagnostics logs on this device and rebuilds the preview."),
+                primaryButton: .destructive(Text("Clear")) {
+                    Task { await rebuildReport(clearStoredLogs: true) }
+                },
+                secondaryButton: .cancel()
+            )
 
-            HStack {
-                Text("Preview")
-                    .font(.headline)
-
-                Spacer()
-
-                if !reportSize.isEmpty {
-                    Text(reportSize)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(previewChunks) { chunk in
-                        Text(chunk.text)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(12)
-            }
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            if let reportId {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Diagnostics sent")
-                        .font(.headline)
-
-                    Text(reportId)
-                        .font(.system(.callout, design: .monospaced))
-                        .textSelection(.enabled)
-
-                    if let submissionWarning {
-                        Text(submissionWarning)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-
-                    HStack {
-                        Button("Copy ID") {
-                            UIPasteboard.general.string = reportId
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-
-            HStack(spacing: 12) {
-                Button("Share") {
-                    shareDiagnostics()
-                }
-                .buttonStyle(.bordered)
-                .disabled(!isReady || isSubmitting)
-
-                Button("Clear Stored Logs", role: .destructive) {
-                    alertState = .confirmClear
-                }
-                .buttonStyle(.bordered)
-                .disabled(isSubmitting)
-            }
-
-            Button {
-                Task { await submitReport() }
-            } label: {
-                if isSubmitting {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Text("Submit")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(report == nil || isSubmitting || reportId != nil)
+        case let .error(message):
+            Alert(
+                title: Text("Something went wrong"),
+                message: Text(message),
+                dismissButton: .default(Text("OK"))
+            )
         }
-        .padding()
     }
 
     @MainActor
@@ -336,6 +213,298 @@ struct SendDiagnosticsSheet: View {
         }
 
         return chunks
+    }
+}
+
+private struct SendDiagnosticsNavigationContent: View {
+    let loadState: DiagnosticsLoadState
+    @Binding var description: String
+    let previewChunks: [DiagnosticsPreviewChunk]
+    let reportSize: String
+    let reportId: String?
+    let submissionWarning: String?
+    let isReady: Bool
+    let isSubmitting: Bool
+    let canSubmit: Bool
+    let retry: () -> Void
+    let share: () -> Void
+    let clear: () -> Void
+    let submit: () async -> Void
+    let done: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            SendDiagnosticsContent(
+                loadState: loadState,
+                description: $description,
+                previewChunks: previewChunks,
+                reportSize: reportSize,
+                reportId: reportId,
+                submissionWarning: submissionWarning,
+                isReady: isReady,
+                isSubmitting: isSubmitting,
+                canSubmit: canSubmit,
+                retry: retry,
+                share: share,
+                clear: clear,
+                submit: submit,
+                done: done
+            )
+            .navigationTitle("Send Diagnostics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done", action: done)
+                        .disabled(isSubmitting)
+                }
+            }
+        }
+    }
+}
+
+private struct SendDiagnosticsContent: View {
+    private let content: AnyView
+
+    init(
+        loadState: DiagnosticsLoadState,
+        description: Binding<String>,
+        previewChunks: [DiagnosticsPreviewChunk],
+        reportSize: String,
+        reportId: String?,
+        submissionWarning: String?,
+        isReady: Bool,
+        isSubmitting: Bool,
+        canSubmit: Bool,
+        retry: @escaping () -> Void,
+        share: @escaping () -> Void,
+        clear: @escaping () -> Void,
+        submit: @escaping () async -> Void,
+        done: @escaping () -> Void
+    ) {
+        content = switch loadState {
+        case .loading:
+            AnyView(
+                ProgressView("Building diagnostics...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            )
+        case let .failed(message):
+            AnyView(SendDiagnosticsFailureView(message: message, retry: retry))
+        case .ready:
+            AnyView(SendDiagnosticsReadyContent(
+                description: description,
+                previewChunks: previewChunks,
+                reportSize: reportSize,
+                reportId: reportId,
+                submissionWarning: submissionWarning,
+                isReady: isReady,
+                isSubmitting: isSubmitting,
+                canSubmit: canSubmit,
+                share: share,
+                clear: clear,
+                submit: submit,
+                done: done
+            ))
+        }
+    }
+
+    var body: some View {
+        content
+    }
+}
+
+private struct SendDiagnosticsFailureView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Diagnostics Unavailable")
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Retry", action: retry)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct SendDiagnosticsReadyContent: View {
+    @Binding var description: String
+    let previewChunks: [DiagnosticsPreviewChunk]
+    let reportSize: String
+    let reportId: String?
+    let submissionWarning: String?
+    let isReady: Bool
+    let isSubmitting: Bool
+    let canSubmit: Bool
+    let share: () -> Void
+    let clear: () -> Void
+    let submit: () async -> Void
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SendDiagnosticsDescriptionEditor(description: $description)
+            SendDiagnosticsPreviewHeader(reportSize: reportSize)
+            SendDiagnosticsPreview(chunks: previewChunks)
+
+            if let reportId {
+                SendDiagnosticsSubmittedCard(
+                    reportId: reportId,
+                    warning: submissionWarning,
+                    done: done
+                )
+            }
+
+            SendDiagnosticsActions(
+                isReady: isReady,
+                isSubmitting: isSubmitting,
+                share: share,
+                clear: clear
+            )
+            SendDiagnosticsSubmitButton(
+                isSubmitting: isSubmitting,
+                isDisabled: !canSubmit || isSubmitting,
+                submit: submit
+            )
+        }
+        .padding()
+    }
+}
+
+private struct SendDiagnosticsDescriptionEditor: View {
+    @Binding var description: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Description")
+                .font(.headline)
+            TextEditor(text: $description)
+                .frame(minHeight: 84, maxHeight: 120)
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+private struct SendDiagnosticsPreviewHeader: View {
+    let reportSize: String
+
+    var body: some View {
+        HStack {
+            Text("Preview")
+                .font(.headline)
+            Spacer()
+
+            if !reportSize.isEmpty {
+                Text(reportSize)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct SendDiagnosticsPreview: View {
+    let chunks: [DiagnosticsPreviewChunk]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(chunks) { chunk in
+                    Text(chunk.text)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+        }
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct SendDiagnosticsSubmittedCard: View {
+    let reportId: String
+    let warning: String?
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Diagnostics sent")
+                .font(.headline)
+            Text(reportId)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+
+            if let warning {
+                Text(warning)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Copy ID", action: copyId)
+                    .buttonStyle(.bordered)
+                Button("Done", action: done)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func copyId() {
+        UIPasteboard.general.string = reportId
+    }
+}
+
+private struct SendDiagnosticsActions: View {
+    let isReady: Bool
+    let isSubmitting: Bool
+    let share: () -> Void
+    let clear: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button("Share", action: share)
+                .buttonStyle(.bordered)
+                .disabled(!isReady || isSubmitting)
+            Button("Clear Stored Logs", role: .destructive, action: clear)
+                .buttonStyle(.bordered)
+                .disabled(isSubmitting)
+        }
+    }
+}
+
+private struct SendDiagnosticsSubmitButton: View {
+    let isSubmitting: Bool
+    let isDisabled: Bool
+    let submit: () async -> Void
+
+    var body: some View {
+        Button {
+            Task { await submit() }
+        } label: {
+            if isSubmitting {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            } else {
+                Text("Submit")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(isDisabled)
     }
 }
 

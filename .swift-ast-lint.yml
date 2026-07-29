@@ -1,0 +1,12 @@
+included_paths:
+  - "ios/**/*.swift"
+
+excluded_paths:
+  - "ios/CoveCore/Sources/CoveCore/generated/**"
+  - "ios/CoveCore/Sources/cove_core_ffi.xcframework/**"
+
+rules:
+  swiftui-view-body-complexity:
+    args:
+      maximumComplexity: 10
+      severity: error

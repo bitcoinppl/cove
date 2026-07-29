@@ -41,6 +41,73 @@ struct CloudBackupDetailScreen: View {
     }
 
     var body: some View {
+        CloudBackupReinitializeDialog(
+            manager: manager,
+            isPresented: $showReinitializeConfirmation,
+            content: CloudBackupRecreateDialog(
+                manager: manager,
+                isPresented: $showRecreateConfirmation,
+                content: CloudBackupDetailForm(
+                    manager: manager,
+                    isVerifying: isVerifying,
+                    hasVerificationResult: hasVerificationResult,
+                    isCancelled: isCancelled,
+                    isPasskeyMissing: isPasskeyMissing,
+                    isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
+                    shouldShowLoadingState: shouldShowLoadingState,
+                    onRecreate: showRecreateDialog,
+                    onReinitialize: showReinitializeDialog
+                )
+                .navigationTitle("Cloud Backup")
+                .navigationBarTitleDisplayMode(.inline)
+                .task(enterDetail)
+                .onDisappear(perform: closeDetail)
+                .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
+                    cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
+                }
+                .onChange(of: manager.isLifecycleDisabled) { _, isDisabled in
+                    if isDisabled {
+                        dismiss()
+                    }
+                }
+            )
+        )
+    }
+
+    private func enterDetail() async {
+        manager.dispatch(action: .enterDetail)
+    }
+
+    private func closeDetail() {
+        manager.dispatch(action: .closeDetail)
+        cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
+    }
+
+    private func showRecreateDialog() {
+        guard manager.isDetailInventoryComplete else { return }
+
+        showRecreateConfirmation = true
+    }
+
+    private func showReinitializeDialog() {
+        guard manager.isDetailInventoryComplete else { return }
+
+        showReinitializeConfirmation = true
+    }
+}
+
+private struct CloudBackupDetailForm: View {
+    let manager: CloudBackupManager
+    let isVerifying: Bool
+    let hasVerificationResult: Bool
+    let isCancelled: Bool
+    let isPasskeyMissing: Bool
+    let isUnsupportedPasskeyProvider: Bool
+    let shouldShowLoadingState: Bool
+    let onRecreate: () -> Void
+    let onReinitialize: () -> Void
+
+    var body: some View {
         Form {
             CloudBackupDetailFormContent(
                 manager: manager,
@@ -50,38 +117,22 @@ struct CloudBackupDetailScreen: View {
                 isPasskeyMissing: isPasskeyMissing,
                 isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                 shouldShowLoadingState: shouldShowLoadingState,
-                onRecreate: {
-                    guard manager.isDetailInventoryComplete else { return }
-
-                    showRecreateConfirmation = true
-                },
-                onReinitialize: {
-                    guard manager.isDetailInventoryComplete else { return }
-
-                    showReinitializeConfirmation = true
-                }
+                onRecreate: onRecreate,
+                onReinitialize: onReinitialize
             )
         }
-        .navigationTitle("Cloud Backup")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            manager.dispatch(action: .enterDetail)
-        }
-        .onDisappear {
-            manager.dispatch(action: .closeDetail)
-            cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
-        }
-        .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
-            cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
-        }
-        .onChange(of: manager.isLifecycleDisabled) { _, isDisabled in
-            if isDisabled {
-                dismiss()
-            }
-        }
-        .confirmationDialog(
+    }
+}
+
+private struct CloudBackupRecreateDialog<Content: View>: View {
+    let manager: CloudBackupManager
+    @Binding var isPresented: Bool
+    let content: Content
+
+    var body: some View {
+        content.confirmationDialog(
             "Recreate Backup Index",
-            isPresented: $showRecreateConfirmation,
+            isPresented: $isPresented,
             titleVisibility: .visible
         ) {
             Button("Recreate", role: .destructive) {
@@ -97,9 +148,18 @@ struct CloudBackupDetailScreen: View {
                 "This will rebuild the backup index from wallets on this device. Wallets that only exist in the cloud backup will no longer be referenced."
             )
         }
-        .confirmationDialog(
+    }
+}
+
+private struct CloudBackupReinitializeDialog<Content: View>: View {
+    let manager: CloudBackupManager
+    @Binding var isPresented: Bool
+    let content: Content
+
+    var body: some View {
+        content.confirmationDialog(
             "Reinitialize Cloud Backup",
-            isPresented: $showReinitializeConfirmation,
+            isPresented: $isPresented,
             titleVisibility: .visible
         ) {
             Button("Reinitialize", role: .destructive) {
@@ -172,70 +232,122 @@ struct CloudBackupStatusSection: View {
     var body: some View {
         Group {
             if manager.isDetailInventoryChecking, manager.detail != nil {
-                Section {
-                    HStack {
-                        ProgressView()
-                            .padding(.trailing, 8)
-
-                        Text("Checking for more cloud backups...")
-                    }
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("cloudBackup.inventory.checking")
-                }
+                CloudBackupInventoryCheckingSection()
             }
 
             if let error = manager.detailError {
-                Section {
-                    Label("Cloud backup inventory is incomplete", systemImage: "exclamationmark.icloud")
-                        .foregroundStyle(Color.statusError)
-                        .accessibilityFocused($inventoryErrorFocused)
-                        .accessibilityIdentifier("cloudBackup.inventory.incomplete")
-
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Button {
-                        manager.dispatch(action: .refreshDetail)
-                    } label: {
-                        Label("Check Again", systemImage: "arrow.clockwise")
-                    }
-                    .accessibilityIdentifier("cloudBackup.inventory.checkAgain")
-                }
-            }
-
-            if isVerifying, !hasVerificationResult {
-                Section {
-                    VStack {
-                        ProgressView("Verifying cloud backup...")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                }
-            } else if let detail = manager.detail, !isCancelled {
-                DetailFormContent(
-                    detail: detail,
-                    syncHealth: manager.syncHealth,
-                    manager: manager
+                CloudBackupInventoryErrorSection(
+                    manager: manager,
+                    error: error,
+                    isFocused: $inventoryErrorFocused
                 )
-            } else if shouldShowLoadingState, manager.detailError == nil {
-                Section {
-                    VStack(spacing: 12) {
-                        ProgressView("Loading cloud backup...")
-
-                        Text("Finishing setup and fetching backup details")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                }
             }
+
+            CloudBackupDetailStatusContent(
+                manager: manager,
+                isVerifying: isVerifying,
+                hasVerificationResult: hasVerificationResult,
+                isCancelled: isCancelled,
+                shouldShowLoadingState: shouldShowLoadingState
+            )
         }
         .onChange(of: manager.detailError, initial: true) { _, error in
             inventoryErrorFocused = error != nil
+        }
+    }
+}
+
+private struct CloudBackupInventoryCheckingSection: View {
+    var body: some View {
+        Section {
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+
+                Text("Checking for more cloud backups...")
+            }
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("cloudBackup.inventory.checking")
+        }
+    }
+}
+
+private struct CloudBackupInventoryErrorSection: View {
+    let manager: CloudBackupManager
+    let error: String
+    @AccessibilityFocusState.Binding var isFocused: Bool
+
+    var body: some View {
+        Section {
+            Label("Cloud backup inventory is incomplete", systemImage: "exclamationmark.icloud")
+                .foregroundStyle(Color.statusError)
+                .accessibilityFocused($isFocused)
+                .accessibilityIdentifier("cloudBackup.inventory.incomplete")
+
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: refreshDetail) {
+                Label("Check Again", systemImage: "arrow.clockwise")
+            }
+            .accessibilityIdentifier("cloudBackup.inventory.checkAgain")
+        }
+    }
+
+    private func refreshDetail() {
+        manager.dispatch(action: .refreshDetail)
+    }
+}
+
+private struct CloudBackupDetailStatusContent: View {
+    let manager: CloudBackupManager
+    let isVerifying: Bool
+    let hasVerificationResult: Bool
+    let isCancelled: Bool
+    let shouldShowLoadingState: Bool
+
+    var body: some View {
+        if isVerifying, !hasVerificationResult {
+            CloudBackupVerifyingSection()
+        } else if let detail = manager.detail, !isCancelled {
+            DetailFormContent(
+                detail: detail,
+                syncHealth: manager.syncHealth,
+                manager: manager
+            )
+        } else if shouldShowLoadingState, manager.detailError == nil {
+            CloudBackupLoadingSection()
+        }
+    }
+}
+
+private struct CloudBackupVerifyingSection: View {
+    var body: some View {
+        Section {
+            VStack {
+                ProgressView("Verifying cloud backup...")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+private struct CloudBackupLoadingSection: View {
+    var body: some View {
+        Section {
+            VStack(spacing: 12) {
+                ProgressView("Loading cloud backup...")
+
+                Text("Finishing setup and fetching backup details")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
     }
 }
@@ -274,43 +386,21 @@ struct CloudBackupPendingUploadConfirmationSection: View {
 
     var body: some View {
         Group {
-            switch manager.verificationState {
-            case .awaitingUploadConfirmation:
-                if case .blocked = manager.syncState {
-                    Section {
-                        Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
-                            .foregroundStyle(.orange)
-                            .accessibilityFocused($focusedStatus, equals: .authorizationRequired)
-                    }
-                } else if case let .failed(message) = manager.syncState {
-                    Section {
-                        Label("Latest upload could not be confirmed", systemImage: "exclamationmark.icloud")
-                            .foregroundStyle(Color.statusError)
-                            .accessibilityFocused($focusedStatus, equals: .failed)
-
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Button {
-                            manager.dispatch(action: .syncUnsynced)
-                        } label: {
-                            Label("Try Again", systemImage: "arrow.clockwise")
-                        }
-                    }
-                } else {
-                    Section {
-                        HStack {
-                            ProgressView()
-                                .padding(.trailing, 8)
-
-                            Text("Confirming latest cloud upload")
-                        }
-                    }
-                }
-            default:
+            switch accessibilityStatus {
+            case .hidden:
                 EmptyView()
+            case .confirming:
+                CloudBackupUploadConfirmingSection()
+            case .authorizationRequired:
+                CloudBackupUploadAuthorizationRequiredSection(focusedStatus: $focusedStatus)
+            case .failed:
+                if case let .failed(message) = manager.syncState {
+                    CloudBackupUploadConfirmationFailedSection(
+                        manager: manager,
+                        message: message,
+                        focusedStatus: $focusedStatus
+                    )
+                }
             }
         }
         .onChange(of: accessibilityStatus, initial: true) { _, status in
@@ -321,6 +411,58 @@ struct CloudBackupPendingUploadConfirmationSection: View {
                 focusedStatus = nil
             }
         }
+    }
+}
+
+private struct CloudBackupUploadConfirmingSection: View {
+    var body: some View {
+        Section {
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+
+                Text("Confirming latest cloud upload")
+            }
+        }
+    }
+}
+
+private struct CloudBackupUploadAuthorizationRequiredSection: View {
+    @AccessibilityFocusState.Binding var focusedStatus: CloudBackupPendingUploadAccessibilityStatus?
+
+    var body: some View {
+        Section {
+            Label("Waiting for iCloud authorization", systemImage: "icloud.slash")
+                .foregroundStyle(.orange)
+                .accessibilityFocused($focusedStatus, equals: .authorizationRequired)
+        }
+    }
+}
+
+private struct CloudBackupUploadConfirmationFailedSection: View {
+    let manager: CloudBackupManager
+    let message: String
+    @AccessibilityFocusState.Binding var focusedStatus: CloudBackupPendingUploadAccessibilityStatus?
+
+    var body: some View {
+        Section {
+            Label("Latest upload could not be confirmed", systemImage: "exclamationmark.icloud")
+                .foregroundStyle(Color.statusError)
+                .accessibilityFocused($focusedStatus, equals: .failed)
+
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: syncUnsynced) {
+                Label("Try Again", systemImage: "arrow.clockwise")
+            }
+        }
+    }
+
+    private func syncUnsynced() {
+        manager.dispatch(action: .syncUnsynced)
     }
 }
 

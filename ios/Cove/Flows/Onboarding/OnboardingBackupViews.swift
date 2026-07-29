@@ -263,7 +263,11 @@ struct OnboardingCloudBackupStepView: View {
                 )
 
             case .enable:
-                enableContent
+                OnboardingCloudBackupEnableContent(
+                    branch: branch,
+                    onEnable: onEnable,
+                    onSkip: onSkip
+                )
             }
         }
         .task(id: backupManager.enableCompletion?.id) {
@@ -271,30 +275,6 @@ struct OnboardingCloudBackupStepView: View {
         }
         .task(id: backupManager.lifecycle) {
             await completeIfReady()
-        }
-    }
-
-    @ViewBuilder
-    private var enableContent: some View {
-        switch branch {
-        case .softwareImport:
-            OnboardingSoftwareImportCloudBackupStepView(
-                onEnable: onEnable,
-                onSkip: onSkip
-            )
-
-        case .hardware:
-            OnboardingHardwareImportCloudBackupStepView(
-                onEnable: onEnable,
-                onSkip: onSkip
-            )
-
-        case .newUser, .exchange, .softwareCreate, nil:
-            OnboardingCloudBackupDetailsStepView(
-                onEnable: onEnable,
-                onSkip: onSkip,
-                context: .standard
-            )
         }
     }
 
@@ -327,6 +307,35 @@ struct OnboardingCloudBackupStepView: View {
 
         didReportEnabled = true
         onEnabled()
+    }
+}
+
+private struct OnboardingCloudBackupEnableContent: View {
+    let branch: OnboardingBranch?
+    let onEnable: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        switch branch {
+        case .softwareImport:
+            OnboardingSoftwareImportCloudBackupStepView(
+                onEnable: onEnable,
+                onSkip: onSkip
+            )
+
+        case .hardware:
+            OnboardingHardwareImportCloudBackupStepView(
+                onEnable: onEnable,
+                onSkip: onSkip
+            )
+
+        case .newUser, .exchange, .softwareCreate, nil:
+            OnboardingCloudBackupDetailsStepView(
+                onEnable: onEnable,
+                onSkip: onSkip,
+                context: .standard
+            )
+        }
     }
 }
 
@@ -701,82 +710,13 @@ private struct OnboardingExchangeFundingContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 12) {
-                        Text("Your wallet is ready to fund")
-                            .font(.system(size: 34, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Text(
-                            "Move your Bitcoin off the exchange and into the wallet you now control."
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.coveLightGray.opacity(0.74))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if let displayedErrorMessage {
-                        OnboardingInlineMessage(text: displayedErrorMessage)
-                    } else if let addressInfo {
-                        VStack(spacing: 18) {
-                            OnboardingAddressQr(address: addressInfo.addressUnformatted())
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Deposit address")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.coveLightGray.opacity(0.72))
-
-                                Text(addressInfo.addressUnformatted().addressSpacedOut())
-                                    .font(.system(.body, design: .monospaced))
-                                    .foregroundStyle(.white)
-                                    .textSelection(.enabled)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(18)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(Color.duskBlue.opacity(0.48))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(Color.coveLightGray.opacity(0.15), lineWidth: 1)
-                            )
-
-                            Button {
-                                copyAddress(addressInfo)
-                            } label: {
-                                Text(didCopyAddress ? "Copied" : "Copy Address")
-                            }
-                            .buttonStyle(OnboardingSecondaryButtonStyle())
-                        }
-                    } else {
-                        VStack(spacing: 12) {
-                            ProgressView()
-                                .tint(.white)
-                            Text("Loading deposit address")
-                                .font(.body)
-                                .foregroundStyle(.white)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 48)
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
-            }
-
-            VStack(spacing: 14) {
-                Button("Continue", action: onContinue)
-                    .buttonStyle(OnboardingPrimaryButtonStyle())
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onboardingRecoveryBackground()
+        OnboardingExchangeFundingBody(
+            displayedErrorMessage: displayedErrorMessage,
+            addressInfo: addressInfo,
+            didCopyAddress: didCopyAddress,
+            onCopyAddress: copyAddress,
+            onContinue: onContinue
+        )
         .task(id: manager.map(ObjectIdentifier.init)) {
             await loadAddress()
         }
@@ -824,6 +764,113 @@ private struct OnboardingExchangeFundingContent: View {
                 didCopyAddress = false
             }
         }
+    }
+}
+
+private struct OnboardingExchangeFundingBody: View {
+    let displayedErrorMessage: String?
+    let addressInfo: AddressInfo?
+    let didCopyAddress: Bool
+    let onCopyAddress: (AddressInfo) -> Void
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 12) {
+                        Text("Your wallet is ready to fund")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text(
+                            "Move your Bitcoin off the exchange and into the wallet you now control."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.74))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if let displayedErrorMessage {
+                        OnboardingInlineMessage(text: displayedErrorMessage)
+                    } else if let addressInfo {
+                        OnboardingExchangeFundingAddress(
+                            addressInfo: addressInfo,
+                            didCopyAddress: didCopyAddress,
+                            onCopyAddress: onCopyAddress
+                        )
+                    } else {
+                        OnboardingExchangeFundingLoading()
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 32)
+            }
+
+            VStack(spacing: 14) {
+                Button("Continue", action: onContinue)
+                    .buttonStyle(OnboardingPrimaryButtonStyle())
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onboardingRecoveryBackground()
+    }
+}
+
+private struct OnboardingExchangeFundingAddress: View {
+    let addressInfo: AddressInfo
+    let didCopyAddress: Bool
+    let onCopyAddress: (AddressInfo) -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            OnboardingAddressQr(address: addressInfo.addressUnformatted())
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Deposit address")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.coveLightGray.opacity(0.72))
+
+                Text(addressInfo.addressUnformatted().addressSpacedOut())
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.duskBlue.opacity(0.48))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.coveLightGray.opacity(0.15), lineWidth: 1)
+            )
+
+            Button(
+                didCopyAddress ? "Copied" : "Copy Address",
+                action: { onCopyAddress(addressInfo) }
+            )
+            .buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+    }
+}
+
+private struct OnboardingExchangeFundingLoading: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(.white)
+
+            Text("Loading deposit address")
+                .font(.body)
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 48)
     }
 }
 

@@ -15,14 +15,26 @@ struct TermsAndConditionsView: View {
     @State private var checks: [Bool] = Array(repeating: false, count: 5)
     @Environment(\.openURL) private var openURL
 
-    private var allChecked: Bool {
-        checks.allSatisfy(\.self)
-    }
-
     var body: some View {
         ViewThatFits(in: .vertical) {
-            content(cardSpacing: 10, cardPadding: 18, footerTopSpacing: 16)
-            content(cardSpacing: 8, cardPadding: 14, footerTopSpacing: 12)
+            TermsContent(
+                checks: $checks,
+                errorMessage: errorMessage,
+                cardSpacing: 10,
+                cardPadding: 18,
+                footerTopSpacing: 16,
+                openURL: openURL,
+                onAgree: onAgree
+            )
+            TermsContent(
+                checks: $checks,
+                errorMessage: errorMessage,
+                cardSpacing: 8,
+                cardPadding: 14,
+                footerTopSpacing: 12,
+                openURL: openURL,
+                onAgree: onAgree
+            )
         }
         .padding(.horizontal, 26)
         .padding(.top, 22)
@@ -30,80 +42,131 @@ struct TermsAndConditionsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onboardingRecoveryBackground()
     }
+}
 
-    private func content(cardSpacing: CGFloat, cardPadding: CGFloat, footerTopSpacing: CGFloat) -> some View {
+private struct TermsContent: View {
+    @Binding var checks: [Bool]
+    let errorMessage: String?
+    let cardSpacing: CGFloat
+    let cardPadding: CGFloat
+    let footerTopSpacing: CGFloat
+    let openURL: OpenURLAction
+    let onAgree: () -> Void
+
+    private var allChecked: Bool {
+        checks.allSatisfy(\.self)
+    }
+
+    var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Terms & Conditions")
-                    .font(OnboardingRecoveryTypography.termsTitle)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text("By continuing, you agree to the following:")
-                    .font(OnboardingRecoveryTypography.subheadline)
-                    .foregroundStyle(.coveLightGray.opacity(0.74))
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            TermsHeader()
 
             Spacer()
                 .frame(height: 20)
 
-            VStack(spacing: cardSpacing) {
-                TermsCheckboxCard(isOn: $checks[0], cardPadding: cardPadding) {
-                    Text("I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.")
-                }
-                .accessibilityIdentifier("onboarding.terms.check.backup")
-
-                TermsCheckboxCard(isOn: $checks[1], cardPadding: cardPadding) {
-                    Text("I understand that any unlawful use of Cove is strictly prohibited.")
-                }
-                .accessibilityIdentifier("onboarding.terms.check.legal")
-
-                TermsCheckboxCard(isOn: $checks[2], cardPadding: cardPadding) {
-                    Text("I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.")
-                }
-                .accessibilityIdentifier("onboarding.terms.check.financial")
-
-                TermsCheckboxCard(isOn: $checks[3], cardPadding: cardPadding) {
-                    Text("I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.")
-                }
-                .accessibilityIdentifier("onboarding.terms.check.recovery")
-
-                TermsCheckboxCard(isOn: $checks[4], cardPadding: cardPadding) {
-                    TermsAgreementText {
-                        openURL($0)
-                    }
-                }
-                .accessibilityIdentifier("onboarding.terms.check.agreement")
-            }
+            TermsChecklist(
+                checks: $checks,
+                spacing: cardSpacing,
+                cardPadding: cardPadding,
+                openURL: openURL
+            )
 
             Spacer()
                 .frame(height: footerTopSpacing)
 
-            if let errorMessage {
-                OnboardingInlineMessage(text: errorMessage)
-                    .padding(.bottom, 8)
-            }
+            TermsFooter(
+                errorMessage: errorMessage,
+                allChecked: allChecked,
+                onAgree: onAgree
+            )
+        }
+    }
+}
 
-            Text("By checking these boxes, you accept and agree to the above terms.")
-                .font(OnboardingRecoveryTypography.subheadline)
-                .foregroundStyle(.coveLightGray.opacity(0.5))
+private struct TermsHeader: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Terms & Conditions")
+                .font(OnboardingRecoveryTypography.termsTitle)
+                .foregroundStyle(.white)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
 
-            Spacer(minLength: 20)
-
-            Button("Agree and Continue") {
-                guard allChecked else { return }
-                onAgree()
-            }
-            .buttonStyle(OnboardingPrimaryButtonStyle())
-            .disabled(!allChecked)
-            .accessibilityIdentifier("onboarding.terms.agree")
+            Text("By continuing, you agree to the following:")
+                .font(OnboardingRecoveryTypography.subheadline)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+private struct TermsChecklist: View {
+    @Binding var checks: [Bool]
+    let spacing: CGFloat
+    let cardPadding: CGFloat
+    let openURL: OpenURLAction
+
+    var body: some View {
+        VStack(spacing: spacing) {
+            TermsCheckboxCard(isOn: $checks[0], cardPadding: cardPadding) {
+                Text("I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.")
+            }
+            .accessibilityIdentifier("onboarding.terms.check.backup")
+
+            TermsCheckboxCard(isOn: $checks[1], cardPadding: cardPadding) {
+                Text("I understand that any unlawful use of Cove is strictly prohibited.")
+            }
+            .accessibilityIdentifier("onboarding.terms.check.legal")
+
+            TermsCheckboxCard(isOn: $checks[2], cardPadding: cardPadding) {
+                Text("I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.")
+            }
+            .accessibilityIdentifier("onboarding.terms.check.financial")
+
+            TermsCheckboxCard(isOn: $checks[3], cardPadding: cardPadding) {
+                Text("I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.")
+            }
+            .accessibilityIdentifier("onboarding.terms.check.recovery")
+
+            TermsCheckboxCard(isOn: $checks[4], cardPadding: cardPadding) {
+                TermsAgreementText {
+                    openURL($0)
+                }
+            }
+            .accessibilityIdentifier("onboarding.terms.check.agreement")
+        }
+    }
+}
+
+private struct TermsFooter: View {
+    let errorMessage: String?
+    let allChecked: Bool
+    let onAgree: () -> Void
+
+    var body: some View {
+        if let errorMessage {
+            OnboardingInlineMessage(text: errorMessage)
+                .padding(.bottom, 8)
+        }
+
+        Text("By checking these boxes, you accept and agree to the above terms.")
+            .font(OnboardingRecoveryTypography.subheadline)
+            .foregroundStyle(.coveLightGray.opacity(0.5))
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+
+        Spacer(minLength: 20)
+
+        Button("Agree and Continue") {
+            guard allChecked else { return }
+
+            onAgree()
+        }
+        .buttonStyle(OnboardingPrimaryButtonStyle())
+        .disabled(!allChecked)
+        .accessibilityIdentifier("onboarding.terms.agree")
     }
 }
 

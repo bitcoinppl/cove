@@ -45,67 +45,16 @@ struct SendFlowDetailsView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            // To Address Section
-            HStack {
-                Text("Address")
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .foregroundColor(.primary)
+            SendFlowDetailsAddressRow(address: details.sendingTo())
+                .padding(.top, 6)
+                .onTapGesture { presentingInputOutputDetails = true }
 
-                Spacer()
-                Spacer()
-                Spacer()
-                Spacer()
-
-                Text(
-                    details
-                        .sendingTo()
-                        .spacedOut()
-                )
-                .font(.system(.footnote, design: .none))
-                .fontWeight(.semibold)
-                .padding(.leading, 60)
-                .lineLimit(3)
-            }
-            .padding(.top, 6)
-            .onTapGesture { presentingInputOutputDetails = true }
-
-            Group {
-                // Network Fee Section
-                HStack {
-                    Text("Network Fee")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Text(displayFiatOrBtcAmount(details.feeTotal()))
-                        .font(.footnote)
-                        .fontWeight(details.feePercentage() > 20 ? .bold : .medium)
-                        .foregroundStyle(details.feePercentage() > 20 ? .red : .secondary)
-                        .padding(.vertical, 10)
-                }
-
-                // They receive section
-                HStack {
-                    Text("They'll receive")
-                    Spacer()
-                    Text(displayFiatOrBtcAmount(details.sendingAmount()))
-                }
-                .font(.footnote)
-                .fontWeight(.semibold)
-
-                // Total Amount Section
-                HStack {
-                    Text("You'll pay")
-                    Spacer()
-                    Text(displayFiatOrBtcAmount(details.spendingAmount()))
-                }
-                .font(.footnote)
-                .fontWeight(.semibold)
-            }
+            SendFlowDetailsAmountRows(
+                feeAmount: displayFiatOrBtcAmount(details.feeTotal()),
+                feePercentage: details.feePercentage(),
+                receiveAmount: displayFiatOrBtcAmount(details.sendingAmount()),
+                spendingAmount: displayFiatOrBtcAmount(details.spendingAmount())
+            )
             .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
         }
         .onChange(of: app.prices, initial: true) { _, newPrices in
@@ -118,12 +67,79 @@ struct SendFlowDetailsView: View {
                     [.height(300), .height(400), .height(500), .large], selection: $presentationSize
                 )
         }
-        .onAppear {
-            let total = details.outputs().count + details.inputs().count
-            if total == 3 { presentationSize = .height(300) }
-            if total > 3 { presentationSize = .height(400) }
-            if total > 5 { presentationSize = .height(500) }
+        .onAppear(perform: updatePresentationSize)
+    }
+
+    private func updatePresentationSize() {
+        let total = details.outputs().count + details.inputs().count
+        if total == 3 { presentationSize = .height(300) }
+        if total > 3 { presentationSize = .height(400) }
+        if total > 5 { presentationSize = .height(500) }
+    }
+}
+
+private struct SendFlowDetailsAddressRow: View {
+    let address: Address
+
+    var body: some View {
+        HStack {
+            Text("Address")
+                .font(.footnote)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+                .foregroundColor(.primary)
+
+            Spacer()
+            Spacer()
+            Spacer()
+            Spacer()
+
+            Text(address.spacedOut())
+                .font(.system(.footnote, design: .none))
+                .fontWeight(.semibold)
+                .padding(.leading, 60)
+                .lineLimit(3)
         }
+    }
+}
+
+private struct SendFlowDetailsAmountRows: View {
+    let feeAmount: String
+    let feePercentage: UInt64
+    let receiveAmount: String
+    let spendingAmount: String
+
+    var body: some View {
+        HStack {
+            Text("Network Fee")
+                .font(.footnote)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(feeAmount)
+                .font(.footnote)
+                .fontWeight(feePercentage > 20 ? .bold : .medium)
+                .foregroundStyle(feePercentage > 20 ? .red : .secondary)
+                .padding(.vertical, 10)
+        }
+
+        HStack {
+            Text("They'll receive")
+            Spacer()
+            Text(receiveAmount)
+        }
+        .font(.footnote)
+        .fontWeight(.semibold)
+
+        HStack {
+            Text("You'll pay")
+            Spacer()
+            Text(spendingAmount)
+        }
+        .font(.footnote)
+        .fontWeight(.semibold)
     }
 }
 
