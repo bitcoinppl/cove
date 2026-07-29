@@ -237,6 +237,7 @@ mod tests {
             "xpub": null,
             "wallet_mode": "Main"
         });
+
         let plaintext = serde_json::to_vec(&legacy_json).unwrap();
         let wallet_key = derive_wallet_key(&critical_key, &wallet_salt);
         let cipher = ChaCha20Poly1305::new((&wallet_key).into());

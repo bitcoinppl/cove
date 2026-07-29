@@ -74,6 +74,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
     let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
     };
+
     assert!(labels_warning.is_none());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
@@ -286,6 +287,7 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
         crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
     };
+
     Keychain::global()
         .save_wallet_xpub(
             &first_wallet.id,
@@ -1168,6 +1170,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
     let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
     };
+
     let warning = labels_warning.expect("expected label warning");
     assert_eq!(warning.wallet_name, wallet.name);
     assert!(
@@ -1318,6 +1321,7 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     let WalletRestoreOutcome::Restored { labels_warning } = second_outcome else {
         panic!("expected second wallet to restore");
     };
+
     let warning = labels_warning.expect("expected label warning");
     assert_eq!(warning.wallet_name, second_wallet.name);
 

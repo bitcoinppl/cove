@@ -44,6 +44,7 @@ impl StateMachine<'_> {
             model.phase = phase;
             model.phase.public_state()
         };
+
         self.0.reconciler.send(Message::UpdateState(state));
     }
 
@@ -58,6 +59,7 @@ impl StateMachine<'_> {
             model.phase = phase;
             model.phase.public_state()
         };
+
         self.0.reconciler.send(Message::UpdateState(state));
 
         true
@@ -136,17 +138,21 @@ impl ReceivePhase {
                     word_count: mnemonic.word_count() as u32,
                 })
             }
+
             Self::XprvReview { revealed, .. } => {
                 KeyTeleportManagerState::ReceiveXprvReview(KeyTeleportXprvReview {
                     revealed: *revealed,
                 })
             }
+
             Self::MessageReview { review, .. } => {
                 KeyTeleportManagerState::ReceiveMessageReview(review.clone())
             }
+
             Self::Imported { wallet, .. } => {
                 KeyTeleportManagerState::ReceiveImportedWallet(wallet.clone())
             }
+
             Self::AlreadyImported { wallet, .. } => {
                 KeyTeleportManagerState::ReceiveAlreadyImportedWallet(wallet.clone())
             }
@@ -173,6 +179,7 @@ impl ReceivePhase {
             Self::Imported { session_id, .. } | Self::AlreadyImported { session_id, .. } => {
                 Ok(Some(session_id.clone()))
             }
+
             _ => self.active_session().map(|session| session.map(ActiveReceiveSession::into_id)),
         }
     }
@@ -187,11 +194,13 @@ impl SendPhase {
                     eligible_wallets: eligible_wallets.clone(),
                 })
             }
+
             Self::EnterCode { wallet, .. } => {
                 KeyTeleportManagerState::SendEnterCode(KeyTeleportSendEnterCode {
                     selected_wallet: wallet.clone(),
                 })
             }
+
             Self::Ready(state) => KeyTeleportManagerState::SendReady(state.clone()),
         }
     }

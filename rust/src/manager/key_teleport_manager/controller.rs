@@ -52,10 +52,12 @@ impl ManagerController<'_> {
                 self.ensure_ingest_direction(PacketDirection::Receiver)?;
                 return SendWorkflow::new(self.0).start_with_receiver_packet(packet);
             }
+
             KeyTeleportInput::Sender(packet) => {
                 self.ensure_ingest_direction(PacketDirection::Sender)?;
                 return ReceiveWorkflow::new(self.0).start_password_entry(packet);
             }
+
             KeyTeleportInput::MultiFormat(input) => {
                 crate::key_teleport::parse_key_teleport_input(input)
             }
@@ -66,13 +68,16 @@ impl ManagerController<'_> {
                 self.ensure_ingest_direction(PacketDirection::Receiver)?;
                 SendWorkflow::new(self.0).start_with_receiver_packet(packet)
             }
+
             Ok(crate::key_teleport::ParsedKeyTeleport::Sender(packet)) => {
                 self.ensure_ingest_direction(PacketDirection::Sender)?;
                 ReceiveWorkflow::new(self.0).start_password_entry(packet)
             }
+
             Ok(crate::key_teleport::ParsedKeyTeleport::UnsupportedPsbt) => {
                 Err(KeyTeleportAlert::UnsupportedPsbt)
             }
+
             Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {
                 Err(KeyTeleportAlert::ParseFailed)
             }
@@ -88,6 +93,7 @@ impl ManagerController<'_> {
             PacketDirection::Receiver => phase.is_receive_direction(),
             PacketDirection::Sender => phase.is_send_direction(),
         };
+
         if conflicts {
             return Err(KeyTeleportAlert::ConflictingTransferDirection);
         }

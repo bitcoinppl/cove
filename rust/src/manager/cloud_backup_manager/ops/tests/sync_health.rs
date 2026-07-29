@@ -546,6 +546,7 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
     else {
         panic!("expected complete inventory snapshot");
     };
+
     assert!(snapshot.is_complete);
     assert!(snapshot.provisional_detail.is_none());
 
@@ -595,9 +596,11 @@ async fn authoritative_failure_retains_provisional_rows_in_failed_state() {
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
         panic!("expected configured cloud backup");
     };
+
     let CloudBackupDetailState::Failed { retained: Some(retained), .. } = configured.detail else {
         panic!("expected failed inventory with provisional rows");
     };
+
     let wallet = retained
         .detail
         .up_to_date

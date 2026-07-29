@@ -692,6 +692,7 @@ impl WalletActor {
                 warn!("System clock skew detected: {e}");
                 0
             });
+
         let txid = transaction.compute_txid();
 
         // insert the unconfirmed transaction into the local wallet
@@ -787,6 +788,7 @@ impl WalletActor {
                 warn!("System clock skew detected: {e}");
                 0
             });
+
         let txid = tx.compute_txid();
 
         self.wallet.bdk.apply_unconfirmed_txs([(tx, now)]);

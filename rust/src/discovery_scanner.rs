@@ -921,6 +921,7 @@ mod tests {
             started_at: Instant::now(),
             state: WorkerState::Failed("node unavailable".into()),
         });
+
         workers[index(WalletAddressType::Legacy)] = Some(WorkerHandle {
             id,
             addr: Addr::default(),

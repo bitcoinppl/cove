@@ -755,6 +755,7 @@ fn target_path_for_android_file(output_dir: &Path, remote_path: &str) -> Result<
             Some(extension) => format!("{stem}-{suffix}.{extension}"),
             None => format!("{stem}-{suffix}"),
         };
+
         let candidate = output_dir.join(candidate_file_name);
 
         if !candidate.exists() {

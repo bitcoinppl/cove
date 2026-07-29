@@ -380,6 +380,7 @@ mod tests {
             "xpub": null,
             "wallet_mode": "Main"
         });
+
         let bytes = serde_json::to_vec(&json).unwrap();
 
         let decoded = WalletEntry::from_json_slice(&bytes).unwrap();

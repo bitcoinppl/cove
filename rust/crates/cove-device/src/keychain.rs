@@ -1081,6 +1081,7 @@ mod tests {
         let second = std::thread::spawn(move || {
             second_keychain.save_wallet_secret(&second_id, second_secret)
         });
+
         let results = [first.join().unwrap(), second.join().unwrap()];
 
         assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
@@ -1105,6 +1106,7 @@ mod tests {
             } else {
                 wallet_mnemonic_key_name(&id)
             };
+
             let keychain =
                 make_keychain(MockKeychain::with_entries(vec![(orphaned_key.as_str(), "orphan")]));
 

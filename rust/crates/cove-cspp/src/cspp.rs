@@ -169,6 +169,7 @@ impl<S: CsppStore> Cspp<S> {
                     )));
                 }
             };
+
             if existing_key.as_bytes() == master_key.as_bytes() {
                 return Ok(());
             }
@@ -210,6 +211,7 @@ impl<S: CsppStore> Cspp<S> {
             Some(journal) => journal.staged,
             None => self.read_staged_entries(),
         };
+
         if entries.is_absent() {
             return Ok(None);
         }
@@ -257,6 +259,7 @@ impl<S: CsppStore> Cspp<S> {
                     prior: self.read_active_entries(),
                     staged,
                 };
+
                 self.save_promotion_journal(&journal)?;
                 journal
             }
@@ -423,6 +426,7 @@ impl<S: CsppStore> Cspp<S> {
             Some(journal) => journal.prior,
             None => self.read_active_entries(),
         };
+
         let prior_matches_expected = match expected_prior_namespace {
             Some(expected) => {
                 prior_entries.is_complete()
@@ -630,6 +634,7 @@ impl<S: CsppStore> Cspp<S> {
         let Some(serialized) = self.0.get(MASTER_KEY_PROMOTION_JOURNAL.into()) else {
             return Ok(None);
         };
+
         let journal: MasterKeyPromotionJournal =
             serde_json::from_str(&serialized).map_err_str(CsppError::Deserialization)?;
         if journal.version != MASTER_KEY_PROMOTION_JOURNAL_VERSION {

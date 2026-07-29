@@ -521,6 +521,7 @@ impl CloudStorageAccess for MockCloudStorage {
             state.wallet_backup_success_count += 1;
             (dirty_wallet, changed_wallet, disabling)
         };
+
         if let Some(wallet_id) = dirty_wallet {
             persist_dirty_blob_state(wallet_id);
         }
@@ -574,6 +575,7 @@ impl CloudStorageAccess for MockCloudStorage {
                 *attempts += 1;
                 *attempts
             };
+
             let deferred_error = state
                 .wallet_backup_download_failures_after_successes
                 .get(&override_key)
@@ -590,6 +592,7 @@ impl CloudStorageAccess for MockCloudStorage {
 
             (state.dirty_wallet_on_next_backup_check.take(), deferred_error, gate)
         };
+
         if let Some(wallet_id) = dirty_wallet {
             persist_dirty_blob_state(wallet_id);
         }
@@ -639,6 +642,7 @@ impl CloudStorageAccess for MockCloudStorage {
         state.uploaded_wallet_backups.retain(|(uploaded_namespace, uploaded_record_id)| {
             uploaded_namespace != &namespace || uploaded_record_id != &record_id
         });
+
         Ok(())
     }
 
@@ -712,6 +716,7 @@ impl CloudStorageAccess for MockCloudStorage {
         } else {
             state.list_wallet_files_error.clone()
         };
+
         if let Some(error) = error {
             return Err(error);
         }
@@ -745,6 +750,7 @@ impl CloudStorageAccess for MockCloudStorage {
             state.list_wallet_files_snapshot_attempts += 1;
             state.wallet_file_snapshots.get(&namespace).cloned()
         };
+
         if let Some(snapshot) = snapshot {
             return Ok(snapshot);
         }
@@ -1121,6 +1127,7 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
         let result = call!(supervisor.clear_upload_runtime_state()).await;
         sender.send(result).expect("send clear upload runtime state result");
     });
+
     receiver
         .recv()
         .expect("receive clear upload runtime state result")
@@ -1138,6 +1145,7 @@ fn wait_for_cleanup_idle_for_test(manager: &RustCloudBackupManager) {
             let result = call!(supervisor.cleanup_idle_for_test()).await;
             sender.send(result).expect("send cleanup idle result");
         });
+
         let idle =
             receiver.recv().expect("receive cleanup idle result").expect("check cleanup idle");
         if idle {

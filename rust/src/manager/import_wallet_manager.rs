@@ -121,6 +121,7 @@ impl ExistingWalletUpgradeRollback<'_> {
             Some(previous_id) => self.database.global_config.select_wallet(previous_id.clone()),
             None => self.database.global_config.clear_selected_wallet(),
         };
+
         let secret_rollback = self.secret.rollback(self.keychain, self.id);
 
         if selection_rollback.is_ok() && secret_rollback.is_ok() {
@@ -236,6 +237,7 @@ fn create_new_wallet(
             WalletMetadata::new_imported_from_xpriv(name, network, fingerprint)
         }
     };
+
     metadata.wallet_mode = mode;
 
     match secret {
@@ -308,6 +310,7 @@ fn upgrade_existing_wallet(
             UpgradeSecretState::Created
         }
     };
+
     let rollback = ExistingWalletUpgradeRollback {
         database,
         keychain,
@@ -397,6 +400,7 @@ fn existing_wallet_for_secret(
     let Some((degraded_match, incoming_identity_hash)) = degraded_matches.pop() else {
         return Ok(None);
     };
+
     let wallet_id = &degraded_match.id;
     warn!(
         "same-fingerprint wallet missing public identity wallet_id={wallet_id} incoming_identity_hash={incoming_identity_hash}, falling back to fingerprint match"

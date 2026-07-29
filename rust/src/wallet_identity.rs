@@ -106,6 +106,7 @@ mod tests {
                 format!("pkh([817e7be0/44h/0h/{account}h]{xpub}/0/*)")
             }
         };
+
         let internal = match address_type {
             WalletAddressType::NativeSegwit => {
                 format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)")
@@ -145,6 +146,7 @@ mod tests {
             WalletAddressType::WrappedSegwit => 49,
             WalletAddressType::Legacy => 44,
         };
+
         let path = bdk_wallet::bitcoin::bip32::DerivationPath::from_str(&format!(
             "m/{purpose}h/0h/{account}h"
         ))

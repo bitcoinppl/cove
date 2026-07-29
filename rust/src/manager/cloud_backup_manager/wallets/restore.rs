@@ -153,6 +153,7 @@ impl WalletBackupReader {
                 "test cloud storage cannot download wallet backups".into(),
             ));
         };
+
         cloud.download_wallet_backup(self.namespace.clone(), record_id.to_string()).await
     }
 

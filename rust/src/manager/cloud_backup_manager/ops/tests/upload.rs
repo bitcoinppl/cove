@@ -108,6 +108,7 @@ async fn backup_wallets_defers_remaining_writes_when_disable_starts_after_upload
     else {
         panic!("expected configured cloud backup state");
     };
+
     globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
         previous_configured,
         namespace_id,
@@ -443,6 +444,7 @@ async fn upload_wallet_if_dirty_completes_inside_disable_transition_when_already
     else {
         panic!("expected configured cloud backup state");
     };
+
     globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
         previous_configured,
         namespace_id,

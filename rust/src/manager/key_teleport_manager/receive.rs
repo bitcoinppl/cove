@@ -44,10 +44,12 @@ impl ReceiveWorkflow<'_> {
                 Phase::Idle => (false, None),
             }
         };
+
         if receive_flow_active {
             let Some(session) = active_session else {
                 return Ok(());
             };
+
             if let Err(error) = self.0.receive_sessions.authoritative(&session) {
                 self.state_machine().set_phase(Phase::Receive(ReceivePhase::Error));
                 return Err(error);
@@ -65,6 +67,7 @@ impl ReceiveWorkflow<'_> {
 
                 return self.activate_session(session);
             }
+
             Ok(Some(LoadedReceiveSession::Expired(session_id))) => {
                 self.replace_session_if_matches(
                     &session_id,
@@ -72,7 +75,9 @@ impl ReceiveWorkflow<'_> {
                 )?;
                 return Ok(());
             }
+
             Ok(None) => {}
+
             Err(error) => {
                 error!("unable to load KeyTeleport receive session: {error}");
                 self.replace_session(KeyTeleportAlert::ReceiveSessionReset)?;
@@ -94,7 +99,6 @@ impl ReceiveWorkflow<'_> {
 
         let generation = self.state_machine().invalidate_phase();
         self.0.receive_sessions.delete()?;
-
         self.create_session(generation).inspect_err(|_| {
             self.state_machine()
                 .set_phase_if_current(generation, Phase::Receive(ReceivePhase::Error));
@@ -110,6 +114,7 @@ impl ReceiveWorkflow<'_> {
                 Phase::Idle => Ok(None),
             }
         }?;
+
         let generation = self.state_machine().invalidate_phase();
 
         match session_id {
@@ -122,6 +127,7 @@ impl ReceiveWorkflow<'_> {
             }
             None => self.0.receive_sessions.delete()?,
         }
+
         self.state_machine().set_phase_if_current(generation, Phase::Idle);
 
         Ok(())
@@ -141,6 +147,7 @@ impl ReceiveWorkflow<'_> {
 
             (session, mnemonic.clone())
         };
+
         if self.0.receive_sessions.authoritative(&session).is_err() {
             return Vec::new();
         }
@@ -167,7 +174,7 @@ impl ReceiveWorkflow<'_> {
         let _authoritative = self.0.receive_sessions.authoritative(&session)?;
         session
             .receiver_session()
-            .decode_step1(packet.inner())
+            .decode_step1(packet.as_ref())
             .map_err(|_| KeyTeleportAlert::WrongReceiverCode)?;
 
         let phase = Phase::Receive(ReceivePhase::EnterPassword { session, packet });
@@ -182,23 +189,27 @@ impl ReceiveWorkflow<'_> {
         let (generation, session, packet) = self.take_password_phase()?;
         let password = TeleportPassword::from_str(password)
             .map_err(|_| KeyTeleportAlert::WrongTeleportPassword)?;
+
         let _authoritative = self.0.receive_sessions.authoritative(&session)?;
         let decoded = session
             .receiver_session()
-            .decode(packet.inner(), &password)
+            .decode(packet.as_ref(), &password)
             .map_err(KeyTeleportAlert::from_receive_decode_error)?;
 
         let phase = match decoded {
             DecodedPayload::Mnemonic(mnemonic) => {
                 ReceivePhase::MnemonicReview { session, mnemonic }
             }
+
             DecodedPayload::Xprv(xprv) => {
                 ReceivePhase::XprvReview { session, xprv, revealed: false }
             }
+
             DecodedPayload::Notes(notes) => {
                 ReceivePhase::MessageReview { session, review: notes.into() }
             }
         };
+
         if !self.state_machine().set_phase_if_current(generation, Phase::Receive(phase)) {
             return Err(KeyTeleportAlert::NoPendingReceiveSecret);
         }
@@ -223,6 +234,7 @@ impl ReceiveWorkflow<'_> {
                 _ => return Err(KeyTeleportAlert::NoPendingReceiveSecret),
             }
         };
+
         let authoritative = self.0.receive_sessions.authoritative(&session)?;
         let result = import_key_teleport_wallet_secret_with_target(
             secret,
@@ -235,6 +247,7 @@ impl ReceiveWorkflow<'_> {
                 authoritative.delete()?;
                 ReceivePhase::Imported { session_id: session.id, wallet: metadata }
             }
+
             Err(ImportWalletError::WalletAlreadyExists(id)) => {
                 let metadata = Database::global()
                     .wallets
@@ -244,11 +257,14 @@ impl ReceiveWorkflow<'_> {
                             ImportWalletError::MissingMetadata(id).to_string(),
                         )
                     })?;
+
                 authoritative.delete()?;
                 ReceivePhase::AlreadyImported { session_id: session.id, wallet: metadata }
             }
+
             Err(error) => return Err(KeyTeleportAlert::ImportFailed(error.to_string())),
         };
+
         if !self.state_machine().set_phase_if_current(generation, Phase::Receive(phase)) {
             return Err(KeyTeleportAlert::NoPendingReceiveSecret);
         }
@@ -265,6 +281,7 @@ impl ReceiveWorkflow<'_> {
 
             session.try_clone()?
         };
+
         self.0.receive_sessions.authoritative(&session)?;
 
         let state = {
@@ -274,9 +291,11 @@ impl ReceiveWorkflow<'_> {
             else {
                 return Ok(());
             };
+
             *current = revealed;
             model.phase.public_state()
         };
+
         self.0.reconciler.send(Message::UpdateState(state));
 
         Ok(())
@@ -289,6 +308,7 @@ impl ReceiveWorkflow<'_> {
             self.state_machine()
                 .set_phase_if_current(generation, Phase::Receive(ReceivePhase::Error));
         })?;
+
         self.0.reconciler.send(Message::SetAlert(alert));
 
         Ok(())
@@ -305,6 +325,7 @@ impl ReceiveWorkflow<'_> {
             self.state_machine()
                 .set_phase_if_current(generation, Phase::Receive(ReceivePhase::Error));
         })?;
+
         self.0.reconciler.send(Message::SetAlert(alert));
 
         Ok(())
@@ -341,7 +362,6 @@ impl ReceiveWorkflow<'_> {
     ) -> Result<bool, KeyTeleportAlert> {
         let state = session.receive_state()?;
         let phase = Phase::Receive(ReceivePhase::Ready { session, state });
-
         Ok(self.state_machine().set_phase_if_current(generation, phase))
     }
 
@@ -358,6 +378,7 @@ impl ReceiveWorkflow<'_> {
 
             (model.generation, active_session)
         };
+
         let session = match active_session {
             Some(session) => session,
             None => match self.0.receive_sessions.load()? {

@@ -84,6 +84,7 @@ async fn detail_reports_other_backup_namespaces() {
     let CloudBackupOtherBackupsState::Loaded { summary } = detail.other_backups else {
         panic!("expected loaded other backups");
     };
+
     assert_eq!(summary.namespace_count, 1);
     assert_eq!(summary.wallet_count, 2);
     assert_eq!(summary.passkey_hints.len(), 1);

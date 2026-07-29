@@ -26,6 +26,7 @@ impl WalletSecretExt for WalletSecret {
                     WalletAddressType::WrappedSegwit => Descriptor::new_bip49,
                     WalletAddressType::Legacy => Descriptor::new_bip44,
                 };
+
                 let external = new_descriptor(
                     &descriptor_secret_key,
                     bdk_wallet::KeychainKind::External,

@@ -87,6 +87,7 @@ impl Wallet {
                 Self::try_new_persisted_from_xpriv(metadata_for_new_wallet, xpriv, address_type)?
             }
         };
+
         let current_metadata = self.current_database_metadata()?;
         let metadata =
             metadata_for_mnemonic_address_type_switch(current_metadata, &me.metadata, address_type);
@@ -463,6 +464,7 @@ mod tests {
             block_height: 1,
             last_seen: std::time::Duration::from_secs(20),
         });
+
         current_metadata.internal.performed_full_scan_at = Some(30);
         current_metadata.internal.store_type = StoreType::FileStore;
 

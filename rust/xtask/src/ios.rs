@@ -130,6 +130,7 @@ impl IosRunOptions {
                 .map(|device_name| resolve_device_name_or_alias(device_name))
                 .collect::<Result<Vec<_>>>()?
         };
+
         let mut seen_udids = HashSet::new();
         let mut devices = selectors
             .into_iter()

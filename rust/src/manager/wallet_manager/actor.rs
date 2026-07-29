@@ -620,6 +620,7 @@ impl WalletActor {
             ScanRequestOrder::Standard => self.wallet.bdk.start_full_scan().build(),
             ScanRequestOrder::ReceivePriority => self.wallet.start_receive_prioritized_full_scan(),
         };
+
         let graph = self.wallet.bdk.tx_graph().clone();
         let last_revealed_indices = self.wallet.bdk.spk_index().last_revealed_indices();
 
@@ -1658,6 +1659,7 @@ mod tests {
                     } else {
                         "1".to_string()
                     };
+
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
                         body.len(),
@@ -1740,6 +1742,7 @@ mod tests {
                     } else {
                         "1"
                     };
+
                     let status =
                         if request.starts_with("POST /tx ") { broadcast_status } else { 200 };
                     let reason = if status == 200 { "OK" } else { "Internal Server Error" };
@@ -3014,6 +3017,7 @@ mod tests {
             input: vec![],
             output: vec![],
         };
+
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
             .create_session(&fallback_tx)
             .unwrap();
@@ -3137,6 +3141,7 @@ mod tests {
             input: vec![],
             output: vec![],
         };
+
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
             .create_session(&fallback_tx)
             .unwrap();

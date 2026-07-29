@@ -802,6 +802,7 @@ mod tests {
             xpub: None,
             labels_jsonl: None,
         };
+
         let duplicate_key = identity_key_for_backup(&metadata, &backup).unwrap();
         let mut existing_identities = ExistingWalletIdentitySet::default();
         existing_identities.insert(duplicate_key);

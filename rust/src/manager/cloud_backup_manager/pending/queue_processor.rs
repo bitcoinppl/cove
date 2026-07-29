@@ -313,6 +313,7 @@ impl PendingUploadVerifier {
                 ));
             }
         };
+
         if let Err(unsupported) = encrypted.backup_version() {
             return BlobCheckResult::terminal_failure(format!(
                 "unsupported wallet backup version {}",

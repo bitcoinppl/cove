@@ -248,6 +248,7 @@ impl From<NotesPayload> for KeyTeleportMessageReview {
                     text: note.text().to_string(),
                     group: note.group().to_string(),
                 },
+
                 NotesRecord::Password(password) => KeyTeleportMessageItem::Password {
                     title: password.title().to_string(),
                     username: password.username().to_string(),

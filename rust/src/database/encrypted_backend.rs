@@ -1360,6 +1360,7 @@ pub(crate) mod tests {
             let file = File::open(&path).unwrap();
             read_header(&file).unwrap()
         };
+
         assert_eq!(header_after_verify, original_v1_header, "verify must not rewrite V1 headers");
         assert_eq!(header_after_verify[VERSION_OFFSET], VERSION_V1);
 
