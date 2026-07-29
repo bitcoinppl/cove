@@ -7,7 +7,7 @@ mod send;
 use std::{fmt, sync::Arc};
 
 use cove_device::keychain::KeychainError;
-use cove_keyteleport::{Error as KeyTeleportError, NotesPayload, NotesRecord, TeleportPassword};
+use keyteleport::{Error as KeyTeleportError, NotesPayload, NotesRecord, TeleportPassword};
 use parking_lot::Mutex;
 use tracing::trace;
 

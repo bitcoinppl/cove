@@ -6,7 +6,9 @@ use std::{
 
 use bip39::Mnemonic;
 use cove_device::keychain::{Keychain, WalletSecret};
-use cove_keyteleport::{DecodedPayload, NumericCode, Payload, ReceiverSession, SenderSession};
+use keyteleport::{
+    DecodedPayload, NumericCode, Payload, ReceiverSession, SenderSession, UnsupportedPayloadKind,
+};
 
 use crate::{
     database::Database, wallet::metadata::WalletType, wallet_secret::WalletSecretExt as _,
@@ -463,7 +465,7 @@ fn receive_decode_errors_preserve_failure_kind() {
     );
     assert_eq!(
         KeyTeleportAlert::from_receive_decode_error(KeyTeleportError::UnsupportedPayload(
-            cove_keyteleport::UnsupportedPayloadKind::Vault,
+            UnsupportedPayloadKind::Vault,
         )),
         KeyTeleportAlert::UnsupportedPayload,
     );

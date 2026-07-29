@@ -4,7 +4,7 @@ use std::{
 };
 
 use cove_device::keychain::Keychain;
-use cove_keyteleport::ReceiverSession;
+use keyteleport::ReceiverSession;
 use parking_lot::{Mutex, MutexGuard};
 use rand::RngExt as _;
 use serde::{Deserialize, Serialize};

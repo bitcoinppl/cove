@@ -1481,7 +1481,7 @@ mod tests {
 
     #[test]
     fn test_qr_scanner_single_part_keyteleport_receiver() {
-        let receiver = cove_keyteleport::ReceiverSession::from_private_key_bytes([1; 32]).unwrap();
+        let receiver = keyteleport::ReceiverSession::from_private_key_bytes([1; 32]).unwrap();
         let request = receiver.request().unwrap();
         let packet = crate::key_teleport::KeyTeleportReceiverPacket::new(request.packet);
         let scanner = QrScannerFFI::new();

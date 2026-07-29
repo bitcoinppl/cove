@@ -2,7 +2,7 @@ use std::{str::FromStr as _, sync::Arc};
 
 use bip39::Mnemonic;
 use cove_device::keychain::{WalletSecret, WalletXprv};
-use cove_keyteleport::{DecodedPayload, TeleportPassword, XprvPayload};
+use keyteleport::{DecodedPayload, TeleportPassword, XprvPayload};
 use tracing::error;
 
 use crate::{

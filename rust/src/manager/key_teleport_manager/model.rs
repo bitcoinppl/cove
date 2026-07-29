@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bip39::Mnemonic;
-use cove_keyteleport::XprvPayload;
+use keyteleport::XprvPayload;
 
 use crate::{
     key_teleport::{KeyTeleportReceiverPacket, KeyTeleportSenderPacket},

@@ -1,7 +1,7 @@
 use std::{fmt, sync::Arc};
 
 use bbqr::file_type::FileType;
-use cove_keyteleport::{Error as ProtocolError, Packet, ReceiverPacket, SenderPacket};
+use keyteleport::{Error as ProtocolError, Packet, PsbtPacket, ReceiverPacket, SenderPacket};
 
 use crate::multi_format::StringOrData;
 
@@ -137,7 +137,7 @@ pub(crate) fn parse_key_teleport_bbqr_payload(
         FileType::KeyTeleportSender => Packet::Sender(
             SenderPacket::new(data).map_err(|_| KeyTeleportParseError::Unrecognized)?,
         ),
-        FileType::KeyTeleportPsbt => Packet::Psbt(cove_keyteleport::PsbtPacket::new(data)),
+        FileType::KeyTeleportPsbt => Packet::Psbt(PsbtPacket::new(data)),
         _ => return Err(KeyTeleportParseError::Unrecognized),
     };
 
@@ -172,7 +172,7 @@ fn parse_packet(packet: Packet) -> Result<ParsedKeyTeleport, KeyTeleportParseErr
 mod tests {
     use std::str::FromStr as _;
 
-    use cove_keyteleport::{Payload, ReceiverSession, SenderSession};
+    use keyteleport::{Payload, ReceiverSession, SenderSession};
 
     use super::*;
 
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn parses_keyteleport_psbt_as_typed_unsupported() {
-        let packet = Packet::Psbt(cove_keyteleport::PsbtPacket::new(vec![1, 2, 3, 4]));
+        let packet = Packet::Psbt(PsbtPacket::new(vec![1, 2, 3, 4]));
         let bbqr = packet.to_bbqr_part().unwrap();
         let parsed = parse_key_teleport_string(&bbqr).unwrap();
 

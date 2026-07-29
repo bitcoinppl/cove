@@ -1,7 +1,7 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use cove_device::keychain::{Keychain, WalletSecret};
-use cove_keyteleport::{NumericCode, Payload, SenderSession};
+use keyteleport::{NumericCode, Payload, SenderSession};
 
 use crate::{
     database::Database,
