@@ -4,34 +4,24 @@ import UniformTypeIdentifiers
 struct XprvRevealSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Binding var xprv: String?
+    let xprv: String
     @State private var copied = false
 
     var body: some View {
         NavigationStack {
-            XprvRevealContent(xprv: $xprv, copied: $copied)
+            XprvRevealContent(xprv: xprv, copied: $copied)
                 .navigationTitle("Private Key")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    XprvRevealToolbar(done: done)
+                    XprvRevealToolbar(done: dismiss.callAsFunction)
                 }
         }
         .interactiveDismissDisabled()
-        .onDisappear(perform: clear)
-    }
-
-    private func done() {
-        clear()
-        dismiss()
-    }
-
-    private func clear() {
-        xprv = nil
     }
 }
 
 struct XprvRevealContent: View {
-    @Binding var xprv: String?
+    let xprv: String
     @Binding var copied: Bool
 
     var body: some View {
@@ -40,27 +30,25 @@ struct XprvRevealContent: View {
                 Text("Extended Private Key")
                     .font(.headline)
 
-                if let xprv {
-                    Text(xprv)
-                        .font(.system(.caption, design: .monospaced))
-                        .privacySensitive()
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(UIColor.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Text(xprv)
+                    .font(.system(.caption, design: .monospaced))
+                    .privacySensitive()
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                    Button {
-                        copySensitiveXprv(xprv)
-                        copied = true
-                    } label: {
-                        Label(
-                            copied ? "Copied for 2 Minutes" : "Copy for 2 Minutes",
-                            systemImage: copied ? "checkmark" : "doc.on.doc"
-                        )
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
+                Button {
+                    copySensitiveXprv(xprv)
+                    copied = true
+                } label: {
+                    Label(
+                        copied ? "Copied for 2 Minutes" : "Copy for 2 Minutes",
+                        systemImage: copied ? "checkmark" : "doc.on.doc"
+                    )
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
 
                 Text("The clipboard copy stays on this device and expires after two minutes.")
                     .font(.footnote)
