@@ -1,7 +1,7 @@
 package org.bitcoinppl.cove.secret_words
 
+import android.view.WindowManager
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -9,31 +9,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -45,71 +34,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.SecureFlagPolicy
-import android.view.WindowManager
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
-import org.bitcoinppl.cove.AuthManager
-import org.bitcoinppl.cove.ScreenSecurity
-import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.flows.SettingsFlow.hasFreshMainCredential
+import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove.views.ColumnMajorGrid
-import org.bitcoinppl.cove.views.RecoveryWordChip
-import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.types.WalletId
-
-private enum class SecretWordsSensitiveAction(
-    val confirmationTitle: String,
-    val confirmationButtonTitle: String,
-    val confirmationMessage: String,
-) {
-    SEED_QR(
-        confirmationTitle = "Show Seed QR?",
-        confirmationButtonTitle = "Show QR Code",
-        confirmationMessage =
-            "Your seed words are sensitive and control access to your Bitcoin. " +
-                "QR codes are machine-readable, so be careful who or what device you show this to.",
-    ),
-    KEY_TELEPORT(
-        confirmationTitle = "Send with KeyTeleport?",
-        confirmationButtonTitle = "Continue",
-        confirmationMessage =
-            "KeyTeleport sends this wallet's secret words to another device. " +
-                "Only continue if you trust the receiving device and can verify its request.",
-    ),
-    ;
-
-    fun perform(
-        showSeedQr: () -> Unit,
-        startKeyTeleport: () -> Unit,
-    ) {
-        when (this) {
-            SEED_QR -> showSeedQr()
-            KEY_TELEPORT -> startKeyTeleport()
-        }
-    }
-}
 
 /**
  * secret words screen - displays recovery phrase with auth guard
@@ -318,226 +261,12 @@ fun SecretWordsScreen(
         ModalBottomSheet(
             onDismissRequest = { showSeedQrSheet = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            properties = ModalBottomSheetProperties(
-                securePolicy = SecureFlagPolicy.SecureOn,
-            ),
+            properties =
+                ModalBottomSheetProperties(
+                    securePolicy = SecureFlagPolicy.SecureOn,
+                ),
         ) {
             SeedQrSheetContent(seedQrString = words!!.toSeedQrString())
         }
-    }
-}
-
-/**
- * Build the KeyTeleport send request for this wallet's secret words.
- *
- * The send is held until the main credential is entered again, so neither a decoy session nor an
- * unlock that happened before the request can start a transfer.
- */
-@Composable
-private fun rememberKeyTeleportSendRequest(
-    app: AppManager,
-    auth: AuthManager,
-    walletId: WalletId,
-): () -> Unit {
-    var pendingGeneration by remember(walletId) { mutableStateOf<Long?>(null) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    LaunchedEffect(auth.mainCredentialGeneration) {
-        val requestedAt = pendingGeneration ?: return@LaunchedEffect
-        if (!hasFreshMainCredential(auth.mainCredentialGeneration, requestedAt)) return@LaunchedEffect
-
-        pendingGeneration = null
-        if (!app.startKeyTeleportSend(walletId)) {
-            app.alertState =
-                TaggedItem(
-                    AppAlertState.General(
-                        title = "KeyTeleport",
-                        message = "Finish the active KeyTeleport flow before starting another transfer.",
-                    ),
-                )
-        }
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                    pendingGeneration = null
-                }
-            }
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            pendingGeneration = null
-        }
-    }
-
-    return remember(app, auth, walletId) {
-        {
-            if (!auth.isAuthEnabled) {
-                app.alertState =
-                    TaggedItem(
-                        AppAlertState.General(
-                            title = "KeyTeleport",
-                            message = "Set up a PIN or biometric unlock before sending secret words with KeyTeleport.",
-                        ),
-                    )
-            } else {
-                pendingGeneration = auth.mainCredentialGeneration
-                auth.lock()
-            }
-        }
-    }
-}
-
-@Composable
-private fun SecretWordsToolbarMenu(
-    showKeyTeleport: Boolean,
-    onAction: (SecretWordsSensitiveAction) -> Unit,
-) {
-    var isExpanded by remember { mutableStateOf(false) }
-
-    IconButton(onClick = { isExpanded = true }) {
-        Icon(
-            imageVector = Icons.Default.MoreVert,
-            contentDescription = "Secret words options",
-            tint = Color.White,
-        )
-    }
-    DropdownMenu(
-        expanded = isExpanded,
-        onDismissRequest = { isExpanded = false },
-    ) {
-        DropdownMenuItem(
-            text = { Text("Seed QR") },
-            leadingIcon = {
-                Icon(Icons.Default.QrCode, contentDescription = null)
-            },
-            onClick = {
-                isExpanded = false
-                onAction(SecretWordsSensitiveAction.SEED_QR)
-            },
-        )
-        if (showKeyTeleport) {
-            DropdownMenuItem(
-                text = { Text("KeyTeleport") },
-                leadingIcon = {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                },
-                onClick = {
-                    isExpanded = false
-                    onAction(SecretWordsSensitiveAction.KEY_TELEPORT)
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun SecretWordsActionConfirmation(
-    action: SecretWordsSensitiveAction,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(action.confirmationTitle) },
-        text = { Text(action.confirmationMessage) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(action.confirmationButtonTitle)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-    )
-}
-
-/**
- * Recovery words grid for viewing only (non-selectable)
- * Uses column-major ordering (words flow down columns first)
- */
-@Composable
-private fun RecoveryWordsGrid(
-    words: List<String>,
-    modifier: Modifier = Modifier,
-) {
-    ColumnMajorGrid(
-        items = words,
-        modifier = modifier,
-        numColumns = 2,
-    ) { index, word ->
-        RecoveryWordChip(
-            index = index + 1,
-            word = word,
-            selected = false,
-            onClick = null,
-        )
-    }
-}
-
-@Composable
-private fun SeedQrSheetContent(seedQrString: String) {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = "Seed QR",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Scan with a SeedQR-compatible device",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        BoxWithConstraints(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            val qrSize = maxWidth
-            val bitmap =
-                remember(seedQrString) {
-                    QrCodeGenerator.generate(seedQrString, size = 512)
-                }
-
-            Box(
-                modifier =
-                    Modifier
-                        .size(qrSize)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White)
-                        .padding(12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Seed QR Code",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.FillBounds,
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }
