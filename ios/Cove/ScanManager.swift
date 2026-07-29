@@ -91,25 +91,7 @@ import SwiftUI
                 return false
             }
         } catch let error as MultiFormatError {
-            if case .KeyTeleportPsbtNotSupported = error {
-                app.alertState = TaggedItem(
-                    .invalidFormat(message: "KeyTeleport PSBT packets are not supported yet.")
-                )
-                return true
-            }
-
-            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let looksLikeKeyTeleport = normalized.contains("keyteleport.com")
-                || normalized.hasPrefix("b$2r")
-                || normalized.hasPrefix("b$2s")
-                || normalized.hasPrefix("b$2p")
-            if looksLikeKeyTeleport {
-                app.alertState = TaggedItem(
-                    .invalidFormat(message: "This KeyTeleport packet could not be read.")
-                )
-            }
-
-            return looksLikeKeyTeleport
+            return handleKeyTeleportTextError(error, text: text)
         } catch {
             return false
         }
@@ -206,6 +188,34 @@ import SwiftUI
 }
 
 extension ScanManager {
+    @MainActor
+    private func handleKeyTeleportTextError(_ error: MultiFormatError, text: String) -> Bool {
+        if case .KeyTeleportPsbtNotSupported = error {
+            app.alertState = TaggedItem(
+                .invalidFormat(message: "KeyTeleport PSBT packets are not supported yet.")
+            )
+            return true
+        }
+
+        guard looksLikeKeyTeleportPacket(text) else {
+            return false
+        }
+
+        app.alertState = TaggedItem(
+            .invalidFormat(message: "This KeyTeleport packet could not be read.")
+        )
+        return true
+    }
+
+    private func looksLikeKeyTeleportPacket(_ text: String) -> Bool {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return normalized.contains("keyteleport.com")
+            || normalized.hasPrefix("b$2r")
+            || normalized.hasPrefix("b$2s")
+            || normalized.hasPrefix("b$2p")
+    }
+
     @MainActor
     private func handleKeyTeleportUrl(_ url: URL) -> Bool {
         guard isKeyTeleportHost(url.host) else {
