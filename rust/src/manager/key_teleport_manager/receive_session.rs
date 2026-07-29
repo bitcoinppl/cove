@@ -75,6 +75,7 @@ impl ReceiveSessionStore {
         let Some(persisted) = load_receive_session_unlocked()? else {
             return Ok(None);
         };
+
         let session_id = persisted.session_id()?;
         if persisted.is_expired() {
             return Ok(Some(LoadedReceiveSession::Expired(session_id)));
@@ -92,6 +93,7 @@ impl ReceiveSessionStore {
             network: session.network,
             wallet_mode: session.wallet_mode,
         };
+
         private_key.zeroize();
 
         let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
@@ -191,7 +193,7 @@ impl ActiveReceiveSession {
             .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
 
         Ok(KeyTeleportReceiveState {
-            packet: std::sync::Arc::new(KeyTeleportReceiverPacket::new(request.packet)),
+            packet: std::sync::Arc::new(KeyTeleportReceiverPacket::from(request.packet)),
             numeric_code: request.numeric_code.as_str().to_string(),
             grouped_numeric_code: request.numeric_code.grouped(),
             created_at_secs: self.created_at_secs,
@@ -223,6 +225,7 @@ impl ReceiveSessionId {
     fn parse(value: String) -> Result<Self, KeyTeleportAlert> {
         let bytes = hex::decode(&value)
             .map_err(|error| KeyTeleportAlert::Keychain(format!("invalid session id: {error}")))?;
+
         if bytes.len() != 16 {
             return Err(KeyTeleportAlert::Keychain("invalid receive session id length".into()));
         }
@@ -295,6 +298,7 @@ impl PersistedReceiveSession {
             .as_slice()
             .try_into()
             .map_err(|_| KeyTeleportAlert::Keychain("invalid receive private key length".into()))?;
+
         let session = ReceiverSession::from_private_key_bytes(private_key)
             .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()));
         private_key.zeroize();
@@ -322,6 +326,7 @@ fn load_receive_session_unlocked() -> Result<Option<PersistedReceiveSession>, Ke
     let mut session: PersistedReceiveSession = serde_json::from_str(&value).map_err(|error| {
         KeyTeleportAlert::Keychain(format!("unable to parse receive session: {error}"))
     })?;
+
     if session.session_id.is_none() {
         session.session_id = Some(ReceiveSessionId::new().0);
         session.save_unlocked()?;
@@ -339,6 +344,7 @@ fn ensure_authoritative_receive_session_unlocked(
     let persisted =
         load_receive_session_unlocked()?.ok_or(KeyTeleportAlert::NoActiveReceiveSession)?;
     persisted.scope().ensure_current()?;
+
     if persisted.session_id()? != session.id {
         return Err(KeyTeleportAlert::NoActiveReceiveSession);
     }
@@ -360,6 +366,7 @@ fn delete_receive_session_if_matches_unlocked(
     let Some(persisted) = load_receive_session_unlocked()? else {
         return Ok(());
     };
+
     if persisted.session_id()? != *session_id {
         return Err(KeyTeleportAlert::NoActiveReceiveSession);
     }

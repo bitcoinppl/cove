@@ -1483,7 +1483,7 @@ mod tests {
     fn test_qr_scanner_single_part_keyteleport_receiver() {
         let receiver = keyteleport::ReceiverSession::from_private_key_bytes([1; 32]).unwrap();
         let request = receiver.request().unwrap();
-        let packet = crate::key_teleport::KeyTeleportReceiverPacket::new(request.packet);
+        let packet = crate::key_teleport::KeyTeleportReceiverPacket::from(request.packet);
         let scanner = QrScannerFFI::new();
 
         let result = scanner.scan(StringOrData::String(packet.bbqr_part().unwrap())).unwrap();

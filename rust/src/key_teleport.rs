@@ -1,30 +1,13 @@
 use std::{fmt, sync::Arc};
 
 use bbqr::file_type::FileType;
+use derive_more::{AsRef, Deref, From, Into};
 use keyteleport::{Error as ProtocolError, Packet, PsbtPacket, ReceiverPacket, SenderPacket};
 
 use crate::multi_format::StringOrData;
 
-#[derive(Clone, uniffi::Object)]
+#[derive(Clone, PartialEq, Eq, From, Into, AsRef, Deref, uniffi::Object)]
 pub struct KeyTeleportReceiverPacket(ReceiverPacket);
-
-impl KeyTeleportReceiverPacket {
-    pub(crate) fn new(packet: ReceiverPacket) -> Self {
-        Self(packet)
-    }
-
-    pub(crate) fn inner(&self) -> &ReceiverPacket {
-        &self.0
-    }
-}
-
-impl PartialEq for KeyTeleportReceiverPacket {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_bytes() == other.0.as_bytes()
-    }
-}
-
-impl Eq for KeyTeleportReceiverPacket {}
 
 impl fmt::Debug for KeyTeleportReceiverPacket {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -45,26 +28,8 @@ impl KeyTeleportReceiverPacket {
     }
 }
 
-#[derive(Clone, uniffi::Object)]
+#[derive(Clone, PartialEq, Eq, From, Into, AsRef, Deref, uniffi::Object)]
 pub struct KeyTeleportSenderPacket(SenderPacket);
-
-impl KeyTeleportSenderPacket {
-    pub(crate) fn new(packet: SenderPacket) -> Self {
-        Self(packet)
-    }
-
-    pub(crate) fn inner(&self) -> &SenderPacket {
-        &self.0
-    }
-}
-
-impl PartialEq for KeyTeleportSenderPacket {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_bytes() == other.0.as_bytes()
-    }
-}
-
-impl Eq for KeyTeleportSenderPacket {}
 
 impl fmt::Debug for KeyTeleportSenderPacket {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -134,10 +99,13 @@ pub(crate) fn parse_key_teleport_bbqr_payload(
         FileType::KeyTeleportReceiver => Packet::Receiver(
             ReceiverPacket::new(data).map_err(|_| KeyTeleportParseError::Unrecognized)?,
         ),
+
         FileType::KeyTeleportSender => Packet::Sender(
             SenderPacket::new(data).map_err(|_| KeyTeleportParseError::Unrecognized)?,
         ),
+
         FileType::KeyTeleportPsbt => Packet::Psbt(PsbtPacket::new(data)),
+
         _ => return Err(KeyTeleportParseError::Unrecognized),
     };
 
@@ -149,6 +117,7 @@ pub(crate) fn parse_key_teleport_input(
 ) -> Result<ParsedKeyTeleport, KeyTeleportParseError> {
     match input {
         StringOrData::String(value) => parse_key_teleport_string(&value),
+
         StringOrData::Data(data) => {
             let value = String::from_utf8(data).map_err(|_| KeyTeleportParseError::Unrecognized)?;
             parse_key_teleport_string(&value)
@@ -159,11 +128,13 @@ pub(crate) fn parse_key_teleport_input(
 fn parse_packet(packet: Packet) -> Result<ParsedKeyTeleport, KeyTeleportParseError> {
     match packet {
         Packet::Receiver(packet) => {
-            Ok(ParsedKeyTeleport::Receiver(Arc::new(KeyTeleportReceiverPacket::new(packet))))
+            Ok(ParsedKeyTeleport::Receiver(Arc::new(KeyTeleportReceiverPacket::from(packet))))
         }
+
         Packet::Sender(packet) => {
-            Ok(ParsedKeyTeleport::Sender(Arc::new(KeyTeleportSenderPacket::new(packet))))
+            Ok(ParsedKeyTeleport::Sender(Arc::new(KeyTeleportSenderPacket::from(packet))))
         }
+
         Packet::Psbt(_) => Ok(ParsedKeyTeleport::UnsupportedPsbt),
     }
 }
@@ -201,7 +172,7 @@ mod tests {
         )
         .unwrap();
         let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
-        let packet = KeyTeleportSenderPacket::new(response.packet);
+        let packet = KeyTeleportSenderPacket::from(response.packet);
 
         let parsed = parse_key_teleport_string(&packet.bbqr_part().unwrap()).unwrap();
 

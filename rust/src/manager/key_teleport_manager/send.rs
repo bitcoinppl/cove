@@ -41,12 +41,14 @@ impl SendWorkflow<'_> {
 
             (model.generation, packet)
         };
+
         let wallet = eligible_wallet_by_id(&wallet_id)?;
 
         let phase = match packet {
             Some(packet) => SendPhase::EnterCode { packet, wallet },
             None => SendPhase::AwaitReceiver { wallet },
         };
+
         if !self.state_machine().set_phase_if_current(generation, Phase::Send(phase)) {
             return Err(KeyTeleportAlert::NoPendingSend);
         }
@@ -67,6 +69,7 @@ impl SendWorkflow<'_> {
 
             (model.generation, selected_wallet)
         };
+
         if let Some(wallet) = selected_wallet {
             let phase = Phase::Send(SendPhase::EnterCode { packet, wallet });
             if !self.state_machine().set_phase_if_current(generation, phase) {
@@ -99,6 +102,7 @@ impl SendWorkflow<'_> {
 
             (model.generation, packet.clone())
         };
+
         let phase = Phase::Send(SendPhase::EnterCode { packet, wallet });
         if !self.state_machine().set_phase_if_current(generation, phase) {
             return Err(KeyTeleportAlert::NoPendingSend);
@@ -118,20 +122,23 @@ impl SendWorkflow<'_> {
             (model.generation, packet.clone(), wallet.clone())
         };
 
-        let sender = SenderSession::new(packet.inner(), &code)
+        let sender = SenderSession::new(packet.as_ref(), &code)
             .map_err(|_| KeyTeleportAlert::WrongReceiverCode)?;
         let wallet = current_send_wallet(&wallet.id)?;
         let keychain = Keychain::global();
         let secret =
             keychain.get_wallet_secret(&wallet.id)?.ok_or(KeyTeleportAlert::IneligibleWallet)?;
+
         if !is_supported_send_secret(&secret) {
             return Err(KeyTeleportAlert::IneligibleWallet);
         }
+
         let incoming_descriptors =
             secret.clone().into_descriptors(wallet.network, wallet.address_type);
         let incoming_identity = PublicWalletIdentity::from_descriptors(&incoming_descriptors);
         let existing_identity = PublicWalletIdentity::from_existing_wallet(&wallet, keychain)?
             .ok_or(KeyTeleportAlert::IneligibleWallet)?;
+
         if incoming_identity != existing_identity {
             return Err(KeyTeleportAlert::IneligibleWallet);
         }
@@ -141,13 +148,15 @@ impl SendWorkflow<'_> {
             WalletSecret::Xpriv(xpriv) => Payload::xprv(xpriv.expose()),
         }
         .map_err(|_| KeyTeleportAlert::InvalidPayload)?;
+
         let response =
             sender.send(payload).map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
         let state = KeyTeleportSendReady {
             selected_wallet: wallet,
-            packet: Arc::new(KeyTeleportSenderPacket::new(response.packet)),
+            packet: Arc::new(KeyTeleportSenderPacket::from(response.packet)),
             password: Arc::new(KeyTeleportPassword::new(response.password)),
         };
+
         if !self
             .state_machine()
             .set_phase_if_current(generation, Phase::Send(SendPhase::Ready(state)))
@@ -201,6 +210,7 @@ fn eligible_wallet_by_id(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTele
         .wallets
         .get(wallet_id, network, mode)?
         .ok_or(KeyTeleportAlert::IneligibleWallet)?;
+
     if !is_send_eligible(&wallet)? {
         return Err(KeyTeleportAlert::IneligibleWallet);
     }
@@ -216,6 +226,7 @@ fn current_send_wallet(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTelepo
         .wallets
         .get(wallet_id, network, mode)?
         .ok_or(KeyTeleportAlert::IneligibleWallet)?;
+
     if wallet.wallet_type != WalletType::Hot {
         return Err(KeyTeleportAlert::IneligibleWallet);
     }

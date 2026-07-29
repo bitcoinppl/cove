@@ -176,7 +176,7 @@ fn receive_request(manager: &RustKeyTeleportManager) -> KeyTeleportReceiveState 
 
 fn sender_transfer(request: &KeyTeleportReceiveState) -> (Arc<KeyTeleportSenderPacket>, String) {
     let sender = SenderSession::new(
-        request.packet.inner(),
+        request.packet.as_ref(),
         &NumericCode::from_str(&request.numeric_code).unwrap(),
     )
     .unwrap();
@@ -186,7 +186,7 @@ fn sender_transfer(request: &KeyTeleportReceiveState) -> (Arc<KeyTeleportSenderP
         .unwrap();
     let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
 
-    (Arc::new(KeyTeleportSenderPacket::new(response.packet)), response.password.as_display_text())
+    (Arc::new(KeyTeleportSenderPacket::from(response.packet)), response.password.as_display_text())
 }
 
 fn sender_packet(request: &KeyTeleportReceiveState) -> Arc<KeyTeleportSenderPacket> {
@@ -224,6 +224,7 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
         "network": scope.network,
         "wallet_mode": scope.wallet_mode,
     });
+
     Keychain::global().save_key_teleport_receive_session(&legacy.to_string()).unwrap();
     let expected_packet = receiver.request().unwrap().packet;
     let manager = RustKeyTeleportManager::new();
@@ -231,7 +232,7 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
     manager.start_receive().unwrap();
 
     let request = receive_request(&manager);
-    assert_eq!(request.packet.inner(), &expected_packet);
+    assert_eq!(&**request.packet, &expected_packet);
     let migrated = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
     let migrated: serde_json::Value = serde_json::from_str(&migrated).unwrap();
     assert!(migrated["session_id"].is_string());
@@ -349,7 +350,7 @@ fn wrong_sender_password_keeps_receive_session_for_retry() {
     };
 
     let sender = SenderSession::new(
-        request.packet.inner(),
+        request.packet.as_ref(),
         &NumericCode::from_str(&request.numeric_code).unwrap(),
     )
     .unwrap();
@@ -358,7 +359,7 @@ fn wrong_sender_password_keeps_receive_session_for_retry() {
         )
         .unwrap();
     let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
-    let packet = Arc::new(KeyTeleportSenderPacket::new(response.packet));
+    let packet = Arc::new(KeyTeleportSenderPacket::from(response.packet));
 
     manager.clone().dispatch(Action::Ingest(KeyTeleportInput::Sender(packet)));
     manager.clone().dispatch(Action::EnterSenderPassword("AAAAAAAA".to_string()));
@@ -378,8 +379,9 @@ fn displayed_receive_request_is_invalidated_if_authoritative_storage_disappears(
         KeyTeleportManagerState::ReceiveReady(state) => state,
         other => panic!("expected receive ready, got {other:?}"),
     };
+
     let sender = SenderSession::new(
-        request.packet.inner(),
+        request.packet.as_ref(),
         &NumericCode::from_str(&request.numeric_code).unwrap(),
     )
     .unwrap();
@@ -388,7 +390,7 @@ fn displayed_receive_request_is_invalidated_if_authoritative_storage_disappears(
         )
         .unwrap();
     let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
-    let packet = KeyTeleportSenderPacket::new(response.packet);
+    let packet = KeyTeleportSenderPacket::from(response.packet);
 
     Keychain::global().delete_key_teleport_receive_session();
     let error = manager.handle_action(Action::Ingest(KeyTeleportInput::Sender(Arc::new(packet))));
@@ -408,8 +410,9 @@ fn duplicate_receive_import_finishes_and_erases_the_receive_session() {
         KeyTeleportManagerState::ReceiveReady(state) => state,
         other => panic!("expected receive ready, got {other:?}"),
     };
+
     let sender = SenderSession::new(
-        request.packet.inner(),
+        request.packet.as_ref(),
         &NumericCode::from_str(&request.numeric_code).unwrap(),
     )
     .unwrap();
@@ -422,7 +425,7 @@ fn duplicate_receive_import_finishes_and_erases_the_receive_session() {
 
     manager
         .handle_action(Action::Ingest(KeyTeleportInput::Sender(Arc::new(
-            KeyTeleportSenderPacket::new(response.packet),
+            KeyTeleportSenderPacket::from(response.packet),
         ))))
         .unwrap();
     manager.enter_sender_password(&password.as_display_text()).unwrap();
@@ -431,6 +434,7 @@ fn duplicate_receive_import_finishes_and_erases_the_receive_session() {
     let KeyTeleportManagerState::ReceiveAlreadyImportedWallet(wallet) = manager.state() else {
         panic!("expected already-imported result")
     };
+
     assert_eq!(wallet.id, fixture.wallet.id);
     assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_none());
 }
@@ -501,6 +505,7 @@ fn expired_receive_session_is_deleted_and_not_resumed() {
         "network": Database::global().global_config.selected_network(),
         "wallet_mode": Database::global().global_config.wallet_mode(),
     });
+
     Keychain::global().save_key_teleport_receive_session(&persisted.to_string()).unwrap();
     let manager = RustKeyTeleportManager::new();
 
@@ -566,7 +571,7 @@ fn ingest_rejects_packets_that_conflict_with_the_active_direction() {
     let other_receiver = ReceiverSession::new().request().unwrap();
 
     let receive_error = receive_manager.ingest(KeyTeleportInput::Receiver(Arc::new(
-        KeyTeleportReceiverPacket::new(other_receiver.packet),
+        KeyTeleportReceiverPacket::from(other_receiver.packet),
     )));
 
     let fixture = SendWalletFixture::new();
@@ -581,7 +586,7 @@ fn ingest_rejects_packets_that_conflict_with_the_active_direction() {
         .unwrap();
     let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
     let send_error = send_manager
-        .ingest(KeyTeleportInput::Sender(Arc::new(KeyTeleportSenderPacket::new(response.packet))));
+        .ingest(KeyTeleportInput::Sender(Arc::new(KeyTeleportSenderPacket::from(response.packet))));
 
     assert_eq!(receive_error, Err(KeyTeleportAlert::ConflictingTransferDirection));
     assert_eq!(send_error, Err(KeyTeleportAlert::ConflictingTransferDirection));
@@ -626,7 +631,7 @@ fn sender_packet_without_active_receive_session_returns_clear_alert() {
         )
         .unwrap();
     let response = sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap();
-    let packet = KeyTeleportSenderPacket::new(response.packet);
+    let packet = KeyTeleportSenderPacket::from(response.packet);
 
     let error = manager.handle_action(Action::Ingest(KeyTeleportInput::Sender(Arc::new(packet))));
 
@@ -643,8 +648,9 @@ fn sender_packet_resumes_persisted_receive_session_before_route_appears() {
         KeyTeleportManagerState::ReceiveReady(state) => state,
         other => panic!("expected receive ready, got {other:?}"),
     };
+
     let sender = SenderSession::new(
-        request.packet.inner(),
+        request.packet.as_ref(),
         &NumericCode::from_str(&request.numeric_code).unwrap(),
     )
     .unwrap();
@@ -657,7 +663,7 @@ fn sender_packet_resumes_persisted_receive_session_before_route_appears() {
 
     manager
         .handle_action(Action::Ingest(KeyTeleportInput::Sender(Arc::new(
-            KeyTeleportSenderPacket::new(response.packet),
+            KeyTeleportSenderPacket::from(response.packet),
         ))))
         .unwrap();
     manager.handle_action(Action::StartReceive).unwrap();
@@ -682,6 +688,7 @@ fn wallet_started_send_keeps_wallet_fixed_while_awaiting_receiver() {
     let Phase::Send(SendPhase::AwaitReceiver { wallet }) = &model.phase else {
         panic!("expected wallet-fixed private phase")
     };
+
     assert_eq!(wallet, &fixture.wallet);
 }
 
@@ -695,12 +702,13 @@ fn receiver_started_send_requires_wallet_choice() {
     let request = receiver.request().unwrap();
 
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
 
     let KeyTeleportManagerState::SendChooseWallet(state) = manager.state() else {
         panic!("expected wallet choice state")
     };
+
     assert_eq!(state.eligible_wallets, vec![fixture.wallet.clone()]);
 }
 
@@ -715,7 +723,7 @@ fn receiver_code_reaches_send_ready_for_mnemonic() {
 
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
     manager.enter_receiver_code(request.numeric_code.as_str()).unwrap();
 
@@ -723,7 +731,7 @@ fn receiver_code_reaches_send_ready_for_mnemonic() {
     let Phase::Send(SendPhase::Ready(ready)) = &model.phase else { panic!("expected send ready") };
     assert_eq!(ready.selected_wallet, fixture.wallet);
     assert!(matches!(
-        receiver.decode(ready.packet.inner(), &ready.password.0).unwrap(),
+        receiver.decode(ready.packet.as_ref(), &ready.password.0).unwrap(),
         DecodedPayload::Mnemonic(_)
     ));
 }
@@ -764,12 +772,13 @@ fn fixed_wallet_send_ignores_other_wallets_with_unreadable_secrets() {
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
 
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
 
     let KeyTeleportManagerState::SendEnterCode(state) = manager.state() else {
         panic!("expected receiver code entry")
     };
+
     assert_eq!(state.selected_wallet, fixture.wallet);
     assert_eq!(
         eligible_wallet_by_id(&WalletMetadata::preview_new().id),
@@ -793,7 +802,7 @@ fn end_receive_during_send_ready_preserves_receive_session_and_send_state() {
     let request = receiver.request().unwrap();
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
     manager.enter_receiver_code(request.numeric_code.as_str()).unwrap();
     assert!(matches!(manager.state(), KeyTeleportManagerState::SendReady(_)));
@@ -826,7 +835,7 @@ fn receiver_code_reaches_send_ready_for_xprv_stash() {
 
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
     manager.enter_receiver_code(request.numeric_code.as_str()).unwrap();
 
@@ -834,10 +843,11 @@ fn receiver_code_reaches_send_ready_for_xprv_stash() {
     let Phase::Send(SendPhase::Ready(ready)) = &model.phase else { panic!("expected send ready") };
     assert_eq!(ready.selected_wallet, fixture.wallet);
     let DecodedPayload::Xprv(decoded) =
-        receiver.decode(ready.packet.inner(), &ready.password.0).unwrap()
+        receiver.decode(ready.packet.as_ref(), &ready.password.0).unwrap()
     else {
         panic!("expected xprv")
     };
+
     assert_eq!(decoded.expose_string(), xprv.to_string());
 }
 
@@ -851,7 +861,7 @@ fn receiver_code_revalidates_the_wallet_before_reading_its_secret() {
     let request = receiver.request().unwrap();
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
     Database::global()
         .wallets
@@ -874,7 +884,7 @@ fn receiver_code_rejects_a_replaced_wallet_secret() {
     let request = receiver.request().unwrap();
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
     manager
-        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::new(request.packet)))
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
         .unwrap();
     let before = manager.state();
     let replacement = Mnemonic::from_entropy(&[1_u8; 16]).unwrap();
@@ -905,7 +915,7 @@ fn wrong_receiver_code_keeps_pending_send_for_retry() {
         })
         .expect("test fixture should have at least one invalid wrong code");
     let wallet = WalletMetadata::preview_new();
-    let packet = Arc::new(KeyTeleportReceiverPacket::new(request.packet));
+    let packet = Arc::new(KeyTeleportReceiverPacket::from(request.packet));
     manager.set_phase(Phase::Send(SendPhase::EnterCode { packet, wallet }));
 
     let error = manager.enter_receiver_code(&wrong_code);
