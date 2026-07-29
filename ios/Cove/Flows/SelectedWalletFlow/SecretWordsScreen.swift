@@ -73,6 +73,48 @@ struct SecretWordsScreen: View {
         )
     }
 
+    var body: some View {
+        SecretWordsLayout(
+            sizeCategory: sizeCategory,
+            words: words,
+            errorMessage: errorMessage,
+            rowHeight: rowHeight,
+            numberOfRows: numberOfRows,
+            numberOfColumns: numberOfColumns
+        )
+        .onAppear(perform: loadWords)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .adaptiveToolbarStyle()
+        .toolbar {
+            SecretWordsOptionsToolbar(
+                isInDecoyMode: auth.isInDecoyMode(),
+                pendingAction: pendingSensitiveAction,
+                isConfirmationPresented: showingSensitiveActionConfirmation,
+                presentConfirmation: presentConfirmation,
+                performSensitiveAction: performSensitiveAction
+            )
+        }
+        .sheet(isPresented: $showSeedQrSheet) {
+            SeedQrPresentation(words: words)
+        }
+        .fullScreenCover(
+            isPresented: $showingKeyTeleportCredentialVerification,
+            onDismiss: handleCredentialVerificationDismiss
+        ) {
+            SecretWordsCredentialVerification(
+                auth: auth,
+                succeeded: $keyTeleportCredentialVerificationSucceeded
+            )
+        }
+        .alert("App Lock Required", isPresented: $showingAppLockRequired) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enable a PIN or biometric app lock before sending secret words with KeyTeleport.")
+        }
+        .background(SecretWordsPatternBackground())
+        .background(Color.midnightBlue)
+    }
+
     private func presentConfirmation(for action: SecretWordsSensitiveAction) {
         // wait for Menu dismissal so the action sheet can anchor to the toolbar button
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -98,84 +140,11 @@ struct SecretWordsScreen: View {
         }
     }
 
-    var body: some View {
-        SecretWordsLayout(
-            sizeCategory: sizeCategory,
-            words: words,
-            errorMessage: errorMessage,
-            rowHeight: rowHeight,
-            numberOfRows: numberOfRows,
-            numberOfColumns: numberOfColumns
-        )
-        .onAppear(perform: loadWords)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .adaptiveToolbarStyle()
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button {
-                        presentConfirmation(for: .seedQr)
-                    } label: {
-                        Label("Seed QR", systemImage: "qrcode")
-                    }
+    private func handleCredentialVerificationDismiss() {
+        defer { keyTeleportCredentialVerificationSucceeded = false }
+        guard keyTeleportCredentialVerificationSucceeded else { return }
 
-                    // the main credential is required because the decoy PIN can never satisfy it
-                    if !auth.isInDecoyMode() {
-                        Button {
-                            presentConfirmation(for: .keyTeleport)
-                        } label: {
-                            Label("KeyTeleport", systemImage: "paperplane")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(.white)
-                }
-                .accessibilityLabel("Secret words options")
-                .confirmationDialog(
-                    pendingSensitiveAction?.confirmationTitle ?? "",
-                    isPresented: showingSensitiveActionConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    if let pendingSensitiveAction {
-                        Button(pendingSensitiveAction.confirmationButtonTitle) {
-                            performSensitiveAction(pendingSensitiveAction)
-                        }
-                    }
-
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    if let pendingSensitiveAction {
-                        Text(pendingSensitiveAction.confirmationMessage)
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showSeedQrSheet) {
-            if let words {
-                SeedQrSheetView(words: words)
-            }
-        }
-        .fullScreenCover(
-            isPresented: $showingKeyTeleportCredentialVerification,
-            onDismiss: {
-                defer { keyTeleportCredentialVerificationSucceeded = false }
-                guard keyTeleportCredentialVerificationSucceeded else { return }
-
-                app.startKeyTeleportSend(walletId: id)
-            }
-        ) {
-            MainCredentialVerificationView(auth: auth) {
-                keyTeleportCredentialVerificationSucceeded = true
-            }
-        }
-        .alert("App Lock Required", isPresented: $showingAppLockRequired) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Enable a PIN or biometric app lock before sending secret words with KeyTeleport.")
-        }
-        .background(SecretWordsPatternBackground())
-        .background(Color.midnightBlue)
+        app.startKeyTeleportSend(walletId: id)
     }
 
     private func loadWords() {
@@ -186,6 +155,77 @@ struct SecretWordsScreen: View {
             words = try Mnemonic(id: id)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct SecretWordsOptionsToolbar: ToolbarContent {
+    let isInDecoyMode: Bool
+    let pendingAction: SecretWordsSensitiveAction?
+    let isConfirmationPresented: Binding<Bool>
+    let presentConfirmation: (SecretWordsSensitiveAction) -> Void
+    let performSensitiveAction: (SecretWordsSensitiveAction) -> Void
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Menu {
+                Button {
+                    presentConfirmation(.seedQr)
+                } label: {
+                    Label("Seed QR", systemImage: "qrcode")
+                }
+
+                // the main credential is required because the decoy PIN can never satisfy it
+                if !isInDecoyMode {
+                    Button {
+                        presentConfirmation(.keyTeleport)
+                    } label: {
+                        Label("KeyTeleport", systemImage: "paperplane")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.white)
+            }
+            .accessibilityLabel("Secret words options")
+            .confirmationDialog(
+                pendingAction?.confirmationTitle ?? "",
+                isPresented: isConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                if let pendingAction {
+                    Button(pendingAction.confirmationButtonTitle) {
+                        performSensitiveAction(pendingAction)
+                    }
+                }
+
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if let pendingAction {
+                    Text(pendingAction.confirmationMessage)
+                }
+            }
+        }
+    }
+}
+
+private struct SeedQrPresentation: View {
+    let words: Mnemonic?
+
+    var body: some View {
+        if let words {
+            SeedQrSheetView(words: words)
+        }
+    }
+}
+
+private struct SecretWordsCredentialVerification: View {
+    let auth: AuthManager
+    @Binding var succeeded: Bool
+
+    var body: some View {
+        MainCredentialVerificationView(auth: auth) {
+            succeeded = true
         }
     }
 }

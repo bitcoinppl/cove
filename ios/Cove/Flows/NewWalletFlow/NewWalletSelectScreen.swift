@@ -164,7 +164,7 @@ private struct NewWalletSelectionLayout: View {
             Group {
                 if scrollableLayout {
                     ScrollView {
-                        NewWalletSelectionMainContent(
+                        NewWalletSelectionBottomLayout(
                             showSelectDialog: $showSelectDialog,
                             nfcCalled: nfcCalled,
                             hotWalletRoute: hotWalletRoute,
@@ -174,7 +174,7 @@ private struct NewWalletSelectionLayout: View {
                             pasteWallet: pasteWallet,
                             showNfcHelp: showNfcHelp
                         )
-                        .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .bottom)
+                        .frame(minHeight: proxy.size.height)
                     }
                     .scrollIndicators(.hidden)
                 } else {
@@ -192,39 +192,6 @@ private struct NewWalletSelectionLayout: View {
                 }
             }
         }
-    }
-}
-
-private struct NewWalletSelectionMainContent: View {
-    @Binding var showSelectDialog: Bool
-    let nfcCalled: Bool
-    let hotWalletRoute: Route
-    let qrRoute: Route
-    let importFile: () -> Void
-    let scanNfc: () -> Void
-    let pasteWallet: () -> Void
-    let showNfcHelp: () -> Void
-
-    var body: some View {
-        VStack(spacing: 28) {
-            NewWalletSelectionPrompt()
-
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
-
-            NewWalletTypeActions(
-                showSelectDialog: $showSelectDialog,
-                nfcCalled: nfcCalled,
-                hotWalletRoute: hotWalletRoute,
-                qrRoute: qrRoute,
-                importFile: importFile,
-                scanNfc: scanNfc,
-                pasteWallet: pasteWallet,
-                showNfcHelp: showNfcHelp
-            )
-        }
-        .padding()
-        .frame(maxHeight: .infinity)
     }
 }
 

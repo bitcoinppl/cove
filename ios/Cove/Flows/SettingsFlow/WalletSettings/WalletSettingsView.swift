@@ -131,6 +131,22 @@ struct WalletSettingsView: View {
         manager.validateMetadata()
     }
 
+    private func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
+        guard oldPhase == .active, newPhase != .active else { return }
+
+        clearRevealedXprv()
+    }
+
+    private func handleXprvVerificationDismiss() {
+        defer {
+            pendingXprvAction = nil
+            xprvCredentialVerificationSucceeded = false
+        }
+        guard xprvCredentialVerificationSucceeded, let pendingXprvAction else { return }
+
+        performXprvExport(pendingXprvAction)
+    }
+
     var body: some View {
         List {
             WalletSettingsInformationSection(
@@ -169,30 +185,19 @@ struct WalletSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .foregroundColor(.primary)
         .onDisappear(perform: handleDisappear)
-        .onAppear { manager.validateMetadata() }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            guard oldPhase == .active, newPhase != .active else { return }
-
-            clearRevealedXprv()
-        }
+        .onAppear(perform: manager.validateMetadata)
+        .onChange(of: scenePhase, handleScenePhaseChange)
         .task {
             accountNumber = manager.rust.nonDefaultAccountNumber()
         }
         .fullScreenCover(
             isPresented: $showingXprvCredentialVerification,
-            onDismiss: {
-                defer {
-                    pendingXprvAction = nil
-                    xprvCredentialVerificationSucceeded = false
-                }
-                guard xprvCredentialVerificationSucceeded, let pendingXprvAction else { return }
-
-                performXprvExport(pendingXprvAction)
-            }
+            onDismiss: handleXprvVerificationDismiss
         ) {
-            MainCredentialVerificationView(auth: auth) {
-                xprvCredentialVerificationSucceeded = true
-            }
+            WalletXprvCredentialVerification(
+                auth: auth,
+                succeeded: $xprvCredentialVerificationSucceeded
+            )
         }
         .sheet(
             isPresented: $showingXprvReveal,
@@ -206,6 +211,17 @@ struct WalletSettingsView: View {
             Text("Enable a PIN or biometric app lock before exporting a private key.")
         }
         .scrollContentBackground(.hidden)
+    }
+}
+
+private struct WalletXprvCredentialVerification: View {
+    let auth: AuthManager
+    @Binding var succeeded: Bool
+
+    var body: some View {
+        MainCredentialVerificationView(auth: auth) {
+            succeeded = true
+        }
     }
 }
 
@@ -559,52 +575,75 @@ private struct XprvRevealSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Extended Private Key")
-                        .font(.headline)
-
-                    if let xprv {
-                        Text(xprv)
-                            .font(.system(.caption, design: .monospaced))
-                            .privacySensitive()
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(UIColor.secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                        Button {
-                            copySensitiveXprv(xprv)
-                            copied = true
-                        } label: {
-                            Label(
-                                copied ? "Copied for 2 Minutes" : "Copy for 2 Minutes",
-                                systemImage: copied ? "checkmark" : "doc.on.doc"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-
-                    Text("The clipboard copy stays on this device and expires after two minutes.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            XprvRevealContent(xprv: $xprv, copied: $copied)
+                .navigationTitle("Private Key")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    XprvRevealToolbar(done: done)
                 }
-                .padding()
-            }
-            .navigationTitle("Private Key")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        xprv = nil
-                        dismiss()
-                    }
-                }
-            }
         }
         .interactiveDismissDisabled()
-        .onDisappear { xprv = nil }
+        .onDisappear(perform: clear)
+    }
+
+    private func done() {
+        clear()
+        dismiss()
+    }
+
+    private func clear() {
+        xprv = nil
+    }
+}
+
+private struct XprvRevealContent: View {
+    @Binding var xprv: String?
+    @Binding var copied: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Extended Private Key")
+                    .font(.headline)
+
+                if let xprv {
+                    Text(xprv)
+                        .font(.system(.caption, design: .monospaced))
+                        .privacySensitive()
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    Button {
+                        copySensitiveXprv(xprv)
+                        copied = true
+                    } label: {
+                        Label(
+                            copied ? "Copied for 2 Minutes" : "Copy for 2 Minutes",
+                            systemImage: copied ? "checkmark" : "doc.on.doc"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                Text("The clipboard copy stays on this device and expires after two minutes.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+        }
+    }
+}
+
+private struct XprvRevealToolbar: ToolbarContent {
+    let done: () -> Void
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Done", action: done)
+        }
     }
 }
 

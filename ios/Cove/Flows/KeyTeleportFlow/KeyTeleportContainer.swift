@@ -47,22 +47,20 @@ private struct KeyTeleportLoadedView: View {
     @State private var showRestartSessionConfirmation = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-
-                if let alert = manager.alert {
-                    KeyTeleportAlertBanner(alert: alert) {
-                        manager.alert = nil
-                    }
-                }
-
-                stateContent
-                    .id(sensitiveRevealResetId)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 24)
-        }
+        KeyTeleportLoadedContent(
+            manager: manager,
+            route: route,
+            pastedText: $pastedText,
+            receiverCode: $receiverCode,
+            senderPassword: $senderPassword,
+            mnemonicDisclosure: $mnemonicDisclosure,
+            xprv: $xprv,
+            sensitiveRevealResetId: sensitiveRevealResetId,
+            scan: openScanner,
+            paste: paste,
+            revealMnemonicWords: revealMnemonicWords,
+            finishReview: finishReview
+        )
         .scrollDismissesKeyboard(.interactively)
         .foregroundStyle(.white)
         .tint(.btnGradientLight)
@@ -70,251 +68,21 @@ private struct KeyTeleportLoadedView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if showsReadyActions {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    readyActionsMenu
-                }
-            }
+            KeyTeleportReadyActionsToolbar(
+                manager: manager,
+                showEndSessionConfirmation: $showEndSessionConfirmation,
+                showRestartSessionConfirmation: $showRestartSessionConfirmation
+            )
         }
         .sheet(isPresented: $showScanner) {
             QrCodeScanView(app: app, scannedCode: $scannedCode)
         }
         .onAppear(perform: prepare)
         .onDisappear(perform: handleDisappear)
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            guard oldPhase == .active, newPhase != .active else { return }
-
-            resetSensitiveRevealUI()
-        }
-        .onChange(of: isMnemonicReview) { _, isReview in
-            if !isReview {
-                mnemonicDisclosure = .hidden
-            }
-        }
-        .onChange(of: isXprvReview) { _, isReview in
-            if !isReview {
-                xprv = nil
-            }
-        }
-        .onChange(of: scannedCode) { _, scannedCode in
-            guard let multiFormat = scannedCode?.item else { return }
-
-            ingest(multiFormat)
-            self.scannedCode = nil
-        }
-    }
-
-    private var stateContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            switch manager.state {
-            case .idle:
-                switch route {
-                case .receive:
-                    KeyTeleportLoadingView()
-                case .send:
-                    KeyTeleportScanPasteSection(
-                        pastedText: $pastedText,
-                        scan: { showScanner = true },
-                        paste: paste
-                    )
-                }
-            case let .receiveReady(state):
-                KeyTeleportReceiveReadyView(state: state) {
-                    showScanner = true
-                }
-            case .receiveError:
-                VStack(spacing: 16) {
-                    Text("Cove couldn’t prepare a receive request.")
-                        .font(.headline)
-
-                    Button("Try Again") {
-                        manager.dispatch(.startReceive)
-                    }
-                    .buttonStyle(OnboardingPrimaryButtonStyle())
-                }
-            case .receiveEnterPassword:
-                KeyTeleportPasswordEntryView(password: $senderPassword) {
-                    manager.dispatch(.enterSenderPassword(senderPassword))
-                }
-            case let .receiveMnemonicReview(review):
-                KeyTeleportMnemonicReviewView(
-                    review: review,
-                    disclosure: mnemonicDisclosure
-                ) {
-                    revealMnemonicWords()
-                } importWords: {
-                    mnemonicDisclosure = .hidden
-                    manager.dispatch(.importReceivedWallet)
-                } finish: {
-                    mnemonicDisclosure = .hidden
-                    finishReview()
-                }
-            case let .receiveXprvReview(review):
-                KeyTeleportXprvReviewView(review: review, xprv: $xprv) {
-                    xprv = manager.revealXprv()
-                } hide: {
-                    xprv = nil
-                    manager.dispatch(.hideXprv)
-                } importWallet: {
-                    xprv = nil
-                    manager.dispatch(.importReceivedWallet)
-                } finish: {
-                    xprv = nil
-                    finishReview()
-                }
-            case let .receiveMessageReview(review):
-                KeyTeleportMessageReviewView(review: review, finish: finishReview)
-            case let .receiveImportedWallet(wallet):
-                KeyTeleportImportedWalletView(wallet: wallet) {
-                    manager.dispatch(.clear)
-                    app.selectWallet(wallet.id)
-                }
-            case let .receiveAlreadyImportedWallet(wallet):
-                KeyTeleportImportedWalletView(
-                    wallet: wallet,
-                    title: "Wallet already imported",
-                    message: "\(wallet.name) is already available in Cove.",
-                    buttonTitle: "Open Wallet"
-                ) {
-                    manager.dispatch(.clear)
-                    app.selectWallet(wallet.id)
-                }
-            case .sendAwaitReceiver:
-                KeyTeleportAwaitReceiverView()
-
-                KeyTeleportScanPasteSection(
-                    pastedText: $pastedText,
-                    scan: { showScanner = true },
-                    paste: paste
-                )
-            case let .sendChooseWallet(state):
-                KeyTeleportSendChooseWalletView(state: state) { walletId in
-                    manager.dispatch(.selectSendWallet(walletId))
-                }
-            case let .sendEnterCode(state):
-                KeyTeleportReceiverCodeView(state: state, code: $receiverCode) {
-                    manager.dispatch(.enterReceiverCode(receiverCode))
-                }
-            case let .sendReady(state):
-                KeyTeleportSendReadyView(state: state) {
-                    manager.dispatch(.clear)
-                    app.popRoute()
-                }
-            }
-        }
-        .keyTeleportCard()
-    }
-
-    private var showsReadyActions: Bool {
-        switch manager.state {
-        case .receiveReady, .sendReady:
-            true
-        default:
-            false
-        }
-    }
-
-    private var readyActionsMenu: some View {
-        Menu {
-            switch manager.state {
-            case let .receiveReady(state):
-                shareButton { try state.packet.url() }
-
-                Button {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        showRestartSessionConfirmation = true
-                    }
-                } label: {
-                    Label("New Receive Request", systemImage: "arrow.clockwise")
-                }
-
-                Button(role: .destructive) {
-                    // wait for menu dismissal so the dialog can anchor to the toolbar button
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        showEndSessionConfirmation = true
-                    }
-                } label: {
-                    Label("End Session", systemImage: "xmark.circle")
-                }
-            case let .sendReady(state):
-                shareButton { try state.packet.url() }
-            default:
-                EmptyView()
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-        }
-        .accessibilityLabel("More")
-        .confirmationDialog(
-            "End this session?",
-            isPresented: $showEndSessionConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("End Session", role: .destructive) {
-                manager.dispatch(.endReceive)
-                app.popRoute()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The current receive request will be deleted from this device.")
-        }
-        .confirmationDialog(
-            "Create a new receive request?",
-            isPresented: $showRestartSessionConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Create New Request", role: .destructive) {
-                manager.dispatch(.restartReceive)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Sender responses made for the current request will no longer work.")
-        }
-    }
-
-    private func shareButton(url: @escaping () throws -> String) -> some View {
-        Button {
-            do {
-                try ShareSheet.presentFromMenu(text: url())
-            } catch {
-                app.alertState = TaggedItem(
-                    .invalidFormat(message: "Unable to encode this KeyTeleport packet.")
-                )
-            }
-        } label: {
-            Label("Share", systemImage: "square.and.arrow.up")
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(OnboardingRecoveryTypography.compactTitle)
-
-            Text(subtitle)
-                .font(OnboardingRecoveryTypography.footnote)
-                .foregroundStyle(.coveLightGray.opacity(0.74))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var title: String {
-        switch route {
-        case .receive:
-            "Receive by KeyTeleport"
-        case .send:
-            "Send by KeyTeleport"
-        }
-    }
-
-    private var subtitle: String {
-        switch route {
-        case .receive:
-            "Show this request to the sending wallet, then scan the sender response."
-        case .send:
-            "Scan or paste the receiver request, confirm the wallet, then share the response."
-        }
+        .onChange(of: scenePhase, handleScenePhaseChange)
+        .onChange(of: isMnemonicReview, handleMnemonicReviewChange)
+        .onChange(of: isXprvReview, handleXprvReviewChange)
+        .onChange(of: scannedCode, handleScannedCodeChange)
     }
 
     private func prepare() {
@@ -335,6 +103,38 @@ private struct KeyTeleportLoadedView: View {
         sensitiveRevealResetId = UUID()
 
         manager.hideSensitiveReveals()
+    }
+
+    private func openScanner() {
+        showScanner = true
+    }
+
+    private func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
+        guard oldPhase == .active, newPhase != .active else { return }
+
+        resetSensitiveRevealUI()
+    }
+
+    private func handleMnemonicReviewChange(_: Bool, _ isReview: Bool) {
+        if !isReview {
+            mnemonicDisclosure = .hidden
+        }
+    }
+
+    private func handleXprvReviewChange(_: Bool, _ isReview: Bool) {
+        if !isReview {
+            xprv = nil
+        }
+    }
+
+    private func handleScannedCodeChange(
+        _: TaggedItem<MultiFormat>?,
+        _ scannedCode: TaggedItem<MultiFormat>?
+    ) {
+        guard let multiFormat = scannedCode?.item else { return }
+
+        ingest(multiFormat)
+        self.scannedCode = nil
     }
 
     private func paste() {
@@ -406,6 +206,462 @@ private struct KeyTeleportLoadedView: View {
     private var isXprvReview: Bool {
         if case .receiveXprvReview = manager.state { return true }
         return false
+    }
+}
+
+private struct KeyTeleportLoadedContent: View {
+    @Bindable var manager: KeyTeleportManager
+    let route: KeyTeleportRoute
+    @Binding var pastedText: String
+    @Binding var receiverCode: String
+    @Binding var senderPassword: String
+    @Binding var mnemonicDisclosure: KeyTeleportMnemonicDisclosure
+    @Binding var xprv: String?
+    let sensitiveRevealResetId: UUID
+    let scan: () -> Void
+    let paste: () -> Void
+    let revealMnemonicWords: () -> Void
+    let finishReview: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                KeyTeleportHeader(route: route)
+
+                if let alert = manager.alert {
+                    KeyTeleportAlertBanner(alert: alert, dismiss: dismissAlert)
+                }
+
+                KeyTeleportStateContent(
+                    manager: manager,
+                    route: route,
+                    pastedText: $pastedText,
+                    receiverCode: $receiverCode,
+                    senderPassword: $senderPassword,
+                    mnemonicDisclosure: $mnemonicDisclosure,
+                    xprv: $xprv,
+                    scan: scan,
+                    paste: paste,
+                    revealMnemonicWords: revealMnemonicWords,
+                    finishReview: finishReview
+                )
+                .id(sensitiveRevealResetId)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 24)
+        }
+    }
+
+    private func dismissAlert() {
+        manager.alert = nil
+    }
+}
+
+private struct KeyTeleportHeader: View {
+    let route: KeyTeleportRoute
+
+    private var title: String {
+        switch route {
+        case .receive:
+            "Receive by KeyTeleport"
+        case .send:
+            "Send by KeyTeleport"
+        }
+    }
+
+    private var subtitle: String {
+        switch route {
+        case .receive:
+            "Show this request to the sending wallet, then scan the sender response."
+        case .send:
+            "Scan or paste the receiver request, confirm the wallet, then share the response."
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(OnboardingRecoveryTypography.compactTitle)
+
+            Text(subtitle)
+                .font(OnboardingRecoveryTypography.footnote)
+                .foregroundStyle(.coveLightGray.opacity(0.74))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct KeyTeleportStateContent: View {
+    @Bindable var manager: KeyTeleportManager
+    let route: KeyTeleportRoute
+    @Binding var pastedText: String
+    @Binding var receiverCode: String
+    @Binding var senderPassword: String
+    @Binding var mnemonicDisclosure: KeyTeleportMnemonicDisclosure
+    @Binding var xprv: String?
+    let scan: () -> Void
+    let paste: () -> Void
+    let revealMnemonicWords: () -> Void
+    let finishReview: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            switch route {
+            case .receive:
+                KeyTeleportReceiveStateContent(
+                    manager: manager,
+                    senderPassword: $senderPassword,
+                    mnemonicDisclosure: $mnemonicDisclosure,
+                    xprv: $xprv,
+                    scan: scan,
+                    revealMnemonicWords: revealMnemonicWords,
+                    finishReview: finishReview
+                )
+            case .send:
+                KeyTeleportSendStateContent(
+                    manager: manager,
+                    pastedText: $pastedText,
+                    receiverCode: $receiverCode,
+                    scan: scan,
+                    paste: paste
+                )
+            }
+        }
+        .keyTeleportCard()
+    }
+}
+
+private struct KeyTeleportReceiveStateContent: View {
+    @Bindable var manager: KeyTeleportManager
+    @Binding var senderPassword: String
+    @Binding var mnemonicDisclosure: KeyTeleportMnemonicDisclosure
+    @Binding var xprv: String?
+    let scan: () -> Void
+    let revealMnemonicWords: () -> Void
+    let finishReview: () -> Void
+
+    var body: some View {
+        switch manager.state {
+        case .idle, .receiveReady, .receiveError, .receiveEnterPassword:
+            KeyTeleportReceiveSetupStateContent(
+                manager: manager,
+                senderPassword: $senderPassword,
+                scan: scan
+            )
+        default:
+            KeyTeleportReceiveReviewStateContent(
+                manager: manager,
+                mnemonicDisclosure: $mnemonicDisclosure,
+                xprv: $xprv,
+                revealMnemonicWords: revealMnemonicWords,
+                finishReview: finishReview
+            )
+        }
+    }
+}
+
+private struct KeyTeleportReceiveSetupStateContent: View {
+    @Bindable var manager: KeyTeleportManager
+    @Binding var senderPassword: String
+    let scan: () -> Void
+
+    var body: some View {
+        switch manager.state {
+        case .idle:
+            KeyTeleportLoadingView()
+        case let .receiveReady(state):
+            KeyTeleportReceiveReadyView(state: state, scan: scan)
+        case .receiveError:
+            KeyTeleportReceiveErrorView(retry: retry)
+        case .receiveEnterPassword:
+            KeyTeleportPasswordEntryView(password: $senderPassword, submit: submitPassword)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func retry() {
+        manager.dispatch(.startReceive)
+    }
+
+    private func submitPassword() {
+        manager.dispatch(.enterSenderPassword(senderPassword))
+    }
+}
+
+private struct KeyTeleportReceiveErrorView: View {
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Cove couldn’t prepare a receive request.")
+                .font(.headline)
+
+            Button("Try Again", action: retry)
+                .buttonStyle(OnboardingPrimaryButtonStyle())
+        }
+    }
+}
+
+private struct KeyTeleportReceiveReviewStateContent: View {
+    @Bindable var manager: KeyTeleportManager
+    @Binding var mnemonicDisclosure: KeyTeleportMnemonicDisclosure
+    @Binding var xprv: String?
+    let revealMnemonicWords: () -> Void
+    let finishReview: () -> Void
+
+    var body: some View {
+        switch manager.state {
+        case let .receiveMnemonicReview(review):
+            KeyTeleportMnemonicReviewView(
+                review: review,
+                disclosure: mnemonicDisclosure,
+                reveal: revealMnemonicWords,
+                importWords: importMnemonic,
+                finish: finishMnemonicReview
+            )
+        case let .receiveXprvReview(review):
+            KeyTeleportXprvReviewView(
+                review: review,
+                xprv: $xprv,
+                reveal: revealXprv,
+                hide: hideXprv,
+                importWallet: importXprv,
+                finish: finishXprvReview
+            )
+        case let .receiveMessageReview(review):
+            KeyTeleportMessageReviewView(review: review, finish: finishReview)
+        case let .receiveImportedWallet(wallet):
+            KeyTeleportImportedWalletStateView(
+                manager: manager,
+                wallet: wallet,
+                presentation: .imported
+            )
+        case let .receiveAlreadyImportedWallet(wallet):
+            KeyTeleportImportedWalletStateView(
+                manager: manager,
+                wallet: wallet,
+                presentation: .alreadyImported
+            )
+        default:
+            EmptyView()
+        }
+    }
+
+    private func importMnemonic() {
+        mnemonicDisclosure = .hidden
+        manager.dispatch(.importReceivedWallet)
+    }
+
+    private func finishMnemonicReview() {
+        mnemonicDisclosure = .hidden
+        finishReview()
+    }
+
+    private func revealXprv() {
+        xprv = manager.revealXprv()
+    }
+
+    private func hideXprv() {
+        xprv = nil
+        manager.dispatch(.hideXprv)
+    }
+
+    private func importXprv() {
+        xprv = nil
+        manager.dispatch(.importReceivedWallet)
+    }
+
+    private func finishXprvReview() {
+        xprv = nil
+        finishReview()
+    }
+}
+
+private enum KeyTeleportImportedWalletPresentation {
+    case imported
+    case alreadyImported
+}
+
+private struct KeyTeleportImportedWalletStateView: View {
+    @Environment(AppManager.self) private var app
+
+    @Bindable var manager: KeyTeleportManager
+    let wallet: WalletMetadata
+    let presentation: KeyTeleportImportedWalletPresentation
+
+    var body: some View {
+        switch presentation {
+        case .imported:
+            KeyTeleportImportedWalletView(wallet: wallet, finish: openWallet)
+        case .alreadyImported:
+            KeyTeleportImportedWalletView(
+                wallet: wallet,
+                title: "Wallet already imported",
+                message: "\(wallet.name) is already available in Cove.",
+                buttonTitle: "Open Wallet",
+                finish: openWallet
+            )
+        }
+    }
+
+    private func openWallet() {
+        manager.dispatch(.clear)
+        app.selectWallet(wallet.id)
+    }
+}
+
+private struct KeyTeleportSendStateContent: View {
+    @Environment(AppManager.self) private var app
+
+    @Bindable var manager: KeyTeleportManager
+    @Binding var pastedText: String
+    @Binding var receiverCode: String
+    let scan: () -> Void
+    let paste: () -> Void
+
+    var body: some View {
+        switch manager.state {
+        case .idle:
+            KeyTeleportScanPasteSection(pastedText: $pastedText, scan: scan, paste: paste)
+        case .sendAwaitReceiver:
+            KeyTeleportAwaitReceiverView()
+            KeyTeleportScanPasteSection(pastedText: $pastedText, scan: scan, paste: paste)
+        case let .sendChooseWallet(state):
+            KeyTeleportSendChooseWalletView(state: state, select: selectWallet)
+        case let .sendEnterCode(state):
+            KeyTeleportReceiverCodeView(
+                state: state,
+                code: $receiverCode,
+                submit: submitReceiverCode
+            )
+        case let .sendReady(state):
+            KeyTeleportSendReadyView(state: state, finish: finish)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func selectWallet(_ walletId: WalletId) {
+        manager.dispatch(.selectSendWallet(walletId))
+    }
+
+    private func submitReceiverCode() {
+        manager.dispatch(.enterReceiverCode(receiverCode))
+    }
+
+    private func finish() {
+        manager.dispatch(.clear)
+        app.popRoute()
+    }
+}
+
+private struct KeyTeleportReadyActionsToolbar: ToolbarContent {
+    @Environment(AppManager.self) private var app
+
+    @Bindable var manager: KeyTeleportManager
+    @Binding var showEndSessionConfirmation: Bool
+    @Binding var showRestartSessionConfirmation: Bool
+
+    private var showsReadyActions: Bool {
+        switch manager.state {
+        case .receiveReady, .sendReady:
+            true
+        default:
+            false
+        }
+    }
+
+    var body: some ToolbarContent {
+        if showsReadyActions {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                readyActionsMenu
+            }
+        }
+    }
+
+    private var readyActionsMenu: some View {
+        Menu {
+            switch manager.state {
+            case let .receiveReady(state):
+                shareButton { try state.packet.url() }
+
+                Button(action: showRestartConfirmation) {
+                    Label("New Receive Request", systemImage: "arrow.clockwise")
+                }
+
+                Button(
+                    role: .destructive,
+                    action: showEndConfirmation
+                ) {
+                    Label("End Session", systemImage: "xmark.circle")
+                }
+            case let .sendReady(state):
+                shareButton { try state.packet.url() }
+            default:
+                EmptyView()
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("More")
+        .confirmationDialog(
+            "End this session?",
+            isPresented: $showEndSessionConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("End Session", role: .destructive, action: endSession)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The current receive request will be deleted from this device.")
+        }
+        .confirmationDialog(
+            "Create a new receive request?",
+            isPresented: $showRestartSessionConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Create New Request", role: .destructive, action: restartSession)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Sender responses made for the current request will no longer work.")
+        }
+    }
+
+    private func shareButton(url: @escaping () throws -> String) -> some View {
+        Button {
+            do {
+                try ShareSheet.presentFromMenu(text: url())
+            } catch {
+                app.alertState = TaggedItem(
+                    .invalidFormat(message: "Unable to encode this KeyTeleport packet.")
+                )
+            }
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func showRestartConfirmation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            showRestartSessionConfirmation = true
+        }
+    }
+
+    private func showEndConfirmation() {
+        // wait for menu dismissal so the dialog can anchor to the toolbar button
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            showEndSessionConfirmation = true
+        }
+    }
+
+    private func endSession() {
+        manager.dispatch(.endReceive)
+        app.popRoute()
+    }
+
+    private func restartSession() {
+        manager.dispatch(.restartReceive)
     }
 }
 
@@ -939,22 +1195,36 @@ private struct KeyTeleportMessageItemView: View {
         VStack(alignment: .leading, spacing: 12) {
             switch item {
             case let .note(title, text, group):
-                messageHeader(title: title, group: group, systemImage: "note.text")
-                messageField(label: "Message", value: text)
+                KeyTeleportMessageHeader(
+                    title: title,
+                    group: group,
+                    systemImage: "note.text"
+                )
+                KeyTeleportMessageField(label: "Message", value: text)
             case let .password(title, username, password, site, notes, group):
-                messageHeader(title: title, group: group, systemImage: "lock.fill")
-                messageField(label: "Username", value: username)
-                messageField(label: "Password", value: password)
-                messageField(label: "Website", value: site)
-                messageField(label: "Notes", value: notes)
+                KeyTeleportMessageHeader(
+                    title: title,
+                    group: group,
+                    systemImage: "lock.fill"
+                )
+                KeyTeleportMessageField(label: "Username", value: username)
+                KeyTeleportMessageField(label: "Password", value: password)
+                KeyTeleportMessageField(label: "Website", value: site)
+                KeyTeleportMessageField(label: "Notes", value: notes)
             }
         }
         .padding(16)
         .background(Color.midnightBlue.opacity(0.48))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
+}
 
-    private func messageHeader(title: String, group: String, systemImage: String) -> some View {
+private struct KeyTeleportMessageHeader: View {
+    let title: String
+    let group: String
+    let systemImage: String
+
+    var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Label(title, systemImage: systemImage)
                 .font(.headline)
@@ -968,9 +1238,13 @@ private struct KeyTeleportMessageItemView: View {
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func messageField(label: String, value: String) -> some View {
+private struct KeyTeleportMessageField: View {
+    let label: String
+    let value: String
+
+    var body: some View {
         if !value.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label.uppercased())

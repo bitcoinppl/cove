@@ -89,10 +89,6 @@ struct WalletTransitionRecoveryPlan {
         managerCache.coinControlManager
     }
 
-    var keyTeleportManager: KeyTeleportManager? {
-        managerCache.keyTeleportManager
-    }
-
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
         case .light:
@@ -197,43 +193,6 @@ struct WalletTransitionRecoveryPlan {
 
     public func clearCoinControlManager(_ manager: CoinControlManager) {
         managerCache.clearCoinControlManager(manager)
-    }
-
-    func ensureKeyTeleportManager() -> KeyTeleportManager {
-        managerCache.ensureKeyTeleportManager(app: rust)
-    }
-
-    func clearKeyTeleportManager() {
-        managerCache.clearKeyTeleportManager()
-    }
-
-    func canKeyTeleportSend(walletId: WalletId) -> Bool {
-        rust.canKeyTeleportSend(walletId: walletId)
-    }
-
-    @MainActor
-    @discardableResult
-    func startKeyTeleportSend(walletId: WalletId) -> Bool {
-        let activeDirections = [router.default.keyTeleportFlowDirection]
-            + router.routes.map(\.keyTeleportFlowDirection)
-            + [keyTeleportManager?.flowDirection]
-        guard KeyTeleportSendStartDecision.resolve(
-            activeDirections: activeDirections.compactMap(\.self)
-        ) == .start else {
-            alertState = .init(
-                .general(
-                    title: "KeyTeleport Session Active",
-                    message: "Finish the active KeyTeleport session before starting another transfer."
-                )
-            )
-            return false
-        }
-
-        let keyTeleportManager = ensureKeyTeleportManager()
-        keyTeleportManager.dispatch(.startSendFromWallet(walletId))
-        navigateToKeyTeleport(.send)
-
-        return true
     }
 
     @MainActor
@@ -408,14 +367,6 @@ struct WalletTransitionRecoveryPlan {
 
     func reconcileRouteOwnedManagers() {
         managerCache.reconcileRouteOwnedManagers(router: router)
-    }
-
-    func hideSensitiveKeyTeleportReveals() {
-        keyTeleportManager?.hideSensitiveReveals()
-    }
-
-    func navigateToKeyTeleport(_ route: KeyTeleportRoute) {
-        pushRoute(.keyTeleport(route))
     }
 
     private func restoreExistingRouteIfPresent(_ target: Route) -> Bool {
@@ -801,6 +752,57 @@ struct WalletTransitionRecoveryPlan {
         } catch {
             logger.error("Unable to dispatch app action \(action), error: \(error)")
         }
+    }
+}
+
+extension AppManager {
+    var keyTeleportManager: KeyTeleportManager? {
+        managerCache.keyTeleportManager
+    }
+
+    func ensureKeyTeleportManager() -> KeyTeleportManager {
+        managerCache.ensureKeyTeleportManager(app: rust)
+    }
+
+    func clearKeyTeleportManager() {
+        managerCache.clearKeyTeleportManager()
+    }
+
+    func canKeyTeleportSend(walletId: WalletId) -> Bool {
+        rust.canKeyTeleportSend(walletId: walletId)
+    }
+
+    @MainActor
+    @discardableResult
+    func startKeyTeleportSend(walletId: WalletId) -> Bool {
+        let activeDirections = [router.default.keyTeleportFlowDirection]
+            + router.routes.map(\.keyTeleportFlowDirection)
+            + [keyTeleportManager?.flowDirection]
+        guard KeyTeleportSendStartDecision.resolve(
+            activeDirections: activeDirections.compactMap(\.self)
+        ) == .start else {
+            alertState = .init(
+                .general(
+                    title: "KeyTeleport Session Active",
+                    message: "Finish the active KeyTeleport session before starting another transfer."
+                )
+            )
+            return false
+        }
+
+        let keyTeleportManager = ensureKeyTeleportManager()
+        keyTeleportManager.dispatch(.startSendFromWallet(walletId))
+        navigateToKeyTeleport(.send)
+
+        return true
+    }
+
+    func hideSensitiveKeyTeleportReveals() {
+        keyTeleportManager?.hideSensitiveReveals()
+    }
+
+    func navigateToKeyTeleport(_ route: KeyTeleportRoute) {
+        pushRoute(.keyTeleport(route))
     }
 }
 
