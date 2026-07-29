@@ -26,64 +26,16 @@ struct OhttpRelaySettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Text(
-                    "PayJoin uses an OHTTP relay to send transactions privately. By default Cove rotates between three public relays. Adding custom relays replaces the defaults."
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            } header: {
-                Text("Description")
-            }
-
-            Section("Default Relays") {
-                ForEach(defaultRelays, id: \.self) { relay in
-                    Text(relay)
-                        .font(.footnote.monospaced())
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-            }
-
-            Section {
-                ForEach(relays, id: \.self) { relay in
-                    Text(relay)
-                        .font(.footnote.monospaced())
-                        .textSelection(.enabled)
-                }
-                .onDelete(perform: deleteRelay)
-
-                if isAdding {
-                    HStack {
-                        TextField("https://your-relay.example.com", text: $newInput)
-                            .focused($isInputFocused)
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .submitLabel(.done)
-                            .onSubmit(addRelay)
-
-                        Button("Add", action: addRelay)
-                            .disabled(newInput.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                } else {
-                    Button {
-                        isAdding = true
-                        isInputFocused = true
-                    } label: {
-                        Label("Add Relay", systemImage: "plus")
-                    }
-                }
-            } header: {
-                Text("Custom Relays")
-            } footer: {
-                if relays.isEmpty {
-                    Text(
-                        "No custom relays set. Using the three default relays, chosen randomly per send."
-                    )
-                    .font(.footnote)
-                }
-            }
+            DescriptionSection()
+            DefaultRelaysSection(relays: defaultRelays)
+            CustomRelaysSection(
+                relays: $relays,
+                newInput: $newInput,
+                isAdding: $isAdding,
+                isInputFocused: $isInputFocused,
+                onAdd: addRelay,
+                onDelete: deleteRelay
+            )
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("PayJoin Relay")
@@ -133,6 +85,118 @@ struct OhttpRelaySettingsView: View {
             showInvalidUrlAlert = true
         } catch {
             showUpdateFailedAlert = true
+        }
+    }
+}
+
+private struct DescriptionSection: View {
+    var body: some View {
+        Section {
+            Text(
+                "PayJoin uses an OHTTP relay to send transactions privately. By default Cove rotates between three public relays. Adding custom relays replaces the defaults."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        } header: {
+            Text("Description")
+        }
+    }
+}
+
+private struct DefaultRelaysSection: View {
+    let relays: [String]
+
+    var body: some View {
+        Section("Default Relays") {
+            ForEach(relays, id: \.self) { relay in
+                Text(relay)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+}
+
+private struct CustomRelaysSection: View {
+    @Binding var relays: [String]
+    @Binding var newInput: String
+    @Binding var isAdding: Bool
+    var isInputFocused: FocusState<Bool>.Binding
+    let onAdd: () -> Void
+    let onDelete: (IndexSet) -> Void
+
+    var body: some View {
+        Section {
+            RelayListContent(relays: relays, onDelete: onDelete)
+            AddRelayControl(
+                newInput: $newInput,
+                isAdding: $isAdding,
+                isInputFocused: isInputFocused,
+                onAdd: onAdd
+            )
+        } header: {
+            Text("Custom Relays")
+        } footer: {
+            CustomRelaysFooter(isEmpty: relays.isEmpty)
+        }
+    }
+}
+
+private struct RelayListContent: View {
+    let relays: [String]
+    let onDelete: (IndexSet) -> Void
+
+    var body: some View {
+        ForEach(relays, id: \.self) { relay in
+            Text(relay)
+                .font(.footnote.monospaced())
+                .textSelection(.enabled)
+        }
+        .onDelete(perform: onDelete)
+    }
+}
+
+private struct AddRelayControl: View {
+    @Binding var newInput: String
+    @Binding var isAdding: Bool
+    var isInputFocused: FocusState<Bool>.Binding
+    let onAdd: () -> Void
+
+    var body: some View {
+        if isAdding {
+            HStack {
+                TextField("https://your-relay.example.com", text: $newInput)
+                    .focused(isInputFocused)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit(onAdd)
+
+                Button("Add", action: onAdd)
+                    .disabled(newInput.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        } else {
+            Button {
+                isAdding = true
+                isInputFocused.wrappedValue = true
+            } label: {
+                Label("Add Relay", systemImage: "plus")
+            }
+        }
+    }
+}
+
+private struct CustomRelaysFooter: View {
+    let isEmpty: Bool
+
+    var body: some View {
+        if isEmpty {
+            Text(
+                "No custom relays set. Using the three default relays, chosen randomly per send."
+            )
+            .font(.footnote)
         }
     }
 }
