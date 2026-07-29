@@ -94,7 +94,6 @@ struct HotWalletImportScreen: View {
     @FocusState var focusField: ImportFieldNumber?
 
     @State private var keyboardObserver = KeyboardObserver()
-    @StateObject private var keyboardAccessoryController = KeyboardAccessoryController()
 
     private var accessoryHeight: CGFloat {
         switch sizeCategory {
@@ -335,7 +334,6 @@ struct HotWalletImportScreen: View {
         )
         .background {
             KeyboardAccessoryHost(
-                controller: keyboardAccessoryController,
                 isVisible: keyboardObserver.keyboardIsShowing && focusField != nil
                     && !filteredSuggestions.isEmpty,
                 height: accessoryHeight
