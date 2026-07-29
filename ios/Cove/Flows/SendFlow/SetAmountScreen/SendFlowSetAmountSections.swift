@@ -17,17 +17,11 @@ struct SendFlowAmountKeyboardToolbar: View {
 
     var body: some View {
         HStack {
-            Group {
-                if addressIsEmpty {
-                    Button(action: focusAddress) {
-                        Text("Next")
-                    }
-                } else {
-                    Button(action: dismissIfValid) {
-                        Text("Done")
-                    }
-                }
-            }
+            SendFlowAmountToolbarPrimaryAction(
+                addressIsEmpty: addressIsEmpty,
+                focusAddress: focusAddress,
+                dismissIfValid: dismissIfValid
+            )
             .buttonStyle(.bordered)
             .tint(.primary)
 
@@ -57,6 +51,20 @@ struct SendFlowAmountKeyboardToolbar: View {
     }
 }
 
+private struct SendFlowAmountToolbarPrimaryAction: View {
+    let addressIsEmpty: Bool
+    let focusAddress: () -> Void
+    let dismissIfValid: () -> Void
+
+    var body: some View {
+        if addressIsEmpty {
+            Button("Next", action: focusAddress)
+        } else {
+            Button("Done", action: dismissIfValid)
+        }
+    }
+}
+
 struct SendFlowAddressKeyboardToolbar: View {
     let addressIsEmpty: Bool
     let addressIsValid: Bool
@@ -69,25 +77,12 @@ struct SendFlowAddressKeyboardToolbar: View {
 
     var body: some View {
         HStack {
-            Group {
-                if addressIsEmpty || !addressIsValid {
-                    Button(action: pasteAddress) {
-                        Text("Paste")
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Group {
-                if addressIsValid, !amountIsValid {
-                    Button(action: focusAmount) {
-                        Text("Next")
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
+            SendFlowAddressToolbarLeadingActions(
+                showsPaste: addressIsEmpty || !addressIsValid,
+                showsNext: addressIsValid && !amountIsValid,
+                pasteAddress: pasteAddress,
+                focusAmount: focusAmount
+            )
 
             Button(action: showQrScanner) {
                 Label("QR", systemImage: "qrcode")
@@ -110,6 +105,27 @@ struct SendFlowAddressKeyboardToolbar: View {
             }
             .buttonStyle(.bordered)
             .tint(.primary)
+        }
+    }
+}
+
+private struct SendFlowAddressToolbarLeadingActions: View {
+    let showsPaste: Bool
+    let showsNext: Bool
+    let pasteAddress: () -> Void
+    let focusAmount: () -> Void
+
+    var body: some View {
+        if showsPaste {
+            Button("Paste", action: pasteAddress)
+                .buttonStyle(.bordered)
+                .tint(.primary)
+        }
+
+        if showsNext {
+            Button("Next", action: focusAmount)
+                .buttonStyle(.bordered)
+                .tint(.primary)
         }
     }
 }
@@ -222,60 +238,17 @@ struct SendFlowCoinControlAmountSection: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                Text(totalSending)
-                    .font(.system(size: 48, weight: .bold))
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.decimalPad)
-                    .minimumScaleFactor(0.01)
-                    .lineLimit(1)
-                    .scrollDisabled(true)
-                    .offset(x: offset)
-                    .padding(.horizontal, 30)
-                    .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
-                    .onTapGesture {
-                        guard canEditCustomAmount else { return }
-                        showCustomAmount()
-                    }
+                SendFlowCoinControlAmountDisplay(
+                    totalSending: totalSending,
+                    offset: offset,
+                    canEditCustomAmount: canEditCustomAmount,
+                    showCustomAmount: showCustomAmount
+                )
 
-                HStack(spacing: 0) {
-                    Menu {
-                        VStack(alignment: .center, spacing: 0) {
-                            Button(action: { updateUnit(.sat) }) {
-                                Text("sats")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(12)
-                                    .background(Color.clear)
-                            }
-                            .buttonStyle(.plain)
-                            .contentShape(Rectangle())
-
-                            Button(action: { updateUnit(.btc) }) {
-                                Text("btc")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(12)
-                                    .background(Color.clear)
-                            }
-                            .buttonStyle(.plain)
-                            .contentShape(Rectangle())
-                        }
-                        .foregroundStyle(.primary.opacity(0.8))
-                        .contentShape(Rectangle())
-                    } label: {
-                        HStack(spacing: 2) {
-                            Text(unit)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 10)
-                                .fixedSize(horizontal: true, vertical: true)
-
-                            Image(systemName: "chevron.down")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .padding(.top, 2)
-                        }
-                        .offset(y: -2)
-                    }
-                    .foregroundStyle(.primary)
-                }
+                SendFlowCoinControlUnitMenu(
+                    unit: unit,
+                    updateUnit: updateUnit
+                )
             }
 
             Text(sendAmountFiat)
@@ -283,6 +256,96 @@ struct SendFlowCoinControlAmountSection: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
+    }
+}
+
+private struct SendFlowCoinControlAmountDisplay: View {
+    let totalSending: String
+    let offset: CGFloat
+    let canEditCustomAmount: Bool
+    let showCustomAmount: () -> Void
+
+    var body: some View {
+        Text(totalSending)
+            .font(.system(size: 48, weight: .bold))
+            .multilineTextAlignment(.center)
+            .keyboardType(.decimalPad)
+            .minimumScaleFactor(0.01)
+            .lineLimit(1)
+            .scrollDisabled(true)
+            .offset(x: offset)
+            .padding(.horizontal, 30)
+            .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
+            .onTapGesture(perform: showCustomAmountIfAvailable)
+    }
+
+    private func showCustomAmountIfAvailable() {
+        guard canEditCustomAmount else { return }
+
+        showCustomAmount()
+    }
+}
+
+private struct SendFlowCoinControlUnitMenu: View {
+    let unit: String
+    let updateUnit: (Unit) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Menu {
+                SendFlowCoinControlUnitMenuActions(updateUnit: updateUnit)
+            } label: {
+                HStack(spacing: 2) {
+                    Text(unit)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 10)
+                        .fixedSize(horizontal: true, vertical: true)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .padding(.top, 2)
+                }
+                .offset(y: -2)
+            }
+            .foregroundStyle(.primary)
+        }
+    }
+}
+
+private struct SendFlowCoinControlUnitMenuActions: View {
+    let updateUnit: (Unit) -> Void
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 0) {
+            Button(action: selectSats) {
+                Text("sats")
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background(Color.clear)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+
+            Button(action: selectBtc) {
+                Text("btc")
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                    .background(Color.clear)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+        .foregroundStyle(.primary.opacity(0.8))
+        .contentShape(Rectangle())
+    }
+
+    private func selectSats() {
+        updateUnit(.sat)
+    }
+
+    private func selectBtc() {
+        updateUnit(.btc)
     }
 }
 

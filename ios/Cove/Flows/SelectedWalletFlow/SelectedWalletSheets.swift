@@ -22,35 +22,51 @@ private struct SelectedWalletSheetContent: View {
             QrCodeLabelImportView(scannedCode: context.scannedLabels)
 
         case .labelsQrExport:
-            QrExportView(
-                title: "Export Labels",
-                subtitle: "Scan to import labels\ninto another wallet",
-                generateBbqrStrings: { density in
-                    try await context.manager.rust.exportLabelsForQr(density: density)
-                },
-                generateUrStrings: nil,
-                copyData: { try await context.manager.rust.exportLabelsForShare().content }
-            )
-            .presentationDetents([.height(500), .height(600), .large])
-            .padding()
-            .padding(.top, 10)
+            LabelQrExportSheet(manager: context.manager)
 
         case .xpubQrExport:
-            QrExportView(
-                title: "Export Xpub",
-                subtitle: "Public descriptor for\nwatch-only wallet",
-                generateBbqrStrings: { density in
-                    try await context.manager.rust.exportXpubForQr(density: density)
-                },
-                generateUrStrings: nil,
-                copyData: { try await context.manager.rust.exportXpubForShare().content }
-            )
-            .presentationDetents([.height(500), .height(600), .large])
-            .padding()
-            .padding(.top, 10)
+            XpubQrExportSheet(manager: context.manager)
 
         case .labelsFileImport, .exportLabelsConfirmation, .exportXpubConfirmation:
             EmptyView()
         }
+    }
+}
+
+private struct LabelQrExportSheet: View {
+    let manager: WalletManager
+
+    var body: some View {
+        QrExportView(
+            title: "Export Labels",
+            subtitle: "Scan to import labels\ninto another wallet",
+            generateBbqrStrings: { density in
+                try await manager.rust.exportLabelsForQr(density: density)
+            },
+            generateUrStrings: nil,
+            copyData: { try await manager.rust.exportLabelsForShare().content }
+        )
+        .presentationDetents([.height(500), .height(600), .large])
+        .padding()
+        .padding(.top, 10)
+    }
+}
+
+private struct XpubQrExportSheet: View {
+    let manager: WalletManager
+
+    var body: some View {
+        QrExportView(
+            title: "Export Xpub",
+            subtitle: "Public descriptor for\nwatch-only wallet",
+            generateBbqrStrings: { density in
+                try await manager.rust.exportXpubForQr(density: density)
+            },
+            generateUrStrings: nil,
+            copyData: { try await manager.rust.exportXpubForShare().content }
+        )
+        .presentationDetents([.height(500), .height(600), .large])
+        .padding()
+        .padding(.top, 10)
     }
 }

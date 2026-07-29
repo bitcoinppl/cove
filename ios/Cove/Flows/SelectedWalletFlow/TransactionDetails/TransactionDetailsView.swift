@@ -71,27 +71,6 @@ struct TransactionDetailsView: View {
         metadata.detailsExpanded
     }
 
-    func ContentScrollView(content: @escaping () -> some View) -> some View {
-        GeometryReader { geo in
-            ScrollView(.vertical) {
-                content()
-                    .frame(minHeight: geo.size.height)
-            }
-            .scrollIndicators(.never)
-            .frame(alignment: .top)
-            .scrollPosition($scrollPosition)
-            .onScrollGeometryChange(for: Double.self) { geo in
-                geo.contentOffset.y
-            } action: { oldValue, newValue in
-                if oldValue == newValue { return }
-                if oldValue == 0 { return }
-                let initialOffset = initialOffset ?? oldValue
-                self.initialOffset = initialOffset
-                currentOffset = initialOffset - newValue
-            }
-        }
-    }
-
     private func retryTransactionLockState() {
         Task { await refreshTransactionLockState() }
     }
@@ -123,77 +102,27 @@ struct TransactionDetailsView: View {
     }
 
     var body: some View {
-        ContentScrollView {
-            VStack(spacing: 24) {
-                if sizeCategory < .extraExtraExtraLarge || isMiniDevice { Spacer() }
-
-                Group {
-                    if transactionDetails.isReceived() {
-                        TransactionReceivedDetailsSection(
-                            transactionDetails: transactionDetails,
-                            manager: manager,
-                            metadata: metadata,
-                            numberOfConfirmations: numberOfConfirmations,
-                            lockState: lockState,
-                            isUpdatingLockState: isUpdatingLockState,
-                            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
-                            lockStateLoadError: lockStateLoadError,
-                            retryLockState: retryTransactionLockState,
-                            requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
-                            toggleLockState: beginToggleTransactionLockState
-                        )
-                    } else {
-                        TransactionSentDetailsSection(
-                            transactionDetails: transactionDetails,
-                            manager: manager,
-                            metadata: metadata,
-                            numberOfConfirmations: numberOfConfirmations,
-                            lockState: lockState,
-                            isUpdatingLockState: isUpdatingLockState,
-                            showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
-                            lockStateLoadError: lockStateLoadError,
-                            retryLockState: retryTransactionLockState,
-                            requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
-                            toggleLockState: beginToggleTransactionLockState
-                        )
-                    }
-                }
-
-                Spacer()
-                if sizeCategory < .extraExtraLarge || isMiniDevice { Spacer() }
-                if !isMiniDevice, sizeCategory < .extraLarge { Spacer() }
-
-                Button(action: {
-                    if let url = URL(string: transactionDetails.transactionUrl()) {
-                        openURL(url)
-                    }
-                }) {
-                    Text("View in Explorer")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.midnightBtn)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .padding(.horizontal, detailsExpandedPadding)
-                }
-
-                Button(action: {
-                    if detailsExpanded {
-                        withAnimation { scrollPosition.scrollTo(edge: .top) }
-                        manager.dispatch(action: .toggleDetailsExpanded)
-                    } else {
-                        manager.dispatch(action: .toggleDetailsExpanded)
-                    }
-                }) {
-                    Text(detailsExpanded ? "Hide Details" : "Show Details")
-                        .font(.footnote)
-                        .fontWeight(.bold)
-                        .foregroundStyle(Color.secondary.opacity(0.8))
-                }
-                .padding(.top, 10)
-                .offset(y: -20)
-            }
-        }
+        TransactionDetailsScrollView(
+            scrollPosition: $scrollPosition,
+            initialOffset: $initialOffset,
+            currentOffset: $currentOffset,
+            content: TransactionDetailsContent(
+                sizeCategory: sizeCategory,
+                transactionDetails: transactionDetails,
+                manager: manager,
+                metadata: metadata,
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryTransactionLockState,
+                requestUnlockLockedUtxos: beginUnlockTransactionOutputs,
+                toggleLockState: beginToggleTransactionLockState,
+                openExplorer: openTransactionExplorer,
+                toggleDetails: toggleDetails
+            )
+        )
         .refreshable {
             await refreshTransactionDetails()
             await refreshTransactionLockState()
@@ -207,16 +136,10 @@ struct TransactionDetailsView: View {
             await refreshTransactionLockState()
         }
         .background(
-            GeometryReader { geometry in
-                Image(.transactionDetailsPattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: geometry.size.width, alignment: .center)
-                    .ignoresSafeArea(edges: .top)
-                    .opacity(colorScheme == .light ? 0.40 : 1)
-                    .offset(y: currentOffset > 0 ? 0 : currentOffset)
-                    .opacity(max(0, 1 + (currentOffset / 275)))
-            }
+            TransactionDetailsBackground(
+                colorScheme: colorScheme,
+                currentOffset: currentOffset
+            )
         )
         .onAppear {
             UIRefreshControl.appearance().tintColor = colorScheme == .light ? UIColor.label : UIColor.secondaryLabel
@@ -227,16 +150,21 @@ struct TransactionDetailsView: View {
         .onDisappear {
             UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
-        .alert("Unable to Update Lock", isPresented: Binding(
-            get: { lockStateError != nil },
-            set: { if !$0 { lockStateError = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                lockStateError = nil
-            }
-        } message: {
-            Text(lockStateError ?? "")
+        .modifier(TransactionLockErrorModifier(error: $lockStateError))
+    }
+
+    private func openTransactionExplorer() {
+        guard let url = URL(string: transactionDetails.transactionUrl()) else { return }
+
+        openURL(url)
+    }
+
+    private func toggleDetails() {
+        if detailsExpanded {
+            withAnimation { scrollPosition.scrollTo(edge: .top) }
         }
+
+        manager.dispatch(action: .toggleDetailsExpanded)
     }
 
     func refreshTransactionDetails() async {
@@ -310,6 +238,206 @@ struct TransactionDetailsView: View {
         guard detailsExpanded else { return 0 }
         guard currentOffset < 0 else { return 0 }
         return currentOffset
+    }
+}
+
+private struct TransactionDetailsScrollView<Content: View>: View {
+    @Binding var scrollPosition: ScrollPosition
+    @Binding var initialOffset: Double?
+    @Binding var currentOffset: Double
+
+    let content: Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollView(.vertical) {
+                content
+                    .frame(minHeight: geometry.size.height)
+            }
+            .scrollIndicators(.never)
+            .frame(alignment: .top)
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: Double.self) { geometry in
+                geometry.contentOffset.y
+            } action: { oldValue, newValue in
+                updateOffset(oldValue: oldValue, newValue: newValue)
+            }
+        }
+    }
+
+    private func updateOffset(oldValue: Double, newValue: Double) {
+        guard oldValue != newValue, oldValue != 0 else { return }
+
+        let initialOffset = initialOffset ?? oldValue
+        self.initialOffset = initialOffset
+        currentOffset = initialOffset - newValue
+    }
+}
+
+private struct TransactionDetailsContent: View {
+    let sizeCategory: ContentSizeCategory
+    let transactionDetails: TransactionDetails
+    let manager: WalletManager
+    let metadata: WalletMetadata
+    let numberOfConfirmations: Int?
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
+    let lockStateLoadError: String?
+    let retryLockState: () -> Void
+    let requestUnlockLockedUtxos: () -> Void
+    let toggleLockState: () -> Void
+    let openExplorer: () -> Void
+    let toggleDetails: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            if sizeCategory < .extraExtraExtraLarge || isMiniDevice {
+                Spacer()
+            }
+
+            TransactionDetailsDirectionContent(
+                transactionDetails: transactionDetails,
+                manager: manager,
+                metadata: metadata,
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                requestUnlockLockedUtxos: requestUnlockLockedUtxos,
+                toggleLockState: toggleLockState
+            )
+
+            Spacer()
+            if sizeCategory < .extraExtraLarge || isMiniDevice {
+                Spacer()
+            }
+            if !isMiniDevice, sizeCategory < .extraLarge {
+                Spacer()
+            }
+
+            TransactionDetailsFooterActions(
+                detailsExpanded: metadata.detailsExpanded,
+                openExplorer: openExplorer,
+                toggleDetails: toggleDetails
+            )
+        }
+    }
+}
+
+private struct TransactionDetailsDirectionContent: View {
+    let transactionDetails: TransactionDetails
+    let manager: WalletManager
+    let metadata: WalletMetadata
+    let numberOfConfirmations: Int?
+    let lockState: TransactionLockState?
+    let isUpdatingLockState: Bool
+    let showLockStateUpdatingIndicator: Bool
+    let lockStateLoadError: String?
+    let retryLockState: () -> Void
+    let requestUnlockLockedUtxos: () -> Void
+    let toggleLockState: () -> Void
+
+    var body: some View {
+        if transactionDetails.isReceived() {
+            TransactionReceivedDetailsSection(
+                transactionDetails: transactionDetails,
+                manager: manager,
+                metadata: metadata,
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                requestUnlockLockedUtxos: requestUnlockLockedUtxos,
+                toggleLockState: toggleLockState
+            )
+        } else {
+            TransactionSentDetailsSection(
+                transactionDetails: transactionDetails,
+                manager: manager,
+                metadata: metadata,
+                numberOfConfirmations: numberOfConfirmations,
+                lockState: lockState,
+                isUpdatingLockState: isUpdatingLockState,
+                showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
+                lockStateLoadError: lockStateLoadError,
+                retryLockState: retryLockState,
+                requestUnlockLockedUtxos: requestUnlockLockedUtxos,
+                toggleLockState: toggleLockState
+            )
+        }
+    }
+}
+
+private struct TransactionDetailsFooterActions: View {
+    let detailsExpanded: Bool
+    let openExplorer: () -> Void
+    let toggleDetails: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Button(action: openExplorer) {
+                Text("View in Explorer")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.midnightBtn)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding(.horizontal, detailsExpandedPadding)
+            }
+
+            Button(action: toggleDetails) {
+                Text(detailsExpanded ? "Hide Details" : "Show Details")
+                    .font(.footnote)
+                    .fontWeight(.bold)
+                    .foregroundStyle(Color.secondary.opacity(0.8))
+            }
+            .padding(.top, 10)
+            .offset(y: -20)
+        }
+    }
+}
+
+private struct TransactionDetailsBackground: View {
+    let colorScheme: ColorScheme
+    let currentOffset: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            Image(.transactionDetailsPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: geometry.size.width, alignment: .center)
+                .ignoresSafeArea(edges: .top)
+                .opacity(colorScheme == .light ? 0.40 : 1)
+                .offset(y: currentOffset > 0 ? 0 : currentOffset)
+                .opacity(max(0, 1 + (currentOffset / 275)))
+        }
+    }
+}
+
+private struct TransactionLockErrorModifier: ViewModifier {
+    @Binding var error: String?
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Unable to Update Lock",
+                isPresented: Binding(
+                    get: { error != nil },
+                    set: { if !$0 { error = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    error = nil
+                }
+            } message: {
+                Text(error ?? "")
+            }
     }
 }
 

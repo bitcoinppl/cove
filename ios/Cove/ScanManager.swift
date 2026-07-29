@@ -81,33 +81,7 @@ import SwiftUI
 
         do {
             let readResult = try fileHandler.read()
-            switch readResult {
-            case let .mnemonic(mnemonic):
-                importHotWallet(mnemonic.words())
-            case let .hardwareExport(export):
-                importColdWallet(export)
-            case let .address(addressWithNetwork):
-                handleAddress(addressWithNetwork)
-            case let .transaction(txn):
-                handleTransaction(txn)
-            case let .tapSignerUnused(tapSigner):
-                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
-            case let .tapSignerReady(tapSigner):
-                let panic =
-                    "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
-                Log.error(panic)
-            case let .bip329Labels(labels):
-                guard let manager = app.walletManager,
-                      let selectedWallet = Database().globalConfig().selectedWallet(),
-                      selectedWallet == manager.id
-                else {
-                    return setInvalidLabels()
-                }
-
-                return try manager.importLabels(labels: labels)
-            case let .signedPsbt(psbt):
-                handleSignedPsbt(psbt)
-            }
+            try handleFileMultiFormat(readResult)
         } catch {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
@@ -128,6 +102,37 @@ import SwiftUI
             default:
                 Log.error("Unknown error file handling file: \(error)")
             }
+        }
+    }
+
+    @MainActor
+    private func handleFileMultiFormat(_ multiFormat: MultiFormat) throws {
+        switch multiFormat {
+        case let .mnemonic(mnemonic):
+            importHotWallet(mnemonic.words())
+        case let .hardwareExport(export):
+            importColdWallet(export)
+        case let .address(addressWithNetwork):
+            handleAddress(addressWithNetwork)
+        case let .transaction(transaction):
+            handleTransaction(transaction)
+        case let .tapSignerUnused(tapSigner):
+            app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+        case let .tapSignerReady(tapSigner):
+            let panic =
+                "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
+            Log.error(panic)
+        case let .bip329Labels(labels):
+            guard let manager = app.walletManager,
+                  let selectedWallet = Database().globalConfig().selectedWallet(),
+                  selectedWallet == manager.id
+            else {
+                return setInvalidLabels()
+            }
+
+            try manager.importLabels(labels: labels)
+        case let .signedPsbt(psbt):
+            handleSignedPsbt(psbt)
         }
     }
 }

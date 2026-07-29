@@ -9,15 +9,19 @@ struct WalletSections: View {
 
     var body: some View {
         ForEach(groupedWallets) { group in
-            Section(header: sectionHeader(for: group.key)) {
+            Section(header: WalletSectionHeader(key: group.key)) {
                 ForEach(group.items, id: \.recordId) { item in
                     WalletItemRow(item: item)
                 }
             }
         }
     }
+}
 
-    private func sectionHeader(for key: GroupKey) -> some View {
+private struct WalletSectionHeader: View {
+    let key: GroupKey
+
+    var body: some View {
         Text(key.title)
     }
 }
@@ -40,30 +44,7 @@ struct WalletItemRow: View {
                 StatusBadge(status: item.syncStatus)
             }
 
-            HStack(spacing: 12) {
-                if let network = item.network {
-                    IconLabel("globe", network.displayName())
-                }
-                if let walletType = item.walletType {
-                    IconLabel("wallet.bifold", walletType.displayName())
-                }
-                if let fingerprint = item.fingerprint {
-                    IconLabel("touchid", fingerprint)
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                if let labelCount = item.labelCount {
-                    IconLabel("tag", "\(labelCount) labels")
-                }
-                if let backupUpdatedAt = item.backupUpdatedAt {
-                    IconLabel("clock", formatDate(backupUpdatedAt))
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            WalletItemMetadata(item: item)
 
             if let failure = item.restoreFailure {
                 Label(failure.message, systemImage: "exclamationmark.circle")
@@ -79,6 +60,52 @@ struct WalletItemRow: View {
             action: accessibilityAction
         ))
         .accessibilityIdentifier("cloudBackup.wallet.\(item.recordId)")
+    }
+}
+
+private struct WalletItemMetadata: View {
+    let item: CloudBackupWalletItem
+
+    var body: some View {
+        WalletIdentityMetadata(item: item)
+        WalletBackupMetadata(item: item)
+    }
+}
+
+private struct WalletIdentityMetadata: View {
+    let item: CloudBackupWalletItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let network = item.network {
+                IconLabel("globe", network.displayName())
+            }
+            if let walletType = item.walletType {
+                IconLabel("wallet.bifold", walletType.displayName())
+            }
+            if let fingerprint = item.fingerprint {
+                IconLabel("touchid", fingerprint)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct WalletBackupMetadata: View {
+    let item: CloudBackupWalletItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let labelCount = item.labelCount {
+                IconLabel("tag", "\(labelCount) labels")
+            }
+            if let backupUpdatedAt = item.backupUpdatedAt {
+                IconLabel("clock", formatDate(backupUpdatedAt))
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private func formatDate(_ timestamp: UInt64) -> String {

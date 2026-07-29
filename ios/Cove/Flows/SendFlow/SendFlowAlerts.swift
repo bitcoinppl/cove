@@ -96,7 +96,7 @@ private struct SendFlowAlertActions: View {
     var body: some View {
         switch alert {
         case let .error(error):
-            errorButtons(error)
+            SendFlowErrorAlertActions(error: error, context: context)
         case .general:
             Button("OK") { context.dismissAlert() }
         case let .warning(kind: kind, title: _, message: _):
@@ -108,9 +108,17 @@ private struct SendFlowAlertActions: View {
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func errorButtons(_ error: SendFlowError) -> some View {
+private struct SendFlowErrorAlertActions: View {
+    let error: SendFlowError
+    let context: SendFlowAlertContext
+
+    private var presenter: SendFlowPresenter {
+        context.presenter
+    }
+
+    var body: some View {
         switch error {
         case .EmptyAddress, .WrongNetwork, .InvalidAddress:
             Button("OK") {

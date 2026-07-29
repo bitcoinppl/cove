@@ -79,96 +79,24 @@ struct WalletBalanceHeaderView: View {
 
     var body: some View {
         VStack(spacing: 28) {
-            VStack(spacing: 6) {
-                HStack {
-                    WalletBalanceSecondaryView(
-                        balance: balance,
-                        fiatBalance: fiatBalance,
-                        metadata: metadata,
-                        manager: manager,
-                        opacity: balancePresentation.secondaryOpacity
-                    )
-                    .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
-                    .font(.footnote)
-                    .padding(.leading, 2)
-                    .contentTransition(.numericText())
-
-                    Spacer()
-                }
-
-                HStack {
-                    WalletBalancePrimaryView(
-                        balance: balance,
-                        fiatBalance: fiatBalance,
-                        metadata: metadata,
-                        manager: manager,
-                        opacity: balancePresentation.primaryOpacity
-                    )
-                    .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
-                    .font(.system(size: fontSize, weight: .bold))
-                    .contentTransition(.numericText())
-
-                    Spacer()
-
-                    Image(systemName: eyeIcon)
-                        .foregroundColor(.gray)
-                        .onTapGesture { updater(.toggleSensitiveVisibility) }
-                }
-
-                WalletBalancePendingView(
-                    pending: manager.balance.untrustedPending(),
-                    fiatPendingBalance: fiatPendingBalance,
-                    metadata: metadata,
-                    manager: manager,
-                    opacity: balancePresentation.pendingOpacity
-                )
-            }
-            .onTapGesture {
-                manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
-            }
-            .contentShape(
-                .contextMenuPreview,
-                RoundedRectangle(cornerRadius: 8).inset(by: -8)
+            WalletBalanceDisplay(
+                balance: balance,
+                fiatBalance: fiatBalance,
+                fiatPendingBalance: fiatPendingBalance,
+                balancePresentation: balancePresentation,
+                metadata: metadata,
+                manager: manager,
+                fontSize: fontSize,
+                eyeIcon: eyeIcon,
+                toggleSensitiveVisibility: toggleSensitiveVisibility
             )
-            .contextMenu {
-                Button("BTC") {
-                    manager.dispatch(action: .updateUnit(.btc))
-                    manager.dispatch(action: .updateFiatOrBtc(.btc))
-                }
 
-                Button("SATS") {
-                    manager.dispatch(action: .updateUnit(.sat))
-                    manager.dispatch(action: .updateFiatOrBtc(.btc))
-                }
-            }
-
-            HStack(spacing: 16) {
-                Button(action: sendButtonPressed) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.up.right")
-                        Text("Send")
-                    }
-                    .foregroundColor(sendButtonForegroundColor)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .padding(.vertical, 4)
-                    .background(sendButtonBackgroundColor)
-                    .cornerRadius(10)
-                }
-
-                Button(action: showReceiveSheet) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.down.left")
-                        Text("Receive")
-                    }
-                    .foregroundColor(Color.midnightBtn)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .padding(.vertical, 4)
-                    .background(Color.btnPrimary)
-                    .cornerRadius(10)
-                }
-            }
+            WalletBalanceActions(
+                sendForegroundColor: sendButtonForegroundColor,
+                sendBackgroundColor: sendButtonBackgroundColor,
+                send: sendButtonPressed,
+                receive: showReceiveSheet
+            )
         }
         .padding()
         .padding(.vertical, 22)
@@ -200,6 +128,129 @@ struct WalletBalanceHeaderView: View {
             // recalculate fiat when prices are loaded/updated
             fiatBalance = manager.amountInFiatCached(balance)
             fiatPendingBalance = manager.amountInFiatCached(manager.balance.untrustedPending())
+        }
+    }
+
+    private func toggleSensitiveVisibility() {
+        updater(.toggleSensitiveVisibility)
+    }
+}
+
+private struct WalletBalanceDisplay: View {
+    let balance: Amount
+    let fiatBalance: Double?
+    let fiatPendingBalance: Double?
+    let balancePresentation: BalancePresentation
+    let metadata: WalletMetadata
+    let manager: WalletManager
+    let fontSize: CGFloat
+    let eyeIcon: String
+    let toggleSensitiveVisibility: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                WalletBalanceSecondaryView(
+                    balance: balance,
+                    fiatBalance: fiatBalance,
+                    metadata: metadata,
+                    manager: manager,
+                    opacity: balancePresentation.secondaryOpacity
+                )
+                .foregroundColor(.white.opacity(balancePresentation.secondaryOpacity))
+                .font(.footnote)
+                .padding(.leading, 2)
+                .contentTransition(.numericText())
+
+                Spacer()
+            }
+
+            HStack {
+                WalletBalancePrimaryView(
+                    balance: balance,
+                    fiatBalance: fiatBalance,
+                    metadata: metadata,
+                    manager: manager,
+                    opacity: balancePresentation.primaryOpacity
+                )
+                .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
+                .font(.system(size: fontSize, weight: .bold))
+                .contentTransition(.numericText())
+
+                Spacer()
+
+                Image(systemName: eyeIcon)
+                    .foregroundColor(.gray)
+                    .onTapGesture(perform: toggleSensitiveVisibility)
+            }
+
+            WalletBalancePendingView(
+                pending: manager.balance.untrustedPending(),
+                fiatPendingBalance: fiatPendingBalance,
+                metadata: metadata,
+                manager: manager,
+                opacity: balancePresentation.pendingOpacity
+            )
+        }
+        .onTapGesture(perform: togglePrimarySecondary)
+        .contentShape(
+            .contextMenuPreview,
+            RoundedRectangle(cornerRadius: 8).inset(by: -8)
+        )
+        .contextMenu {
+            Button("BTC", action: useBtc)
+            Button("SATS", action: useSats)
+        }
+    }
+
+    private func togglePrimarySecondary() {
+        manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
+    }
+
+    private func useBtc() {
+        manager.dispatch(action: .updateUnit(.btc))
+        manager.dispatch(action: .updateFiatOrBtc(.btc))
+    }
+
+    private func useSats() {
+        manager.dispatch(action: .updateUnit(.sat))
+        manager.dispatch(action: .updateFiatOrBtc(.btc))
+    }
+}
+
+private struct WalletBalanceActions: View {
+    let sendForegroundColor: Color
+    let sendBackgroundColor: Color
+    let send: () -> Void
+    let receive: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button(action: send) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.up.right")
+                    Text("Send")
+                }
+                .foregroundColor(sendForegroundColor)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .padding(.vertical, 4)
+                .background(sendBackgroundColor)
+                .cornerRadius(10)
+            }
+
+            Button(action: receive) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.left")
+                    Text("Receive")
+                }
+                .foregroundColor(Color.midnightBtn)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .padding(.vertical, 4)
+                .background(Color.btnPrimary)
+                .cornerRadius(10)
+            }
         }
     }
 }

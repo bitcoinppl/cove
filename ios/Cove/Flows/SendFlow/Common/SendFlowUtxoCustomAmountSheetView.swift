@@ -81,12 +81,6 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         )
     }
 
-    private var divider: some View {
-        Divider()
-            .padding(.vertical, 28)
-            .foregroundStyle(.red)
-    }
-
     private var minSend: Double {
         satToDouble(conservativeDustLimitSats)
     }
@@ -159,36 +153,12 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            // header
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Sending UTXO Details")
-                        .font(.headline.weight(.semibold))
-
-                    Text("Your are sending the following UTXOs to the recipient.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top)
-
-                Spacer()
-
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundColor(.primary.opacity(0.8))
-                        .padding(10)
-                        .background(Circle().fill(Color.secondary.opacity(0.15)))
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .onTapGesture { isFocused = false }
+            SendFlowUtxoCustomAmountHeader(dismiss: dismiss.callAsFunction)
+                .onTapGesture { isFocused = false }
 
             Divider()
                 .padding(.horizontal, -16)
 
-            // content sections
             ScrollView {
                 ForEach(utxos) { utxo in
                     UtxoRow(utxo: utxo)
@@ -198,65 +168,125 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
             Spacer()
 
-            VStack {
-                HStack {
-                    Text("Set Amount")
-                    Spacer()
-                    TextField(displayAmount(), text: displayAmountBinding).keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .focused($isFocused)
-
-                    Text(selectedUnitSymbol)
-                }
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-                HStack {
-                    Text("Use the slider to set the amount.")
-                    Spacer()
-                }
-                .foregroundStyle(.secondary)
-                .font(.caption2)
-
-                Slider(
-                    value: smartSnapBinding,
-                    in: minSend ... maxSend,
-                    step: step,
-                    onEditingChanged: { isEditing = $0 }
-                )
-                .accessibilityLabel("Send amount slider")
-                .accessibilityValue("\(displayAmount()) \(selectedUnitSymbol)")
-            }
+            SendFlowUtxoCustomAmountControls(
+                displayAmount: displayAmount(),
+                displayAmountBinding: displayAmountBinding,
+                selectedUnitSymbol: selectedUnitSymbol,
+                sliderValue: smartSnapBinding,
+                sliderRange: minSend ... maxSend,
+                sliderStep: step,
+                isFocused: $isFocused,
+                editingChanged: { isEditing = $0 }
+            )
         }
         .padding()
         .background(Color(UIColor.secondarySystemBackground))
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .onChange(of: metadata.selectedUnit, initial: true) { _, _ in
-            self.customAmount = manager.amount.map(amountToDouble) ?? maxSend
-        }
-        .onChange(of: isEditing) { old, new in
-            Log.debug("isEditing changed from \(old) -> \(new)")
+        .onChange(of: metadata.selectedUnit, initial: true, selectedUnitChanged)
+        .onChange(of: isEditing, editingChanged)
+        .onChange(of: manager.amount, managerAmountChanged)
+        .onChange(of: isFocused, initial: false, focusChanged)
+    }
 
-            // stopped editing dispatch the amount
-            if old == true, new == false {
-                manager.dispatch(.notifyCoinControlAmountChanged(customAmount))
-            }
-        }
-        .onChange(of: manager.amount) { _, new in
-            guard let newAmount = new else { return }
-            if isEditing { return }
+    private func selectedUnitChanged(_: Unit, _: Unit) {
+        customAmount = manager.amount.map(amountToDouble) ?? maxSend
+    }
 
-            switch metadata.selectedUnit {
-            case .sat: customAmount = Double(newAmount.asSats())
-            case .btc: customAmount = newAmount.asBtc()
-            }
+    private func editingChanged(_ old: Bool, _ new: Bool) {
+        Log.debug("isEditing changed from \(old) -> \(new)")
+
+        if old, !new {
+            manager.dispatch(.notifyCoinControlAmountChanged(customAmount))
         }
-        .onChange(of: isFocused, initial: false) { old, new in
-            // lost focus
-            if old == true, new == false {
-                self.customAmount = manager.amount.map(amountToDouble) ?? maxSend
+    }
+
+    private func managerAmountChanged(_: Amount?, _ new: Amount?) {
+        guard let newAmount = new, !isEditing else { return }
+
+        switch metadata.selectedUnit {
+        case .sat: customAmount = Double(newAmount.asSats())
+        case .btc: customAmount = newAmount.asBtc()
+        }
+    }
+
+    private func focusChanged(_ old: Bool, _ new: Bool) {
+        guard old, !new else { return }
+
+        customAmount = manager.amount.map(amountToDouble) ?? maxSend
+    }
+}
+
+private struct SendFlowUtxoCustomAmountHeader: View {
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Sending UTXO Details")
+                    .font(.headline.weight(.semibold))
+
+                Text("Your are sending the following UTXOs to the recipient.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .padding(.top)
+
+            Spacer()
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.primary.opacity(0.8))
+                    .padding(10)
+                    .background(Circle().fill(Color.secondary.opacity(0.15)))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct SendFlowUtxoCustomAmountControls: View {
+    let displayAmount: String
+    let displayAmountBinding: Binding<String>
+    let selectedUnitSymbol: String
+    let sliderValue: Binding<Double>
+    let sliderRange: ClosedRange<Double>
+    let sliderStep: Double
+    let isFocused: FocusState<Bool>.Binding
+    let editingChanged: (Bool) -> Void
+
+    var body: some View {
+        VStack {
+            HStack {
+                Text("Set Amount")
+                Spacer()
+                TextField(displayAmount, text: displayAmountBinding)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .focused(isFocused)
+
+                Text(selectedUnitSymbol)
+            }
+            .font(.subheadline)
+            .fontWeight(.semibold)
+
+            HStack {
+                Text("Use the slider to set the amount.")
+                Spacer()
+            }
+            .foregroundStyle(.secondary)
+            .font(.caption2)
+
+            Slider(
+                value: sliderValue,
+                in: sliderRange,
+                step: sliderStep,
+                onEditingChanged: editingChanged
+            )
+            .accessibilityLabel("Send amount slider")
+            .accessibilityValue("\(displayAmount) \(selectedUnitSymbol)")
         }
     }
 }
@@ -267,31 +297,7 @@ private struct UtxoRow: View {
 
     var body: some View {
         HStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 4) {
-                // Name
-                HStack(spacing: 4) {
-                    Text(utxo.name())
-                        .font(.footnote)
-                        .truncationMode(.middle)
-                        .lineLimit(1)
-
-                    if utxo.type == .change {
-                        Image(systemName: "circlebadge.2")
-                            .font(.caption)
-                            .foregroundColor(.orange.opacity(0.8))
-                    }
-                }
-
-                // Address (semi-bold caption)
-                HStack {
-                    Text(utxo.address.spacedOut())
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .foregroundColor(.secondary)
-                        .truncationMode(.middle)
-                }
-            }
+            UtxoRowIdentity(utxo: utxo)
 
             Spacer(minLength: 8)
 
@@ -322,6 +328,36 @@ private struct UtxoRow: View {
             }
         } preview: {
             UtxoRowPreview(displayAmount: wm.displayAmount, utxo: utxo)
+        }
+    }
+}
+
+private struct UtxoRowIdentity: View {
+    let utxo: Utxo
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Text(utxo.name())
+                    .font(.footnote)
+                    .truncationMode(.middle)
+                    .lineLimit(1)
+
+                if utxo.type == .change {
+                    Image(systemName: "circlebadge.2")
+                        .font(.caption)
+                        .foregroundColor(.orange.opacity(0.8))
+                }
+            }
+
+            HStack {
+                Text(utxo.address.spacedOut())
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .foregroundColor(.secondary)
+                    .truncationMode(.middle)
+            }
         }
     }
 }

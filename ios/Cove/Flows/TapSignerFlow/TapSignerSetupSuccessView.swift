@@ -8,9 +8,7 @@
 import SwiftUI
 
 struct TapSignerSetupSuccess: View {
-    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
-    @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
     let setup: TapSignerSetupComplete
@@ -34,130 +32,132 @@ struct TapSignerSetupSuccess: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
+        TapSignerAdaptiveLayout(
+            compactContentBottomPadding: 40,
+            compactSafeAreaBottomPadding: 0
+        ) { usesFlexibleSpacing in
+            TapSignerSetupSuccessContent(
+                usesFlexibleSpacing: usesFlexibleSpacing,
+                cancelAction: cancel,
+                exportBackupAction: exportBackup,
+                continueAction: continueToWallet
             )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .padding(.bottom, 40)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
-            }
         }
         .background(TapSignerResultBackground())
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
-        .onAppear {
-            saveWallet()
+        .onAppear(perform: saveWallet)
+    }
+
+    private func cancel() {
+        app.sheetState = .none
+    }
+
+    private func exportBackup() {
+        let content = hexEncode(bytes: setup.backup)
+        let filename = "\(tapSigner.identFileNamePrefix())_backup.txt"
+
+        ShareSheet.present(data: content, filename: filename) { success in
+            if !success {
+                Log.warn("Backup export cancelled or failed")
+            }
         }
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
-        let contentSpacing: CGFloat = usesFlexibleSpacing ? 40 : 24
+    private func continueToWallet() {
+        guard let walletId else {
+            saveWallet()
+            return
+        }
 
-        return VStack(spacing: contentSpacing) {
-            VStack {
-                HStack {
-                    Button(action: { app.sheetState = .none }) {
-                        Text("Cancel")
-                    }
+        app.selectWallet(walletId)
+        app.sheetState = .none
+    }
+}
 
-                    Spacer()
-                }
-                .padding(.top, 20)
-                .padding(.horizontal, 10)
-                .foregroundStyle(.primary)
-                .fontWeight(.semibold)
-            }
+private struct TapSignerSetupSuccessContent: View {
+    let usesFlexibleSpacing: Bool
+    let cancelAction: () -> Void
+    let exportBackupAction: () -> Void
+    let continueAction: () -> Void
 
-            if usesFlexibleSpacing {
-                Spacer()
-            }
+    private var contentSpacing: CGFloat {
+        usesFlexibleSpacing ? 40 : 24
+    }
 
-            VStack(spacing: 20) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 100))
-                    .foregroundStyle(.green)
-                    .fontWeight(.light)
+    var body: some View {
+        VStack(spacing: contentSpacing) {
+            TapSignerTopActionHeader("Cancel", action: cancelAction)
 
-                VStack(spacing: 12) {
-                    Text("Setup Complete")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
-                    Text("Your TAPSIGNER ready to use.")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary.opacity(0.8))
-                }
-
-                Text(
-                    "If you haven’t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.primary.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Button(action: {
-                let content = hexEncode(bytes: setup.backup)
-                let filename = "\(tapSigner.identFileNamePrefix())_backup.txt"
-                ShareSheet.present(data: content, filename: filename) { success in
-                    if !success { Log.warn("Backup export cancelled or failed") }
-                }
-            }) {
-                HStack {
-                    VStack(spacing: 4) {
-                        HStack {
-                            Text("Download Backup")
-                                .font(.footnote)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Color.primary)
-                            Spacer()
-                        }
-
-                        HStack {
-                            Text("You need this backup to restore your wallet.")
-                                .foregroundStyle(Color.secondary)
-                            Spacer()
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.secondary)
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-            }
-            .font(.footnote)
-            .fontWeight(.semibold)
-
-            if usesFlexibleSpacing {
-                Spacer()
-            }
+            TapSignerSetupSuccessDescription()
+            TapSignerBackupButton(action: exportBackupAction)
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack(spacing: 14) {
-                Button("Continue") {
-                    guard let walletId else { return saveWallet() }
-                    app.selectWallet(walletId)
-                    app.sheetState = .none
-                }
-                .buttonStyle(DarkButtonStyle())
+                Button("Continue", action: continueAction)
+                    .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)
+    }
+}
+
+private struct TapSignerSetupSuccessDescription: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            TapSignerResultStatus(
+                systemImage: "checkmark.circle.fill",
+                color: .green,
+                title: "Setup Complete",
+                message: "Your TAPSIGNER ready to use."
+            )
+
+            Text(
+                "If you haven’t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet."
+            )
+            .font(.subheadline)
+            .foregroundStyle(.primary.opacity(0.8))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct TapSignerBackupButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                VStack(spacing: 4) {
+                    HStack {
+                        Text("Download Backup")
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.primary)
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text("You need this backup to restore your wallet.")
+                            .foregroundStyle(Color.secondary)
+                        Spacer()
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(Color.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+        }
+        .font(.footnote)
+        .fontWeight(.semibold)
     }
 }
 

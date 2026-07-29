@@ -1,0 +1,26 @@
+included:
+  - ios
+
+excluded:
+  - ios/CoveCore/Sources/CoveCore/generated
+  - ios/CoveCore/Sources/cove_core_ffi.xcframework
+
+only_rules:
+  - cyclomatic_complexity
+  - function_body_length
+  - type_body_length
+
+strict: true
+check_for_updates: false
+
+cyclomatic_complexity:
+  warning: 14
+  error: 20
+
+function_body_length:
+  warning: 60
+  error: 100
+
+type_body_length:
+  warning: 600
+  error: 800

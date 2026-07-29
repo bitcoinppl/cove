@@ -25,16 +25,6 @@ struct WalletSettingsContainer: View {
         )
     }
 
-    @ViewBuilder
-    func WalletSettingsRoute(manager: WalletManager, route: WalletSettingsRoute) -> some View {
-        switch route {
-        case .main:
-            WalletSettingsView(manager: manager)
-        case .changeName:
-            WalletSettingsChangeNameView(name: walletNameBinding(manager))
-        }
-    }
-
     var body: some View {
         WalletManagerHost(walletId: id, loading: {
             WalletSettingsLoadingOrError(error: error, metadata: app.walletMetadata(id: id)) {
@@ -44,8 +34,29 @@ struct WalletSettingsContainer: View {
             self.error = "Failed to get wallet \(error.localizedDescription)"
             Log.error(self.error!)
         }) { manager in
-            WalletSettingsRoute(manager: manager, route: route)
+            WalletSettingsRouteView(
+                manager: manager,
+                route: route,
+                walletName: walletNameBinding(manager)
+            )
         }
+    }
+}
+
+private struct WalletSettingsRouteView: View {
+    private let content: AnyView
+
+    init(manager: WalletManager, route: WalletSettingsRoute, walletName: Binding<String>) {
+        content = switch route {
+        case .main:
+            AnyView(WalletSettingsView(manager: manager))
+        case .changeName:
+            AnyView(WalletSettingsChangeNameView(name: walletName))
+        }
+    }
+
+    var body: some View {
+        content
     }
 }
 
@@ -80,67 +91,11 @@ private struct WalletSettingsLoadingView: View {
 
     var body: some View {
         List {
-            Section(header: Text("Wallet Information")) {
-                WalletSettingsLoadingRow(title: "Network", value: metadata.network.description)
-                WalletSettingsLoadingRow(title: "Wallet Type", value: String(metadata.walletType))
-            }
-
-            Section(header: Text("Settings")) {
-                HStack {
-                    Text("Name")
-                    Spacer()
-
-                    Text(metadata.name)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(Color(UIColor.tertiaryLabel))
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                }
-                .font(.subheadline)
-
-                VStack(spacing: 14) {
-                    HStack {
-                        Text("Wallet Color")
-                            .font(.subheadline)
-                        Spacer()
-                    }
-
-                    HStack {
-                        Rectangle()
-                            .fill(metadata.swiftColor)
-                            .cornerRadius(10)
-                            .frame(width: 80, height: 80)
-
-                        LazyVGrid(columns: colorColumns, spacing: 20) {
-                            ForEach(defaultWalletColors(), id: \.self) { color in
-                                ZStack {
-                                    if color == metadata.color {
-                                        Circle()
-                                            .stroke(Color(color).opacity(0.7), lineWidth: 2)
-                                            .frame(width: 32, height: 32)
-                                    }
-
-                                    Circle()
-                                        .fill(Color(color))
-                                        .frame(width: 28, height: 28)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(.vertical, 8)
-
-                Toggle(isOn: .constant(metadata.showLabels)) {
-                    Text("Show transaction labels")
-                        .font(.subheadline)
-                }
-                .disabled(true)
-            }
+            WalletSettingsLoadingInformationSection(metadata: metadata)
+            WalletSettingsLoadingSettingsSection(
+                metadata: metadata,
+                colorColumns: colorColumns
+            )
         }
         .navigationTitle(metadata.name)
         .overlay {
@@ -149,6 +104,106 @@ private struct WalletSettingsLoadingView: View {
                 .controlSize(.large)
                 .frame(width: 72, height: 72)
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+private struct WalletSettingsLoadingInformationSection: View {
+    let metadata: WalletMetadata
+
+    var body: some View {
+        Section(header: Text("Wallet Information")) {
+            WalletSettingsLoadingRow(title: "Network", value: metadata.network.description)
+            WalletSettingsLoadingRow(title: "Wallet Type", value: String(metadata.walletType))
+        }
+    }
+}
+
+private struct WalletSettingsLoadingSettingsSection: View {
+    let metadata: WalletMetadata
+    let colorColumns: [GridItem]
+
+    var body: some View {
+        Section(header: Text("Settings")) {
+            WalletSettingsLoadingNameRow(name: metadata.name)
+            WalletSettingsLoadingColorPicker(
+                metadata: metadata,
+                colorColumns: colorColumns
+            )
+            Toggle(isOn: .constant(metadata.showLabels)) {
+                Text("Show transaction labels")
+                    .font(.subheadline)
+            }
+            .disabled(true)
+        }
+    }
+}
+
+private struct WalletSettingsLoadingNameRow: View {
+    let name: String
+
+    var body: some View {
+        HStack {
+            Text("Name")
+            Spacer()
+            Text(name)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Image(systemName: "chevron.right")
+                .foregroundColor(Color(UIColor.tertiaryLabel))
+                .font(.footnote)
+                .fontWeight(.semibold)
+        }
+        .font(.subheadline)
+    }
+}
+
+private struct WalletSettingsLoadingColorPicker: View {
+    let metadata: WalletMetadata
+    let colorColumns: [GridItem]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            HStack {
+                Text("Wallet Color")
+                    .font(.subheadline)
+                Spacer()
+            }
+            HStack {
+                Rectangle()
+                    .fill(metadata.swiftColor)
+                    .cornerRadius(10)
+                    .frame(width: 80, height: 80)
+                LazyVGrid(columns: colorColumns, spacing: 20) {
+                    ForEach(defaultWalletColors(), id: \.self) { color in
+                        WalletSettingsLoadingColor(
+                            color: color,
+                            isSelected: color == metadata.color
+                        )
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct WalletSettingsLoadingColor: View {
+    let color: WalletColor
+    let isSelected: Bool
+
+    var body: some View {
+        ZStack {
+            if isSelected {
+                Circle()
+                    .stroke(Color(color).opacity(0.7), lineWidth: 2)
+                    .frame(width: 32, height: 32)
+            }
+            Circle()
+                .fill(Color(color))
+                .frame(width: 28, height: 28)
         }
     }
 }

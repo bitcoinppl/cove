@@ -22,25 +22,10 @@ struct VerificationCompleteScreen: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
-            )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
-            }
-        }
+        VerificationCompleteLayout(
+            sizeCategory: sizeCategory,
+            completeVerification: completeVerification
+        )
         .background(
             Image(.newWalletPattern)
                 .resizable()
@@ -52,7 +37,58 @@ struct VerificationCompleteScreen: View {
         .background(Color.midnightBlue)
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
+    private func completeVerification() {
+        do {
+            try manager.rust.markWalletAsVerified()
+            if let onVerified {
+                onVerified()
+            } else {
+                app.resetRoute(to: Route.selectedWallet(manager.id))
+            }
+        } catch {
+            Log.error("Error marking wallet as verified: \(error)")
+        }
+    }
+}
+
+private struct VerificationCompleteLayout: View {
+    let sizeCategory: ContentSizeCategory
+    let completeVerification: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scrollableLayout = usesCompactLayout(
+                sizeCategory: sizeCategory,
+                availableHeight: proxy.size.height
+            )
+
+            Group {
+                if scrollableLayout {
+                    ScrollView {
+                        VerificationCompleteContent(
+                            usesFlexibleSpacing: false,
+                            completeVerification: completeVerification
+                        )
+                        .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
+                        .safeAreaPadding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
+                } else {
+                    VerificationCompleteContent(
+                        usesFlexibleSpacing: true,
+                        completeVerification: completeVerification
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct VerificationCompleteContent: View {
+    let usesFlexibleSpacing: Bool
+    let completeVerification: () -> Void
+
+    var body: some View {
         VStack(spacing: 24) {
             if usesFlexibleSpacing {
                 Spacer()
@@ -99,19 +135,8 @@ struct VerificationCompleteScreen: View {
 
             Divider().overlay(Color.coveLightGray.opacity(0.50))
 
-            Button("Go To Wallet") {
-                do {
-                    try manager.rust.markWalletAsVerified()
-                    if let onVerified {
-                        onVerified()
-                    } else {
-                        app.resetRoute(to: Route.selectedWallet(manager.id))
-                    }
-                } catch {
-                    Log.error("Error marking wallet as verified: \(error)")
-                }
-            }
-            .buttonStyle(PrimaryButtonStyle())
+            Button("Go To Wallet", action: completeVerification)
+                .buttonStyle(PrimaryButtonStyle())
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)

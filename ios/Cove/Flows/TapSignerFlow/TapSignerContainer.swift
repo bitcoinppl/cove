@@ -76,9 +76,9 @@ struct TapSignerContainer: View {
     var body: some View {
         NavigationStack(path: $manager.path) {
             // Initial view based on initial route
-            routeContent(route: manager.initialRoute)
+            TapSignerRouteView(route: manager.initialRoute, manager: manager)
                 .navigationDestination(for: TapSignerRoute.self) { route in
-                    routeContent(route: route)
+                    TapSignerRouteView(route: route, manager: manager)
                 }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -88,39 +88,122 @@ struct TapSignerContainer: View {
         .frame(width: screenWidth)
         .id(manager.id)
     }
+}
 
-    @ViewBuilder
-    func routeContent(route: TapSignerRoute) -> some View {
+private enum TapSignerSetupRoute {
+    case select(TapSigner)
+    case advanced(TapSigner)
+    case startingPin(TapSigner, String?)
+    case newPin(TapSignerNewPinArgs)
+    case confirmPin(TapSignerConfirmPinArgs)
+    case enterPin(TapSigner, AfterPinAction)
+}
+
+private enum TapSignerResultRoute {
+    case setupSuccess(TapSigner, TapSignerSetupComplete)
+    case setupRetry(TapSigner, SetupCmdResponse)
+    case importSuccess(TapSigner, DeriveInfo)
+    case importRetry(TapSigner)
+}
+
+private enum TapSignerPresentedRoute {
+    case setup(TapSignerSetupRoute)
+    case result(TapSignerResultRoute)
+
+    init(_ route: TapSignerRoute) {
         switch route {
         case let .initSelect(t):
-            TapSignerChooseChainCode(tapSigner: t)
-                .id(id("initSelect"))
+            self = .setup(.select(t))
         case let .initAdvanced(t):
-            TapSignerAdvancedChainCode(tapSigner: t)
-                .id(id("initAdvanced"))
+            self = .setup(.advanced(t))
         case let .startingPin(tapSigner: t, chainCode: chainCode):
-            TapSignerStartingPin(tapSigner: t, chainCode: chainCode)
-                .id(id("startingPin"))
+            self = .setup(.startingPin(t, chainCode))
         case let .newPin(args: args):
+            self = .setup(.newPin(args))
+        case let .confirmPin(args):
+            self = .setup(.confirmPin(args))
+        case let .enterPin(tapSigner: tapSigner, action: action):
+            self = .setup(.enterPin(tapSigner, action))
+        case let .setupSuccess(tapSigner, setup):
+            self = .result(.setupSuccess(tapSigner, setup))
+        case let .setupRetry(tapSigner, response):
+            self = .result(.setupRetry(tapSigner, response))
+        case let .importSuccess(tapSigner, deriveInfo):
+            self = .result(.importSuccess(tapSigner, deriveInfo))
+        case let .importRetry(tapSigner):
+            self = .result(.importRetry(tapSigner))
+        }
+    }
+}
+
+private struct TapSignerRouteView: View {
+    let route: TapSignerPresentedRoute
+    let manager: TapSignerManager
+
+    init(route: TapSignerRoute, manager: TapSignerManager) {
+        self.route = TapSignerPresentedRoute(route)
+        self.manager = manager
+    }
+
+    var body: some View {
+        switch route {
+        case let .setup(route):
+            TapSignerSetupRouteView(route: route, manager: manager)
+        case let .result(route):
+            TapSignerResultRouteView(route: route, manager: manager)
+        }
+    }
+}
+
+private struct TapSignerSetupRouteView: View {
+    let route: TapSignerSetupRoute
+    let manager: TapSignerManager
+
+    var body: some View {
+        switch route {
+        case let .select(tapSigner):
+            TapSignerChooseChainCode(tapSigner: tapSigner)
+                .id(id("initSelect"))
+        case let .advanced(tapSigner):
+            TapSignerAdvancedChainCode(tapSigner: tapSigner)
+                .id(id("initAdvanced"))
+        case let .startingPin(tapSigner, chainCode):
+            TapSignerStartingPin(tapSigner: tapSigner, chainCode: chainCode)
+                .id(id("startingPin"))
+        case let .newPin(args):
             TapSignerNewPinView(args: args)
                 .id(id("newPin"))
         case let .confirmPin(args):
             TapSignerConfirmPinView(args: args)
                 .id(id("confirmPin"))
+        case let .enterPin(tapSigner, action):
+            TapSignerEnterPin(tapSigner: tapSigner, action: action)
+                .id(id("enterPin-\(action)"))
+        }
+    }
+
+    private func id(_ id: String) -> String {
+        "\(id)-\(manager.id)"
+    }
+}
+
+private struct TapSignerResultRouteView: View {
+    let route: TapSignerResultRoute
+    let manager: TapSignerManager
+
+    var body: some View {
+        switch route {
         case let .setupSuccess(tapSigner, setup):
             TapSignerSetupSuccess(tapSigner: tapSigner, setup: setup)
                 .id(id("setupSuccess"))
         case let .setupRetry(tapSigner, response):
             TapSignerSetupRetry(tapSigner: tapSigner, response: response)
                 .id(id("setupRetry"))
-        case let .enterPin(tapSigner: t, action: action):
-            TapSignerEnterPin(tapSigner: t, action: action)
-                .id(id("enterPin-\(action)"))
-        case let .importSuccess(t, deriveInfo):
-            TapSignerImportSuccess(tapSigner: t, deriveInfo: deriveInfo)
+        case let .importSuccess(tapSigner, deriveInfo):
+            TapSignerImportSuccess(tapSigner: tapSigner, deriveInfo: deriveInfo)
                 .id(id("importSuccess"))
-        case let .importRetry(t):
-            TapSignerImportRetry(tapSigner: t)
+        case let .importRetry(tapSigner):
+            TapSignerImportRetry(tapSigner: tapSigner)
         }
     }
 

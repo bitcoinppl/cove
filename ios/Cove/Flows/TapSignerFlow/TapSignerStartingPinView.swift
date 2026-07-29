@@ -19,93 +19,58 @@ struct TapSignerStartingPin: View {
     @FocusState private var isFocused
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 30) {
-                VStack {
-                    HStack {
-                        Button(action: { manager.popRoute() }) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
+        TapSignerPinScreen(
+            pin: $startingPin,
+            focus: $isFocused,
+            spacing: 30,
+            header: TapSignerStartingPinHeader(action: goBack),
+            description: TapSignerPinDescription(
+                title: "Enter Starting PIN",
+                message: """
+                The starting PIN is the 6 digit numeric PIN found of the back of your TAPSIGNER
+                """
+            ),
+            indicators: TapSignerPinIndicators(pinCount: startingPin.count, focus: $isFocused)
+        )
+        .onAppear(perform: resetPin)
+        .onChange(of: isFocused, keepFocused)
+        .onChange(of: startingPin, handlePinChange)
+    }
 
-                        Spacer()
-                    }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 10)
-                    .foregroundStyle(.white)
-                    .fontWeight(.semibold)
+    private func goBack() {
+        manager.popRoute()
+    }
 
-                    Image(.tapSignerCard)
-                        .offset(y: 10)
-                        .clipped()
-                }
-                .background(Color.duskBlue)
+    private func resetPin() {
+        startingPin = ""
+        isFocused = true
+    }
 
-                VStack(spacing: 20) {
-                    Text("Enter Starting PIN")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+    private func keepFocused(_: Bool, _: Bool) {
+        isFocused = true
+    }
 
-                    Text(
-                        "The starting PIN is the 6 digit numeric PIN found of the back of your TAPSIGNER"
-                    )
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
-                        Circle()
-                            .stroke(.primary, lineWidth: 1.3)
-                            .fill(startingPin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
-                            .id(index)
-                            .foregroundStyle(.primary)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { isFocused = true }
-                .fixedSize(horizontal: true, vertical: true)
-
-                TextField("Hidden Input", text: $startingPin)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .focused($isFocused)
-                    .keyboardType(.numberPad)
-            }
-            .onAppear {
-                startingPin = ""
-                isFocused = true
-            }
-            .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: startingPin) { old, pin in
-                if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        manager.navigate(to:
-                            .newPin(TapSignerNewPinArgs(
-                                tapSigner: tapSigner,
-                                startingPin: pin,
-                                chainCode: chainCode,
-                                action: .setup
-                            )))
-                    }
-                }
-
-                if pin.count > 6, old.count < 6 {
-                    startingPin = old
-                    return
-                }
-
-                if pin.count > 6 {
-                    startingPin = String(startingPin.prefix(6))
-                    return
-                }
+    private func handlePinChange(old: String, pin: String) {
+        if pin.count == 6 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                manager.navigate(to:
+                    .newPin(TapSignerNewPinArgs(
+                        tapSigner: tapSigner,
+                        startingPin: pin,
+                        chainCode: chainCode,
+                        action: .setup
+                    )))
             }
         }
-        .scrollIndicators(.hidden)
-        .navigationBarHidden(true)
+
+        if pin.count > 6, old.count < 6 {
+            startingPin = old
+            return
+        }
+
+        if pin.count > 6 {
+            startingPin = String(startingPin.prefix(6))
+        }
     }
 }
 

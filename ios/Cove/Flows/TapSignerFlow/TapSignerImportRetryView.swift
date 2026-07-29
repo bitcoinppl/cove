@@ -9,101 +9,46 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TapSignerImportRetry: View {
-    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
 
     var body: some View {
-        GeometryReader { proxy in
-            let scrollableLayout = usesCompactLayout(
-                sizeCategory: sizeCategory,
-                availableHeight: proxy.size.height
+        TapSignerAdaptiveLayout { usesFlexibleSpacing in
+            TapSignerRetryContent(
+                usesFlexibleSpacing: usesFlexibleSpacing,
+                title: "Could not complete import",
+                message: """
+                Please try again and hold your TAPSIGNER steady until import is complete.
+                """,
+                cancelAction: cancel,
+                retryAction: retry
             )
-
-            Group {
-                if scrollableLayout {
-                    ScrollView {
-                        mainContent(usesFlexibleSpacing: false)
-                            .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .top)
-                            .safeAreaPadding(.bottom, 24)
-                    }
-                    .scrollIndicators(.hidden)
-                } else {
-                    mainContent(usesFlexibleSpacing: true)
-                }
-            }
         }
         .background(TapSignerResultBackground())
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
     }
 
-    private func mainContent(usesFlexibleSpacing: Bool) -> some View {
-        VStack(spacing: 40) {
-            VStack {
-                HStack {
-                    Button(action: { manager.popRoute() }) {
-                        Text("Cancel")
-                    }
+    private func cancel() {
+        manager.popRoute()
+    }
 
-                    Spacer()
-                }
-                .padding(.top, 20)
-                .padding(.horizontal, 10)
-                .foregroundStyle(.primary)
-                .fontWeight(.semibold)
-            }
+    private func retry() {
+        guard let pin = manager.enteredPin else {
+            app.alertState = .init(.tapSignerDeriveFailed(message: "No PIN entered"))
+            return
+        }
 
-            if usesFlexibleSpacing {
-                Spacer()
-            }
+        let nfc = manager.getOrCreateNfc(tapSigner)
 
-            VStack(spacing: 20) {
-                Image(systemName: "x.circle.fill")
-                    .font(.system(size: 100))
-                    .foregroundStyle(.red)
-                    .fontWeight(.light)
-
-                Text("Could not complete import")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text(
-                    "Please try again and hold your TAPSIGNER steady until import is complete."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.primary.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal)
-
-            if usesFlexibleSpacing {
-                Spacer()
-            }
-
-            VStack(spacing: 14) {
-                Button("Retry") {
-                    guard let pin = manager.enteredPin else {
-                        app.alertState = .init(.tapSignerDeriveFailed(message: "No PIN entered"))
-                        return
-                    }
-
-                    let nfc = manager.getOrCreateNfc(tapSigner)
-
-                    Task {
-                        switch await nfc.derive(pin: pin) {
-                        case let .success(deriveInfo):
-                            manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
-                        case let .failure(error):
-                            app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
-                        }
-                    }
-                }
-                .buttonStyle(DarkButtonStyle())
-                .padding(.horizontal)
+        Task {
+            switch await nfc.derive(pin: pin) {
+            case let .success(deriveInfo):
+                manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
+            case let .failure(error):
+                app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
             }
         }
     }

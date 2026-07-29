@@ -28,17 +28,25 @@ jobs:
       - name: Run rustfmt
         run: cd rust && cargo fmt --all -- --check
 
-  swiftformat:
+  swift-lint:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
-      - name: Install SwiftFormat
+      - name: Install Swift lint tools
         run: |
           brew update
           brew upgrade swiftformat || brew install swiftformat
+          brew upgrade swiftlint || brew install swiftlint
           swiftformat --version
+          swiftlint version
       - name: SwiftFormat
         run: swiftformat --lint ios --reporter github-actions-log --swiftversion 6
+      - name: SwiftLint
+        run: swiftlint lint --config .swiftlint.yml --reporter github-actions-logging
+      - name: Test Cove Swift lint rules
+        run: swift test --package-path tools/cove-swift-lint
+      - name: Cove Swift lint rules
+        run: swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
 
   ktlint:
     runs-on: ubuntu-latest

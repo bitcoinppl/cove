@@ -590,88 +590,129 @@ struct WalletTransitionRecoveryPlan {
             guard let self else { return }
             logger.debug("Update: \(message)")
 
-            switch message {
-            case let .routeUpdated(routes: routes):
-                navigationCoordinator.applyRouteUpdated(
-                    routes: routes,
-                    router: &router
-                ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
-                }
+            apply(message)
+        }
+    }
 
-            case let .pushedRoute(route):
-                navigationCoordinator.applyPushedRoute(
-                    route,
-                    router: &router,
-                    isSidebarVisible: &isSidebarVisible
-                ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
-                }
+    @MainActor
+    private func apply(_ message: AppStateReconcileMessage) {
+        switch message {
+        case .routeUpdated, .pushedRoute, .defaultRouteChanged:
+            applyNavigationMessage(message)
+        case .databaseUpdated, .colorSchemeChanged, .selectedNodeChanged,
+             .selectedNetworkChanged, .fiatPricesChanged, .feesChanged, .fiatCurrencyChanged:
+            applyConfigurationMessage(message)
+        case .walletModeChanged, .walletsChanged, .clearCachedWalletManager,
+             .showLoadingPopup, .hideLoadingPopup:
+            applyWalletPresentationMessage(message)
+        }
+    }
 
-            case .databaseUpdated:
-                database = Database()
-                needsOnboarding = rust.needsOnboarding()
-
-            case let .colorSchemeChanged(colorSchemeSelection):
-                self.colorSchemeSelection = colorSchemeSelection
-
-            case let .selectedNodeChanged(node):
-                selectedNode = node
-
-            case let .selectedNetworkChanged(network):
-                selectedNetwork = network
-                loadWallets()
-
-            case let .defaultRouteChanged(route, nestedRoutes):
-                navigationCoordinator.applyDefaultRouteChanged(
-                    route: route,
-                    nestedRoutes: nestedRoutes,
-                    router: &router,
-                    routeId: &routeId
-                ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
-                }
-
-            case let .fiatPricesChanged(prices):
-                self.prices = prices
-
-            case let .feesChanged(fees):
-                self.fees = fees
-
-            case let .fiatCurrencyChanged(fiatCurrency):
-                selectedFiatCurrency = fiatCurrency
-
-                // refresh fiat values in the wallet manager
-                if let walletManager {
-                    Task {
-                        await walletManager.forceWalletScan()
-                        await walletManager.updateWalletBalance()
-                    }
-                }
-
-            case .walletModeChanged:
-                isLoading = true
-                loadWallets()
-
-                Task {
-                    try? await Task.sleep(for: .milliseconds(walletModeChangeDelayMs))
-                    await MainActor.run {
-                        withAnimation { self.isLoading = false }
-                    }
-                }
-
-            case .walletsChanged:
-                wallets = (try? database.wallets().all()) ?? []
-
-            case let .clearCachedWalletManager(walletId):
-                clearWalletManager(id: walletId)
-
-            case .showLoadingPopup:
-                Task { await MiddlePopup(state: .loading).present() }
-
-            case .hideLoadingPopup:
-                Task { await PopupStack.dismissAllPopups() }
+    @MainActor
+    private func applyNavigationMessage(_ message: AppStateReconcileMessage) {
+        switch message {
+        case let .routeUpdated(routes):
+            navigationCoordinator.applyRouteUpdated(
+                routes: routes,
+                router: &router
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
             }
+
+        case let .pushedRoute(route):
+            navigationCoordinator.applyPushedRoute(
+                route,
+                router: &router,
+                isSidebarVisible: &isSidebarVisible
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            }
+
+        case let .defaultRouteChanged(route, nestedRoutes):
+            navigationCoordinator.applyDefaultRouteChanged(
+                route: route,
+                nestedRoutes: nestedRoutes,
+                router: &router,
+                routeId: &routeId
+            ) { router in
+                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            }
+
+        default:
+            preconditionFailure("Expected an app navigation reconcile message")
+        }
+    }
+
+    @MainActor
+    private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
+        switch message {
+        case .databaseUpdated:
+            database = Database()
+            needsOnboarding = rust.needsOnboarding()
+
+        case let .colorSchemeChanged(colorSchemeSelection):
+            self.colorSchemeSelection = colorSchemeSelection
+
+        case let .selectedNodeChanged(node):
+            selectedNode = node
+
+        case let .selectedNetworkChanged(network):
+            selectedNetwork = network
+            loadWallets()
+
+        case let .fiatPricesChanged(prices):
+            self.prices = prices
+
+        case let .feesChanged(fees):
+            self.fees = fees
+
+        case let .fiatCurrencyChanged(fiatCurrency):
+            selectedFiatCurrency = fiatCurrency
+            refreshWalletFiatValues()
+
+        default:
+            preconditionFailure("Expected an app configuration reconcile message")
+        }
+    }
+
+    @MainActor
+    private func refreshWalletFiatValues() {
+        guard let walletManager else { return }
+
+        Task {
+            await walletManager.forceWalletScan()
+            await walletManager.updateWalletBalance()
+        }
+    }
+
+    @MainActor
+    private func applyWalletPresentationMessage(_ message: AppStateReconcileMessage) {
+        switch message {
+        case .walletModeChanged:
+            isLoading = true
+            loadWallets()
+
+            Task {
+                try? await Task.sleep(for: .milliseconds(walletModeChangeDelayMs))
+                await MainActor.run {
+                    withAnimation { self.isLoading = false }
+                }
+            }
+
+        case .walletsChanged:
+            wallets = (try? database.wallets().all()) ?? []
+
+        case let .clearCachedWalletManager(walletId):
+            clearWalletManager(id: walletId)
+
+        case .showLoadingPopup:
+            Task { await MiddlePopup(state: .loading).present() }
+
+        case .hideLoadingPopup:
+            Task { await PopupStack.dismissAllPopups() }
+
+        default:
+            preconditionFailure("Expected an app wallet presentation reconcile message")
         }
     }
 

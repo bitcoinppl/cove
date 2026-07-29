@@ -51,7 +51,12 @@ private struct SendFlowLoadedView: View {
     var body: some View {
         Group {
             if let sendFlowManager = initializedSendFlowManager {
-                loadedContent(sendFlowManager: sendFlowManager)
+                SendFlowLoadedContent(
+                    sendRoute: sendRoute,
+                    manager: manager,
+                    sendFlowManager: sendFlowManager,
+                    errorAlert: sendFlowErrorAlert
+                )
             } else {
                 ProgressView()
                     .tint(.primary)
@@ -59,65 +64,6 @@ private struct SendFlowLoadedView: View {
         }
         .task(id: ObjectIdentifier(manager)) {
             await ensureSendFlowManagerInitialized()
-        }
-    }
-
-    @ViewBuilder
-    private func loadedContent(sendFlowManager: SendFlowManager) -> some View {
-        let presenter = sendFlowManager.presenter
-
-        Group {
-            sendRouteToScreen(sendRoute: sendRoute, manager: manager)
-        }
-        .environment(presenter)
-        .environment(sendFlowManager)
-        .onAppear {
-            if manager.ledgerState.initialScanIncomplete {
-                app.showInitialScanIncompleteAlert()
-                app.popRoute()
-                return
-            }
-
-            if manager.balance.spendable().asSats() == 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        presenter.focusField = .none
-                    }
-                }
-
-                presenter.alertState = .init(.error(.NoBalance))
-                return
-            }
-        }
-        .presentingAlert(
-            sendFlowErrorAlert,
-            context: SendFlowErrorAlertContext(alertState: sendFlowErrorAlert),
-            defaultTitle: "Error!"
-        )
-        .onDisappear {
-            presenter.setDisappearing()
-        }
-    }
-
-    @ViewBuilder
-    private func sendRouteToScreen(
-        sendRoute: SendRoute,
-        manager: WalletManager
-    ) -> some View {
-        switch sendRoute {
-        case let .setAmount(id: id, address: _, amount: amount):
-            SendFlowSetAmountScreen(id: id, amount: amount)
-        case let .coinControlSetAmount(id: id, utxos: utxos):
-            SendFlowCoinControlSetAmountScreen(id: id, utxos: utxos)
-        case let .confirm(confirm):
-            SendFlowConfirmScreen(
-                id: confirm.id, manager: manager,
-                details: confirm.details,
-                input: confirm.input,
-                payjoinEndpoint: confirm.payjoinEndpoint
-            )
-        case let .hardwareExport(id: id, details: details):
-            SendFlowHardwareScreen(id: id, manager: manager, details: details)
         }
     }
 
@@ -195,6 +141,74 @@ private struct SendFlowLoadedView: View {
                 message: "The wallet could not be opened for sending. Please try again from the wallet screen."
             ))
             app.popRoute()
+        }
+    }
+}
+
+private struct SendFlowLoadedContent: View {
+    @Environment(AppManager.self) private var app
+
+    let sendRoute: SendRoute
+    let manager: WalletManager
+    let sendFlowManager: SendFlowManager
+    let errorAlert: Binding<TaggedItem<SendFlowErrorAlert>?>
+
+    private var presenter: SendFlowPresenter {
+        sendFlowManager.presenter
+    }
+
+    var body: some View {
+        SendFlowRouteView(sendRoute: sendRoute, manager: manager)
+            .environment(presenter)
+            .environment(sendFlowManager)
+            .onAppear(perform: validateWallet)
+            .presentingAlert(
+                errorAlert,
+                context: SendFlowErrorAlertContext(alertState: errorAlert),
+                defaultTitle: "Error!"
+            )
+            .onDisappear(perform: presenter.setDisappearing)
+    }
+
+    private func validateWallet() {
+        if manager.ledgerState.initialScanIncomplete {
+            app.showInitialScanIncompleteAlert()
+            app.popRoute()
+            return
+        }
+
+        guard manager.balance.spendable().asSats() == 0 else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                presenter.focusField = .none
+            }
+        }
+
+        presenter.alertState = .init(.error(.NoBalance))
+    }
+}
+
+private struct SendFlowRouteView: View {
+    let sendRoute: SendRoute
+    let manager: WalletManager
+
+    var body: some View {
+        switch sendRoute {
+        case let .setAmount(id: id, address: _, amount: amount):
+            SendFlowSetAmountScreen(id: id, amount: amount)
+        case let .coinControlSetAmount(id: id, utxos: utxos):
+            SendFlowCoinControlSetAmountScreen(id: id, utxos: utxos)
+        case let .confirm(confirm):
+            SendFlowConfirmScreen(
+                id: confirm.id,
+                manager: manager,
+                details: confirm.details,
+                input: confirm.input,
+                payjoinEndpoint: confirm.payjoinEndpoint
+            )
+        case let .hardwareExport(id: id, details: details):
+            SendFlowHardwareScreen(id: id, manager: manager, details: details)
         }
     }
 }
