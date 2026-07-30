@@ -1,11 +1,46 @@
 package org.bitcoinppl.cove
 
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportFlowDirection
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportSendStartResult
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyTeleportNavigationPolicyTest {
+    @Test
+    fun acceptedWalletStartOpensTheRoute() {
+        assertEquals(
+            KeyTeleportSendCompletion.OPEN_ROUTE,
+            resolveKeyTeleportSendCompletion(
+                result = KeyTeleportSendStartResult.ACCEPTED,
+                hasKeyTeleportRoute = false,
+            ),
+        )
+    }
+
+    @Test
+    fun rejectedWalletStartShowsAGlobalFailure() {
+        assertEquals(
+            KeyTeleportSendCompletion.SHOW_FAILURE,
+            resolveKeyTeleportSendCompletion(
+                result = KeyTeleportSendStartResult.REJECTED,
+                hasKeyTeleportRoute = false,
+            ),
+        )
+    }
+
+    @Test
+    fun completionIsIgnoredWhenAnotherKeyTeleportRouteOpened() {
+        assertEquals(
+            KeyTeleportSendCompletion.IGNORE,
+            resolveKeyTeleportSendCompletion(
+                result = KeyTeleportSendStartResult.REJECTED,
+                hasKeyTeleportRoute = true,
+            ),
+        )
+    }
+
     @Test
     fun oppositeManagerDirectionIsRejected() {
         assertFalse(

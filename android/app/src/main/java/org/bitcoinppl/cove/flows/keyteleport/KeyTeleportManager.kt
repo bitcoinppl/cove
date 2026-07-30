@@ -4,14 +4,17 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.RustHandleGuard
+import org.bitcoinppl.cove_core.InternalException
 import org.bitcoinppl.cove_core.KeyTeleportAlert
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerReconcileMessage
@@ -25,6 +28,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal enum class KeyTeleportFlowDirection {
     RECEIVE,
     SEND,
+}
+
+internal enum class KeyTeleportSendStartResult {
+    ACCEPTED,
+    REJECTED,
 }
 
 @Stable
@@ -122,13 +130,48 @@ class KeyTeleportManager internal constructor(
         }
     }
 
-    internal fun startSendFromWallet(walletId: WalletId): Boolean {
-        if (state !is KeyTeleportManagerState.Idle) return false
+    internal suspend fun startSendFromWallet(walletId: WalletId): KeyTeleportSendStartResult =
+        withContext(rustDispatcher) {
+            if (!acceptingActions.get()) return@withContext KeyTeleportSendStartResult.REJECTED
 
-        dispatch(KeyTeleportManagerAction.StartSendFromWallet(walletId))
+            try {
+                val acceptedState: KeyTeleportManagerState? =
+                    rustGuard.withHandle(rust) {
+                        val currentState = state()
+                        val canStart =
+                            try {
+                                currentState.canStartSendFromWallet()
+                            } finally {
+                                currentState.destroy()
+                            }
+                        if (!canStart) return@withHandle null
 
-        return true
-    }
+                        dispatch(KeyTeleportManagerAction.StartSendFromWallet(walletId))
+                        state()
+                    }
+                if (acceptedState == null) {
+                    return@withContext KeyTeleportSendStartResult.REJECTED
+                }
+
+                try {
+                    if (acceptingActions.get()) {
+                        acceptedState.sendStartResult()
+                    } else {
+                        KeyTeleportSendStartResult.REJECTED
+                    }
+                } finally {
+                    acceptedState.destroy()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: InternalException) {
+                Log.e(tag, "Unable to start KeyTeleport send", e)
+                KeyTeleportSendStartResult.REJECTED
+            } catch (e: IllegalStateException) {
+                Log.e(tag, "Unable to start KeyTeleport send", e)
+                KeyTeleportSendStartResult.REJECTED
+            }
+        }
 
     internal fun ingest(
         input: org.bitcoinppl.cove_core.KeyTeleportInput,
@@ -257,4 +300,14 @@ internal fun KeyTeleportManagerState.flowDirection(): KeyTeleportFlowDirection? 
         -> KeyTeleportFlowDirection.SEND
 
         is KeyTeleportManagerState.Idle -> null
+    }
+
+internal fun KeyTeleportManagerState.canStartSendFromWallet(): Boolean =
+    this is KeyTeleportManagerState.Idle
+
+internal fun KeyTeleportManagerState.sendStartResult(): KeyTeleportSendStartResult =
+    if (flowDirection() == KeyTeleportFlowDirection.SEND) {
+        KeyTeleportSendStartResult.ACCEPTED
+    } else {
+        KeyTeleportSendStartResult.REJECTED
     }

@@ -40,7 +40,7 @@ internal fun SendIdleView(
         Text("No eligible hot wallets are available on this device.", color = Color.White.copy(alpha = 0.75f))
     } else {
         WalletChoices(eligibleWallets, selectedWallet = null) {
-            manager.startSendFromWallet(it.id)
+            manager.dispatch(KeyTeleportManagerAction.StartSendFromWallet(it.id))
         }
     }
 }

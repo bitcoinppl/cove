@@ -12,9 +12,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportSendStartResult
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
@@ -146,6 +149,7 @@ class AppManager private constructor() : FfiReconcile {
     // multiple screens within the same wallet (send, coin control, tx details, settings)
     // call getWalletManager, this avoids recreating the actor and reconciler each time
     private val managerCache = AndroidManagerCache(mainScope)
+    private val keyTeleportSendStartMutex = Mutex()
 
     internal val walletManager: WalletManager?
         get() = managerCache.walletManager
@@ -237,13 +241,35 @@ class AppManager private constructor() : FfiReconcile {
     internal fun startKeyTeleportSend(walletId: WalletId): Boolean {
         if (routeStackContainsKeyTeleport(router.default, router.routes)) return false
 
-        val manager = getKeyTeleportManager()
-        val started = manager.startSendFromWallet(walletId)
-        if (started) {
-            router.pushRoute(RouteFactory().keyTeleportSend())
+        mainScope.launch {
+            keyTeleportSendStartMutex.withLock {
+                if (routeStackContainsKeyTeleport(router.default, router.routes)) {
+                    return@withLock
+                }
+
+                val result = getKeyTeleportManager().startSendFromWallet(walletId)
+                val hasKeyTeleportRoute =
+                    routeStackContainsKeyTeleport(router.default, router.routes)
+
+                when (resolveKeyTeleportSendCompletion(result, hasKeyTeleportRoute)) {
+                    KeyTeleportSendCompletion.OPEN_ROUTE ->
+                        router.pushRoute(RouteFactory().keyTeleportSend())
+
+                    KeyTeleportSendCompletion.SHOW_FAILURE ->
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "KeyTeleport",
+                                    message = "KeyTeleport could not start for this wallet.",
+                                ),
+                            )
+
+                    KeyTeleportSendCompletion.IGNORE -> Unit
+                }
+            }
         }
 
-        return started
+        return true
     }
 
     fun canKeyTeleportSend(walletId: WalletId): Boolean =
@@ -809,3 +835,19 @@ class AppManager private constructor() : FfiReconcile {
 // global accessor for convenience
 val App: AppManager
     get() = AppManager.getInstance()
+
+internal enum class KeyTeleportSendCompletion {
+    OPEN_ROUTE,
+    SHOW_FAILURE,
+    IGNORE,
+}
+
+internal fun resolveKeyTeleportSendCompletion(
+    result: KeyTeleportSendStartResult,
+    hasKeyTeleportRoute: Boolean,
+): KeyTeleportSendCompletion =
+    when {
+        hasKeyTeleportRoute -> KeyTeleportSendCompletion.IGNORE
+        result == KeyTeleportSendStartResult.ACCEPTED -> KeyTeleportSendCompletion.OPEN_ROUTE
+        else -> KeyTeleportSendCompletion.SHOW_FAILURE
+    }
