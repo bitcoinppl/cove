@@ -99,9 +99,11 @@ internal fun shouldAcceptExternalKeyTeleportIntent(
     keyTeleportAliasEnabled: Boolean,
 ): Boolean =
     when (action) {
-        Intent.ACTION_SEND -> keyTeleportAliasEnabled
-        Intent.ACTION_VIEW ->
+        Intent.ACTION_SEND,
+        Intent.ACTION_VIEW,
+        ->
             keyTeleportAliasEnabled && componentClassName == keyTeleportAliasClassName
+
         else -> false
     }
 

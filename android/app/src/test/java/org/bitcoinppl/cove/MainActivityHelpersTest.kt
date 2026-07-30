@@ -59,13 +59,21 @@ class MainActivityHelpersTest {
     }
 
     @Test
-    fun actionSendRequiresTheKeyTeleportEntryGate() {
+    fun actionSendRequiresTheEnabledKeyTeleportAlias() {
         assertFalse(
             shouldAcceptExternalKeyTeleportIntent(
                 action = Intent.ACTION_SEND,
                 componentClassName = MainActivity::class.java.name,
                 keyTeleportAliasClassName = KEY_TELEPORT_ALIAS,
                 keyTeleportAliasEnabled = false,
+            ),
+        )
+        assertFalse(
+            shouldAcceptExternalKeyTeleportIntent(
+                action = Intent.ACTION_SEND,
+                componentClassName = MainActivity::class.java.name,
+                keyTeleportAliasClassName = KEY_TELEPORT_ALIAS,
+                keyTeleportAliasEnabled = true,
             ),
         )
         assertTrue(
