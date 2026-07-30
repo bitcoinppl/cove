@@ -12,7 +12,7 @@ import org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails.Transacti
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportContainer
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowContainer
 import org.bitcoinppl.cove.flows.SettingsFlow.SettingsContainer
-import org.bitcoinppl.cove.secret_words.SecretWordsScreen
+import org.bitcoinppl.cove.secretwords.SecretWordsScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 

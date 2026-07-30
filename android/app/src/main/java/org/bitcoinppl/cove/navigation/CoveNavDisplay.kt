@@ -25,7 +25,7 @@ import org.bitcoinppl.cove.flows.SelectedWalletFlow.SelectedWalletContainer
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionDetails.TransactionDetailsContainer
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowContainer
 import org.bitcoinppl.cove.flows.SettingsFlow.SettingsContainer
-import org.bitcoinppl.cove.secret_words.SecretWordsScreen
+import org.bitcoinppl.cove.secretwords.SecretWordsScreen
 import org.bitcoinppl.cove.ui.theme.MaterialMotion
 import org.bitcoinppl.cove_core.Route
 

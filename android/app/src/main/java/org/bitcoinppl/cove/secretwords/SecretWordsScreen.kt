@@ -1,4 +1,4 @@
-package org.bitcoinppl.cove.secret_words
+package org.bitcoinppl.cove.secretwords
 
 import android.view.WindowManager
 import androidx.compose.foundation.Image

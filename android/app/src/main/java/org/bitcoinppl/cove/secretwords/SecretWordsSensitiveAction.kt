@@ -1,4 +1,4 @@
-package org.bitcoinppl.cove.secret_words
+package org.bitcoinppl.cove.secretwords
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -47,7 +47,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.flows.SettingsFlow.hasFreshMainCredential
+import org.bitcoinppl.cove.flows.settings.hasFreshMainCredential
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
 import org.bitcoinppl.cove_core.AppAlertState

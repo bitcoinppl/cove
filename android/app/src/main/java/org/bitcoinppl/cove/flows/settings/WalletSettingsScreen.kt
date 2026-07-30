@@ -1,4 +1,4 @@
-package org.bitcoinppl.cove.flows.SettingsFlow
+package org.bitcoinppl.cove.flows.settings
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,8 +34,11 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SettingsFlow.SettingsTopAppBar
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.WalletType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,16 +50,10 @@ fun WalletSettingsScreen(
     val metadata = manager.walletMetadata
     val auth = remember { Auth }
     val lifecycleOwner = LocalLifecycleOwner.current
-    var showFirstDeleteConfirmation by remember { mutableStateOf(false) }
-    var showSecondDeleteConfirmation by remember { mutableStateOf(false) }
-    var showFinalDeleteConfirmation by remember { mutableStateOf(false) }
-    var showXprvExportWarning by remember { mutableStateOf(false) }
-    var showXprvExportOptions by remember { mutableStateOf(false) }
+    var deletionDialog by remember { mutableStateOf<WalletDeletionDialog?>(null) }
+    var xprvExportDialog by remember { mutableStateOf<XprvExportDialog?>(null) }
     var pendingXprvExport by remember { mutableStateOf<PendingXprvExport?>(null) }
     var revealedXprv by remember { mutableStateOf<String?>(null) }
-    var xprvExportError by remember { mutableStateOf<String?>(null) }
-    var requiredConfirmations by remember { mutableStateOf(1.toUByte()) }
-    var deleteError by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
     val finalDeleteConfirmationMessage =
         if (app.cloudBackupManager.isCloudBackupEnabled) {
@@ -73,14 +70,13 @@ fun WalletSettingsScreen(
             manager.deleteWallet()
             app.popRoute()
         } catch (e: Exception) {
-            deleteError = e.message ?: "Failed to delete wallet"
+            deletionDialog =
+                WalletDeletionDialog.Error(
+                    e.message ?: "Failed to delete wallet",
+                )
             Log.e("WalletSettingsScreen", "failed to delete wallet", e)
         }
     }
-
-    fun firstDeleteConfirmationMessage(): String = manager.deletionWarningMessage()
-
-    fun requiredDeleteConfirmations(): UByte = manager.requiredDeletionConfirmations()
 
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
@@ -102,7 +98,9 @@ fun WalletSettingsScreen(
                 if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
                     pendingXprvExport = null
                     revealedXprv = null
-                    showXprvExportOptions = false
+                    if (xprvExportDialog == XprvExportDialog.Options) {
+                        xprvExportDialog = null
+                    }
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -134,29 +132,48 @@ fun WalletSettingsScreen(
         return
     }
 
+    val sensitiveAction =
+        when {
+            metadata.walletType != WalletType.HOT -> null
+            manager.hasRecoveryWords() -> WalletSettingsSensitiveAction.VIEW_RECOVERY_WORDS
+            manager.hasXprvSecret() && !auth.isInDecoyMode() ->
+                WalletSettingsSensitiveAction.EXPORT_PRIVATE_KEY
+
+            else -> null
+        }
+
     fun performXprvExport(action: XprvExportAction) {
         when (action) {
             XprvExportAction.REVEAL -> {
                 try {
                     revealedXprv = manager.exposeXprv()
                 } catch (e: Exception) {
-                    xprvExportError = e.message ?: "Unable to reveal the private key."
+                    xprvExportDialog =
+                        XprvExportDialog.Error(
+                            e.message ?: "Unable to reveal the private key.",
+                        )
                     Log.e("WalletSettingsScreen", "failed to reveal private key", e)
                 }
             }
 
             XprvExportAction.KEY_TELEPORT -> {
                 if (!app.startKeyTeleportSend(metadata.id)) {
-                    xprvExportError = "Finish the active KeyTeleport session before starting another transfer."
+                    xprvExportDialog =
+                        XprvExportDialog.Error(
+                            "Finish the active KeyTeleport session before starting another transfer.",
+                        )
                 }
             }
         }
     }
 
     fun startXprvExport(action: XprvExportAction) {
-        showXprvExportOptions = false
+        xprvExportDialog = null
         if (!auth.isAuthEnabled) {
-            xprvExportError = "Set up a PIN or biometric unlock before exporting a private key."
+            xprvExportDialog =
+                XprvExportDialog.Error(
+                    "Set up a PIN or biometric unlock before exporting a private key.",
+                )
             return
         }
 
@@ -181,7 +198,9 @@ fun WalletSettingsScreen(
     LaunchedEffect(auth.sensitiveContentGeneration) {
         pendingXprvExport = null
         revealedXprv = null
-        showXprvExportOptions = false
+        if (xprvExportDialog == XprvExportDialog.Options) {
+            xprvExportDialog = null
+        }
     }
 
     Scaffold(
@@ -222,32 +241,38 @@ fun WalletSettingsScreen(
                     metadata = metadata,
                 )
                 WalletSettingsDangerSection(
-                    app = app,
-                    manager = manager,
-                    metadata = metadata,
-                    auth = auth,
-                    onExportPrivateKey = { showXprvExportWarning = true },
+                    sensitiveAction = sensitiveAction,
+                    onSensitiveAction = { action ->
+                        when (action) {
+                            WalletSettingsSensitiveAction.VIEW_RECOVERY_WORDS ->
+                                app.pushRoute(Route.SecretWords(metadata.id))
+
+                            WalletSettingsSensitiveAction.EXPORT_PRIVATE_KEY ->
+                                xprvExportDialog = XprvExportDialog.Warning
+                        }
+                    },
                     onDeleteClick = {
-                        requiredConfirmations = requiredDeleteConfirmations()
-                        showFirstDeleteConfirmation = true
+                        deletionDialog =
+                            WalletDeletionDialog.Confirmation(
+                                WalletDeletionFlow.start(
+                                    walletName = metadata.name,
+                                    firstMessage = manager.deletionWarningMessage(),
+                                    finalMessage = finalDeleteConfirmationMessage,
+                                    finalButtonTitle = finalDeleteButtonTitle,
+                                    requiredConfirmations = manager.requiredDeletionConfirmations(),
+                                ),
+                            )
                     },
                 )
             }
         },
     )
 
-    WalletSettingsXprvExportDialogs(
-        showWarning = showXprvExportWarning,
-        showOptions = showXprvExportOptions,
-        exportError = xprvExportError,
-        onDismissWarning = { showXprvExportWarning = false },
-        onContinueFromWarning = {
-            showXprvExportWarning = false
-            showXprvExportOptions = true
-        },
-        onDismissOptions = { showXprvExportOptions = false },
+    WalletSettingsXprvExportDialog(
+        dialog = xprvExportDialog,
+        onDismiss = { xprvExportDialog = null },
+        onContinue = { xprvExportDialog = XprvExportDialog.Options },
         onExport = ::startXprvExport,
-        onDismissError = { xprvExportError = null },
     )
 
     revealedXprv?.let { xprv ->
@@ -257,25 +282,17 @@ fun WalletSettingsScreen(
         )
     }
 
-    WalletSettingsDeleteDialogs(
-        walletName = metadata.name,
-        firstDeleteMessage = firstDeleteConfirmationMessage(),
-        finalDeleteMessage = finalDeleteConfirmationMessage,
-        finalDeleteButtonTitle = finalDeleteButtonTitle,
-        requiredConfirmations = requiredConfirmations,
-        showFirstDeleteConfirmation = showFirstDeleteConfirmation,
-        showSecondDeleteConfirmation = showSecondDeleteConfirmation,
-        showFinalDeleteConfirmation = showFinalDeleteConfirmation,
-        deleteError = deleteError,
-        onDismissFirst = { showFirstDeleteConfirmation = false },
-        onDismissSecond = { showSecondDeleteConfirmation = false },
-        onDismissFinal = { showFinalDeleteConfirmation = false },
-        onDismissError = { deleteError = null },
-        onRequestSecond = { showSecondDeleteConfirmation = true },
-        onRequestFinal = { showFinalDeleteConfirmation = true },
-        onDelete = {
-            showFinalDeleteConfirmation = false
-            deleteWallet()
+    WalletSettingsDeleteDialog(
+        dialog = deletionDialog,
+        onDismiss = { deletionDialog = null },
+        onConfirm = { flow ->
+            val next = flow.advance()
+            if (next == null) {
+                deletionDialog = null
+                deleteWallet()
+            } else {
+                deletionDialog = WalletDeletionDialog.Confirmation(next)
+            }
         },
     )
 }

@@ -1,4 +1,4 @@
-package org.bitcoinppl.cove.flows.SettingsFlow
+package org.bitcoinppl.cove.flows.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,6 +44,7 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.HardwareWalletMetadata
+import org.bitcoinppl.cove_core.InternalException
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletBirthday
@@ -55,6 +56,10 @@ import org.bitcoinppl.cove_core.defaultWalletColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private const val WALLET_COLOR_COLUMN_COUNT = 5
+private const val WALLET_COLOR_GRID_WEIGHT = 3f
+private val WalletColorGridMaxHeight = 200.dp
 
 @Composable
 internal fun WalletSettingsInformationSection(
@@ -89,10 +94,11 @@ internal fun WalletSettingsInformationSection(
 
             // show fingerprint for non-TapSigner wallets
             val hardwareMeta = metadata.hardwareMetadata
-            if (manager.masterFingerprint() != null && hardwareMeta !is HardwareWalletMetadata.TapSigner) {
+            val masterFingerprint = manager.masterFingerprint()
+            if (masterFingerprint != null && hardwareMeta !is HardwareWalletMetadata.TapSigner) {
                 MaterialSettingsItem(
                     title = stringResource(R.string.label_wallet_fingerprint),
-                    subtitle = manager.masterFingerprint() ?: "",
+                    subtitle = masterFingerprint,
                 )
                 MaterialDivider()
             }
@@ -183,7 +189,7 @@ internal fun WalletColorSelector(
         remember {
             try {
                 defaultWalletColors()
-            } catch (e: Throwable) {
+            } catch (e: InternalException) {
                 Log.e("WalletSettingsScreen", "failed to load default wallet colors", e)
                 emptyList()
             }
@@ -209,67 +215,102 @@ internal fun WalletColorSelector(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .aspectRatio(1f)
-                    .background(
-                        color = selectedColor.toComposeColor(),
-                        shape = RoundedCornerShape(8.dp),
-                    ).weight(1f),
+            SelectedWalletColorPreview(
+                selectedColor = selectedColor,
+                modifier = Modifier.weight(1f),
             )
 
-            // 5 per row, adjust as needed
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
-                userScrollEnabled = false,
+            WalletColorGrid(
+                availableColors = availableColors,
+                selectedColor = selectedColor,
+                onColorSelected = { walletColor ->
+                    selectedColor = walletColor
+                    onColorChange(walletColor)
+                },
+                modifier = Modifier.weight(WALLET_COLOR_GRID_WEIGHT),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectedWalletColorPreview(
+    selectedColor: WalletColor,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .aspectRatio(1f)
+            .background(
+                color = selectedColor.toComposeColor(),
+                shape = RoundedCornerShape(8.dp),
+            ),
+    )
+}
+
+@Composable
+private fun WalletColorGrid(
+    availableColors: List<WalletColor>,
+    selectedColor: WalletColor,
+    onColorSelected: (WalletColor) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(WALLET_COLOR_COLUMN_COUNT),
+        userScrollEnabled = false,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(max = WalletColorGridMaxHeight)
+                .padding(4.dp),
+        contentPadding = PaddingValues(2.dp),
+    ) {
+        items(availableColors.size) { index ->
+            val walletColor = availableColors[index]
+
+            WalletColorOption(
+                walletColor = walletColor,
+                isSelected = walletColor == selectedColor,
+                onClick = { onColorSelected(walletColor) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun WalletColorOption(
+    walletColor: WalletColor,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .padding(4.dp)
+                .aspectRatio(1f)
+                .size(48.dp)
+                .clickable(onClick = onClick),
+    ) {
+        if (isSelected) {
+            Box(
                 modifier =
                     Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                        .padding(4.dp)
-                        .weight(3f),
-                contentPadding = PaddingValues(2.dp),
-            ) {
-                items(availableColors.size) { index ->
-                    val walletColor = availableColors[index]
-
-                    Box(
-                        modifier =
-                            Modifier
-                                .padding(4.dp)
-                                .aspectRatio(1f)
-                                .size(48.dp)
-                                .clickable {
-                                    selectedColor = walletColor
-                                    onColorChange(walletColor)
-                                },
-                    ) {
-                        // If selected → border first
-                        if (walletColor == selectedColor) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .matchParentSize()
-                                        .padding(3.dp)
-                                        .border(
-                                            width = 3.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            shape = CircleShape,
-                                        ),
-                            )
-                        }
-
-                        // color circle
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(walletColor.toComposeColor(), CircleShape),
-                        )
-                    }
-                }
-            }
+                        .matchParentSize()
+                        .padding(3.dp)
+                        .border(
+                            width = 3.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = CircleShape,
+                        ),
+            )
         }
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(walletColor.toComposeColor(), CircleShape),
+        )
     }
 }
 
