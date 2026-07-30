@@ -241,15 +241,6 @@ private struct CoveMainPresentedContent: View {
             .presentingAlert($app.alertState, context: presentationContext)
             .presentingSheet($app.sheetState, context: presentationContext)
             .onOpenURL(perform: ScanManager.shared.handleFileOpen)
-            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                guard
-                    Bundle.main.object(forInfoDictionaryKey: "KeyTeleportAppLinksEnabled")
-                    as? Bool == true,
-                    let url = activity.webpageURL
-                else { return }
-
-                ScanManager.shared.handleFileOpen(url)
-            }
             .onChange(of: phase, initial: true, onChangePhase)
     }
 }
