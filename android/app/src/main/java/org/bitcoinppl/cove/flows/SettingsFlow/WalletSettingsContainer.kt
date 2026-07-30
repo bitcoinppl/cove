@@ -26,6 +26,7 @@ import kotlinx.coroutines.ensureActive
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.settings.WalletSettingsScreen
 import org.bitcoinppl.cove.WalletSelectionRecoveryResult
 import org.bitcoinppl.cove.recoverWalletSelectionOrPopRoute
 import org.bitcoinppl.cove_core.*

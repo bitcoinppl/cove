@@ -11,49 +11,11 @@ class ScanManager private constructor() {
     private val tag = "ScanManager"
 
     private val app: AppManager get() = AppManager.getInstance()
+    private val keyTeleport = KeyTeleportScanHandler(app)
 
     fun handleMultiFormat(multiFormat: MultiFormat) {
         try {
-            when (multiFormat) {
-                is MultiFormat.Mnemonic -> {
-                    multiFormat.v1.use { mnemonic ->
-                        importHotWallet(mnemonic.words())
-                    }
-                }
-
-                is MultiFormat.HardwareExport -> {
-                    importColdWallet(multiFormat.v1)
-                }
-
-                is MultiFormat.Address -> {
-                    handleAddress(multiFormat.v1)
-                }
-
-                is MultiFormat.Transaction -> {
-                    handleTransaction(multiFormat.v1)
-                }
-
-                is MultiFormat.SignedPsbt -> {
-                    handleSignedPsbt(multiFormat.v1)
-                }
-
-                is MultiFormat.TapSignerUnused -> {
-                    app.alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
-                }
-
-                is MultiFormat.TapSignerReady -> {
-                    val wallet = app.findTapSignerWallet(multiFormat.v1)
-                    if (wallet != null) {
-                        app.alertState = TaggedItem(AppAlertState.TapSignerWalletFound(wallet.id))
-                    } else {
-                        app.alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
-                    }
-                }
-
-                is MultiFormat.Bip329Labels -> {
-                    importLabels(multiFormat.v1)
-                }
-            }
+            routeMultiFormat(multiFormat)
         } catch (e: Exception) {
             Log.e(tag, "Unable to handle scanned code", e)
             app.alertState =
@@ -62,6 +24,60 @@ class ScanManager private constructor() {
                 )
         }
     }
+
+    private fun routeMultiFormat(multiFormat: MultiFormat) {
+        when (multiFormat) {
+            is MultiFormat.Mnemonic -> {
+                multiFormat.v1.use { mnemonic ->
+                    importHotWallet(mnemonic.words())
+                }
+            }
+
+            is MultiFormat.HardwareExport -> {
+                importColdWallet(multiFormat.v1)
+            }
+
+            is MultiFormat.Address -> {
+                handleAddress(multiFormat.v1)
+            }
+
+            is MultiFormat.Transaction -> {
+                handleTransaction(multiFormat.v1)
+            }
+
+            is MultiFormat.SignedPsbt -> {
+                handleSignedPsbt(multiFormat.v1)
+            }
+
+            is MultiFormat.TapSignerUnused -> {
+                app.alertState = TaggedItem(AppAlertState.UninitializedTapSigner(multiFormat.v1))
+            }
+
+            is MultiFormat.TapSignerReady -> {
+                val wallet = app.findTapSignerWallet(multiFormat.v1)
+                if (wallet != null) {
+                    app.alertState = TaggedItem(AppAlertState.TapSignerWalletFound(wallet.id))
+                } else {
+                    app.alertState = TaggedItem(AppAlertState.InitializedTapSigner(multiFormat.v1))
+                }
+            }
+
+            is MultiFormat.Bip329Labels -> {
+                importLabels(multiFormat.v1)
+            }
+
+            is MultiFormat.KeyTeleportReceiver -> {
+                keyTeleport.handleReceiver(multiFormat.v1)
+            }
+
+            is MultiFormat.KeyTeleportSender -> {
+                keyTeleport.handleSender(multiFormat.v1)
+            }
+        }
+    }
+
+    internal fun handleKeyTeleportText(input: String): KeyTeleportIngestOutcome =
+        keyTeleport.handleText(input)
 
     private fun importLabels(labels: Bip329Labels) {
         val manager = app.walletManager

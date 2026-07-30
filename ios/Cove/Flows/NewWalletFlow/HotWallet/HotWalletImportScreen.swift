@@ -13,6 +13,7 @@ enum HotWalletImportAlertState: Equatable {
     case invalidWords
     case duplicateWallet(WalletId)
     case scanError(String)
+    case importError(String)
 }
 
 enum HotWalletImportSheetState: Equatable {
@@ -258,6 +259,21 @@ struct HotWalletImportScreen: View {
                 Log.error("Unable to import wallet: \(error)")
             case let .MissingMetadata(walletId):
                 Log.error("Wallet metadata missing for \(walletId)")
+            case .WalletIdentityCollision:
+                Log.error("Multiple existing wallets match the imported secret")
+                alertState = .init(.importError(
+                    "More than one existing wallet matches these words, so Cove can't tell which one to update. Remove the duplicate wallet and try again."
+                ))
+            case let .WalletIdentity(message):
+                Log.error("Unable to match imported words to an existing wallet: \(message)")
+                alertState = .init(.importError(
+                    "Cove couldn't safely match these words to an existing wallet: \(message)"
+                ))
+            case let .UpgradeRollback(message):
+                Log.error("Failed to roll back a partial wallet upgrade: \(message)")
+                alertState = .init(.importError(
+                    "The import failed partway and Cove couldn't fully undo it. Restart Cove and check this wallet before trying again."
+                ))
             }
         } catch {
             Log.error("Unknown error \(error)")

@@ -67,6 +67,7 @@ pub use self::dto::{
     DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RecordId,
     SavedPasskeyConfirmationMode,
 };
+
 pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;
 pub type CloudBackupState = self::dto::CloudBackupState;
 pub use self::error::CloudBackupDriveAccountSwitchError;
@@ -505,6 +506,7 @@ impl RustCloudBackupManager {
             let mut state = self.state.write();
             state.accept_enable_prompt(choice)
         };
+
         self.send_model_effects(effects);
 
         match accepted {
@@ -714,6 +716,7 @@ impl RustCloudBackupManager {
                 return;
             }
         };
+
         if !cleared {
             send!(self.supervisor.clear_pending_verification_completion());
             return;
@@ -1153,6 +1156,7 @@ mod tests {
             let result = call!(supervisor.new_restore_operation()).await;
             sender.send(result).expect("send restore operation result");
         });
+
         receiver
             .recv()
             .expect("receive restore operation result")
@@ -1166,6 +1170,7 @@ mod tests {
             let result = call!(supervisor.invalidate_restore_operation()).await;
             sender.send(result).expect("send invalidate restore operation result");
         });
+
         receiver
             .recv()
             .expect("receive invalidate restore operation result")
@@ -1180,6 +1185,7 @@ mod tests {
         let _task = cove_tokio::task::spawn(async move {
             sender.send(future.await).expect("send cloud backup runtime result");
         });
+
         receiver.recv().expect("receive cloud backup runtime result")
     }
 
@@ -1294,6 +1300,13 @@ mod tests {
         let secret = cove_cspp::backup_data::WalletSecret::Mnemonic("abandon".into());
         let result = wallets::tests::convert_cloud_secret(&secret);
         assert!(matches!(result, LocalWalletSecret::Mnemonic(ref m) if m == "abandon"));
+    }
+
+    #[test]
+    fn convert_cloud_secret_xprv() {
+        let secret = cove_cspp::backup_data::WalletSecret::Xprv("xprv-example".into());
+        let result = wallets::tests::convert_cloud_secret(&secret);
+        assert!(matches!(result, LocalWalletSecret::Xprv(ref value) if value == "xprv-example"));
     }
 
     #[test]
@@ -1426,6 +1439,7 @@ mod tests {
             operation: PasskeyOperation::DiscoverAssertion,
             reason: PasskeyFailureReason::Unknown { diagnostic_message: diagnostic.into() },
         });
+
         let status = RustCloudBackupManager::status_for_operation_error(&error);
 
         assert_eq!(
@@ -1563,6 +1577,7 @@ mod tests {
         let error = run_on_cloud_backup_runtime({
             async move { operation.ensure_current().await.unwrap_err() }
         });
+
         assert!(matches!(error, CloudBackupError::Cancelled));
     }
 
@@ -1705,6 +1720,7 @@ mod tests {
         let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
             panic!("expected configured state");
         };
+
         assert_eq!(
             configured.restore_all,
             CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },

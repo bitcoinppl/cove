@@ -3,55 +3,79 @@ import SwiftUI
 @Observable final class ScanManager {
     static let shared = ScanManager()
 
-    private var app: AppManager {
+    var app: AppManager {
         AppManager.shared
     }
 
     @MainActor
     func handleMultiFormat(_ multiFormat: MultiFormat) {
         do {
-            switch multiFormat {
-            case let .mnemonic(mnemonic):
-                importHotWallet(mnemonic.words())
-            case let .hardwareExport(export):
-                importColdWallet(export)
-            case let .address(addressWithNetwork):
-                handleAddress(addressWithNetwork)
-            case let .transaction(transaction):
-                handleTransaction(transaction)
-            case let .signedPsbt(psbt):
-                handleSignedPsbt(psbt)
-            case let .tapSignerUnused(tapSigner):
-                app.alertState = .init(.uninitializedTapSigner(tapSigner: tapSigner))
-            case let .tapSignerReady(tapSigner):
-                if let wallet = app.findTapSignerWallet(tapSigner) {
-                    app.alertState = .init(.tapSignerWalletFound(walletId: wallet.id))
-                } else {
-                    app.alertState = .init(.initializedTapSigner(tapSigner: tapSigner))
-                }
-            case let .bip329Labels(labels):
-                guard let manager = app.walletManager else { return setInvalidLabels() }
-                guard let selectedWallet = Database().globalConfig().selectedWallet(),
-                      selectedWallet == manager.id
-                else {
-                    return setInvalidLabels()
-                }
-
-                try manager.importLabels(labels: labels)
-                app.alertState = .init(.importedLabelsSuccessfully)
-            }
+            try handleRecognizedMultiFormat(multiFormat)
         } catch {
-            switch error {
-            case let multiFormatError as MultiFormatError:
-                Log.error(
-                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
-                )
-                app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
+            handleMultiFormatError(error)
+        }
+    }
 
-            default:
-                Log.error("Unable to handle scanned code, error: \(error)")
-                app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
-            }
+    @MainActor
+    private func handleRecognizedMultiFormat(_ multiFormat: MultiFormat) throws {
+        switch multiFormat {
+        case let .mnemonic(mnemonic):
+            importHotWallet(mnemonic.words())
+        case let .hardwareExport(export):
+            importColdWallet(export)
+        case let .address(addressWithNetwork):
+            handleAddress(addressWithNetwork)
+        case let .transaction(transaction):
+            handleTransaction(transaction)
+        case let .signedPsbt(psbt):
+            handleSignedPsbt(psbt)
+        case let .tapSignerUnused(tapSigner):
+            app.alertState = .init(.uninitializedTapSigner(tapSigner: tapSigner))
+        case let .tapSignerReady(tapSigner):
+            handleReadyTapSigner(tapSigner)
+        case let .bip329Labels(labels):
+            try importLabels(labels)
+        case let .keyTeleportReceiver(packet):
+            handleKeyTeleportReceiver(packet)
+        case let .keyTeleportSender(packet):
+            handleKeyTeleportSender(packet)
+        }
+    }
+
+    @MainActor
+    private func handleReadyTapSigner(_ tapSigner: TapSigner) {
+        if let wallet = app.findTapSignerWallet(tapSigner) {
+            app.alertState = .init(.tapSignerWalletFound(walletId: wallet.id))
+        } else {
+            app.alertState = .init(.initializedTapSigner(tapSigner: tapSigner))
+        }
+    }
+
+    @MainActor
+    private func importLabels(_ labels: Bip329Labels) throws {
+        guard let manager = app.walletManager,
+              let selectedWallet = Database().globalConfig().selectedWallet(),
+              selectedWallet == manager.id
+        else {
+            return setInvalidLabels()
+        }
+
+        try manager.importLabels(labels: labels)
+        app.alertState = .init(.importedLabelsSuccessfully)
+    }
+
+    @MainActor
+    private func handleMultiFormatError(_ error: Error) {
+        switch error {
+        case let multiFormatError as MultiFormatError:
+            Log.error(
+                "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.description)"
+            )
+            app.alertState = TaggedItem(.invalidFormat(message: multiFormatError.description))
+
+        default:
+            Log.error("Unable to handle scanned code, error: \(error)")
+            app.alertState = TaggedItem(.invalidFileFormat(message: error.localizedDescription))
         }
     }
 
@@ -77,6 +101,10 @@ import SwiftUI
 
     @MainActor
     func handleFileOpen(_ url: URL) {
+        if handleKeyTeleportUrl(url) {
+            return
+        }
+
         let fileHandler = FileHandler(filePath: url.absoluteString)
 
         do {
@@ -133,11 +161,13 @@ import SwiftUI
             try manager.importLabels(labels: labels)
         case let .signedPsbt(psbt):
             handleSignedPsbt(psbt)
+        case let .keyTeleportReceiver(packet):
+            handleKeyTeleportReceiver(packet)
+        case let .keyTeleportSender(packet):
+            handleKeyTeleportSender(packet)
         }
     }
-}
 
-extension ScanManager {
     @MainActor
     private func importHotWallet(_ words: [String]) {
         do {
@@ -174,7 +204,9 @@ extension ScanManager {
             Log.debug("Imported Wallet: \(id)")
             app.alertState = TaggedItem(.importedSuccessfully)
 
-            if app.walletManager?.id != id { try app.selectWalletOrThrow(id) }
+            if app.walletManager?.id != id {
+                try app.selectWalletOrThrow(id)
+            }
 
             if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
                 try app.walletManager?.rust.setWalletType(walletType: .cold)

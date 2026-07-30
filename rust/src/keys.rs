@@ -253,6 +253,19 @@ impl DescriptorSecretKey {
 
         Self(descriptor_secret_key)
     }
+
+    pub(crate) fn from_xpriv(network: Network, mut xpriv: bitcoin::bip32::Xpriv) -> Self {
+        xpriv.network = bitcoin::Network::from(network).into();
+
+        let descriptor_secret_key = BdkDescriptorSecretKey::XPrv(DescriptorXKey {
+            origin: None,
+            xkey: xpriv,
+            derivation_path: DerivationPath::master(),
+            wildcard: Wildcard::Unhardened,
+        });
+
+        Self(descriptor_secret_key)
+    }
 }
 
 impl From<ExtendedDescriptor> for Descriptor {

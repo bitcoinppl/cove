@@ -4,7 +4,7 @@ use strum::IntoEnumIterator as _;
 use tracing::warn;
 use zeroize::Zeroizing;
 
-use cove_device::keychain::Keychain;
+use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret};
 use cove_types::network::Network;
 
 use crate::custom_block_explorer::CustomBlockExplorerTemplate;
@@ -59,16 +59,21 @@ impl BackupExporter {
 
                     // gather secret material based on wallet type
                     let secret = match metadata.wallet_type {
-                        WalletType::Hot => match self.keychain.get_wallet_key(id) {
-                            Ok(Some(mnemonic)) => WalletSecret::Mnemonic(mnemonic.to_string()),
+                        WalletType::Hot => match self.keychain.get_wallet_secret(id) {
+                            Ok(Some(KeychainWalletSecret::Mnemonic(mnemonic))) => {
+                                WalletSecret::Mnemonic(mnemonic.to_string())
+                            }
+                            Ok(Some(KeychainWalletSecret::Xpriv(xpriv))) => {
+                                WalletSecret::Xprv(xpriv.expose().to_string())
+                            }
                             Ok(None) => {
                                 return Err(BackupError::Gather(format!(
-                                    "hot wallet '{name}' ({network}){mode_tag} has no mnemonic in keychain"
+                                    "hot wallet '{name}' ({network}){mode_tag} has no private key in keychain"
                                 )));
                             }
                             Err(e) => {
                                 return Err(BackupError::Keychain(format!(
-                                    "failed to get mnemonic for wallet '{name}' ({network}){mode_tag}: {e}"
+                                    "failed to get private key for wallet '{name}' ({network}){mode_tag}: {e}"
                                 )));
                             }
                         },
@@ -80,7 +85,9 @@ impl BackupExporter {
 
                             if is_tap_signer {
                                 match self.keychain.get_tap_signer_backup(id) {
-                                    Ok(Some(backup)) => WalletSecret::TapSignerBackup(backup),
+                                    Ok(Some(backup)) => {
+                                        WalletSecret::TapSignerBackup(backup.to_vec())
+                                    }
                                     Ok(None) => {
                                         self.warn(format!("Tap signer wallet '{name}' ({network}){mode_tag} has no backup, exporting without it"));
                                         WalletSecret::None
@@ -207,7 +214,7 @@ pub async fn export_all(password: String) -> Result<BackupResult, BackupError> {
     let wallets = exporter.gather_wallets().await?;
     let settings = exporter.gather_settings()?;
 
-    let payload = BackupPayload::new(wallets, settings);
+    let payload = BackupPayload::try_new(wallets, settings)?;
 
     let json =
         serde_json::to_vec(&payload).map_err(|e| BackupError::Serialization(e.to_string()))?;

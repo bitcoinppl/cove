@@ -181,6 +181,10 @@ fun SelectedWalletContainer(
                 foundAddressesForSheet = state.v1
                 showAddressTypeSheet = true
             }
+            is DiscoveryState.FoundAddressesFromXprv -> {
+                foundAddressesForSheet = state.v1
+                showAddressTypeSheet = true
+            }
             is DiscoveryState.FoundAddressesFromJson -> {
                 foundAddressesForSheet = state.v1
                 showAddressTypeSheet = true

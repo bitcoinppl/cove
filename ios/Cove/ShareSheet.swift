@@ -34,6 +34,41 @@ private class ShareableFile: NSObject, UIActivityItemSource {
 }
 
 enum ShareSheet {
+    /// Shows share sheet for plain text without creating a temporary file
+    @MainActor
+    static func present(text: String, completion: @escaping (Bool) -> Void = { _ in }) {
+        guard let rootViewController = foregroundRootViewController() else {
+            completion(false)
+            return
+        }
+
+        let activityViewController = UIActivityViewController(
+            activityItems: [text],
+            applicationActivities: nil
+        )
+
+        configurePopover(activityViewController, sourceView: rootViewController.view)
+
+        activityViewController.completionWithItemsHandler = { _, completed, _, error in
+            if let error {
+                Log.error("Share sheet error: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                completion(completed)
+            }
+        }
+
+        topPresenter(from: rootViewController).present(activityViewController, animated: true)
+    }
+
+    /// Shows a plain-text share sheet after a transient menu finishes dismissing
+    @MainActor
+    static func presentFromMenu(text: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            present(text: text)
+        }
+    }
+
     /// Shows share sheet for the given file URL
     @MainActor
     static func present(for url: URL) {
@@ -43,12 +78,7 @@ enum ShareSheet {
     /// Shows share sheet for the given file URL with a completion handler
     @MainActor
     static func present(for url: URL, completion: @escaping (Bool) -> Void) {
-        guard let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first,
-            let rootViewController = windowScene.windows
-            .first(where: { $0.isKeyWindow })?.rootViewController
-        else {
+        guard let rootViewController = foregroundRootViewController() else {
             completion(false)
             return
         }
@@ -61,17 +91,7 @@ enum ShareSheet {
             applicationActivities: nil
         )
 
-        // configure for iPad
-        if let popover = activityViewController.popoverPresentationController {
-            popover.sourceView = rootViewController.view
-            popover.sourceRect = CGRect(
-                x: rootViewController.view.bounds.midX,
-                y: rootViewController.view.bounds.midY,
-                width: 0,
-                height: 0
-            )
-            popover.permittedArrowDirections = []
-        }
+        configurePopover(activityViewController, sourceView: rootViewController.view)
 
         activityViewController.completionWithItemsHandler = { _, completed, _, error in
             do {
@@ -90,11 +110,7 @@ enum ShareSheet {
             }
         }
 
-        var presenter = rootViewController
-        while let presented = presenter.presentedViewController {
-            presenter = presented
-        }
-        presenter.present(activityViewController, animated: true)
+        topPresenter(from: rootViewController).present(activityViewController, animated: true)
     }
 
     /// Like `present(data:filename:completion:)` but defers by 400ms so that a
@@ -105,7 +121,9 @@ enum ShareSheet {
     static func presentFromMenu(data: String, filename: String) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             present(data: data, filename: filename) { success in
-                if !success { Log.warn("Share sheet cancelled or failed: \(filename)") }
+                if !success {
+                    Log.warn("Share sheet cancelled or failed: \(filename)")
+                }
             }
         }
     }
@@ -115,7 +133,9 @@ enum ShareSheet {
     static func presentFromMenu(data: Data, filename: String) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             present(data: data, filename: filename) { success in
-                if !success { Log.warn("Share sheet cancelled or failed: \(filename)") }
+                if !success {
+                    Log.warn("Share sheet cancelled or failed: \(filename)")
+                }
             }
         }
     }
@@ -150,12 +170,7 @@ enum ShareSheet {
         filename: String,
         completion: @escaping (Bool) -> Void
     ) {
-        guard let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first,
-            let rootViewController = windowScene.windows
-            .first(where: { $0.isKeyWindow })?.rootViewController
-        else {
+        guard let rootViewController = foregroundRootViewController() else {
             completion(false)
             return
         }
@@ -180,17 +195,7 @@ enum ShareSheet {
             applicationActivities: nil
         )
 
-        // configure for iPad
-        if let popover = activityViewController.popoverPresentationController {
-            popover.sourceView = rootViewController.view
-            popover.sourceRect = CGRect(
-                x: rootViewController.view.bounds.midX,
-                y: rootViewController.view.bounds.midY,
-                width: 0,
-                height: 0
-            )
-            popover.permittedArrowDirections = []
-        }
+        configurePopover(activityViewController, sourceView: rootViewController.view)
 
         // set completion handler
         activityViewController.completionWithItemsHandler = { _, completed, _, error in
@@ -210,10 +215,53 @@ enum ShareSheet {
             }
         }
 
+        topPresenter(from: rootViewController).present(activityViewController, animated: true)
+    }
+
+    @MainActor
+    private static func foregroundRootViewController() -> UIViewController? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+            .flatMap(foregroundWindow(in:))?
+            .rootViewController
+    }
+
+    @MainActor
+    private static func foregroundWindow(in scene: UIWindowScene) -> UIWindow? {
+        if let keyWindow = scene.windows.first(where: { $0.isKeyWindow && !$0.isHidden }) {
+            return keyWindow
+        }
+
+        return scene.windows.first { window in
+            !window.isHidden && window.windowLevel == .normal
+        }
+    }
+
+    @MainActor
+    private static func configurePopover(
+        _ activityViewController: UIActivityViewController,
+        sourceView: UIView
+    ) {
+        guard let popover = activityViewController.popoverPresentationController else { return }
+
+        popover.sourceView = sourceView
+        popover.sourceRect = CGRect(
+            x: sourceView.bounds.midX,
+            y: sourceView.bounds.midY,
+            width: 0,
+            height: 0
+        )
+        popover.permittedArrowDirections = []
+    }
+
+    @MainActor
+    private static func topPresenter(from rootViewController: UIViewController) -> UIViewController {
         var presenter = rootViewController
         while let presented = presenter.presentedViewController {
             presenter = presented
         }
-        presenter.present(activityViewController, animated: true)
+
+        return presenter
     }
 }

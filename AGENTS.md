@@ -27,12 +27,21 @@
 ### Formatting
 
 - Put explanatory comments immediately above the statement or arm they describe, separated from the previous step by a blank line
-- Add blank lines between logical steps in Rust, Swift, and Kotlin function bodies:
+- In Rust, Swift, and Kotlin **function bodies** (not import/`use` groups), blank lines follow this priority:
+  1. After a multi-line construct before the next statement or block, regardless of closing syntax (`};`, `})?;`, `}?;`, multi-line `let`/`match` bindings, method chains, struct literals, trailing closures)
+  2. Between distinct logical phases (setup → validate → mutate → return)
+  3. A related single-line statement may stay tight with the block that follows when a blank line would only add noise
+  4. Keep a short, single-phase body together
+  5. Do not add a blank line only before the final expression
+- Also blank:
   - After setup or result bindings before new control flow
-  - After multi-line `if`, `match`, `guard`, `do`, or `Task` blocks before the next independent statement
-  - Between state mutations and final returns
+  - Between state mutations and final returns when those are separate phases
   - Between multi-line `match` or `switch` arms
-- Keep tightly related consecutive assignments together
+- Keep tightly related consecutive single-line assignments together
+- Examples:
+  - Multi-line scoped binding then next statement → blank after `};` / `})?;`
+  - One-line `let phase = ...;` then `if` that uses it → no blank
+  - Short body ending in `Ok(...)` → no blank whose only job is to separate that final line
 
 ### Verification and Side Effects
 

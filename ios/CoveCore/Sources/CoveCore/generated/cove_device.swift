@@ -961,9 +961,15 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> UInt64 {
 
 
 
+/**
+ * Secure storage facade for device and wallet secrets
+ */
 public protocol KeychainProtocol: AnyObject, Sendable {
 
 }
+/**
+ * Secure storage facade for device and wallet secrets
+ */
 open class Keychain: KeychainProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
 
@@ -1008,7 +1014,7 @@ open class Keychain: KeychainProtocol, @unchecked Sendable {
      *
      * # Panics
      *
-     * Panics if the keychain has already been initialized
+     * Panics if setting the initial global instance fails
      */
 public convenience init(keychain: KeychainAccess) {
     let handle =
@@ -1909,19 +1915,45 @@ public func FfiConverterTypeCloudSyncHealth_lower(_ value: CloudSyncHealth) -> R
 
 
 
+/**
+ * Errors from secure keychain operations
+ */
 public
 enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
 
+    /**
+     * A value could not be saved
+     */
     case Save
+    /**
+     * A value could not be deleted
+     */
     case Delete
+    /**
+     * A stored value could not be parsed
+     */
     case ParseSavedValue(String
     )
+    /**
+     * A value could not be encrypted
+     */
     case Encrypt(String
     )
+    /**
+     * A value could not be decrypted
+     */
     case Decrypt(String
     )
+    /**
+     * A saved wallet secret has a different type than the requested secret
+     */
+    case WalletSecretTypeMismatch
+    /**
+     * A complete wallet secret already exists
+     */
+    case WalletSecretExists
 
 
 
@@ -1973,6 +2005,8 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
         case 5: return .Decrypt(
             try FfiConverterString.read(from: &buf)
             )
+        case 6: return .WalletSecretTypeMismatch
+        case 7: return .WalletSecretExists
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2006,6 +2040,14 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
         case let .Decrypt(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
+
+
+        case .WalletSecretTypeMismatch:
+            writeInt(&buf, Int32(6))
+
+
+        case .WalletSecretExists:
+            writeInt(&buf, Int32(7))
 
         }
     }
@@ -3428,6 +3470,9 @@ public func FfiConverterCallbackInterfaceDeviceAccess_lower(_ v: DeviceAccess) -
 
 
 
+/**
+ * Platform access to secure key-value storage
+ */
 public protocol KeychainAccess: AnyObject, Sendable {
 
     /**
@@ -3439,8 +3484,16 @@ public protocol KeychainAccess: AnyObject, Sendable {
      */
     func save(key: String, value: String) throws
 
+    /**
+     * Gets the value for a key, or `None` when the key does not exist
+     */
     func get(key: String)  -> String?
 
+    /**
+     * Deletes the value for a key
+     *
+     * Returns whether the value was deleted
+     */
     func delete(key: String)  -> Bool
 
 }
@@ -4182,7 +4235,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_constructor_device_new() != 10720) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_constructor_keychain_new() != 56447) {
+    if (uniffi_cove_device_checksum_constructor_keychain_new() != 59945) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 28492) {
@@ -4230,10 +4283,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_keychainaccess_save() != 21295) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 45172) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 217) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 52135) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 35329) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 8345) {

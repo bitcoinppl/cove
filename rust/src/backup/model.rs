@@ -1,17 +1,23 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use crate::wallet::metadata::WalletType;
 use cove_types::network::Network;
+use cove_util::ResultExt as _;
 
-pub const PAYLOAD_VERSION: u32 = 1;
+mod wallet_secret;
+
+pub use wallet_secret::WalletSecret;
+
+pub const PAYLOAD_VERSION: u32 = 2;
+const BASELINE_PAYLOAD_VERSION: u32 = 1;
 
 /// Top-level backup payload, serialized to JSON before compression and encryption
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupPayload {
-    /// Format version, currently PAYLOAD_VERSION
+    /// Minimum payload version required to decode the contained wallet data
     pub version: u32,
     /// Unix timestamp (seconds) when backup was created
     pub created_at: u64,
@@ -22,32 +28,73 @@ pub struct BackupPayload {
 }
 
 impl BackupPayload {
-    pub fn new(wallets: Vec<WalletBackup>, settings: AppSettings) -> Self {
-        Self {
-            version: PAYLOAD_VERSION,
+    /// Builds a payload using the oldest format version that can represent its wallet secrets
+    pub fn try_new(
+        wallets: Vec<WalletBackup>,
+        settings: AppSettings,
+    ) -> Result<Self, super::error::BackupError> {
+        if wallets.iter().any(|wallet| matches!(&wallet.secret, WalletSecret::Unknown)) {
+            return Err(super::error::BackupError::Serialization(
+                "an unknown wallet secret cannot be exported".to_string(),
+            ));
+        }
+
+        let version =
+            if wallets.iter().any(|wallet| matches!(&wallet.secret, WalletSecret::Xprv(_))) {
+                PAYLOAD_VERSION
+            } else {
+                BASELINE_PAYLOAD_VERSION
+            };
+
+        Ok(Self {
+            version,
             created_at: jiff::Timestamp::now().as_second().try_into().unwrap_or_else(|e| {
                 tracing::warn!("timestamp conversion failed, using epoch: {e}");
                 0
             }),
             wallets,
             settings,
-        }
+        })
     }
 
     /// Deserialize from JSON bytes and validate in one step
     pub fn decode(bytes: &[u8]) -> Result<Self, super::error::BackupError> {
+        #[derive(Deserialize)]
+        struct Header {
+            version: u32,
+        }
+
+        let header: Header = serde_json::from_slice(bytes)
+            .map_err_str(super::error::BackupError::Deserialization)?;
+        validate_payload_version(header.version)?;
+
         let payload: Self = serde_json::from_slice(bytes)
-            .map_err(|e| super::error::BackupError::Deserialization(e.to_string()))?;
+            .map_err_str(super::error::BackupError::Deserialization)?;
         payload.validate()?;
         Ok(payload)
     }
 
     /// Validate the payload after deserialization
     pub fn validate(&self) -> Result<(), super::error::BackupError> {
-        if self.version > PAYLOAD_VERSION {
-            return Err(super::error::BackupError::UnsupportedPayloadVersion(self.version));
+        validate_payload_version(self.version)?;
+
+        if self.version == BASELINE_PAYLOAD_VERSION
+            && self.wallets.iter().any(|wallet| matches!(&wallet.secret, WalletSecret::Xprv(_)))
+        {
+            return Err(super::error::BackupError::Deserialization(
+                "payload version 1 cannot contain an extended private key secret".to_string(),
+            ));
         }
+
         Ok(())
+    }
+}
+
+fn validate_payload_version(version: u32) -> Result<(), super::error::BackupError> {
+    match version {
+        BASELINE_PAYLOAD_VERSION | PAYLOAD_VERSION => Ok(()),
+        0 => Err(super::error::BackupError::InvalidFormat),
+        version => Err(super::error::BackupError::UnsupportedPayloadVersion(version)),
     }
 }
 
@@ -87,31 +134,6 @@ impl Drop for WalletBackup {
         }
         if let Some(ref mut descs) = self.descriptors {
             descs.zeroize();
-        }
-    }
-}
-
-/// Secret material for a wallet, depends on wallet type
-#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-pub enum WalletSecret {
-    /// Hot wallet BIP-39 mnemonic
-    Mnemonic(String),
-    /// TapSigner encrypted backup bytes
-    TapSignerBackup(Vec<u8>),
-    /// No secret material (xpub-only / watch-only)
-    None,
-    /// Unrecognized variant from a newer backup version
-    #[serde(other)]
-    Unknown,
-}
-
-impl std::fmt::Debug for WalletSecret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Mnemonic(_) => write!(f, "Mnemonic(****)"),
-            Self::TapSignerBackup(_) => write!(f, "TapSignerBackup(****)"),
-            Self::None => write!(f, "None"),
-            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }
@@ -172,6 +194,8 @@ impl BackupImportReport {
 #[derive(Debug, uniffi::Enum)]
 pub enum WalletSecretType {
     Mnemonic,
+    /// A BIP32 extended private key
+    Xprv,
     TapSignerBackup,
     None,
     Unknown,
@@ -182,6 +206,7 @@ impl WalletSecretType {
     pub fn display_name(&self) -> String {
         match self {
             Self::Mnemonic => "Mnemonic",
+            Self::Xprv => "Extended Private Key",
             Self::TapSignerBackup => "TapSigner",
             Self::None => "Xpub Only",
             Self::Unknown => "Unknown",
@@ -194,6 +219,7 @@ impl From<&WalletSecret> for WalletSecretType {
     fn from(secret: &WalletSecret) -> Self {
         match secret {
             WalletSecret::Mnemonic(_) => Self::Mnemonic,
+            WalletSecret::Xprv(_) => Self::Xprv,
             WalletSecret::TapSignerBackup(_) => Self::TapSignerBackup,
             WalletSecret::None => Self::None,
             WalletSecret::Unknown => Self::Unknown,
@@ -268,7 +294,7 @@ mod tests {
         let json = serde_json::to_vec(&payload).unwrap();
         let decoded: BackupPayload = serde_json::from_slice(&json).unwrap();
 
-        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.version, PAYLOAD_VERSION);
         assert_eq!(decoded.created_at, 1700000000);
         assert_eq!(decoded.wallets.len(), 1);
         assert_eq!(decoded.settings.selected_network.as_deref(), Some("bitcoin"));
@@ -276,6 +302,103 @@ mod tests {
             decoded.settings.custom_block_explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+    }
+
+    #[test]
+    fn version_one_mnemonic_payload_remains_readable() {
+        let mut payload = sample_payload();
+        payload.version = 1;
+        let json = serde_json::to_vec(&payload).unwrap();
+
+        let decoded = BackupPayload::decode(&json).unwrap();
+
+        assert_eq!(decoded.version, 1);
+        assert!(matches!(&decoded.wallets[0].secret, WalletSecret::Mnemonic(_)));
+    }
+
+    #[test]
+    fn new_payload_uses_baseline_version_without_xprv() {
+        let sample = sample_payload();
+
+        let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
+
+        assert_eq!(payload.version, BASELINE_PAYLOAD_VERSION);
+    }
+
+    #[test]
+    fn new_payload_uses_current_version_for_xprv() {
+        let mut sample = sample_payload();
+        sample.wallets[0].secret = WalletSecret::Xprv("xprv-test".to_string());
+
+        let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
+
+        assert_eq!(payload.version, PAYLOAD_VERSION);
+    }
+
+    #[test]
+    fn current_payload_roundtrips_xprv_secret_shape() {
+        let mut payload = sample_payload();
+        payload.wallets[0].secret = WalletSecret::Xprv(
+            "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa"
+                .to_string(),
+        );
+        let json = serde_json::to_vec(&payload).unwrap();
+
+        let decoded = BackupPayload::decode(&json).unwrap();
+
+        assert_eq!(decoded.version, PAYLOAD_VERSION);
+        assert!(matches!(&decoded.wallets[0].secret, WalletSecret::Xprv(_)));
+    }
+
+    #[test]
+    fn version_one_rejects_xprv_content() {
+        let mut payload = sample_payload();
+        payload.version = BASELINE_PAYLOAD_VERSION;
+        payload.wallets[0].secret = WalletSecret::Xprv("xprv-test".to_string());
+        let json = serde_json::to_vec(&payload).unwrap();
+
+        let error = BackupPayload::decode(&json).unwrap_err();
+
+        assert!(matches!(
+            error,
+            super::super::error::BackupError::Deserialization(message)
+                if message.contains("version 1")
+        ));
+    }
+
+    #[test]
+    fn unsupported_version_is_rejected_before_wallet_body() {
+        let json = br#"{
+            "version": 99,
+            "created_at": 1700000000,
+            "wallets": [{"secret": {"Mnemonic": 42}}],
+            "settings": {}
+        }"#;
+
+        let error = BackupPayload::decode(json).unwrap_err();
+
+        assert!(matches!(error, super::super::error::BackupError::UnsupportedPayloadVersion(99)));
+    }
+
+    #[test]
+    fn zero_payload_version_is_invalid_format() {
+        let error = BackupPayload::decode(br#"{"version":0}"#).unwrap_err();
+
+        assert!(matches!(error, super::super::error::BackupError::InvalidFormat));
+    }
+
+    #[test]
+    fn new_payload_rejects_unknown_secret() {
+        let mut sample = sample_payload();
+        sample.wallets[0].secret = WalletSecret::Unknown;
+
+        let error = BackupPayload::try_new(sample.wallets, sample.settings).unwrap_err();
+
+        assert!(matches!(
+            error,
+            super::super::error::BackupError::Serialization(message)
+                if message.contains("unknown wallet secret")
+        ));
     }
 
     #[test]
@@ -402,7 +525,7 @@ mod tests {
         let decompressed = crate::backup::crypto::decompress(&compressed).unwrap();
         let decoded: BackupPayload = serde_json::from_slice(&decompressed).unwrap();
 
-        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.version, PAYLOAD_VERSION);
         assert_eq!(decoded.wallets.len(), 1);
 
         match &decoded.wallets[0].secret {

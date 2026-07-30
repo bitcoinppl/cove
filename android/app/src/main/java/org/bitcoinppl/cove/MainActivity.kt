@@ -90,6 +90,9 @@ class MainActivity : FragmentActivity() {
     private var authorizationLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
     private var isPrivacyCoverVisible by mutableStateOf(false)
     private val onboardingManagerViewModel by viewModels<OnboardingManagerViewModel>()
+    private val externalKeyTeleportIntents by lazy(LazyThreadSafetyMode.NONE) {
+        ExternalKeyTeleportIntentHandler(this)
+    }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -110,15 +113,17 @@ class MainActivity : FragmentActivity() {
         super.onPause()
         ForegroundUiBridge.pause(this)
         if (!isBootstrapped) return
-        // show cover only on actual app transitions (not internal popups like DropdownMenu)
-        if (Auth.isAuthEnabled) {
-            privacyCoverView?.visibility = View.VISIBLE
-            isPrivacyCoverVisible = true
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE,
-            )
-        }
+
+        Auth.concealSensitiveContent()
+        AppManager.getInstance().concealSensitiveKeyTeleportContent()
+
+        // onPause represents an actual activity transition, unlike focus loss from an in-app popup
+        privacyCoverView?.visibility = View.VISIBLE
+        isPrivacyCoverVisible = true
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
     }
 
     override fun onResume() {
@@ -353,6 +358,7 @@ class MainActivity : FragmentActivity() {
                             isBootstrapped = true
                             bootstrapped = true
                             bdkMigrationWarning = warning
+                            externalKeyTeleportIntents.handle(intent)
 
                             // non-blocking — initData preloads caches and prices but is not
                             // required for core functionality, failures are logged but not surfaced to the user
@@ -463,6 +469,14 @@ class MainActivity : FragmentActivity() {
 
         // create view-based privacy cover overlay (synchronous updates, no Compose race condition)
         privacyCoverView = setupPrivacyCover()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (isBootstrapped) {
+            externalKeyTeleportIntents.handle(intent)
+        }
     }
 
     private fun resetLocalDataForUiTestsIfRequested() {

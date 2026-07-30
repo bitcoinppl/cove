@@ -11,6 +11,7 @@ cove-types = { path = "../cove-types" }
 cove-util = { path = "../cove-util" }
 
 once_cell = { workspace = true }
+parking_lot = { workspace = true }
 
 # bitcoin
 bitcoin = { workspace = true }
@@ -35,6 +36,7 @@ hex = { workspace = true }
 
 # crypto
 rand = { workspace = true }
+zeroize = { workspace = true }
 
 # cbor
 minicbor = { workspace = true }

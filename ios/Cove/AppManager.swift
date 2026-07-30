@@ -234,6 +234,7 @@ struct WalletTransitionRecoveryPlan {
         needsOnboarding = rust.needsOnboarding()
         clearWalletManager()
         managerCache.clearCoinControlManager()
+        clearKeyTeleportManager()
 
         let state = rust.state()
         router = state.router
@@ -329,12 +330,16 @@ struct WalletTransitionRecoveryPlan {
     }
 
     func pushRoute(_ route: Route) {
+        if route.keyTeleportFlowDirection != nil, restoreExistingRouteIfPresent(route) {
+            return
+        }
+
         navigationCoordinator.pushRoute(
             route,
             router: &router,
             isSidebarVisible: &isSidebarVisible
         ) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
@@ -344,20 +349,44 @@ struct WalletTransitionRecoveryPlan {
             router: &router,
             isSidebarVisible: &isSidebarVisible
         ) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
     func popRoute() {
         navigationCoordinator.popRoute(router: &router) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
     }
 
     func setRoute(_ routes: [Route]) {
         navigationCoordinator.setRoute(routes, router: &router) { router in
-            self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+            self.managerCache.reconcileRouteOwnedManagers(router: router)
         }
+    }
+
+    func reconcileRouteOwnedManagers() {
+        managerCache.reconcileRouteOwnedManagers(router: router)
+    }
+
+    private func restoreExistingRouteIfPresent(_ target: Route) -> Bool {
+        if router.default == target {
+            if !router.routes.isEmpty {
+                setRoute([])
+            }
+            return true
+        }
+
+        guard let existingIndex = router.routes.firstIndex(of: target) else {
+            return false
+        }
+
+        let routesThroughExisting = Array(router.routes.prefix(through: existingIndex))
+        if routesThroughExisting != router.routes {
+            setRoute(routesThroughExisting)
+        }
+
+        return true
     }
 
     func scanQr() {
@@ -409,7 +438,7 @@ struct WalletTransitionRecoveryPlan {
                     isSidebarVisible: &self.isSidebarVisible,
                     advancesGeneration: false
                 ) { router in
-                    self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                    self.managerCache.reconcileRouteOwnedManagers(router: router)
                 }
             } else {
                 self.navigationCoordinator.resetRoute(
@@ -428,7 +457,7 @@ struct WalletTransitionRecoveryPlan {
                 isSidebarVisible: &self.isSidebarVisible,
                 advancesGeneration: false
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
         }
     }
@@ -441,7 +470,7 @@ struct WalletTransitionRecoveryPlan {
                 isSidebarVisible: &self.isSidebarVisible,
                 advancesGeneration: false
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
         }
     }
@@ -616,7 +645,7 @@ struct WalletTransitionRecoveryPlan {
                 routes: routes,
                 router: &router
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
 
         case let .pushedRoute(route):
@@ -625,7 +654,7 @@ struct WalletTransitionRecoveryPlan {
                 router: &router,
                 isSidebarVisible: &isSidebarVisible
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
 
         case let .defaultRouteChanged(route, nestedRoutes):
@@ -635,7 +664,7 @@ struct WalletTransitionRecoveryPlan {
                 router: &router,
                 routeId: &routeId
             ) { router in
-                self.managerCache.reconcileCoinControlManagerOwnership(router: router)
+                self.managerCache.reconcileRouteOwnedManagers(router: router)
             }
 
         default:
@@ -723,6 +752,57 @@ struct WalletTransitionRecoveryPlan {
         } catch {
             logger.error("Unable to dispatch app action \(action), error: \(error)")
         }
+    }
+}
+
+extension AppManager {
+    var keyTeleportManager: KeyTeleportManager? {
+        managerCache.keyTeleportManager
+    }
+
+    func ensureKeyTeleportManager() -> KeyTeleportManager {
+        managerCache.ensureKeyTeleportManager(app: rust)
+    }
+
+    func clearKeyTeleportManager() {
+        managerCache.clearKeyTeleportManager()
+    }
+
+    func canKeyTeleportSend(walletId: WalletId) -> Bool {
+        rust.canKeyTeleportSend(walletId: walletId)
+    }
+
+    @MainActor
+    @discardableResult
+    func startKeyTeleportSend(walletId: WalletId) -> Bool {
+        let activeDirections = [router.default.keyTeleportFlowDirection]
+            + router.routes.map(\.keyTeleportFlowDirection)
+            + [keyTeleportManager?.flowDirection]
+        guard KeyTeleportSendStartDecision.resolve(
+            activeDirections: activeDirections.compactMap(\.self)
+        ) == .start else {
+            alertState = .init(
+                .general(
+                    title: "KeyTeleport Session Active",
+                    message: "Finish the active KeyTeleport session before starting another transfer."
+                )
+            )
+            return false
+        }
+
+        let keyTeleportManager = ensureKeyTeleportManager()
+        keyTeleportManager.dispatch(.startSendFromWallet(walletId))
+        navigateToKeyTeleport(.send)
+
+        return true
+    }
+
+    func hideSensitiveKeyTeleportReveals() {
+        keyTeleportManager?.hideSensitiveReveals()
+    }
+
+    func navigateToKeyTeleport(_ route: KeyTeleportRoute) {
+        pushRoute(.keyTeleport(route))
     }
 }
 

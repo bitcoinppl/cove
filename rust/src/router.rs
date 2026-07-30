@@ -29,6 +29,7 @@ pub enum Route {
     TransactionDetails { id: WalletId, tx_id: Arc<TxId> },
     Send(SendRoute),
     CoinControl(CoinControlRoute),
+    KeyTeleport(KeyTeleportRoute),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -100,6 +101,12 @@ pub enum SendRoute {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum CoinControlRoute {
     List(WalletId),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum KeyTeleportRoute {
+    Receive,
+    Send,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -334,6 +341,14 @@ impl RouteFactory {
         reset_to.load_and_reset_after(time)
     }
 
+    pub const fn key_teleport_receive(&self) -> Route {
+        Route::KeyTeleport(KeyTeleportRoute::Receive)
+    }
+
+    pub const fn key_teleport_send(&self) -> Route {
+        Route::KeyTeleport(KeyTeleportRoute::Send)
+    }
+
     #[uniffi::method(default(address = None, amount = None))]
     pub const fn send_set_amount(
         &self,
@@ -503,6 +518,7 @@ mod tests {
             id: WalletId::from("wallet-one".to_string()),
             tx_id: tx_id.clone(),
         };
+
         let next =
             Route::TransactionDetails { id: WalletId::from("wallet-two".to_string()), tx_id };
 
@@ -516,6 +532,7 @@ mod tests {
             id: wallet_id.clone(),
             tx_id: Arc::new(TxId::preview_new()),
         };
+
         let next =
             Route::TransactionDetails { id: wallet_id, tx_id: Arc::new(TxId::preview_new()) };
 

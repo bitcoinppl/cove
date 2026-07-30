@@ -102,16 +102,26 @@ struct QrCodeScanView: View {
                 haptic.trigger()
                 progress = prog
             }
+        } catch let error as MultiQrError {
+            if case .RecoverableFrame = error {
+                return
+            }
+
+            handleFatalScanError(error)
         } catch {
-            scanner.reset()
-            dismiss()
-            app.alertState = TaggedItem(
-                .general(
-                    title: "QR Scan Error",
-                    message: "Unable to scan QR code, error: \(error.localizedDescription)"
-                )
-            )
+            handleFatalScanError(error)
         }
+    }
+
+    private func handleFatalScanError(_ error: Error) {
+        scanner.reset()
+        dismiss()
+        app.alertState = TaggedItem(
+            .general(
+                title: "QR Scan Error",
+                message: "Unable to scan QR code, error: \(error.localizedDescription)"
+            )
+        )
     }
 }
 

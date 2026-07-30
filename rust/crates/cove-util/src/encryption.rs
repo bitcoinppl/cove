@@ -3,9 +3,10 @@
 
 use base64::Engine as _;
 use base64::prelude::BASE64_STANDARD;
-use chacha20poly1305::aead::OsRng;
-use chacha20poly1305::{AeadCore as _, ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
+use chacha20poly1305::aead::Generate as _;
+use chacha20poly1305::{ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 use chacha20poly1305::{Key, Nonce};
+use zeroize::{Zeroize as _, Zeroizing};
 
 use cove_macros::impl_default_for;
 
@@ -21,11 +22,22 @@ const SPLITTER: &str = "::";
 ///
 /// Usage: create a fresh `Cryptor` (random key + nonce), encrypt the secret, then
 /// store both the ciphertext and the serialized Cryptor as separate keychain entries
-#[derive(Debug)]
 pub struct Cryptor {
     key: Key,
     nonce: Nonce,
     used: bool,
+}
+
+impl std::fmt::Debug for Cryptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Cryptor(****)")
+    }
+}
+
+impl Drop for Cryptor {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -58,14 +70,14 @@ pub enum Error {
     Base64Decode(base64::DecodeError),
 
     #[error("invalid utf8 string")]
-    InvalidUtf8(#[from] std::string::FromUtf8Error),
+    InvalidUtf8(#[from] std::str::Utf8Error),
 }
 
 impl_default_for!(Cryptor);
 impl Cryptor {
     pub fn new() -> Self {
-        let key = ChaCha20Poly1305::generate_key(&mut OsRng);
-        let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+        let key = Key::generate();
+        let nonce = Nonce::generate();
 
         Self { key, nonce, used: false }
     }
@@ -78,10 +90,13 @@ impl Cryptor {
         let (key_string, nonce_string) =
             string.split_once(SPLITTER).ok_or(Error::KeyAndNonceNotFound)?;
 
-        let key_bytes =
-            BASE64_STANDARD.decode(key_string.as_bytes()).map_err(Error::KeyInvalidFormat)?;
+        let key_bytes = Zeroizing::new(
+            BASE64_STANDARD.decode(key_string.as_bytes()).map_err(Error::KeyInvalidFormat)?,
+        );
 
-        let key_bytes: [u8; 32] = key_bytes.try_into().map_err(|_| Error::KeyInvalidLength)?;
+        let key_bytes = Zeroizing::new(
+            <[u8; 32]>::try_from(key_bytes.as_slice()).map_err(|_| Error::KeyInvalidLength)?,
+        );
 
         let nonce_bytes =
             BASE64_STANDARD.decode(nonce_string.as_bytes()).map_err(Error::NonceInvalidFormat)?;
@@ -89,21 +104,32 @@ impl Cryptor {
         let nonce_bytes: [u8; 12] =
             nonce_bytes.try_into().map_err(|_| Error::NonceInvalidLength)?;
 
-        Ok(Self { key: key_bytes.into(), nonce: nonce_bytes.into(), used: true })
+        Ok(Self {
+            key: Key::clone_from_slice(key_bytes.as_ref()),
+            nonce: nonce_bytes.into(),
+            used: true,
+        })
     }
 
     pub(crate) fn cipher(&self) -> ChaCha20Poly1305 {
         ChaCha20Poly1305::new(&self.key)
     }
 
-    pub fn serialize_to_string(self) -> String {
+    pub fn serialize_to_string(self) -> Zeroizing<String> {
         let key_bytes = self.key.as_slice();
-        let key_string = BASE64_STANDARD.encode(key_bytes);
+        let key_string = Zeroizing::new(BASE64_STANDARD.encode(key_bytes));
 
         let nonce_bytes = self.nonce.as_slice();
         let nonce_string = BASE64_STANDARD.encode(nonce_bytes);
 
-        format!("{key_string}{SPLITTER}{nonce_string}")
+        let mut serialized = Zeroizing::new(String::with_capacity(
+            key_string.len() + SPLITTER.len() + nonce_string.len(),
+        ));
+        serialized.push_str(&key_string);
+        serialized.push_str(SPLITTER);
+        serialized.push_str(&nonce_string);
+
+        serialized
     }
 
     /// Encrypt plaintext bytes
@@ -142,24 +168,48 @@ impl Cryptor {
     ///
     /// # Errors
     /// Returns an error if decryption fails or the result is not valid UTF-8
-    pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<String, Error> {
+    pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<Zeroizing<String>, Error> {
         let ciphertext_bytes =
             BASE64_STANDARD.decode(ciphertext.as_bytes()).map_err(Error::Base64Decode)?;
 
         let decrypted = self.decrypt(&ciphertext_bytes)?;
 
-        let decrypted_string = String::from_utf8(decrypted)?;
-        Ok(decrypted_string)
+        // zeroizing has no into_inner, so validate in place and make one
+        // zeroize-guarded copy
+        let text = std::str::from_utf8(&decrypted)?;
+        Ok(Zeroizing::new(text.to_string()))
     }
 
     /// Decrypt ciphertext bytes
     ///
     /// # Errors
     /// Returns an error if decryption fails
-    pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
         let decrypted =
             self.cipher().decrypt(&self.nonce, ciphertext).map_err(Error::UnableToDecrypt)?;
 
-        Ok(decrypted)
+        Ok(Zeroizing::new(decrypted))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_redacts_key_material() {
+        let cryptor = Cryptor::new();
+
+        assert_eq!(format!("{cryptor:?}"), "Cryptor(****)");
+    }
+
+    #[test]
+    fn serialized_cryptor_restores_key() {
+        let mut cryptor = Cryptor::new();
+        let ciphertext = cryptor.encrypt(b"secret").unwrap();
+        let serialized = cryptor.serialize_to_string();
+        let restored = Cryptor::try_from_string(&serialized).unwrap();
+
+        assert_eq!(restored.decrypt(&ciphertext).unwrap().as_slice(), b"secret");
     }
 }

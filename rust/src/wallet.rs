@@ -21,6 +21,7 @@ use balance::Balance;
 use bdk_wallet::KeychainKind;
 use bdk_wallet::chain::rusqlite::Connection;
 use bip39::Mnemonic;
+use cove_device::keychain::WalletXprv;
 use cove_types::Network;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context as _;
@@ -163,6 +164,14 @@ impl Wallet {
             .build()
     }
 
+    /// Creates, persists, and selects a hot wallet backed by an extended private key
+    pub fn try_new_persisted_xpriv_and_selected(
+        metadata: WalletMetadata,
+        xpriv: WalletXprv,
+    ) -> Result<Self, WalletError> {
+        WalletBuilder::new(WalletSource::PersistedXprivAndSelected { metadata, xpriv }).build()
+    }
+
     /// Try to load an existing wallet from the persisted bdk wallet filestore
     pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
@@ -242,6 +251,14 @@ impl Wallet {
     ) -> Result<Self, WalletError> {
         WalletBuilder::new(WalletSource::Mnemonic { metadata, mnemonic, passphrase, address_type })
             .build()
+    }
+
+    fn try_new_persisted_from_xpriv(
+        metadata: WalletMetadata,
+        xpriv: WalletXprv,
+        address_type: WalletAddressType,
+    ) -> Result<Self, WalletError> {
+        WalletBuilder::new(WalletSource::Xpriv { metadata, xpriv, address_type }).build()
     }
 
     pub fn balance(&self) -> Balance {

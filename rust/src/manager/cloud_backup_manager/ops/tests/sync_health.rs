@@ -546,6 +546,7 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
     else {
         panic!("expected complete inventory snapshot");
     };
+
     assert!(snapshot.is_complete);
     assert!(snapshot.provisional_detail.is_none());
 
@@ -595,9 +596,11 @@ async fn authoritative_failure_retains_provisional_rows_in_failed_state() {
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
         panic!("expected configured cloud backup");
     };
+
     let CloudBackupDetailState::Failed { retained: Some(retained), .. } = configured.detail else {
         panic!("expected failed inventory with provisional rows");
     };
+
     let wallet = retained
         .detail
         .up_to_date
@@ -631,7 +634,7 @@ async fn integrity_preserves_unsupported_remote_wallet_backups() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&metadata, &master_key, "unsupported-revision", 2).await,
+        encrypted_wallet_backup_bytes(&metadata, &master_key, "unsupported-revision", 3).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 

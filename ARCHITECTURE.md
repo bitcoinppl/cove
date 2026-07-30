@@ -176,7 +176,7 @@ redb stores typed table metadata for each table and validates the key and value 
 
 **iOS ↔ Android parity patterns:** For detailed guidance on matching behavior across platforms (opacity, text colors, button centering, NFC scanning UI, etc.), see [docs/ios_android_parity.md](docs/ios_android_parity.md).
 
-**iCloud Drive and passkey notes:** Before changing iCloud Drive discovery, file coordination, passkey registration, passkey presence checks, or Cloud Backup passkey confirmation, read [docs/icloud_drive.md](docs/icloud_drive.md) and [docs/passkeys.md](docs/passkeys.md).
+**iCloud Drive, passkey, and KeyTeleport notes:** Before changing iCloud Drive discovery, file coordination, passkey registration, passkey presence checks, Cloud Backup passkey confirmation, or KeyTeleport secret handling, read [docs/icloud_drive.md](docs/icloud_drive.md), [docs/passkeys.md](docs/passkeys.md), and [docs/keyteleport.md](docs/keyteleport.md).
 
 ### Manager Pattern (cross-platform)
 

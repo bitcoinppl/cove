@@ -31,16 +31,25 @@ fn start_discovery_scanner(
 ) -> Option<Addr<WalletDiscoveryScanner>> {
     if !matches!(
         &metadata.discovery_state,
-        DiscoveryState::StartedJson(_) | DiscoveryState::StartedMnemonic
+        DiscoveryState::StartedJson(_)
+            | DiscoveryState::StartedMnemonic
+            | DiscoveryState::StartedXprv
     ) {
         return None;
     }
 
     let id = metadata.id.clone();
-    match WalletDiscoveryScanner::try_new(metadata, sender) {
+    match WalletDiscoveryScanner::try_new(metadata, sender.clone()) {
         Ok(scanner) => Some(spawn_actor(scanner)),
         Err(error) => {
             warn!("unable to start wallet discovery scanner for {id}: {error}");
+
+            let message = Message::from(error);
+
+            if let Err(send_error) = sender.send(message.into()) {
+                warn!("unable to reconcile discovery scanner setup failure: {send_error}");
+            }
+
             None
         }
     }

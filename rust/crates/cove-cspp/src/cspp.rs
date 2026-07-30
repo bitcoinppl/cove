@@ -169,6 +169,7 @@ impl<S: CsppStore> Cspp<S> {
                     )));
                 }
             };
+
             if existing_key.as_bytes() == master_key.as_bytes() {
                 return Ok(());
             }
@@ -210,6 +211,7 @@ impl<S: CsppStore> Cspp<S> {
             Some(journal) => journal.staged,
             None => self.read_staged_entries(),
         };
+
         if entries.is_absent() {
             return Ok(None);
         }
@@ -257,6 +259,7 @@ impl<S: CsppStore> Cspp<S> {
                     prior: self.read_active_entries(),
                     staged,
                 };
+
                 self.save_promotion_journal(&journal)?;
                 journal
             }
@@ -423,6 +426,7 @@ impl<S: CsppStore> Cspp<S> {
             Some(journal) => journal.prior,
             None => self.read_active_entries(),
         };
+
         let prior_matches_expected = match expected_prior_namespace {
             Some(expected) => {
                 prior_entries.is_complete()
@@ -522,12 +526,12 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     fn encrypt_master_key(master_key: &MasterKey) -> Result<StoredMasterKeyEntries, CsppError> {
-        let hex = hex::encode(master_key.as_bytes());
+        let hex = Zeroizing::new(hex::encode(master_key.as_bytes()));
         let mut cryptor = Cryptor::new();
         let encrypted = cryptor.encrypt_to_string(&hex).map_err_str(CsppError::Encrypt)?;
         let encryption_key = cryptor.serialize_to_string();
 
-        Ok(StoredMasterKeyEntries::complete(encryption_key, encrypted))
+        Ok(StoredMasterKeyEntries::complete(encryption_key.as_str().to_owned(), encrypted))
     }
 
     fn decrypt_entries(entries: &StoredMasterKeyEntries) -> Result<MasterKey, CsppError> {
@@ -542,8 +546,10 @@ impl<S: CsppStore> Cspp<S> {
 
         let hex = cryptor.decrypt_from_string(encrypted).map_err_str(CsppError::Decrypt)?;
 
-        let bytes: [u8; 32] = hex::decode(hex)
-            .map_err_str(CsppError::InvalidData)?
+        let decoded =
+            Zeroizing::new(hex::decode(hex.as_str()).map_err_str(CsppError::InvalidData)?);
+        let bytes: [u8; 32] = decoded
+            .as_slice()
             .try_into()
             .map_err(|_| CsppError::InvalidData("master key not 32 bytes".into()))?;
 
@@ -628,6 +634,7 @@ impl<S: CsppStore> Cspp<S> {
         let Some(serialized) = self.0.get(MASTER_KEY_PROMOTION_JOURNAL.into()) else {
             return Ok(None);
         };
+
         let journal: MasterKeyPromotionJournal =
             serde_json::from_str(&serialized).map_err_str(CsppError::Deserialization)?;
         if journal.version != MASTER_KEY_PROMOTION_JOURNAL_VERSION {

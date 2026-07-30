@@ -12,8 +12,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
+import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportSendStartResult
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove_core.*
@@ -84,7 +88,7 @@ class AppManager private constructor() : FfiReconcile {
             }
 
             override fun onRoutesChanged() {
-                clearInactiveSendFlowManager()
+                clearInactiveRouteManagers()
             }
         }
 
@@ -145,6 +149,7 @@ class AppManager private constructor() : FfiReconcile {
     // multiple screens within the same wallet (send, coin control, tx details, settings)
     // call getWalletManager, this avoids recreating the actor and reconciler each time
     private val managerCache = AndroidManagerCache(mainScope)
+    private val keyTeleportSendStartMutex = Mutex()
 
     internal val walletManager: WalletManager?
         get() = managerCache.walletManager
@@ -154,6 +159,9 @@ class AppManager private constructor() : FfiReconcile {
 
     internal val coinControlManager: CoinControlManager?
         get() = managerCache.coinControlManager
+
+    internal val keyTeleportManager: KeyTeleportManager?
+        get() = managerCache.keyTeleportManager
 
     val cloudBackupManager: CloudBackupManager = CloudBackupManager.getInstance()
 
@@ -217,6 +225,58 @@ class AppManager private constructor() : FfiReconcile {
 
     fun clearCoinControlManager(manager: CoinControlManager) = managerCache.clearCoinControlManager(manager)
 
+    fun getKeyTeleportManager(): KeyTeleportManager =
+        managerCache.getKeyTeleportManager {
+            withRust {
+                newKeyTeleportManager()
+            }
+        }
+
+    fun clearKeyTeleportManager() = managerCache.clearKeyTeleportManager()
+
+    fun concealSensitiveKeyTeleportContent() {
+        managerCache.keyTeleportManager?.concealSensitiveContent()
+    }
+
+    internal fun startKeyTeleportSend(walletId: WalletId): Boolean {
+        if (routeStackContainsKeyTeleport(router.default, router.routes)) return false
+
+        mainScope.launch {
+            keyTeleportSendStartMutex.withLock {
+                if (routeStackContainsKeyTeleport(router.default, router.routes)) {
+                    return@withLock
+                }
+
+                val result = getKeyTeleportManager().startSendFromWallet(walletId)
+                val hasKeyTeleportRoute =
+                    routeStackContainsKeyTeleport(router.default, router.routes)
+
+                when (resolveKeyTeleportSendCompletion(result, hasKeyTeleportRoute)) {
+                    KeyTeleportSendCompletion.OPEN_ROUTE ->
+                        router.pushRoute(RouteFactory().keyTeleportSend())
+
+                    KeyTeleportSendCompletion.SHOW_FAILURE ->
+                        alertState =
+                            TaggedItem(
+                                AppAlertState.General(
+                                    title = "KeyTeleport",
+                                    message = "KeyTeleport could not start for this wallet.",
+                                ),
+                            )
+
+                    KeyTeleportSendCompletion.IGNORE -> Unit
+                }
+            }
+        }
+
+        return true
+    }
+
+    fun canKeyTeleportSend(walletId: WalletId): Boolean =
+        withRustOr(false) {
+            canKeyTeleportSend(walletId)
+        }
+
     fun reconcileAfterLabelImport(walletId: WalletId) = managerCache.reconcileAfterLabelImport(walletId)
 
     suspend fun reconcileAfterLabelImportAndWait(walletId: WalletId): Boolean =
@@ -226,7 +286,7 @@ class AppManager private constructor() : FfiReconcile {
 
     private fun clearWalletManager(id: WalletId) = managerCache.clearWalletManager(id)
 
-    private fun clearInactiveSendFlowManager() = managerCache.clearInactiveSendFlowManager(router)
+    private fun clearInactiveRouteManagers() = managerCache.clearInactiveRouteManagers(router)
 
     val fullVersionId: String
         get() {
@@ -257,6 +317,7 @@ class AppManager private constructor() : FfiReconcile {
         }
 
     fun closeRust() {
+        clearKeyTeleportManager()
         rustGuard.closeOnce {
             rust.close()
         }
@@ -269,6 +330,7 @@ class AppManager private constructor() : FfiReconcile {
     fun reset() {
         // close managers before clearing them
         clearWalletManager()
+        clearKeyTeleportManager()
 
         database = Database()
         needsOnboarding =
@@ -404,6 +466,21 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun pushRoute(route: Route) {
+        if (
+            route is Route.KeyTeleport &&
+            routeStackContainsKeyTeleport(router.default, router.routes) &&
+            currentRoute != route
+        ) {
+            alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "KeyTeleport",
+                        message = "Finish the active KeyTeleport flow before opening a different transfer.",
+                    ),
+                )
+            return
+        }
+
         router.pushRoute(route)
     }
 
@@ -758,3 +835,19 @@ class AppManager private constructor() : FfiReconcile {
 // global accessor for convenience
 val App: AppManager
     get() = AppManager.getInstance()
+
+internal enum class KeyTeleportSendCompletion {
+    OPEN_ROUTE,
+    SHOW_FAILURE,
+    IGNORE,
+}
+
+internal fun resolveKeyTeleportSendCompletion(
+    result: KeyTeleportSendStartResult,
+    hasKeyTeleportRoute: Boolean,
+): KeyTeleportSendCompletion =
+    when {
+        hasKeyTeleportRoute -> KeyTeleportSendCompletion.IGNORE
+        result == KeyTeleportSendStartResult.ACCEPTED -> KeyTeleportSendCompletion.OPEN_ROUTE
+        else -> KeyTeleportSendCompletion.SHOW_FAILURE
+    }

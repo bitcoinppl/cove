@@ -74,6 +74,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
     let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
     };
+
     assert!(labels_warning.is_none());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
@@ -150,13 +151,13 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         supported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 1)
+        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 2)
             .await,
     );
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         unsupported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&unsupported_wallet, &master_key, "unsupported-revision", 2)
+        encrypted_wallet_backup_bytes(&unsupported_wallet, &master_key, "unsupported-revision", 3)
             .await,
     );
     globals.cloud.set_wallet_files(
@@ -286,6 +287,7 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
         crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
     };
+
     Keychain::global()
         .save_wallet_xpub(
             &first_wallet.id,
@@ -1168,6 +1170,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
     let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
     };
+
     let warning = labels_warning.expect("expected label warning");
     assert_eq!(warning.wallet_name, wallet.name);
     assert!(
@@ -1318,6 +1321,7 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     let WalletRestoreOutcome::Restored { labels_warning } = second_outcome else {
         panic!("expected second wallet to restore");
     };
+
     let warning = labels_warning.expect("expected label warning");
     assert_eq!(warning.wallet_name, second_wallet.name);
 
@@ -1395,7 +1399,7 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
         (&first_wallet, 1),
         (&second_wallet, 1),
         (&newly_appeared_wallet, 1),
-        (&unsupported_wallet, 2),
+        (&unsupported_wallet, 3),
     ];
     for (wallet, version) in authoritative_wallets {
         let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
@@ -1547,7 +1551,7 @@ async fn restore_fails_when_all_wallet_backups_are_unsupported() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &master_key, "unsupported-revision", 2).await,
+        encrypted_wallet_backup_bytes(&wallet, &master_key, "unsupported-revision", 3).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 

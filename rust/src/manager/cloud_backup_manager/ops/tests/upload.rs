@@ -77,7 +77,7 @@ async fn backup_wallets_persists_partial_uploads_when_later_wallet_fails() {
         manager.do_backup_wallets(&[first_wallet.clone(), second_wallet]).await.unwrap_err();
 
     let record_id = wallet_record_id(first_wallet.id.as_ref());
-    assert!(error.to_string().contains("has no mnemonic"), "{error}");
+    assert!(error.to_string().contains("has no private key"), "{error}");
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(4));
     assert!(matches!(
@@ -108,6 +108,7 @@ async fn backup_wallets_defers_remaining_writes_when_disable_starts_after_upload
     else {
         panic!("expected configured cloud backup state");
     };
+
     globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
         previous_configured,
         namespace_id,
@@ -443,6 +444,7 @@ async fn upload_wallet_if_dirty_completes_inside_disable_transition_when_already
     else {
         panic!("expected configured cloud backup state");
     };
+
     globals.cloud.persist_disabling_on_next_upload(PersistedDisablingCloudBackup {
         previous_configured,
         namespace_id,

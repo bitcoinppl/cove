@@ -59,7 +59,7 @@ struct NewWalletSelectScreen: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(height: screenHeight * 0.75, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
-                .brightness(0.05)
+                .opacity(0.5)
         )
         .background(Color.midnightBlue)
         .navigationTitle("Add New Wallet")
@@ -68,7 +68,10 @@ struct NewWalletSelectScreen: View {
         .toolbar {
             NewWalletScannerToolbar(
                 scanQr: app.scanQr,
-                scanNfc: app.nfcReader.scan
+                scanNfc: scanNfc,
+                keyTeleport: {
+                    app.pushRoute(RouteFactory().keyTeleportReceive())
+                }
             )
         }
     }
@@ -132,6 +135,10 @@ struct NewWalletSelectScreen: View {
             return
         }
 
+        if ScanManager.shared.handleKeyTeleportText(text) {
+            return
+        }
+
         newWalletFromXpub(text)
     }
 }
@@ -157,7 +164,7 @@ private struct NewWalletSelectionLayout: View {
             Group {
                 if scrollableLayout {
                     ScrollView {
-                        NewWalletSelectionMainContent(
+                        NewWalletSelectionBottomLayout(
                             showSelectDialog: $showSelectDialog,
                             nfcCalled: nfcCalled,
                             hotWalletRoute: hotWalletRoute,
@@ -167,7 +174,7 @@ private struct NewWalletSelectionLayout: View {
                             pasteWallet: pasteWallet,
                             showNfcHelp: showNfcHelp
                         )
-                        .frame(minHeight: proxy.size.height, maxHeight: .infinity, alignment: .bottom)
+                        .frame(minHeight: proxy.size.height)
                     }
                     .scrollIndicators(.hidden)
                 } else {
@@ -185,39 +192,6 @@ private struct NewWalletSelectionLayout: View {
                 }
             }
         }
-    }
-}
-
-private struct NewWalletSelectionMainContent: View {
-    @Binding var showSelectDialog: Bool
-    let nfcCalled: Bool
-    let hotWalletRoute: Route
-    let qrRoute: Route
-    let importFile: () -> Void
-    let scanNfc: () -> Void
-    let pasteWallet: () -> Void
-    let showNfcHelp: () -> Void
-
-    var body: some View {
-        VStack(spacing: 28) {
-            NewWalletSelectionPrompt()
-
-            Divider()
-                .overlay(.coveLightGray.opacity(0.50))
-
-            NewWalletTypeActions(
-                showSelectDialog: $showSelectDialog,
-                nfcCalled: nfcCalled,
-                hotWalletRoute: hotWalletRoute,
-                qrRoute: qrRoute,
-                importFile: importFile,
-                scanNfc: scanNfc,
-                pasteWallet: pasteWallet,
-                showNfcHelp: showNfcHelp
-            )
-        }
-        .padding()
-        .frame(maxHeight: .infinity)
     }
 }
 
@@ -375,20 +349,27 @@ private struct NewWalletTypeButtons: View {
 private struct NewWalletScannerToolbar: ToolbarContent {
     let scanQr: () -> Void
     let scanNfc: () -> Void
+    let keyTeleport: () -> Void
 
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            HStack(spacing: 6) {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
                 Button(action: scanQr) {
-                    Image(systemName: "qrcode")
-                        .foregroundColor(.white)
+                    Label("QR", systemImage: "qrcode")
                 }
 
                 Button(action: scanNfc) {
-                    Image(systemName: "wave.3.right")
-                        .foregroundColor(.white)
+                    Label("NFC", systemImage: "wave.3.right")
                 }
+
+                Button(action: keyTeleport) {
+                    Label("Key Teleport", systemImage: "arrow.down.left.and.arrow.up.right")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundColor(.white)
             }
+            .accessibilityLabel("More wallet import options")
         }
     }
 }

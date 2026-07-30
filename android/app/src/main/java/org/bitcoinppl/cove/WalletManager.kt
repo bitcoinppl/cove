@@ -93,6 +93,21 @@ class WalletManager :
     var unsignedTransactions by mutableStateOf<List<UnsignedTransaction>>(emptyList())
         private set
 
+    fun hasRecoveryWords(): Boolean =
+        withRustOr(false) {
+            hasRecoveryWords()
+        }
+
+    fun hasXprvSecret(): Boolean =
+        withRustOr(false) {
+            hasXprvSecret()
+        }
+
+    fun exposeXprv(): String =
+        withRust {
+            exposeXprv()
+        }
+
     // errors
     var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)

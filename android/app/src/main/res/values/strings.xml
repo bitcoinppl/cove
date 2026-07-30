@@ -53,6 +53,7 @@
     <string name="label_wallet_show_transaction_labels">Show transaction labels</string>
     <string name="title_wallet_danger_zone">Danger zone</string>
     <string name="label_wallet_view_secrets">View secret words</string>
+    <string name="label_wallet_export_private_key">Export private key</string>
     <string name="label_wallet_delete">Delete wallet</string>
     <string name="title_wallet_add">Add New Wallet</string>
     <string name="title_wallet_backup">Backup your wallet</string>

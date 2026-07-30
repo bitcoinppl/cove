@@ -55,6 +55,8 @@ struct RouteView: View {
                 CoinControlContainer(route: route)
                     .tint(.blue)
             }
+        case let .keyTeleport(route):
+            KeyTeleportContainer(route: route)
         }
     }
     .environment(app)

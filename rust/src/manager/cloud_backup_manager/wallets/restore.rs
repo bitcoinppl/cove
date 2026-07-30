@@ -1,8 +1,10 @@
 use std::str::FromStr as _;
 
-use cove_cspp::backup_data::{EncryptedWalletBackup, WalletEntry};
+use cove_cspp::backup_data::{EncryptedWalletBackup, WalletBackupVersion, WalletEntry};
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
+use cove_device::keychain::WalletXprv;
+use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -10,6 +12,7 @@ use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
 use crate::backup::import::{LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels};
 use crate::backup::model::{WalletBackup, WalletSecret};
+use crate::manager::cloud_backup_manager::error::CloudBackupInternalError;
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, fallback_identity_key_for_backup,
@@ -132,10 +135,13 @@ impl WalletBackupReader {
         let encrypted: EncryptedWalletBackup = serde_json::from_slice(&wallet_json)
             .map_err(|source| CloudBackupError::internal_context("deserialize wallet", source))?;
 
-        if encrypted.version != 1 {
-            let version = encrypted.version;
-            warn!("Skipping wallet backup with unsupported wallet backup version {version}");
-            return Ok(WalletBackupLookup::UnsupportedVersion(version));
+        match encrypted.backup_version() {
+            Ok(WalletBackupVersion::V1 | WalletBackupVersion::V2) => {}
+            Err(unsupported) => {
+                let version = unsupported.0;
+                warn!("Skipping wallet backup with unsupported wallet backup version {version}");
+                return Ok(WalletBackupLookup::UnsupportedVersion(version));
+            }
         }
 
         Ok(WalletBackupLookup::Found(encrypted))
@@ -147,6 +153,7 @@ impl WalletBackupReader {
                 "test cloud storage cannot download wallet backups".into(),
             ));
         };
+
         cloud.download_wallet_backup(self.namespace.clone(), record_id.to_string()).await
     }
 
@@ -251,20 +258,29 @@ impl DownloadedWalletBackup {
                 })?;
 
                 crate::backup::import::restore_cloud_mnemonic_wallet(&self.metadata, mnemonic)
-                    .map_err(|(error, _)| {
-                        CloudBackupError::Internal(
-                            format!("restore mnemonic wallet: {error}").into(),
-                        )
-                    })?;
+                    .map_err(|(error, _)| error)
+                    .map_err_prefix("restore mnemonic wallet", CloudBackupInternalError::from)?;
+            }
+            LocalWalletSecret::Xprv(value) => {
+                let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
+                    "invalid extended private key",
+                    CloudBackupInternalError::from,
+                )?;
+
+                crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv)
+                    .map_err(|(error, _)| error)
+                    .map_err_prefix(
+                        "restore extended-private-key wallet",
+                        CloudBackupInternalError::from,
+                    )?;
             }
             _ => {
                 crate::backup::import::restore_cloud_descriptor_wallet(
                     &self.metadata,
                     &backup_model,
                 )
-                .map_err(|(error, _)| {
-                    CloudBackupError::Internal(format!("restore descriptor wallet: {error}").into())
-                })?;
+                .map_err(|(error, _)| error)
+                .map_err_prefix("restore descriptor wallet", CloudBackupInternalError::from)?;
             }
         }
 
@@ -286,39 +302,14 @@ impl DownloadedWalletBackup {
 mod tests {
     use super::*;
     use cove_cspp::backup_data::WalletSecret;
-    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
-    use std::{
-        collections::HashMap,
-        sync::{Arc, Once},
-    };
+    use cove_device::keychain::Keychain;
+    use std::sync::Arc;
 
     use crate::wallet::metadata::WalletMetadata;
     use crate::wallet_identity::test_support::ExistingWalletIdentitySetTestExt as _;
 
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
-
     fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
+        crate::test_support::init_test_keychain();
         Keychain::global()
     }
 

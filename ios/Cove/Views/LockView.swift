@@ -187,6 +187,44 @@ struct LockView<Content: View>: View {
     }
 }
 
+struct MainCredentialVerificationView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let auth: AuthManager
+    let onVerified: () -> Void
+
+    @State private var lockState = LockState.locked
+
+    var body: some View {
+        NavigationStack {
+            LockView(
+                lockType: auth.type,
+                isPinCorrect: auth.checkPin,
+                lockState: $lockState,
+                bioMetricUnlockMessage: "Confirm access to your private key",
+                onUnlock: { _ in
+                    onVerified()
+                    dismiss()
+                },
+                backAction: { dismiss() }
+            ) {
+                Color.black
+                    .ignoresSafeArea()
+            }
+            .navigationTitle("Verify Identity")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+    }
+}
+
 private struct LockContentLayer<Content: View>: View {
     let content: Content
     @Binding var lockState: LockState

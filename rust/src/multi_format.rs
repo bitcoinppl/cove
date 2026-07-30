@@ -15,6 +15,10 @@ use tracing::{debug, warn};
 
 use crate::{
     hardware_export::HardwareExport,
+    key_teleport::{
+        KeyTeleportReceiverPacket, KeyTeleportSenderPacket, ParsedKeyTeleport,
+        parse_key_teleport_string,
+    },
     mnemonic::ParseMnemonic as _,
     signed_import::SignedImportError,
     transaction::ffi::BitcoinTransaction,
@@ -22,7 +26,7 @@ use crate::{
 };
 
 /// A string or data, could be a string or data (bytes)
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum StringOrData {
     String(String),
     Data(Vec<u8>),
@@ -42,6 +46,8 @@ pub enum MultiFormat {
     TapSignerUnused(Arc<cove_tap_card::TapSigner>),
     /// A signed but un-finalized PSBT
     SignedPsbt(Arc<Psbt>),
+    KeyTeleportReceiver(Arc<KeyTeleportReceiverPacket>),
+    KeyTeleportSender(Arc<KeyTeleportSenderPacket>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -66,9 +72,26 @@ pub enum MultiFormatError {
 
     #[error("PSBT has no signatures — sign it with your hardware wallet before importing")]
     PsbtNotSigned,
+
+    #[error("KeyTeleport PSBT packets are not supported yet")]
+    KeyTeleportPsbtNotSupported,
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
+
+impl TryFrom<ParsedKeyTeleport> for MultiFormat {
+    type Error = MultiFormatError;
+
+    fn try_from(value: ParsedKeyTeleport) -> Result<Self> {
+        match value {
+            ParsedKeyTeleport::Receiver(packet) => Ok(Self::KeyTeleportReceiver(packet)),
+            ParsedKeyTeleport::Sender(packet) => Ok(Self::KeyTeleportSender(packet)),
+            ParsedKeyTeleport::UnsupportedPsbt => {
+                Err(MultiFormatError::KeyTeleportPsbtNotSupported)
+            }
+        }
+    }
+}
 
 impl MultiFormat {
     pub fn try_from_data(data: &[u8]) -> Result<Self> {
@@ -111,6 +134,11 @@ impl MultiFormat {
         // try to parse UR format (single-part URs only)
         if string.to_ascii_lowercase().starts_with("ur:") {
             return Self::try_from_ur_string(string);
+        }
+
+        match parse_key_teleport_string(string) {
+            Ok(parsed) => return parsed.try_into(),
+            Err(crate::key_teleport::KeyTeleportParseError::Unrecognized) => {}
         }
 
         // try to parse address

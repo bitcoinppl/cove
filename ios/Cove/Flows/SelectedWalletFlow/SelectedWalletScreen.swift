@@ -192,6 +192,8 @@ struct SelectedWalletScreen: View {
         switch discoveryState {
         case let .foundAddressesFromMnemonic(foundAddresses):
             presentationState = TaggedItem(.chooseAddressType(foundAddresses))
+        case let .foundAddressesFromXprv(foundAddresses):
+            presentationState = TaggedItem(.chooseAddressType(foundAddresses))
         case let .foundAddressesFromJson(foundAddress, _):
             presentationState = TaggedItem(.chooseAddressType(foundAddress))
         default: ()

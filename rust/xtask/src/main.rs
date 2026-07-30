@@ -60,9 +60,14 @@ enum Commands {
         #[arg(default_value = "debug")]
         profile: String,
 
-        /// Device alias (`main`/`sim`) or adb serial. Defaults to `main`. Aliases use ANDROID_DEVICE_MAIN / ANDROID_DEVICE_SIM
-        #[arg(short = 'D', long = "device", env = "ANDROID_DEVICE")]
-        device: Option<String>,
+        /// Device alias (`main`/`sim`) or adb serial. Repeat to target multiple devices. Defaults to `main`. Aliases use ANDROID_DEVICE_MAIN / ANDROID_DEVICE_SIM
+        #[arg(
+            short = 'D',
+            long = "device",
+            env = "ANDROID_DEVICE",
+            action = clap::ArgAction::Append
+        )]
+        device: Vec<String>,
     },
 
     /// Build Android App Bundle (AAB) and APK for Play Store, copy to Downloads
@@ -116,14 +121,15 @@ enum Commands {
         #[arg(long)]
         simulator: bool,
 
-        /// Device alias (`main`/`se`), name, or UDID. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
+        /// Device alias (`main`/`se`), name, or UDID. Repeat to target multiple devices. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
         #[arg(
             short = 'd',
             long = "device-name",
             visible_alias = "device",
-            env = "IOS_DEVICE_NAME"
+            env = "IOS_DEVICE_NAME",
+            action = clap::ArgAction::Append
         )]
-        device_name: Option<String>,
+        device_name: Vec<String>,
 
         /// Physical device UDID to target
         #[arg(long)]
@@ -137,14 +143,15 @@ enum Commands {
         #[arg(long)]
         simulator: bool,
 
-        /// Device alias (`main`/`se`), name, or UDID. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
+        /// Device alias (`main`/`se`), name, or UDID. Repeat to target multiple devices. Defaults to `main`. Aliases use IOS_DEVICE_MAIN / IOS_DEVICE_SE
         #[arg(
             short = 'd',
             long = "device-name",
             visible_alias = "device",
-            env = "IOS_DEVICE_NAME"
+            env = "IOS_DEVICE_NAME",
+            action = clap::ArgAction::Append
         )]
-        device_name: Option<String>,
+        device_name: Vec<String>,
 
         /// Physical device UDID to target
         #[arg(long)]
@@ -336,7 +343,7 @@ fn main() -> Result<()> {
 
         Commands::RunAndroid { profile, device } => {
             let build_profile = android::BuildProfile::from_str(&profile);
-            let options = android::AndroidRunOptions::new(device);
+            let options = android::AndroidRunOptions::new_multiple(device);
             android::run_android(build_profile, options, cli.verbose)
         }
 
@@ -358,12 +365,12 @@ fn main() -> Result<()> {
         }
 
         Commands::RunIos { simulator, device_name, udid } => {
-            let options = ios::IosRunOptions::new(simulator, device_name, udid);
+            let options = ios::IosRunOptions::new_multiple(simulator, device_name, udid);
             ios::run_ios(options, cli.verbose)
         }
 
         Commands::BuildRunIos { simulator, device_name, udid } => {
-            let options = ios::IosRunOptions::new(simulator, device_name, udid);
+            let options = ios::IosRunOptions::new_multiple(simulator, device_name, udid);
             ios::build_run_ios(options, cli.verbose)
         }
 
@@ -480,5 +487,41 @@ mod tests {
 
         assert_eq!(device_name, ["main", "se"]);
         assert_eq!(android_device, ["main", "sim"]);
+    }
+
+    #[test]
+    fn build_run_ios_accepts_multiple_device_names() {
+        let cli = Cli::try_parse_from(["xtask", "build-run-ios", "-d", "se", "-d", "main"])
+            .expect("multiple ios devices should parse");
+
+        let Commands::BuildRunIos { device_name, .. } = cli.command else {
+            panic!("expected build-run-ios command");
+        };
+
+        assert_eq!(device_name, ["se", "main"]);
+    }
+
+    #[test]
+    fn run_ios_accepts_multiple_device_names() {
+        let cli = Cli::try_parse_from(["xtask", "run-ios", "-d", "se", "-d", "main"])
+            .expect("multiple ios devices should parse");
+
+        let Commands::RunIos { device_name, .. } = cli.command else {
+            panic!("expected run-ios command");
+        };
+
+        assert_eq!(device_name, ["se", "main"]);
+    }
+
+    #[test]
+    fn run_android_accepts_multiple_devices() {
+        let cli = Cli::try_parse_from(["xtask", "run-android", "-D", "main", "-D", "sim"])
+            .expect("multiple android devices should parse");
+
+        let Commands::RunAndroid { device, .. } = cli.command else {
+            panic!("expected run-android command");
+        };
+
+        assert_eq!(device, ["main", "sim"]);
     }
 }

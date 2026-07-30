@@ -85,6 +85,7 @@ struct WalletManagerCacheState: Equatable {
 
     private(set) var walletManager: WalletManager?
     private(set) var sendFlowManager: SendFlowManager?
+    private(set) var keyTeleportManager: KeyTeleportManager?
     @ObservationIgnored
     weak var coinControlManager: CoinControlManager?
 
@@ -273,11 +274,40 @@ struct WalletManagerCacheState: Equatable {
         coinControlManager.close()
     }
 
+    func ensureKeyTeleportManager(app: FfiApp) -> KeyTeleportManager {
+        if let keyTeleportManager {
+            return keyTeleportManager
+        }
+
+        let keyTeleportManager = KeyTeleportManager(app.newKeyTeleportManager())
+        self.keyTeleportManager = keyTeleportManager
+        return keyTeleportManager
+    }
+
+    func clearKeyTeleportManager() {
+        guard let keyTeleportManager else { return }
+
+        self.keyTeleportManager = nil
+        keyTeleportManager.close()
+    }
+
     func reconcileCoinControlManagerOwnership(router: Router) {
         guard coinControlManager != nil else { return }
         guard !router.containsCoinControlRoute else { return }
 
         clearCoinControlManager()
+    }
+
+    func reconcileKeyTeleportManagerOwnership(router: Router) {
+        guard keyTeleportManager != nil else { return }
+        guard !router.containsKeyTeleportRoute else { return }
+
+        clearKeyTeleportManager()
+    }
+
+    func reconcileRouteOwnedManagers(router: Router) {
+        reconcileCoinControlManagerOwnership(router: router)
+        reconcileKeyTeleportManagerOwnership(router: router)
     }
 
     @MainActor
@@ -313,6 +343,10 @@ extension Router {
     var containsCoinControlRoute: Bool {
         self.default.isCoinControlRoute || routes.contains { $0.isCoinControlRoute }
     }
+
+    var containsKeyTeleportRoute: Bool {
+        self.default.isKeyTeleportRoute || routes.contains { $0.isKeyTeleportRoute }
+    }
 }
 
 private extension Route {
@@ -320,6 +354,11 @@ private extension Route {
         if case .coinControl = self {
             return true
         }
+        return false
+    }
+
+    var isKeyTeleportRoute: Bool {
+        if case .keyTeleport = self { return true }
         return false
     }
 }

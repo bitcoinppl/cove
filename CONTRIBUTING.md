@@ -65,7 +65,9 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 
 `just build-ios` and `just build-android` rebuild the Rust core, regenerate UniFFI bindings, and update the mobile projects. `just compile-ios` and `just compile-android` only rebuild the native apps, so use them when Rust exports have not changed.
 
-`just build-run-ios` rebuilds the debug iOS bindings, builds the Xcode app with checkout-specific DerivedData, installs it with `devicectl`, and launches it without opening Xcode. It targets the first available paired iOS device by default; pass `--udid <device-udid>`, `--device-name <device-name>`, or set `IOS_DEVICE_UDID` / `IOS_DEVICE_NAME` to choose a specific phone. The phone must be connected, paired, in Developer Mode, and unlocked before launch.
+`just build-run-ios` rebuilds the debug iOS bindings, builds the Xcode app with checkout-specific DerivedData, installs it with `devicectl`, and launches it without opening Xcode. It targets the first available paired iOS device by default; pass `--udid <device-udid>`, `--device-name <device-name>`, or set `IOS_DEVICE_UDID` / `IOS_DEVICE_NAME` to choose a specific phone. Repeat `-d` for multiple devices, for example `just bri -d main -d se`. The phone must be connected, paired, in Developer Mode, and unlocked before launch.
+
+`just run-android` / `just bra` install and launch on Android; repeat `-D` for multiple devices, for example `just ra -D main -D sim`.
 
 `just build-run-all` builds both apps and runs them on the default iOS and Android devices. Repeat `-d` for each iOS target and `-D` for each Android target, for example `just brall -d main -d se -D main -D sim`. Each app is built once before it is installed and launched on its selected devices.
 

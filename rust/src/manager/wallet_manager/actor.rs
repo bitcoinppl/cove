@@ -342,18 +342,18 @@ impl WalletActor {
         });
     }
 
-    pub async fn switch_mnemonic_to_new_address_type(
+    pub async fn switch_private_wallet_to_new_address_type(
         &mut self,
         address_type: WalletAddressType,
     ) -> ActorResult<Result<(), Error>> {
-        debug!("actor switch mnemonic wallet");
+        debug!("actor switch private wallet");
 
         let connection = self.deferred_node_connection();
         let (reply, receiver) = futures::channel::oneshot::channel();
 
         self.addr.send_fut_with(|addr| async move {
             let result = match connection.await {
-                Ok(Ok(())) => call!(addr.apply_mnemonic_address_type_switch(address_type))
+                Ok(Ok(())) => call!(addr.apply_private_wallet_address_type_switch(address_type))
                     .await
                     .unwrap_or(Err(Error::ActorNotFound)),
                 Ok(Err(error)) => Err(error),
@@ -366,20 +366,20 @@ impl WalletActor {
         Ok(Produces::Deferred(receiver))
     }
 
-    async fn apply_mnemonic_address_type_switch(
+    async fn apply_private_wallet_address_type_switch(
         &mut self,
         address_type: WalletAddressType,
     ) -> ActorResult<Result<(), Error>> {
-        let result = self.apply_mnemonic_address_type_switch_inner(address_type).await;
+        let result = self.apply_private_wallet_address_type_switch_inner(address_type).await;
 
         Produces::ok(result)
     }
 
-    async fn apply_mnemonic_address_type_switch_inner(
+    async fn apply_private_wallet_address_type_switch_inner(
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
-        self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
+        self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
         self.restart_scan_after_address_type_switch()
             .await
             .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
@@ -620,6 +620,7 @@ impl WalletActor {
             ScanRequestOrder::Standard => self.wallet.bdk.start_full_scan().build(),
             ScanRequestOrder::ReceivePriority => self.wallet.start_receive_prioritized_full_scan(),
         };
+
         let graph = self.wallet.bdk.tx_graph().clone();
         let last_revealed_indices = self.wallet.bdk.spk_index().last_revealed_indices();
 
@@ -1204,7 +1205,7 @@ mod tests {
         transaction::Version,
     };
     use cove_bdk_progressive_scan::ScanUpdate;
-    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use cove_device::keychain::Keychain;
     use cove_tokio::FutureTimeoutExt as _;
     use cove_types::{
         fees::{FeeRateOption, FeeRateOptions, FeeSpeed},
@@ -1212,10 +1213,10 @@ mod tests {
     };
     use parking_lot::RwLock;
     use std::{
-        collections::{BTreeMap, HashMap, HashSet},
+        collections::{BTreeMap, HashSet},
         str::FromStr as _,
         sync::{
-            Arc, Once,
+            Arc,
             atomic::{AtomicUsize, Ordering},
         },
         time::{Duration, UNIX_EPOCH},
@@ -1250,24 +1251,6 @@ mod tests {
     };
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
-
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
 
     struct LockedActorFixture {
         actor: super::WalletActor,
@@ -1411,11 +1394,7 @@ mod tests {
     }
 
     fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
+        crate::test_support::init_test_keychain();
         Keychain::global()
     }
 
@@ -1680,6 +1659,7 @@ mod tests {
                     } else {
                         "1".to_string()
                     };
+
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
                         body.len(),
@@ -1762,6 +1742,7 @@ mod tests {
                     } else {
                         "1"
                     };
+
                     let status =
                         if request.starts_with("POST /tx ") { broadcast_status } else { 200 };
                     let reason = if status == 200 { "OK" } else { "Internal Server Error" };
@@ -2800,7 +2781,7 @@ mod tests {
         let (addr, receiver) = spawn_test_wallet_actor(wallet);
         drain_reconcile_messages(&receiver);
 
-        call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
+        call!(addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
             .await
             .expect("address type switch actor responds")
             .expect("address type switches");
@@ -2826,10 +2807,11 @@ mod tests {
         let (addr, receiver) = spawn_test_wallet_actor(wallet);
         drain_reconcile_messages(&receiver);
 
-        let _error = call!(addr.switch_mnemonic_to_new_address_type(WalletAddressType::Legacy))
-            .await
-            .expect("address type switch actor responds")
-            .expect_err("address-type switch fails when scan startup fails");
+        let _error =
+            call!(addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
+                .await
+                .expect("address type switch actor responds")
+                .expect_err("address-type switch fails when scan startup fails");
         let messages = receiver.try_iter().collect::<Vec<_>>();
         let actor_metadata =
             call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
@@ -3035,6 +3017,7 @@ mod tests {
             input: vec![],
             output: vec![],
         };
+
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
             .create_session(&fallback_tx)
             .unwrap();
@@ -3158,6 +3141,7 @@ mod tests {
             input: vec![],
             output: vec![],
         };
+
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
             .create_session(&fallback_tx)
             .unwrap();

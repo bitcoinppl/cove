@@ -17,7 +17,7 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&metadata, &master_key, "unsupported-revision", 2).await,
+        encrypted_wallet_backup_bytes(&metadata, &master_key, "unsupported-revision", 3).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
@@ -84,6 +84,7 @@ async fn detail_reports_other_backup_namespaces() {
     let CloudBackupOtherBackupsState::Loaded { summary } = detail.other_backups else {
         panic!("expected loaded other backups");
     };
+
     assert_eq!(summary.namespace_count, 1);
     assert_eq!(summary.wallet_count, 2);
     assert_eq!(summary.passkey_hints.len(), 1);

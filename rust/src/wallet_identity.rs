@@ -37,12 +37,11 @@ pub(crate) enum WalletIdentityError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr as _;
-    use std::sync::{Arc, Once};
+    use std::sync::Arc;
 
     use bdk_wallet::bitcoin::bip32::{Fingerprint as BdkFingerprint, Xpub};
-    use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
+    use cove_device::keychain::Keychain;
 
     use super::existing::matching_public_wallet_by_identity;
     use super::*;
@@ -55,31 +54,12 @@ mod tests {
         metadata::{WalletMetadata, WalletType},
     };
 
-    #[derive(Debug, Default)]
-    struct TestKeychain(parking_lot::Mutex<HashMap<String, String>>);
+    fn test_keychain() -> (tokio::sync::MutexGuard<'static, ()>, &'static Keychain) {
+        let guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
 
-    impl KeychainAccess for TestKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().remove(&key).is_some()
-        }
-    }
-
-    fn test_keychain() -> &'static Keychain {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            Keychain::new(Box::<TestKeychain>::default());
-        });
-
-        Keychain::global()
+        (guard, Keychain::global())
     }
 
     fn descriptor_pair(account: u32) -> Descriptors {
@@ -126,6 +106,7 @@ mod tests {
                 format!("pkh([817e7be0/44h/0h/{account}h]{xpub}/0/*)")
             }
         };
+
         let internal = match address_type {
             WalletAddressType::NativeSegwit => {
                 format!("wpkh([817e7be0/84h/0h/{account}h]{xpub}/1/*)")
@@ -165,6 +146,7 @@ mod tests {
             WalletAddressType::WrappedSegwit => 49,
             WalletAddressType::Legacy => 44,
         };
+
         let path = bdk_wallet::bitcoin::bip32::DerivationPath::from_str(&format!(
             "m/{purpose}h/0h/{account}h"
         ))
@@ -324,7 +306,7 @@ mod tests {
 
     #[test]
     fn cold_existing_wallet_xpub_synthesizes_default_bip84_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let descriptors = descriptor_pair(0);
         let xpub = descriptors.external.xpub().unwrap();
         let metadata = metadata("Existing cold xpub", WalletType::Cold);
@@ -339,7 +321,7 @@ mod tests {
 
     #[test]
     fn cold_existing_wallet_xpub_preserves_address_type_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
 
         for address_type in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
             let descriptors = descriptor_pair_for_address_type(address_type, 0);
@@ -540,7 +522,7 @@ mod tests {
 
     #[test]
     fn public_wallet_identity_matching_skips_same_fingerprint_different_account() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(1);
         let incoming_fingerprint =
@@ -568,7 +550,7 @@ mod tests {
 
     #[test]
     fn public_wallet_identity_matching_routes_exact_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(0);
         let incoming_fingerprint =
@@ -596,7 +578,7 @@ mod tests {
 
     #[test]
     fn public_wallet_identity_matching_falls_back_to_degraded_same_fingerprint() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let degraded = public_wallet_metadata("Degraded account", 0);
         let expected_id = degraded.id.clone();
         let incoming = descriptor_pair(1);
@@ -617,7 +599,7 @@ mod tests {
 
     #[test]
     fn strict_public_wallet_identity_matching_routes_exact_identity() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(0);
         let incoming_fingerprint =
@@ -645,7 +627,7 @@ mod tests {
 
     #[test]
     fn strict_public_wallet_identity_matching_skips_same_fingerprint_different_account() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let existing = public_wallet_metadata("Existing account 0", 0);
         let incoming = descriptor_pair(1);
         let incoming_fingerprint =
@@ -673,7 +655,7 @@ mod tests {
 
     #[test]
     fn strict_public_wallet_identity_matching_errors_on_degraded_same_fingerprint() {
-        let keychain = test_keychain();
+        let (_guard, keychain) = test_keychain();
         let degraded = public_wallet_metadata("Degraded account", 0);
         let expected_id = degraded.id.clone();
         let incoming = descriptor_pair(1);
