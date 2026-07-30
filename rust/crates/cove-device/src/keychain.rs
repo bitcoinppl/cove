@@ -748,7 +748,10 @@ impl Keychain {
     /// # Errors
     ///
     /// Returns a `KeychainError` if stored entries are incomplete, invalid, or cannot be decrypted
-    pub fn get_tap_signer_backup(&self, id: &WalletId) -> Result<Option<Vec<u8>>, KeychainError> {
+    pub fn get_tap_signer_backup(
+        &self,
+        id: &WalletId,
+    ) -> Result<Option<Zeroizing<Vec<u8>>>, KeychainError> {
         let pair = EncryptedKeychainPair::new(
             wallet_tap_signer_backup_key_name(id),
             wallet_tap_signer_encryption_key_and_nonce_key_name(id),
@@ -780,8 +783,10 @@ impl Keychain {
             .decrypt_from_string(&encrypted_backup)
             .map_err_prefix("tap signer backup", KeychainError::Decrypt)?;
 
-        let backup = hex::decode(backup_hex.as_str())
-            .map_err_prefix("tap signer backup hex", KeychainError::ParseSavedValue)?;
+        let backup = Zeroizing::new(
+            hex::decode(backup_hex.as_str())
+                .map_err_prefix("tap signer backup hex", KeychainError::ParseSavedValue)?,
+        );
 
         Ok(Some(backup))
     }

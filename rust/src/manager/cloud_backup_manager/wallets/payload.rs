@@ -245,7 +245,7 @@ fn build_cold_wallet_secret(
     }
 
     match keychain.get_tap_signer_backup(id) {
-        Ok(Some(backup)) => Ok(CloudWalletSecret::TapSignerBackup(backup)),
+        Ok(Some(backup)) => Ok(CloudWalletSecret::TapSignerBackup(backup.to_vec())),
         Ok(None) => {
             warn!("Tap signer wallet has no backup, exporting without it");
             Ok(CloudWalletSecret::WatchOnly)

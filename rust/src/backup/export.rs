@@ -85,7 +85,9 @@ impl BackupExporter {
 
                             if is_tap_signer {
                                 match self.keychain.get_tap_signer_backup(id) {
-                                    Ok(Some(backup)) => WalletSecret::TapSignerBackup(backup),
+                                    Ok(Some(backup)) => {
+                                        WalletSecret::TapSignerBackup(backup.to_vec())
+                                    }
                                     Ok(None) => {
                                         self.warn(format!("Tap signer wallet '{name}' ({network}){mode_tag} has no backup, exporting without it"));
                                         WalletSecret::None

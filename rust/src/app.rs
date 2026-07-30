@@ -356,7 +356,9 @@ impl FfiApp {
         };
 
         let keychain = Keychain::global();
-        keychain.get_tap_signer_backup(&metadata.id)
+        keychain
+            .get_tap_signer_backup(&metadata.id)
+            .map(|backup| backup.map(|bytes| bytes.to_vec()))
     }
 
     /// Save the backup for the tap signer in the keychain
