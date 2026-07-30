@@ -1174,7 +1174,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_constructor_device_new() != 10720.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_constructor_keychain_new() != 56447.toShort()) {
+    if (lib.uniffi_cove_device_checksum_constructor_keychain_new() != 59945.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_constructor_passkeyaccess_new() != 28492.toShort()) {
@@ -1222,10 +1222,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 21295.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 45172.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 217.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 52135.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 35329.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 8345.toShort()) {
@@ -2569,11 +2569,17 @@ public object FfiConverterTypeDevice: FfiConverter<Device, Long> {
 //
 
 
+/**
+ * Secure storage facade for device and wallet secrets
+ */
 public interface KeychainInterface {
 
     companion object
 }
 
+/**
+ * Secure storage facade for device and wallet secrets
+ */
 open class Keychain: Disposable, AutoCloseable, KeychainInterface
 {
 
@@ -2603,7 +2609,7 @@ open class Keychain: Disposable, AutoCloseable, KeychainInterface
      *
      * # Panics
      *
-     * Panics if the keychain has already been initialized
+     * Panics if setting the initial global instance fails
      */
     constructor(`keychain`: KeychainAccess) :
         this(UniffiWithHandle,
@@ -3650,20 +3656,32 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
 
 
 
+/**
+ * Errors from secure keychain operations
+ */
 sealed class KeychainException: kotlin.Exception() {
 
+    /**
+     * A value could not be saved
+     */
     class Save(
         ) : KeychainException() {
         override val message
             get() = ""
     }
 
+    /**
+     * A value could not be deleted
+     */
     class Delete(
         ) : KeychainException() {
         override val message
             get() = ""
     }
 
+    /**
+     * A stored value could not be parsed
+     */
     class ParseSavedValue(
 
         val v1: kotlin.String
@@ -3672,6 +3690,9 @@ sealed class KeychainException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * A value could not be encrypted
+     */
     class Encrypt(
 
         val v1: kotlin.String
@@ -3680,6 +3701,9 @@ sealed class KeychainException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * A value could not be decrypted
+     */
     class Decrypt(
 
         val v1: kotlin.String
@@ -3688,12 +3712,18 @@ sealed class KeychainException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * A saved wallet secret has a different type than the requested secret
+     */
     class WalletSecretTypeMismatch(
         ) : KeychainException() {
         override val message
             get() = ""
     }
 
+    /**
+     * A complete wallet secret already exists
+     */
     class WalletSecretExists(
         ) : KeychainException() {
         override val message
@@ -4917,6 +4947,9 @@ public object FfiConverterTypeDeviceAccess: FfiConverterCallbackInterface<Device
 
 
 
+/**
+ * Platform access to secure key-value storage
+ */
 public interface KeychainAccess {
 
     /**
@@ -4928,8 +4961,16 @@ public interface KeychainAccess {
      */
     fun `save`(`key`: kotlin.String, `value`: kotlin.String)
 
+    /**
+     * Gets the value for a key, or `None` when the key does not exist
+     */
     fun `get`(`key`: kotlin.String): kotlin.String?
 
+    /**
+     * Deletes the value for a key
+     *
+     * Returns whether the value was deleted
+     */
     fun `delete`(`key`: kotlin.String): kotlin.Boolean
 
     companion object
