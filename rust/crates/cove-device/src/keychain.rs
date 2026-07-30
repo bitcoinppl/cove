@@ -1,302 +1,70 @@
 //! Module for interacting with the secure element
 
-use std::{fmt, str::FromStr as _, sync::Arc};
-
-use cove_util::ResultExt as _;
+use std::sync::Arc;
 
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use bip39::Mnemonic;
-use bitcoin::bip32::{ChildNumber, Fingerprint, Xpriv, Xpub};
+use bitcoin::bip32::Xpub;
 use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
 use tracing::warn;
-use zeroize::{Zeroize as _, Zeroizing};
+use zeroize::Zeroizing;
 
 use cove_cspp::CsppStore;
 use cove_types::WalletId;
-use cove_util::encryption::Cryptor;
-use rand::RngExt as _;
 
-const LOCAL_DB_KEY_NAME: &str = "local::v1::db_encryption_key";
-const LOCAL_DB_KEY_CRYPTOR: &str = "local::v1::db_encryption_key_cryptor";
-const KEY_TELEPORT_RECEIVE_SESSION: &str = "key_teleport::v1::receive_session";
-const KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR: &str = "key_teleport::v1::receive_session_cryptor";
-const WALLET_SECRET_TAG_PREFIX: &str = "cove::wallet_secret::v1::";
-const WALLET_SECRET_XPRIV_TAG: &str = "xpriv::";
+mod encrypted_pair;
+mod key_teleport;
+mod local_encryption;
+mod tap_signer;
+#[cfg(test)]
+mod test_support;
+mod wallet_public;
+mod wallet_secrets;
 
-/// A validated BIP32 extended private key backed by zeroizing storage
-#[derive(Clone, PartialEq, Eq)]
-pub struct WalletXprv(String);
+pub use wallet_secrets::{WalletSecret, WalletXprv, WalletXprvError};
 
-/// Validation failures for a wallet extended private key
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum WalletXprvError {
-    /// The value is not a valid encoded extended private key
-    #[error("invalid extended private key: {0}")]
-    Invalid(String),
+use key_teleport::KeyTeleportSessionStore;
+use local_encryption::LocalEncryptionKeyStore;
+use tap_signer::TapSignerBackupStore;
+use wallet_public::WalletPublicDataStore;
+use wallet_secrets::WalletSecretStore;
 
-    /// Cove wallet secrets must represent the BIP32 root
-    #[error("extended private key is not a master key")]
-    NotMaster,
-}
+type SharedAccess = Arc<dyn KeychainAccess>;
 
-impl WalletXprv {
-    /// Validates and wraps an encoded extended private key
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `value` is invalid or contains child-key metadata
-    pub fn parse(value: impl Into<String>) -> Result<Self, WalletXprvError> {
-        let value = Self(value.into());
-        let xprv = Xpriv::from_str(&value.0).map_err_str(WalletXprvError::Invalid)?;
-        validate_master_xprv(&xprv)?;
-
-        Ok(value)
-    }
-
-    /// Exposes the encoded extended private key
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-
-    /// Parses the validated value into an extended private key
-    pub fn to_xpriv(&self) -> Xpriv {
-        Xpriv::from_str(&self.0).expect("WalletXprv must contain a validated extended private key")
-    }
-}
-
-impl fmt::Debug for WalletXprv {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("WalletXprv(<redacted>)")
-    }
-}
-
-impl Drop for WalletXprv {
-    fn drop(&mut self) {
-        self.0.zeroize();
-    }
-}
-
-impl TryFrom<Xpriv> for WalletXprv {
-    type Error = WalletXprvError;
-
-    fn try_from(value: Xpriv) -> Result<Self, Self::Error> {
-        validate_master_xprv(&value)?;
-
-        Ok(Self(value.to_string()))
-    }
-}
-
-fn validate_master_xprv(value: &Xpriv) -> Result<(), WalletXprvError> {
-    let is_master = value.depth == 0
-        && value.parent_fingerprint == Fingerprint::default()
-        && value.child_number == ChildNumber::Normal { index: 0 };
-    if !is_master {
-        return Err(WalletXprvError::NotMaster);
-    }
-
-    Ok(())
-}
-
-/// A hot wallet's private key material
-///
-/// Debug output is always redacted so diagnostics cannot expose the secret
-#[derive(Clone, PartialEq, Eq)]
-pub enum WalletSecret {
-    /// A BIP39 mnemonic phrase
-    Mnemonic(Mnemonic),
-
-    /// A BIP32 extended private key
-    Xpriv(WalletXprv),
-}
-
-impl WalletSecret {
-    /// Returns the mnemonic when this secret contains one
-    pub fn as_mnemonic(&self) -> Option<&Mnemonic> {
-        match self {
-            Self::Mnemonic(mnemonic) => Some(mnemonic),
-            Self::Xpriv(_) => None,
-        }
-    }
-
-    /// Returns the extended private key wrapper when this secret contains one
-    pub fn as_xprv(&self) -> Option<&WalletXprv> {
-        match self {
-            Self::Mnemonic(_) => None,
-            Self::Xpriv(xprv) => Some(xprv),
-        }
-    }
-
-    fn serialize(&self) -> Zeroizing<String> {
-        match self {
-            // keep mnemonic values readable by Cove versions before typed wallet secrets
-            Self::Mnemonic(mnemonic) => Zeroizing::new(mnemonic.to_string()),
-            Self::Xpriv(xprv) => Zeroizing::new(format!(
-                "{WALLET_SECRET_TAG_PREFIX}{WALLET_SECRET_XPRIV_TAG}{}",
-                xprv.expose()
-            )),
-        }
-    }
-
-    fn parse(value: &str) -> Result<Self, KeychainError> {
-        let Some(tagged_value) = value.strip_prefix(WALLET_SECRET_TAG_PREFIX) else {
-            // wallet secrets saved before typed storage were untagged mnemonics
-            return Mnemonic::from_str(value)
-                .map(Self::Mnemonic)
-                .map_err_str(KeychainError::ParseSavedValue);
-        };
-
-        if let Some(xpriv) = tagged_value.strip_prefix(WALLET_SECRET_XPRIV_TAG) {
-            return WalletXprv::parse(xpriv)
-                .map(Self::Xpriv)
-                .map_err_str(KeychainError::ParseSavedValue);
-        }
-
-        Err(KeychainError::ParseSavedValue("unknown wallet secret type".to_string()))
-    }
-}
-
-impl fmt::Debug for WalletSecret {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Mnemonic(_) => formatter.write_str("WalletSecret::Mnemonic(<redacted>)"),
-            Self::Xpriv(_) => formatter.write_str("WalletSecret::Xpriv(<redacted>)"),
-        }
-    }
-}
-
-impl From<Mnemonic> for WalletSecret {
-    fn from(value: Mnemonic) -> Self {
-        Self::Mnemonic(value)
-    }
-}
-
-impl TryFrom<Xpriv> for WalletSecret {
-    type Error = WalletXprvError;
-
-    fn try_from(value: Xpriv) -> Result<Self, Self::Error> {
-        WalletXprv::try_from(value).map(Self::Xpriv)
-    }
-}
-
+/// Errors from secure keychain operations
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum KeychainError {
+    /// A value could not be saved
     #[error("unable to save")]
     Save,
 
+    /// A value could not be deleted
     #[error("unable to delete")]
     Delete,
 
+    /// A stored value could not be parsed
     #[error("unable to parse saved value")]
     ParseSavedValue(String),
 
+    /// A value could not be encrypted
     #[error("unable to encrypt: {0}")]
     Encrypt(String),
 
+    /// A value could not be decrypted
     #[error("unable to decrypt: {0}")]
     Decrypt(String),
 
+    /// A saved wallet secret has a different type than the requested secret
     #[error("saved wallet secret is a different type")]
     WalletSecretTypeMismatch,
 
+    /// A complete wallet secret already exists
     #[error("wallet secret already exists")]
     WalletSecretExists,
 }
 
-struct EncryptedKeychainPair {
-    value_key: String,
-    cryptor_key: String,
-}
-
-enum EncryptedKeychainPairState {
-    Empty,
-    Complete { encrypted_value: String, serialized_cryptor: Zeroizing<String> },
-    ValueOnly,
-    CryptorOnly { serialized_cryptor: Zeroizing<String> },
-}
-
-enum FailedValueSave {
-    DeleteCryptor,
-    KeepCryptor,
-}
-
-impl EncryptedKeychainPair {
-    fn new(value_key: impl Into<String>, cryptor_key: impl Into<String>) -> Self {
-        Self { value_key: value_key.into(), cryptor_key: cryptor_key.into() }
-    }
-
-    fn state(&self, keychain: &dyn KeychainAccess) -> EncryptedKeychainPairState {
-        let encrypted_value = keychain.get(self.value_key.clone());
-        let serialized_cryptor = keychain.get(self.cryptor_key.clone());
-
-        match (encrypted_value, serialized_cryptor) {
-            (None, None) => EncryptedKeychainPairState::Empty,
-            (Some(encrypted_value), Some(serialized_cryptor)) => {
-                EncryptedKeychainPairState::Complete {
-                    encrypted_value,
-                    serialized_cryptor: Zeroizing::new(serialized_cryptor),
-                }
-            }
-            (Some(_), None) => EncryptedKeychainPairState::ValueOnly,
-            (None, Some(serialized_cryptor)) => EncryptedKeychainPairState::CryptorOnly {
-                serialized_cryptor: Zeroizing::new(serialized_cryptor),
-            },
-        }
-    }
-
-    fn delete_value(&self, keychain: &dyn KeychainAccess) -> bool {
-        keychain.delete(self.value_key.clone())
-    }
-
-    fn delete_cryptor(&self, keychain: &dyn KeychainAccess) -> bool {
-        keychain.delete(self.cryptor_key.clone())
-    }
-
-    fn save(
-        &self,
-        keychain: &dyn KeychainAccess,
-        plaintext: &str,
-        failed_value_save: FailedValueSave,
-    ) -> Result<(), KeychainError> {
-        let mut cryptor = Cryptor::new();
-        let encrypted = cryptor
-            .encrypt_to_string(plaintext)
-            .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
-
-        // the keychain callback takes an owned String, so one plain copy at the
-        // ffi boundary is unavoidable; it is moved into and consumed by the callback
-        let serialized = cryptor.serialize_to_string();
-        keychain.save(self.cryptor_key.clone(), serialized.as_str().to_owned())?;
-
-        if let Err(error) = keychain.save(self.value_key.clone(), encrypted) {
-            if matches!(failed_value_save, FailedValueSave::DeleteCryptor) {
-                self.delete_cryptor(keychain);
-            }
-
-            return Err(error);
-        }
-
-        Ok(())
-    }
-
-    fn save_atomically(
-        &self,
-        keychain: &dyn KeychainAccess,
-        plaintext: &str,
-    ) -> Result<(), KeychainError> {
-        self.save(keychain, plaintext, FailedValueSave::DeleteCryptor)
-    }
-
-    fn save_preserving_cryptor_on_failure(
-        &self,
-        keychain: &dyn KeychainAccess,
-        plaintext: &str,
-    ) -> Result<(), KeychainError> {
-        self.save(keychain, plaintext, FailedValueSave::KeepCryptor)
-    }
-}
-
+/// Platform access to secure key-value storage
 #[uniffi::export(callback_interface)]
 pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
     /// Saves a key-value pair
@@ -305,14 +73,28 @@ pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
     ///
     /// Returns a `KeychainError` if the save operation fails
     fn save(&self, key: String, value: String) -> Result<(), KeychainError>;
+
+    /// Gets the value for a key, or `None` when the key does not exist
     fn get(&self, key: String) -> Option<String>;
+
+    /// Deletes the value for a key
+    ///
+    /// Returns whether the value was deleted
     fn delete(&self, key: String) -> bool;
 }
 
 static REF: OnceCell<Keychain> = OnceCell::new();
 
+/// Secure storage facade for device and wallet secrets
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct Keychain(Arc<Box<dyn KeychainAccess>>, Arc<Mutex<()>>);
+pub struct Keychain {
+    access: SharedAccess,
+    local_encryption: LocalEncryptionKeyStore,
+    key_teleport: KeyTeleportSessionStore,
+    wallet_secrets: WalletSecretStore,
+    wallet_public: WalletPublicDataStore,
+    tap_signer_backups: TapSignerBackupStore,
+}
 
 #[uniffi::export]
 impl Keychain {
@@ -320,7 +102,7 @@ impl Keychain {
     ///
     /// # Panics
     ///
-    /// Panics if the keychain has already been initialized
+    /// Panics if setting the initial global instance fails
     #[uniffi::constructor]
     pub fn new(keychain: Box<dyn KeychainAccess>) -> Self {
         if let Some(me) = REF.get() {
@@ -328,7 +110,7 @@ impl Keychain {
             return me.clone();
         }
 
-        let me = Self(Arc::new(keychain), Arc::new(Mutex::new(())));
+        let me = Self::from_access(Arc::from(keychain));
         REF.set(me).expect("failed to set keychain");
 
         Self::global().clone()
@@ -345,150 +127,60 @@ impl Keychain {
         REF.get().expect("keychain is not initialized")
     }
 
-    /// Load existing local DB encryption key, returns None if not found
+    /// Loads the existing local database encryption key
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stored entries are incomplete or invalid, or decryption fails
     pub fn get_local_encryption_key(&self) -> Result<Option<[u8; 32]>, KeychainError> {
-        let pair = EncryptedKeychainPair::new(LOCAL_DB_KEY_NAME, LOCAL_DB_KEY_CRYPTOR);
-        let (encrypted, cryptor_str) = match pair.state(self.0.as_ref().as_ref()) {
-            EncryptedKeychainPairState::Empty => return Ok(None),
-            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
-                (encrypted_value, serialized_cryptor)
-            }
-            EncryptedKeychainPairState::CryptorOnly { .. } => {
-                return Err(KeychainError::Decrypt(
-                    "encryption key cryptor found but encrypted key is missing".into(),
-                ));
-            }
-            EncryptedKeychainPairState::ValueOnly => {
-                return Err(KeychainError::Decrypt(
-                    "encrypted key found but cryptor is missing".into(),
-                ));
-            }
-        };
-
-        let cryptor = Cryptor::try_from_string(&cryptor_str)
-            .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
-
-        let hex = cryptor
-            .decrypt_from_string(&encrypted)
-            .map_err(|e| KeychainError::Decrypt(e.to_string()))?;
-
-        let decoded =
-            Zeroizing::new(hex::decode(hex.as_str()).map_err_str(KeychainError::ParseSavedValue)?);
-        let bytes: [u8; 32] = decoded
-            .as_slice()
-            .try_into()
-            .map_err(|_| KeychainError::ParseSavedValue("not 32 bytes".into()))?;
-
-        Ok(Some(bytes))
+        self.local_encryption.get()
     }
 
-    /// Generate, persist, and return a new random local DB encryption key
+    /// Generates, persists, and returns a new random local database encryption key
     ///
-    /// Write-once: refuses if a key already exists in keychain
+    /// # Errors
+    ///
+    /// Returns an error if a key already exists, encryption fails, or a value cannot be saved
     pub fn create_local_encryption_key(&self) -> Result<[u8; 32], KeychainError> {
-        if self.0.get(LOCAL_DB_KEY_NAME.into()).is_some() {
-            return Err(KeychainError::Save);
-        }
-
-        let key: [u8; 32] = rand::rng().random();
-        let encoded = Zeroizing::new(hex::encode(key));
-        let pair = EncryptedKeychainPair::new(LOCAL_DB_KEY_NAME, LOCAL_DB_KEY_CRYPTOR);
-        pair.save_atomically(self.0.as_ref().as_ref(), &encoded)?;
-
-        Ok(key)
+        self.local_encryption.create()
     }
 
-    /// Delete partial local encryption key entries from keychain
-    ///
-    /// Used during bootstrap recovery when one entry exists but the other is missing
+    /// Deletes partial local encryption key entries
     pub fn purge_local_encryption_key(&self) {
-        self.0.delete(LOCAL_DB_KEY_CRYPTOR.into());
-        self.0.delete(LOCAL_DB_KEY_NAME.into());
+        self.local_encryption.purge();
     }
 
-    /// Saves the active KeyTeleport receive session encrypted in the keychain
+    /// Saves the active KeyTeleport receive session
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if encryption or saving fails
+    /// Returns an error if encryption fails or a value cannot be saved
     pub fn save_key_teleport_receive_session(&self, plaintext: &str) -> Result<(), KeychainError> {
-        let pair = EncryptedKeychainPair::new(
-            KEY_TELEPORT_RECEIVE_SESSION,
-            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR,
-        );
-
-        pair.save_atomically(self.0.as_ref().as_ref(), plaintext)
+        self.key_teleport.save_receive_session(plaintext)
     }
 
-    /// Retrieves the active KeyTeleport receive session from the keychain
+    /// Gets the active KeyTeleport receive session
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if stored entries are incomplete or decryption fails
+    /// Returns an error if the stored entries are incomplete or invalid, or decryption fails
     pub fn get_key_teleport_receive_session(
         &self,
     ) -> Result<Option<Zeroizing<String>>, KeychainError> {
-        let pair = EncryptedKeychainPair::new(
-            KEY_TELEPORT_RECEIVE_SESSION,
-            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR,
-        );
-        let (encrypted, cryptor_str) = match pair.state(self.0.as_ref().as_ref()) {
-            EncryptedKeychainPairState::Empty => return Ok(None),
-            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
-                (encrypted_value, serialized_cryptor)
-            }
-            EncryptedKeychainPairState::CryptorOnly { .. } => {
-                return Err(KeychainError::Decrypt(
-                    "KeyTeleport receive session cryptor found but encrypted session is missing"
-                        .into(),
-                ));
-            }
-            EncryptedKeychainPairState::ValueOnly => {
-                return Err(KeychainError::Decrypt(
-                    "encrypted KeyTeleport receive session found but cryptor is missing".into(),
-                ));
-            }
-        };
-
-        let cryptor = Cryptor::try_from_string(&cryptor_str)
-            .map_err_prefix("KeyTeleport receive session cryptor", KeychainError::Decrypt)?;
-
-        cryptor
-            .decrypt_from_string(&encrypted)
-            .map_err_prefix("KeyTeleport receive session", KeychainError::Decrypt)
-            .map(Some)
+        self.key_teleport.get_receive_session()
     }
 
-    /// Deletes the active KeyTeleport receive session from the keychain
+    /// Deletes the active KeyTeleport receive session
     pub fn delete_key_teleport_receive_session(&self) -> bool {
-        let has_session = self.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_some();
-        let has_cryptor = self.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_some();
-
-        if !has_session && !has_cryptor {
-            return true;
-        }
-
-        let session_ok =
-            if has_session { self.0.delete(KEY_TELEPORT_RECEIVE_SESSION.into()) } else { true };
-        let cryptor_ok = if has_cryptor {
-            self.0.delete(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into())
-        } else {
-            true
-        };
-
-        session_ok && cryptor_ok
+        self.key_teleport.delete_receive_session()
     }
 
-    /// Saves a wallet's mnemonic seed encrypted in the keychain
-    ///
-    /// The mnemonic is encrypted with a random [`Cryptor`] before storage. The
-    /// keychain itself provides at-rest encryption, but this extra layer prevents
-    /// the plaintext mnemonic from being accidentally exposed if other code
-    /// enumerates keychain entries — it must be explicitly decrypted to be read
+    /// Saves a wallet mnemonic seed
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if encryption or saving fails
+    /// Returns an error if a complete secret already exists, an orphaned entry cannot be deleted,
+    /// encryption fails, or a value cannot be saved
     pub fn save_wallet_key(
         &self,
         id: &WalletId,
@@ -497,49 +189,26 @@ impl Keychain {
         self.save_wallet_secret(id, secret_key.into())
     }
 
-    /// Saves a hot wallet secret encrypted in the keychain
-    ///
-    /// Mnemonics and extended private keys share the same wallet-mnemonic
-    /// keychain entries. Existing complete pairs are never replaced
+    /// Saves a typed hot wallet secret
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if encryption or saving fails
+    /// Returns an error if a complete secret already exists, an orphaned entry cannot be deleted,
+    /// encryption fails, or a value cannot be saved
     pub fn save_wallet_secret(
         &self,
         id: &WalletId,
         wallet_secret: WalletSecret,
     ) -> Result<(), KeychainError> {
-        let _wallet_secret_guard = self.1.lock();
-        let secret_key = wallet_mnemonic_key_name(id);
-        let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
-        let pair = EncryptedKeychainPair::new(secret_key, cryptor_key);
-
-        match pair.state(self.0.as_ref().as_ref()) {
-            EncryptedKeychainPairState::Complete { .. } => {
-                return Err(KeychainError::WalletSecretExists);
-            }
-            EncryptedKeychainPairState::ValueOnly => {
-                if !pair.delete_value(self.0.as_ref().as_ref()) {
-                    return Err(KeychainError::Delete);
-                }
-            }
-            EncryptedKeychainPairState::CryptorOnly { .. } => {
-                if !pair.delete_cryptor(self.0.as_ref().as_ref()) {
-                    return Err(KeychainError::Delete);
-                }
-            }
-            EncryptedKeychainPairState::Empty => {}
-        }
-
-        pair.save_atomically(self.0.as_ref().as_ref(), &wallet_secret.serialize())
+        self.wallet_secrets.save(id, wallet_secret)
     }
 
-    /// Retrieves a wallet's mnemonic seed from the keychain
+    /// Gets a wallet mnemonic seed
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if decryption or parsing fails
+    /// Returns an error if the stored secret has a different type, the stored entries are
+    /// incomplete or invalid, or decryption fails
     pub fn get_wallet_key(&self, id: &WalletId) -> Result<Option<Mnemonic>, KeychainError> {
         self.get_wallet_secret(id)?
             .map(|secret| match secret {
@@ -549,124 +218,43 @@ impl Keychain {
             .transpose()
     }
 
-    /// Retrieves a hot wallet secret from the keychain
-    ///
-    /// Existing untagged entries are decoded as mnemonics for backward
-    /// compatibility
+    /// Gets a typed hot wallet secret
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if the stored entries are incomplete or the
-    /// secret cannot be decrypted or parsed
+    /// Returns an error if the stored entries are incomplete or invalid, or decryption fails
     pub fn get_wallet_secret(&self, id: &WalletId) -> Result<Option<WalletSecret>, KeychainError> {
-        // serialize against writers so a read never observes a half-written pair
-        let _wallet_secret_guard = self.1.lock();
-
-        self.get_wallet_secret_from_pair(
-            wallet_mnemonic_key_name(id),
-            wallet_mnemonic_encryption_and_nonce_key_name(id),
-        )
+        self.wallet_secrets.get(id)
     }
 
-    fn get_wallet_secret_from_pair(
-        &self,
-        secret_key: String,
-        cryptor_key: String,
-    ) -> Result<Option<WalletSecret>, KeychainError> {
-        let pair = EncryptedKeychainPair::new(secret_key, cryptor_key);
-        let (encrypted_secret, encryption_key) = match pair.state(self.0.as_ref().as_ref()) {
-            EncryptedKeychainPairState::Empty => return Ok(None),
-            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
-                (encrypted_value, serialized_cryptor)
-            }
-            EncryptedKeychainPairState::ValueOnly => {
-                return Err(KeychainError::Decrypt(
-                    "encrypted wallet secret found but encryption key is missing".into(),
-                ));
-            }
-            EncryptedKeychainPairState::CryptorOnly { .. } => {
-                return Err(KeychainError::Decrypt(
-                    "wallet secret encryption key found but encrypted secret is missing".into(),
-                ));
-            }
-        };
-
-        let cryptor = Cryptor::try_from_string(&encryption_key)
-            .map_err_prefix("wallet secret encryption key", KeychainError::Decrypt)?;
-
-        let wallet_secret = cryptor
-            .decrypt_from_string(&encrypted_secret)
-            .map_err_prefix("wallet secret", KeychainError::Decrypt)?;
-
-        WalletSecret::parse(&wallet_secret).map(Some)
-    }
-
-    /// Deletes a wallet secret from the keychain
+    /// Deletes a wallet secret
     pub fn delete_wallet_secret(&self, id: &WalletId) -> bool {
-        let _wallet_secret_guard = self.1.lock();
-        let keys =
-            [wallet_mnemonic_key_name(id), wallet_mnemonic_encryption_and_nonce_key_name(id)];
-        let mut deleted_all = true;
-
-        for key in keys {
-            if self.0.get(key.clone()).is_some() && !self.0.delete(key) {
-                deleted_all = false;
-            }
-        }
-
-        deleted_all
+        self.wallet_secrets.delete(id)
     }
 
-    /// Saves a wallet's extended public key in the keychain
+    /// Saves a wallet extended public key
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if saving fails
+    /// Returns an error if the value cannot be saved
     pub fn save_wallet_xpub(&self, id: &WalletId, xpub: Xpub) -> Result<(), KeychainError> {
-        let key = wallet_xpub_key_name(id);
-        let xpub_string = xpub.to_string();
-
-        self.0.save(key, xpub_string)?;
-
-        Ok(())
+        self.wallet_public.save_xpub(id, xpub)
     }
 
-    /// Retrieves a wallet's extended public key from the keychain
+    /// Gets a wallet extended public key
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if parsing fails
+    /// Returns an error if the stored value is not a valid extended public key
     pub fn get_wallet_xpub(&self, id: &WalletId) -> Result<Option<Xpub>, KeychainError> {
-        let key = wallet_xpub_key_name(id);
-        let Some(xpub_string) = self.0.get(key) else {
-            return Ok(None);
-        };
-
-        let xpub = Xpub::from_str(&xpub_string).map_err(|error| {
-            let error = format!(
-                "Unable to parse saved xpub, something went wrong \
-                    with saving, this should not happen {error}"
-            );
-
-            KeychainError::ParseSavedValue(error)
-        })?;
-
-        Ok(Some(xpub))
+        self.wallet_public.get_xpub(id)
     }
 
-    fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
-        let key = wallet_xpub_key_name(id);
-        if self.0.get(key.clone()).is_none() {
-            return true;
-        }
-        self.0.delete(key)
-    }
-
-    /// Saves a wallet's public descriptors in the keychain
+    /// Saves a wallet public descriptor pair
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if saving fails
+    /// Returns an error if the value cannot be saved
     #[allow(clippy::needless_pass_by_value)]
     pub fn save_public_descriptor(
         &self,
@@ -674,150 +262,70 @@ impl Keychain {
         external_descriptor: ExtendedDescriptor,
         internal_descriptor: ExtendedDescriptor,
     ) -> Result<(), KeychainError> {
-        let key = wallet_public_descriptor_key_name(id);
-        let value = format!("{external_descriptor}\n{internal_descriptor}");
-
-        self.0.save(key, value)
+        self.wallet_public.save_descriptors(id, external_descriptor, internal_descriptor)
     }
 
-    /// Retrieves a wallet's public descriptors from the keychain
+    /// Gets a wallet public descriptor pair
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if parsing fails
+    /// Returns an error if either stored descriptor is missing or invalid
     pub fn get_public_descriptor(
         &self,
         id: &WalletId,
     ) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, KeychainError> {
-        let key = wallet_public_descriptor_key_name(id);
-        let Some(value) = self.0.get(key) else {
-            return Ok(None);
-        };
-
-        let mut lines = value.lines();
-        let external = lines.next().ok_or_else(|| {
-            KeychainError::ParseSavedValue("missing external descriptor".to_string())
-        })?;
-        let internal = lines.next().ok_or_else(|| {
-            KeychainError::ParseSavedValue("missing internal descriptor".to_string())
-        })?;
-
-        let external = ExtendedDescriptor::from_str(external).map_err(|e| {
-            KeychainError::ParseSavedValue(format!("invalid external descriptor: {e}"))
-        })?;
-        let internal = ExtendedDescriptor::from_str(internal).map_err(|e| {
-            KeychainError::ParseSavedValue(format!("invalid internal descriptor: {e}"))
-        })?;
-
-        Ok(Some((external, internal)))
+        self.wallet_public.get_descriptors(id)
     }
 
-    fn delete_public_descriptor(&self, id: &WalletId) -> bool {
-        let key = wallet_public_descriptor_key_name(id);
-        if self.0.get(key.clone()).is_none() {
-            return true;
-        }
-        self.0.delete(key)
-    }
-
-    /// Saves a Tap Signer backup encrypted in the keychain
-    ///
-    /// Encrypted with a random [`Cryptor`] before storage for the same reason as
-    /// [`save_wallet_key`](Self::save_wallet_key) — prevents accidental plaintext
-    /// exposure when keychain entries are enumerated
+    /// Saves an encrypted Tap Signer backup
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if encryption or saving fails
+    /// Returns an error if encryption fails or a value cannot be saved
     pub fn save_tap_signer_backup(
         &self,
         id: &WalletId,
         backup: &[u8],
     ) -> Result<(), KeychainError> {
-        let encoded = Zeroizing::new(hex::encode(backup));
-        let pair = EncryptedKeychainPair::new(
-            wallet_tap_signer_backup_key_name(id),
-            wallet_tap_signer_encryption_key_and_nonce_key_name(id),
-        );
-
-        pair.save_preserving_cryptor_on_failure(self.0.as_ref().as_ref(), &encoded)
+        self.tap_signer_backups.save(id, backup)
     }
 
-    /// Retrieves and decrypts a Tap Signer backup from the keychain
+    /// Gets and decrypts a Tap Signer backup
     ///
     /// # Errors
     ///
-    /// Returns a `KeychainError` if stored entries are incomplete, invalid, or cannot be decrypted
+    /// Returns an error if the stored entries are incomplete or invalid, or decryption fails
     pub fn get_tap_signer_backup(
         &self,
         id: &WalletId,
     ) -> Result<Option<Zeroizing<Vec<u8>>>, KeychainError> {
-        let pair = EncryptedKeychainPair::new(
-            wallet_tap_signer_backup_key_name(id),
-            wallet_tap_signer_encryption_key_and_nonce_key_name(id),
-        );
-        let (encrypted_backup, encryption_secret_key) = match pair.state(self.0.as_ref().as_ref()) {
-            EncryptedKeychainPairState::Empty => return Ok(None),
-            EncryptedKeychainPairState::Complete { encrypted_value, serialized_cryptor } => {
-                (encrypted_value, serialized_cryptor)
-            }
-            EncryptedKeychainPairState::ValueOnly => {
-                return Err(KeychainError::Decrypt(
-                    "encrypted tap signer backup found but encryption key is missing".into(),
-                ));
-            }
-            EncryptedKeychainPairState::CryptorOnly { serialized_cryptor } => {
-                Cryptor::try_from_string(&serialized_cryptor)
-                    .map_err_prefix("tap signer encryption key", KeychainError::Decrypt)?;
-
-                return Err(KeychainError::Decrypt(
-                    "tap signer encryption key found but backup data is missing".to_string(),
-                ));
-            }
-        };
-
-        let cryptor = Cryptor::try_from_string(&encryption_secret_key)
-            .map_err_prefix("tap signer encryption key", KeychainError::Decrypt)?;
-
-        let backup_hex = cryptor
-            .decrypt_from_string(&encrypted_backup)
-            .map_err_prefix("tap signer backup", KeychainError::Decrypt)?;
-
-        let backup = Zeroizing::new(
-            hex::decode(backup_hex.as_str())
-                .map_err_prefix("tap signer backup hex", KeychainError::ParseSavedValue)?,
-        );
-
-        Ok(Some(backup))
+        self.tap_signer_backups.get(id)
     }
 
-    /// Deletes a Tap Signer backup from the keychain
+    /// Deletes a Tap Signer backup
     pub fn delete_tap_signer_backup(&self, id: &WalletId) -> bool {
-        let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
-        let backup_key = wallet_tap_signer_backup_key_name(id);
-
-        let has_data = self.0.get(backup_key.clone()).is_some();
-        let has_key = self.0.get(encryption_key_key.clone()).is_some();
-
-        // nothing to delete = success
-        if !has_data && !has_key {
-            return true;
-        }
-
-        // delete encrypted data before its encryption key (reverse of save order)
-        // so a partial failure never leaves orphaned data without a decryption key
-        let data_ok = self.0.delete(backup_key);
-        let key_ok = self.0.delete(encryption_key_key);
-        data_ok && key_ok
+        self.tap_signer_backups.delete(id)
     }
 
-    /// Deletes all items saved in the keychain for the given wallet id
+    /// Deletes all keychain entries for a wallet
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
-        let key_ok = self.delete_wallet_secret(id);
-        let xpub_ok = self.delete_wallet_xpub(id);
-        let desc_ok = self.delete_public_descriptor(id);
-        let tap_ok = self.delete_tap_signer_backup(id);
-        key_ok && xpub_ok && desc_ok && tap_ok
+        let key_ok = self.wallet_secrets.delete(id);
+        let xpub_ok = self.wallet_public.delete_xpub(id);
+        let descriptor_ok = self.wallet_public.delete_descriptors(id);
+        let tap_signer_ok = self.tap_signer_backups.delete(id);
+
+        key_ok && xpub_ok && descriptor_ok && tap_signer_ok
+    }
+
+    fn from_access(access: SharedAccess) -> Self {
+        Self {
+            local_encryption: LocalEncryptionKeyStore::new(access.clone()),
+            key_teleport: KeyTeleportSessionStore::new(access.clone()),
+            wallet_secrets: WalletSecretStore::new(access.clone()),
+            wallet_public: WalletPublicDataStore::new(access.clone()),
+            tap_signer_backups: TapSignerBackupStore::new(access.clone()),
+            access,
+        }
     }
 }
 
@@ -825,576 +333,14 @@ impl CsppStore for Keychain {
     type Error = KeychainError;
 
     fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-        self.0.save(key, value)
+        self.access.save(key, value)
     }
 
     fn get(&self, key: String) -> Option<String> {
-        self.0.get(key)
+        self.access.get(key)
     }
 
     fn delete(&self, key: String) -> bool {
-        self.0.delete(key)
-    }
-}
-
-fn wallet_mnemonic_key_name(id: &WalletId) -> String {
-    format!("{id}::wallet_mnemonic")
-}
-
-fn wallet_xpub_key_name(id: &WalletId) -> String {
-    format!("{id}::wallet_xpub")
-}
-
-fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
-    format!("{id}::wallet_mnemonic_encryption_key_and_nonce")
-}
-
-fn wallet_public_descriptor_key_name(id: &WalletId) -> String {
-    format!("{id}::wallet_public_descriptor")
-}
-
-fn wallet_tap_signer_encryption_key_and_nonce_key_name(id: &WalletId) -> String {
-    format!("{id}::wallet_tap_signer_encryption_key_and_nonce_key_name")
-}
-
-fn wallet_tap_signer_backup_key_name(id: &WalletId) -> String {
-    format!("{id}::tap_signer_backup")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
-
-    #[derive(Debug)]
-    struct MockKeychain(Mutex<HashMap<String, String>>);
-
-    impl MockKeychain {
-        fn new() -> Self {
-            Self(Mutex::new(HashMap::new()))
-        }
-
-        fn with_entries(entries: Vec<(&str, &str)>) -> Self {
-            let map: HashMap<String, String> =
-                entries.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-            Self(Mutex::new(map))
-        }
-    }
-
-    impl KeychainAccess for MockKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.lock().unwrap().insert(key, value);
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().unwrap().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.lock().unwrap().remove(&key).is_some()
-        }
-    }
-
-    #[derive(Clone, Debug, Default)]
-    struct FailingKeychain {
-        entries: Arc<Mutex<HashMap<String, String>>>,
-        failing_save_key: Arc<Mutex<Option<String>>>,
-    }
-
-    impl FailingKeychain {
-        fn fail_save_for(&self, key: String) {
-            *self.failing_save_key.lock().unwrap() = Some(key);
-        }
-    }
-
-    impl KeychainAccess for FailingKeychain {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            if self.failing_save_key.lock().unwrap().as_ref() == Some(&key) {
-                return Err(KeychainError::Save);
-            }
-
-            self.entries.lock().unwrap().insert(key, value);
-
-            Ok(())
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.entries.lock().unwrap().get(&key).cloned()
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.entries.lock().unwrap().remove(&key).is_some()
-        }
-    }
-
-    fn make_keychain(mock: MockKeychain) -> Keychain {
-        Keychain(Arc::new(Box::new(mock)), Arc::new(parking_lot::Mutex::new(())))
-    }
-
-    fn wallet_id() -> WalletId {
-        WalletId::preview_new()
-    }
-
-    fn mnemonic() -> Mnemonic {
-        Mnemonic::from_str(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-        )
-        .unwrap()
-    }
-
-    fn xpriv() -> Xpriv {
-        Xpriv::new_master(bitcoin::Network::Bitcoin, &[42; 32]).unwrap()
-    }
-
-    fn save_untagged_wallet_mnemonic(keychain: &Keychain, id: &WalletId, mnemonic: &Mnemonic) {
-        let mut cryptor = Cryptor::new();
-        let encrypted = cryptor.encrypt_to_string(&mnemonic.to_string()).unwrap();
-
-        keychain
-            .0
-            .save(
-                wallet_mnemonic_encryption_and_nonce_key_name(id),
-                cryptor.serialize_to_string().as_str().to_owned(),
-            )
-            .unwrap();
-        keychain.0.save(wallet_mnemonic_key_name(id), encrypted).unwrap();
-    }
-
-    #[test]
-    fn wallet_secret_mnemonic_roundtrips() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = mnemonic();
-
-        keychain.save_wallet_secret(&id, WalletSecret::Mnemonic(expected.clone())).unwrap();
-
-        assert_eq!(
-            keychain.get_wallet_secret(&id).unwrap(),
-            Some(WalletSecret::Mnemonic(expected.clone()))
-        );
-        assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected));
-    }
-
-    #[test]
-    fn wallet_secret_mnemonic_serialization_is_untagged() {
-        let expected = mnemonic();
-        let serialized = WalletSecret::Mnemonic(expected.clone()).serialize();
-
-        assert_eq!(serialized.as_str(), expected.to_string());
-    }
-
-    #[test]
-    fn untagged_wallet_mnemonic_remains_readable() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = mnemonic();
-        save_untagged_wallet_mnemonic(&keychain, &id, &expected);
-
-        assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected.clone()));
-        assert_eq!(
-            keychain.get_wallet_secret(&id).unwrap(),
-            Some(WalletSecret::Mnemonic(expected))
-        );
-    }
-
-    #[test]
-    fn wallet_secret_xpriv_roundtrips() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = xpriv();
-
-        keychain.save_wallet_secret(&id, WalletSecret::try_from(expected).unwrap()).unwrap();
-
-        let secret = keychain.get_wallet_secret(&id).unwrap().unwrap();
-        assert_eq!(secret.as_xprv().unwrap().to_xpriv(), expected);
-    }
-
-    #[test]
-    fn wallet_xprv_rejects_non_master_keys() {
-        let secp = bitcoin::secp256k1::Secp256k1::new();
-        let child = xpriv().derive_priv(&secp, &[ChildNumber::Normal { index: 1 }]).unwrap();
-
-        assert_eq!(WalletXprv::try_from(child), Err(WalletXprvError::NotMaster));
-        assert_eq!(WalletXprv::parse(child.to_string()), Err(WalletXprvError::NotMaster));
-    }
-
-    #[test]
-    fn mnemonic_getter_reports_xpriv_type_mismatch() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        keychain.save_wallet_secret(&id, WalletSecret::try_from(xpriv()).unwrap()).unwrap();
-
-        assert_eq!(keychain.get_wallet_key(&id), Err(KeychainError::WalletSecretTypeMismatch));
-    }
-
-    #[test]
-    fn saving_wallet_secret_rejects_an_existing_secret() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = mnemonic();
-        keychain.save_wallet_key(&id, expected.clone()).unwrap();
-
-        let replacement = WalletSecret::try_from(xpriv()).unwrap();
-        assert_eq!(
-            keychain.save_wallet_secret(&id, replacement),
-            Err(KeychainError::WalletSecretExists)
-        );
-        assert_eq!(
-            keychain.get_wallet_secret(&id).unwrap(),
-            Some(WalletSecret::Mnemonic(expected))
-        );
-    }
-
-    #[test]
-    fn failed_secret_write_leaves_no_partial_state() {
-        let id = wallet_id();
-        let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(&id);
-        let secret_key = wallet_mnemonic_key_name(&id);
-
-        for failing_key in [cryptor_key.clone(), secret_key.clone()] {
-            let access = FailingKeychain::default();
-            access.fail_save_for(failing_key);
-            let keychain =
-                Keychain(Arc::new(Box::new(access.clone())), Arc::new(parking_lot::Mutex::new(())));
-
-            assert_eq!(
-                keychain.save_wallet_secret(&id, WalletSecret::Mnemonic(mnemonic())),
-                Err(KeychainError::Save)
-            );
-            assert!(access.get(cryptor_key.clone()).is_none());
-            assert!(access.get(secret_key.clone()).is_none());
-            assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
-        }
-    }
-
-    #[test]
-    fn concurrent_saves_allow_exactly_one_create() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = WalletSecret::Mnemonic(mnemonic());
-        let first_keychain = keychain.clone();
-        let first_id = id.clone();
-        let first_secret = expected.clone();
-        let second_keychain = keychain.clone();
-        let second_id = id.clone();
-        let second_secret = expected.clone();
-
-        let first =
-            std::thread::spawn(move || first_keychain.save_wallet_secret(&first_id, first_secret));
-        let second = std::thread::spawn(move || {
-            second_keychain.save_wallet_secret(&second_id, second_secret)
-        });
-
-        let results = [first.join().unwrap(), second.join().unwrap()];
-
-        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-        assert_eq!(
-            results
-                .iter()
-                .filter(|result| **result == Err(KeychainError::WalletSecretExists))
-                .count(),
-            1
-        );
-        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), Some(expected));
-    }
-
-    #[test]
-    fn saving_wallet_secret_repairs_a_lone_orphaned_entry() {
-        let expected = mnemonic();
-
-        for cryptor_only in [false, true] {
-            let id = wallet_id();
-            let orphaned_key = if cryptor_only {
-                wallet_mnemonic_encryption_and_nonce_key_name(&id)
-            } else {
-                wallet_mnemonic_key_name(&id)
-            };
-
-            let keychain =
-                make_keychain(MockKeychain::with_entries(vec![(orphaned_key.as_str(), "orphan")]));
-
-            keychain.save_wallet_key(&id, expected.clone()).unwrap();
-
-            assert_eq!(keychain.get_wallet_key(&id).unwrap(), Some(expected.clone()));
-        }
-    }
-
-    #[test]
-    fn saving_wallet_secret_rejects_an_unreadable_committed_pair() {
-        let id = wallet_id();
-        let secret_key = wallet_mnemonic_key_name(&id);
-        let cryptor_key = wallet_mnemonic_encryption_and_nonce_key_name(&id);
-        let keychain = make_keychain(MockKeychain::with_entries(vec![
-            (secret_key.as_str(), "unreadable secret"),
-            (cryptor_key.as_str(), "unreadable cryptor"),
-        ]));
-
-        assert_eq!(
-            keychain.save_wallet_key(&id, mnemonic()),
-            Err(KeychainError::WalletSecretExists)
-        );
-        assert_eq!(keychain.0.get(secret_key), Some("unreadable secret".to_string()));
-        assert_eq!(keychain.0.get(cryptor_key), Some("unreadable cryptor".to_string()));
-    }
-
-    #[test]
-    fn wallet_secret_uses_exact_wallet_mnemonic_key_names() {
-        let access = FailingKeychain::default();
-        let keychain =
-            Keychain(Arc::new(Box::new(access.clone())), Arc::new(parking_lot::Mutex::new(())));
-        let id = wallet_id();
-        let secret_key = format!("{id}::wallet_mnemonic");
-        let cryptor_key = format!("{id}::wallet_mnemonic_encryption_key_and_nonce");
-
-        keychain.save_wallet_key(&id, mnemonic()).unwrap();
-
-        let entries = access.entries.lock().unwrap();
-        assert_eq!(entries.len(), 2);
-        assert!(entries.contains_key(&secret_key));
-        assert!(entries.contains_key(&cryptor_key));
-        assert!(!entries.keys().any(|key| key.starts_with(&format!("{id}::wallet_secret"))));
-    }
-
-    #[test]
-    fn mnemonic_saved_by_new_code_is_readable_by_master_logic() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = mnemonic();
-        let secret_key = format!("{id}::wallet_mnemonic");
-        let cryptor_key = format!("{id}::wallet_mnemonic_encryption_key_and_nonce");
-        keychain.save_wallet_key(&id, expected.clone()).unwrap();
-
-        let encrypted = keychain.0.get(secret_key).unwrap();
-        let cryptor = keychain.0.get(cryptor_key).unwrap();
-        let cryptor = Cryptor::try_from_string(&cryptor).unwrap();
-        let decrypted = cryptor.decrypt_from_string(&encrypted).unwrap();
-        let decoded = Mnemonic::from_str(&decrypted).unwrap();
-
-        assert_eq!(decoded, expected);
-    }
-
-    #[test]
-    fn xpriv_saved_under_wallet_mnemonic_keys_is_tagged() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        let expected = xpriv();
-        let secret_key = format!("{id}::wallet_mnemonic");
-        let cryptor_key = format!("{id}::wallet_mnemonic_encryption_key_and_nonce");
-        keychain.save_wallet_secret(&id, WalletSecret::try_from(expected).unwrap()).unwrap();
-
-        let encrypted = keychain.0.get(secret_key).unwrap();
-        let cryptor = keychain.0.get(cryptor_key).unwrap();
-        let cryptor = Cryptor::try_from_string(&cryptor).unwrap();
-        let decrypted = cryptor.decrypt_from_string(&encrypted).unwrap();
-
-        assert_eq!(
-            *decrypted,
-            format!("{WALLET_SECRET_TAG_PREFIX}{WALLET_SECRET_XPRIV_TAG}{expected}")
-        );
-        assert!(Mnemonic::from_str(&decrypted).is_err());
-    }
-
-    #[test]
-    fn wallet_secret_debug_output_is_redacted() {
-        let mnemonic = mnemonic();
-        let mnemonic_debug = format!("{:?}", WalletSecret::Mnemonic(mnemonic.clone()));
-        let xpriv = WalletXprv::try_from(xpriv()).unwrap();
-        let xpriv_debug = format!("{xpriv:?}");
-
-        assert_eq!(mnemonic_debug, "WalletSecret::Mnemonic(<redacted>)");
-        assert!(!mnemonic_debug.contains(&mnemonic.to_string()));
-        assert_eq!(xpriv_debug, "WalletXprv(<redacted>)");
-        assert!(!xpriv_debug.contains(xpriv.expose()));
-    }
-
-    #[test]
-    fn delete_wallet_items_removes_wallet_secret() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        keychain.save_wallet_key(&id, mnemonic()).unwrap();
-
-        assert!(keychain.delete_wallet_items(&id));
-        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
-        assert!(keychain.0.get(wallet_mnemonic_key_name(&id)).is_none());
-        assert!(keychain.0.get(wallet_mnemonic_encryption_and_nonce_key_name(&id)).is_none());
-    }
-
-    #[test]
-    fn delete_wallet_secret_removes_wallet_mnemonic_keys() {
-        let keychain = make_keychain(MockKeychain::new());
-        let id = wallet_id();
-        keychain.save_wallet_key(&id, mnemonic()).unwrap();
-
-        assert!(keychain.delete_wallet_secret(&id));
-        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), None);
-        assert!(keychain.0.get(wallet_mnemonic_key_name(&id)).is_none());
-        assert!(keychain.0.get(wallet_mnemonic_encryption_and_nonce_key_name(&id)).is_none());
-    }
-
-    #[test]
-    fn get_local_encryption_key_returns_none_when_empty() {
-        let kc = make_keychain(MockKeychain::new());
-        assert!(kc.get_local_encryption_key().unwrap().is_none());
-    }
-
-    #[test]
-    fn get_local_encryption_key_errors_on_cryptor_without_key() {
-        let kc = make_keychain(MockKeychain::with_entries(vec![(
-            LOCAL_DB_KEY_CRYPTOR,
-            "some_cryptor_data",
-        )]));
-        let err = kc.get_local_encryption_key().unwrap_err();
-        assert!(matches!(err, KeychainError::Decrypt(_)));
-    }
-
-    #[test]
-    fn get_local_encryption_key_errors_on_key_without_cryptor() {
-        let kc = make_keychain(MockKeychain::with_entries(vec![(
-            LOCAL_DB_KEY_NAME,
-            "some_encrypted_data",
-        )]));
-        let err = kc.get_local_encryption_key().unwrap_err();
-        assert!(matches!(err, KeychainError::Decrypt(_)));
-    }
-
-    #[test]
-    fn create_and_get_local_encryption_key_roundtrip() {
-        let kc = make_keychain(MockKeychain::new());
-        let created = kc.create_local_encryption_key().unwrap();
-        let loaded = kc.get_local_encryption_key().unwrap().unwrap();
-        assert_eq!(created, loaded);
-    }
-
-    #[test]
-    fn create_local_encryption_key_cleans_up_on_second_save_failure() {
-        // simulate a keychain where the second save always fails
-        #[derive(Debug)]
-        struct FailSecondSave(Mutex<(HashMap<String, String>, u32)>);
-
-        impl KeychainAccess for FailSecondSave {
-            fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-                let mut guard = self.0.lock().unwrap();
-                guard.1 += 1;
-                if guard.1 == 2 {
-                    return Err(KeychainError::Save);
-                }
-                guard.0.insert(key, value);
-                Ok(())
-            }
-
-            fn get(&self, key: String) -> Option<String> {
-                self.0.lock().unwrap().0.get(&key).cloned()
-            }
-
-            fn delete(&self, key: String) -> bool {
-                self.0.lock().unwrap().0.remove(&key).is_some()
-            }
-        }
-
-        let mock = FailSecondSave(Mutex::new((HashMap::new(), 0)));
-        let kc = Keychain(Arc::new(Box::new(mock)), Arc::new(parking_lot::Mutex::new(())));
-
-        let err = kc.create_local_encryption_key().unwrap_err();
-        assert!(matches!(err, KeychainError::Save));
-
-        // cryptor should have been cleaned up, leaving no partial state
-        assert!(kc.0.get(LOCAL_DB_KEY_CRYPTOR.into()).is_none());
-        assert!(kc.0.get(LOCAL_DB_KEY_NAME.into()).is_none());
-    }
-
-    #[test]
-    fn purge_local_encryption_key_removes_both_entries() {
-        let kc = make_keychain(MockKeychain::new());
-        kc.create_local_encryption_key().unwrap();
-
-        assert!(kc.0.get(LOCAL_DB_KEY_CRYPTOR.into()).is_some());
-        assert!(kc.0.get(LOCAL_DB_KEY_NAME.into()).is_some());
-
-        kc.purge_local_encryption_key();
-
-        assert!(kc.0.get(LOCAL_DB_KEY_CRYPTOR.into()).is_none());
-        assert!(kc.0.get(LOCAL_DB_KEY_NAME.into()).is_none());
-    }
-
-    #[test]
-    fn key_teleport_receive_session_roundtrip() {
-        let kc = make_keychain(MockKeychain::new());
-
-        kc.save_key_teleport_receive_session("{\"private_key\":\"redacted\"}").unwrap();
-
-        assert_eq!(
-            kc.get_key_teleport_receive_session().unwrap().unwrap().as_str(),
-            "{\"private_key\":\"redacted\"}"
-        );
-    }
-
-    #[test]
-    fn key_teleport_receive_session_errors_on_cryptor_without_session() {
-        let kc = make_keychain(MockKeychain::with_entries(vec![(
-            KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR,
-            "some_cryptor_data",
-        )]));
-        let err = kc.get_key_teleport_receive_session().unwrap_err();
-
-        assert!(matches!(err, KeychainError::Decrypt(_)));
-    }
-
-    #[test]
-    fn key_teleport_receive_session_errors_on_session_without_cryptor() {
-        let kc = make_keychain(MockKeychain::with_entries(vec![(
-            KEY_TELEPORT_RECEIVE_SESSION,
-            "some_encrypted_data",
-        )]));
-        let err = kc.get_key_teleport_receive_session().unwrap_err();
-
-        assert!(matches!(err, KeychainError::Decrypt(_)));
-    }
-
-    #[test]
-    fn key_teleport_receive_session_delete_removes_both_entries() {
-        let kc = make_keychain(MockKeychain::new());
-        kc.save_key_teleport_receive_session("session").unwrap();
-
-        assert!(kc.delete_key_teleport_receive_session());
-
-        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_none());
-        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_none());
-    }
-
-    #[test]
-    fn key_teleport_receive_session_cleans_up_on_second_save_failure() {
-        #[derive(Debug)]
-        struct FailSecondSave(Mutex<(HashMap<String, String>, u32)>);
-
-        impl KeychainAccess for FailSecondSave {
-            fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-                let mut guard = self.0.lock().unwrap();
-                guard.1 += 1;
-                if guard.1 == 2 {
-                    return Err(KeychainError::Save);
-                }
-                guard.0.insert(key, value);
-                Ok(())
-            }
-
-            fn get(&self, key: String) -> Option<String> {
-                self.0.lock().unwrap().0.get(&key).cloned()
-            }
-
-            fn delete(&self, key: String) -> bool {
-                self.0.lock().unwrap().0.remove(&key).is_some()
-            }
-        }
-
-        let mock = FailSecondSave(Mutex::new((HashMap::new(), 0)));
-        let kc = Keychain(Arc::new(Box::new(mock)), Arc::new(parking_lot::Mutex::new(())));
-
-        let err = kc.save_key_teleport_receive_session("session").unwrap_err();
-        assert!(matches!(err, KeychainError::Save));
-
-        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION_CRYPTOR.into()).is_none());
-        assert!(kc.0.get(KEY_TELEPORT_RECEIVE_SESSION.into()).is_none());
+        self.access.delete(key)
     }
 }
