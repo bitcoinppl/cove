@@ -48,6 +48,8 @@ struct HotWalletImportKeyboardToolbar: View {
         .frame(height: accessoryHeight)
         .background(.regularMaterial)
         .modifier(KeyboardToolbarShapeModifier())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("hotWalletImport.suggestions")
     }
 }
 

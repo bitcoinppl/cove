@@ -10,34 +10,40 @@ import UIKit
 
 /// Bridges a SwiftUI accessory view into the native `inputAccessoryView` of the current first responder.
 struct KeyboardAccessoryHost<Accessory: View>: UIViewRepresentable {
-    var controller: KeyboardAccessoryController
     var isVisible: Bool = true
     var height: CGFloat
     @ViewBuilder var accessory: () -> Accessory
+
+    func makeCoordinator() -> KeyboardAccessoryController {
+        KeyboardAccessoryController()
+    }
 
     func makeUIView(context _: Context) -> UIView {
         UIView(frame: .zero)
     }
 
-    func updateUIView(_ uiView: UIView, context _: Context) {
+    func updateUIView(_ uiView: UIView, context: Context) {
         // Capture the current first responder each pass.
         UIResponder.captureCurrentFirstResponder(from: uiView.window)
-        controller.update(isVisible: isVisible, height: height) {
+        context.coordinator.update(isVisible: isVisible, height: height) {
             AnyView(accessory())
         }
+    }
+
+    static func dismantleUIView(_: UIView, coordinator: KeyboardAccessoryController) {
+        coordinator.detach()
     }
 }
 
 // MARK: - Controller
 
-final class KeyboardAccessoryController: ObservableObject {
+final class KeyboardAccessoryController {
     private var hosting: UIHostingController<AnyView>?
     private var container: UIView?
     private weak var currentResponder: UIView?
-    private var isAttached: Bool = false
+    private var shouldShowAccessory: Bool = false
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var keyboardDidShowObserver: NSObjectProtocol?
-    private var keyboardWillHideObserver: NSObjectProtocol?
 
     init() {
         didBecomeActiveObserver = NotificationCenter.default.addObserver(
@@ -55,16 +61,6 @@ final class KeyboardAccessoryController: ObservableObject {
         ) { [weak self] _ in
             self?.reattachOnKeyboardShow()
         }
-
-        keyboardWillHideObserver = NotificationCenter.default.addObserver(
-            forName: UIResponder.keyboardWillHideNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // mark as detached so we know to reattach when keyboard shows again
-            self?.isAttached = false
-            self?.currentResponder = nil
-        }
     }
 
     /// Reattach the accessory view when app returns from background/notification center.
@@ -73,34 +69,46 @@ final class KeyboardAccessoryController: ObservableObject {
         // small delay to let iOS complete its transition
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self,
-                  self.isAttached,
-                  let responder = self.currentResponder,
+                  self.shouldShowAccessory,
                   let container = self.container
             else {
                 return
             }
 
+            UIResponder.captureCurrentFirstResponder(from: nil)
+            guard let responder = UIResponder.currentFirstResponderView else { return }
+
+            self.detachFromPreviousResponder(unless: responder)
+
             // force rebuild: clear first, then re-set
             self.setAccessory(on: responder, accessoryView: nil, forceReload: false)
             self.setAccessory(on: responder, accessoryView: container, forceReload: true)
+            self.currentResponder = responder
         }
     }
 
     /// Reattach accessory when keyboard appears after focus transitions.
     /// Handles the case where first responder changes between text fields.
     private func reattachOnKeyboardShow() {
-        guard let container = self.container else { return }
+        guard shouldShowAccessory, let container else { return }
 
         // re-capture first responder
         UIResponder.captureCurrentFirstResponder(from: nil)
         guard let responder = UIResponder.currentFirstResponderView else { return }
 
-        // always reattach when keyboard shows (we track hide state via keyboardWillHide)
+        detachFromPreviousResponder(unless: responder)
+
+        guard accessoryView(on: responder) !== container else {
+            currentResponder = responder
+            return
+        }
+
+        // record attachment before reloadInputViews can emit another keyboard notification
+        currentResponder = responder
+
         // force rebuild: clear first, then re-set
         self.setAccessory(on: responder, accessoryView: nil, forceReload: false)
         self.setAccessory(on: responder, accessoryView: container, forceReload: true)
-        self.currentResponder = responder
-        self.isAttached = true
     }
 
     deinit {
@@ -110,26 +118,17 @@ final class KeyboardAccessoryController: ObservableObject {
         if let observer = keyboardDidShowObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        if let observer = keyboardWillHideObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
     }
 
     func update(isVisible: Bool, height: CGFloat, @ViewBuilder accessory: () -> AnyView) {
-        guard let responderView = UIResponder.currentFirstResponderView else {
+        shouldShowAccessory = isVisible
+
+        guard isVisible else {
+            detach()
             return
         }
 
-        // check if visibility or responder changed
-        let responderChanged = currentResponder !== responderView
-        let needsAttachment = isVisible && (!isAttached || responderChanged)
-        let needsDetachment = !isVisible && isAttached
-
-        // remove when hidden; keeps native keyboard height stable
-        if needsDetachment {
-            setAccessory(on: responderView, accessoryView: nil, forceReload: true)
-            currentResponder = nil
-            isAttached = false
+        guard let responderView = UIResponder.currentFirstResponderView else {
             return
         }
 
@@ -143,6 +142,8 @@ final class KeyboardAccessoryController: ObservableObject {
         let container =
             container
                 ?? UIView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: height))
+        let heightChanged = container.frame.height != height
+        container.frame.size.height = height
         container.backgroundColor = .clear
         container.autoresizingMask = [.flexibleWidth]
         container.isUserInteractionEnabled = true
@@ -161,13 +162,52 @@ final class KeyboardAccessoryController: ObservableObject {
         self.hosting = hosting
         self.container = container
 
-        // only set the accessory view when actually visible
-        if isVisible {
-            // only reload when responder changes, not on first attachment (for smooth animation)
-            setAccessory(on: responderView, accessoryView: container, forceReload: responderChanged)
-            currentResponder = responderView
-            isAttached = true
+        let responderChanged = currentResponder !== responderView
+        detachFromPreviousResponder(unless: responderView)
+
+        if accessoryView(on: responderView) !== container || heightChanged {
+            // reload only when an existing input view must change
+            let forceReload = responderChanged || heightChanged
+            setAccessory(on: responderView, accessoryView: container, forceReload: forceReload)
         }
+
+        currentResponder = responderView
+    }
+
+    func detach() {
+        shouldShowAccessory = false
+
+        guard let responder = currentResponder else { return }
+
+        if accessoryView(on: responder) === container {
+            setAccessory(on: responder, accessoryView: nil, forceReload: responder.isFirstResponder)
+        }
+
+        currentResponder = nil
+    }
+
+    private func detachFromPreviousResponder(unless responder: UIView) {
+        guard let currentResponder, currentResponder !== responder else { return }
+
+        if accessoryView(on: currentResponder) === container {
+            setAccessory(on: currentResponder, accessoryView: nil, forceReload: false)
+        }
+
+        self.currentResponder = nil
+    }
+
+    private func accessoryView(on responder: UIView) -> UIView? {
+        if let textField = responder as? UITextField {
+            return textField.inputAccessoryView
+        }
+        if let textView = responder as? UITextView {
+            return textView.inputAccessoryView
+        }
+        if let searchBar = responder as? UISearchBar {
+            return searchBar.inputAccessoryView
+        }
+
+        return nil
     }
 
     private func setAccessory(on responder: UIView, accessoryView: UIView?, forceReload: Bool) {

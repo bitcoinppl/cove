@@ -105,12 +105,6 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    private var accessoryMinWidth: CGFloat {
-        let maxWidth = screenWidth - 32
-        let target: CGFloat = 240 // three-chip feel
-        return min(maxWidth, target)
-    }
-
     @State var manager: ImportWalletManager = .init()
     @State private var validator: WordValidator? = nil
 
@@ -327,34 +321,30 @@ struct HotWalletImportScreen: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let bottomSafeArea = geometry.safeAreaInsets.bottom
-
-            ZStack(alignment: .bottom) {
-                HotWalletImportMainContent(
-                    keyboardIsShowing: keyboardObserver.keyboardIsShowing,
-                    isCompactLayout: usesCompactTypography(sizeCategory: sizeCategory),
-                    numberOfWords: numberOfWords,
-                    tabIndex: $tabIndex,
-                    enteredWords: $enteredWords,
-                    filteredSuggestions: $filteredSuggestions,
-                    focusField: $focusField,
-                    onPasteMnemonic: handlePasteMnemonic,
-                    importWallet: { importWallet() }
+        HotWalletImportMainContent(
+            keyboardIsShowing: keyboardObserver.keyboardIsShowing,
+            isCompactLayout: usesCompactTypography(sizeCategory: sizeCategory),
+            numberOfWords: numberOfWords,
+            tabIndex: $tabIndex,
+            enteredWords: $enteredWords,
+            filteredSuggestions: $filteredSuggestions,
+            focusField: $focusField,
+            onPasteMnemonic: handlePasteMnemonic,
+            importWallet: { importWallet() }
+        )
+        .background {
+            KeyboardAccessoryHost(
+                isVisible: keyboardObserver.keyboardIsShowing && focusField != nil
+                    && !filteredSuggestions.isEmpty,
+                height: accessoryHeight
+            ) {
+                HotWalletImportKeyboardToolbar(
+                    filteredSuggestions: filteredSuggestions,
+                    accessoryHeight: accessoryHeight,
+                    selectWord: selectWordInKeyboard
                 )
-
-                if keyboardObserver.keyboardIsShowing, focusField != nil, !filteredSuggestions.isEmpty {
-                    HotWalletImportKeyboardToolbar(
-                        filteredSuggestions: filteredSuggestions,
-                        accessoryHeight: accessoryHeight,
-                        selectWord: selectWordInKeyboard
-                    )
-                    .offset(y: -(keyboardObserver.keyboardHeight - bottomSafeArea))
-                    .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.2), value: filteredSuggestions.isEmpty)
-                }
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
+            .frame(width: 0, height: 0)
         }
         .animation(.easeInOut(duration: 0.25), value: keyboardObserver.keyboardIsShowing)
         .padding()

@@ -1,4 +1,3 @@
-import UIKit
 import XCTest
 
 final class OnboardingFullLaunchUITests: XCTestCase {
@@ -136,6 +135,46 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
         XCTAssertTrue(button(startingWith: "Enter recovery words").exists)
         XCTAssertTrue(button(startingWith: "Scan QR code").exists)
+    }
+
+    func testSoftwareWalletImportSuggestionsAreAnchoredToKeyboard() {
+        app.launch()
+
+        reachStorageChoices()
+        button(startingWith: "Software wallet").tap()
+        button(startingWith: "Enter recovery words").tap()
+        button(startingWith: "12 words").tap()
+
+        let firstField = app.textFields["hotWalletImport.word.1"]
+        XCTAssertTrue(firstField.waitForExistence(timeout: 10))
+        firstField.tap()
+
+        let keyboardTutorialContinue = app.buttons["Continue"]
+        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
+            keyboardTutorialContinue.tap()
+        }
+
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        firstField.typeText("a")
+
+        let firstSuggestion = app.buttons["abandon"]
+        XCTAssertTrue(firstSuggestion.waitForExistence(timeout: 5))
+
+        let suggestions = app.descendants(matching: .any)["hotWalletImport.suggestions"]
+        XCTAssertTrue(suggestions.waitForExistence(timeout: 5))
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Import wallet word suggestions"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let accessoryGap = keyboard.frame.minY - suggestions.frame.maxY
+        XCTAssertLessThanOrEqual(
+            accessoryGap,
+            20,
+            "expected word suggestions to be attached to the keyboard, got a \(accessoryGap)-point gap"
+        )
     }
 
     func testSoftwareWalletUserCanOpenQrScanner() {
@@ -316,13 +355,13 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         button(startingWith: "12 words").tap()
         XCTAssertTrue(app.navigationBars["Import Wallet"].waitForExistence(timeout: 10))
 
-        let firstField = app.textFields["hotWalletImport.word.1"]
-        XCTAssertTrue(firstField.waitForExistence(timeout: 10))
-        firstField.tap()
-        UIPasteboard.general.string = knownEmptyMainnetMnemonic.joined(separator: " ")
-        firstField.typeKey("v", modifierFlags: .command)
+        for (index, word) in knownEmptyMainnetMnemonic.enumerated() {
+            let field = app.textFields["hotWalletImport.word.\(index + 1)"]
+            XCTAssertTrue(field.waitForExistence(timeout: 10))
+            field.tap()
+            field.typeText(word == "about" ? "abou" : "aba")
+        }
 
-        dismissKeyboardIfVisible()
         app.buttons["hotWalletImport.import"].tap()
 
         XCTAssertTrue(app.staticTexts["Protect this wallet with Cloud Backup?"].waitForExistence(timeout: 20))
