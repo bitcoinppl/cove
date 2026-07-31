@@ -474,7 +474,7 @@ impl WalletActor {
         }
 
         if self.payjoin_actor.is_some() {
-            return Produces::ok(Err(Error::SignAndBroadcastError(
+            return Produces::ok(Err(Error::PayjoinSessionError(
                 "a payjoin session is already in progress".to_string(),
             )));
         }
@@ -494,7 +494,7 @@ impl WalletActor {
                 if !can_cleanup {
                     // Broadcast hasn't completed yet, re-dispatch so the user doesn't need to restart.
                     send!(self.addr.resume_payjoin_session());
-                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                    return Produces::ok(Err(Error::PayjoinSessionError(
                         "retrying a previous payjoin broadcast; please try again in a moment"
                             .to_string(),
                     )));
@@ -504,7 +504,7 @@ impl WalletActor {
                 // in memory without flushing to disk; only drop the session once it is durable.
                 if let Err(error) = self.wallet.persist() {
                     warn!("failed to persist wallet at send gate before payjoin cleanup: {error}");
-                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                    return Produces::ok(Err(Error::PayjoinSessionError(
                         "a previous payjoin session is pending cleanup; please try again later"
                             .to_string(),
                     )));
@@ -512,7 +512,7 @@ impl WalletActor {
 
                 if let Err(error) = self.db.delete_payjoin_sender_session() {
                     warn!("payjoin session cleanup at send gate failed: {error}");
-                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                    return Produces::ok(Err(Error::PayjoinSessionError(
                         "a previous payjoin session is pending cleanup; please try again later"
                             .to_string(),
                     )));
@@ -521,7 +521,7 @@ impl WalletActor {
                 // The completed tx may have been the payjoin proposal, so reusing the
                 // supplied PSBT (which is still the fallback) could cause a conflict.
                 // Ask the user to confirm again now that the record is cleared.
-                return Produces::ok(Err(Error::SignAndBroadcastError(
+                return Produces::ok(Err(Error::PayjoinSessionError(
                     "previous payjoin session cleared; please confirm your payment again"
                         .to_string(),
                 )));
@@ -529,7 +529,7 @@ impl WalletActor {
 
             Err(error) => {
                 error!("failed to check for pending payjoin session: {error}");
-                return Produces::ok(Err(Error::SignAndBroadcastError(
+                return Produces::ok(Err(Error::PayjoinSessionError(
                     "unable to verify payjoin session state; please try again later".to_string(),
                 )));
             }
@@ -577,7 +577,7 @@ impl WalletActor {
         mut psbt: Psbt,
     ) -> Result<(Psbt, BdkTransaction), Error> {
         fn err(s: &str) -> Error {
-            Error::SignAndBroadcastError(s.to_string())
+            Error::SigningError(s.to_string())
         }
 
         let network = self.wallet.network;
@@ -643,7 +643,7 @@ impl WalletActor {
 
     async fn node_client_for_broadcast(&mut self) -> ActorResult<Result<NodeClient, Error>> {
         Produces::ok(self.node_client().cloned().map_err(|_| {
-            Error::SignAndBroadcastError(
+            Error::BroadcastError(
                 "failed to broadcast transaction, could not get node client, try again".to_string(),
             )
         }))
@@ -798,7 +798,7 @@ impl WalletActor {
             error!(
                 "failed to persist wallet after payjoin broadcast; retaining session record for recovery: {error}"
             );
-            return Produces::ok(Err(Error::SignAndBroadcastError(
+            return Produces::ok(Err(Error::PayjoinSessionError(
                 "transaction was broadcast but wallet state could not be saved; please restart the app"
                     .to_string(),
             )));
@@ -903,8 +903,7 @@ impl WalletActor {
                 error!("failed to sign recovered payjoin proposal, pausing for retry: {error:?}");
                 // the receiver accepted a valid proposal; do not fall back — retain the record
                 // so the user can retry after resolving the signing failure
-                self
-                    .send(WalletManagerReconcileMessage::WalletError(Error::SignAndBroadcastError(
+                self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(
                     "could not sign the recovered payjoin proposal; unlock the wallet and restart"
                         .to_string(),
                 )));
@@ -1173,7 +1172,7 @@ async fn broadcast_to_node_with_connection(
         .await
         .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?
         .map_err(|error| {
-            BroadcastTransactionError::BroadcastFailed(Error::SignAndBroadcastError(format!(
+            BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(format!(
                 "failed to broadcast transaction, unable to connect to node: {error:?}"
             )))
         })?;
@@ -1184,7 +1183,7 @@ async fn broadcast_to_node_with_connection(
         .map_err(BroadcastTransactionError::BroadcastFailed)?;
 
     node_client.broadcast_transaction(transaction.clone()).await.map_err(|error| {
-        BroadcastTransactionError::BroadcastFailed(Error::SignAndBroadcastError(format!(
+        BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(format!(
             "failed to broadcast transaction, try again: {error:?}"
         )))
     })?;

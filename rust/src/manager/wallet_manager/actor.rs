@@ -128,7 +128,7 @@ impl Actor for WalletActor {
                 self.send(WalletManagerReconcileMessage::NodeConnectionFailed(error_string));
             }
 
-            Error::SignAndBroadcastError(_) => {
+            Error::SigningError(_) | Error::BroadcastError(_) | Error::PayjoinSessionError(_) => {
                 self.send(WalletManagerReconcileMessage::SendFlowError(
                     SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
                 ));
@@ -222,7 +222,7 @@ impl WalletActor {
     }
 
     pub async fn notify_payjoin_error(&mut self, msg: String) -> ActorResult<()> {
-        self.send(WalletManagerReconcileMessage::WalletError(Error::SignAndBroadcastError(msg)));
+        self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(msg)));
         Produces::ok(())
     }
 
@@ -2302,9 +2302,7 @@ mod tests {
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
 
         assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
-        assert!(
-            matches!(error, super::Error::SignAndBroadcastError(message) if message.contains("try again"))
-        );
+        assert!(matches!(error, super::Error::BroadcastError(_)));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3028,13 +3026,7 @@ mod tests {
         let result = actor.initiate_payment(empty_psbt, None).await;
         let outcome = actor_value(result).await;
 
-        assert!(
-            matches!(
-                &outcome,
-                Err(super::Error::SignAndBroadcastError(msg)) if msg.contains("retrying")
-            ),
-            "expected 'retrying' error but got: {outcome:?}",
-        );
+        assert!(matches!(&outcome, Err(super::Error::PayjoinSessionError(_))));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3079,7 +3071,7 @@ mod tests {
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
         assert!(session.is_none(), "gate should have cleared the stale session record");
-        assert!(matches!(outcome, Err(super::Error::SignAndBroadcastError(_))));
+        assert!(matches!(outcome, Err(super::Error::PayjoinSessionError(_))));
     }
 
     #[tokio::test(flavor = "current_thread")]
