@@ -36562,7 +36562,11 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     case LockedOutputsSelected
     case GetConfirmDetailsError(String
     )
-    case SignAndBroadcastError(String
+    case SigningError(String
+    )
+    case BroadcastError(String
+    )
+    case PayjoinSessionError(String
     )
     case Converter(ConverterError
     )
@@ -36682,38 +36686,44 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 23: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 24: return .SignAndBroadcastError(
+        case 24: return .SigningError(
             try FfiConverterString.read(from: &buf)
             )
-        case 25: return .Converter(
+        case 25: return .BroadcastError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 26: return .PayjoinSessionError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 27: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 26: return .UnknownError(
+        case 28: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 27: return .PsbtFinalizeError(
+        case 29: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 28: return .GetHistoricalPricesError(
+        case 30: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 29: return .CsvCreationError(
+        case 31: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 30: return .AddUtxosError(
+        case 32: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 31: return .OutputLabelsError(
+        case 33: return .OutputLabelsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 32: return .DatabaseCorruption(
+        case 34: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 33: return .PendingUnsignedTransactionsLoadError(
+        case 35: return .PendingUnsignedTransactionsLoadError(
             try FfiConverterString.read(from: &buf)
             )
-        case 34: return .ReceiveAddressError(
+        case 36: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36838,59 +36848,69 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SignAndBroadcastError(v1):
+        case let .SigningError(v1):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Converter(v1):
+        case let .BroadcastError(v1):
             writeInt(&buf, Int32(25))
-            FfiConverterTypeConverterError.write(v1, into: &buf)
+            FfiConverterString.write(v1, into: &buf)
 
 
-        case let .UnknownError(v1):
+        case let .PayjoinSessionError(v1):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .PsbtFinalizeError(v1):
+        case let .Converter(v1):
             writeInt(&buf, Int32(27))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypeConverterError.write(v1, into: &buf)
 
 
-        case let .GetHistoricalPricesError(v1):
+        case let .UnknownError(v1):
             writeInt(&buf, Int32(28))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .CsvCreationError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(29))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .AddUtxosError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(30))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .OutputLabelsError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(31))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .AddUtxosError(v1):
             writeInt(&buf, Int32(32))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .OutputLabelsError(v1):
+            writeInt(&buf, Int32(33))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(34))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .PendingUnsignedTransactionsLoadError(v1):
-            writeInt(&buf, Int32(33))
+            writeInt(&buf, Int32(35))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
-            writeInt(&buf, Int32(34))
+            writeInt(&buf, Int32(36))
             FfiConverterString.write(v1, into: &buf)
 
         }

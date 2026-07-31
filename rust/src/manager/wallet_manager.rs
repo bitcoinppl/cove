@@ -354,8 +354,14 @@ pub enum WalletManagerError {
     #[error("Unable to get confirm details, {0}")]
     GetConfirmDetailsError(String),
 
-    #[error("Unable to sign and broadcast transaction, {0}")]
-    SignAndBroadcastError(String),
+    #[error("signing failed: {0}")]
+    SigningError(String),
+
+    #[error("broadcast failed: {0}")]
+    BroadcastError(String),
+
+    #[error("{0}")]
+    PayjoinSessionError(String),
 
     #[error(transparent)]
     Converter(#[from] ConverterError),
