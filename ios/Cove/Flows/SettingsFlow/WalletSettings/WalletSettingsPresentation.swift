@@ -31,8 +31,10 @@ enum WalletDeletionConfirmationPlan: Equatable {
 }
 
 enum WalletSettingsPresentationState: Equatable {
-    enum Style: Equatable {
-        case confirmationDialog
+    enum Slot: Equatable {
+        case secretWordsConfirmationDialog
+        case xprvExportWarningDialog
+        case deleteConfirmationDialog
         case alert
         case credentialVerification
         case xprvReveal
@@ -47,10 +49,14 @@ enum WalletSettingsPresentationState: Equatable {
     case xprvCredentialVerification(XprvPostVerificationAction)
     case xprvReveal(String)
 
-    var style: Style {
+    var slot: Slot {
         switch self {
-        case .secretWordsConfirmation, .xprvExportWarning, .deleteConfirmation:
-            .confirmationDialog
+        case .secretWordsConfirmation:
+            .secretWordsConfirmationDialog
+        case .xprvExportWarning:
+            .xprvExportWarningDialog
+        case .deleteConfirmation:
+            .deleteConfirmationDialog
         case .secondDeleteConfirmation, .finalDeleteConfirmation, .appLockRequired:
             .alert
         case .xprvCredentialVerification:
@@ -94,43 +100,24 @@ struct WalletSettingsPresentationHost<Content: View>: View {
 
     @Binding var presentationState: TaggedItem<WalletSettingsPresentationState>?
 
-    private var confirmationDialogIsPresented: Binding<Bool> {
-        isPresenting(.confirmationDialog)
-    }
-
     private var alertIsPresented: Binding<Bool> {
-        isPresenting(.alert)
+        $presentationState.isPresenting(.alert)
     }
 
     private var credentialVerificationPresentation:
         Binding<TaggedItem<WalletSettingsPresentationState>?>
     {
-        presentedItem(for: .credentialVerification)
+        $presentationState.presentedItem(for: .credentialVerification)
     }
 
     private var xprvRevealPresentation:
         Binding<TaggedItem<WalletSettingsPresentationState>?>
     {
-        presentedItem(for: .xprvReveal)
+        $presentationState.presentedItem(for: .xprvReveal)
     }
 
     var body: some View {
         content
-            .confirmationDialog(
-                "Are you sure?",
-                isPresented: confirmationDialogIsPresented,
-                presenting: presentationState
-            ) { presentation in
-                WalletSettingsConfirmationDialogActions(
-                    presentation: presentation.item,
-                    context: context
-                )
-            } message: { presentation in
-                WalletSettingsConfirmationDialogMessage(
-                    presentation: presentation.item,
-                    context: context
-                )
-            }
             .alert(
                 context.alertTitle(for: presentationState?.item),
                 isPresented: alertIsPresented,
@@ -156,109 +143,37 @@ struct WalletSettingsPresentationHost<Content: View>: View {
                 WalletSettingsXprvRevealDestination(presentation: presentation.item)
             }
     }
+}
 
-    private func isPresenting(_ style: WalletSettingsPresentationState.Style) -> Binding<Bool> {
-        Binding(
-            get: { presentationState?.item.style == style },
+extension Binding where Value == TaggedItem<WalletSettingsPresentationState>? {
+    func isPresenting(_ slot: WalletSettingsPresentationState.Slot) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { wrappedValue?.item.slot == slot },
             set: { isPresented in
-                guard !isPresented, presentationState?.item.style == style else { return }
+                guard !isPresented, wrappedValue?.item.slot == slot else { return }
 
-                presentationState = nil
+                wrappedValue = nil
             }
         )
     }
 
-    private func presentedItem(
-        for style: WalletSettingsPresentationState.Style
+    func presentedItem(
+        for slot: WalletSettingsPresentationState.Slot
     ) -> Binding<TaggedItem<WalletSettingsPresentationState>?> {
         Binding(
             get: {
-                guard presentationState?.item.style == style else { return nil }
+                guard wrappedValue?.item.slot == slot else { return nil }
 
-                return presentationState
+                return wrappedValue
             },
             set: { newValue in
                 if let newValue {
-                    presentationState = newValue
-                } else if presentationState?.item.style == style {
-                    presentationState = nil
+                    wrappedValue = newValue
+                } else if wrappedValue?.item.slot == slot {
+                    wrappedValue = nil
                 }
             }
         )
-    }
-}
-
-private struct WalletSettingsConfirmationDialogActions: View {
-    let presentation: WalletSettingsPresentationState
-    let context: WalletSettingsPresentationContext
-
-    var body: some View {
-        switch presentation {
-        case .secretWordsConfirmation:
-            WalletSecretWordsConfirmationActions(showSecretWords: context.showSecretWords)
-        case .xprvExportWarning:
-            WalletXprvExportWarningActions(startExport: context.startXprvExport)
-        case let .deleteConfirmation(plan):
-            WalletInitialDeleteConfirmationActions(
-                plan: plan,
-                confirm: context.confirmInitialDelete
-            )
-        default:
-            EmptyView()
-        }
-    }
-}
-
-private struct WalletSecretWordsConfirmationActions: View {
-    let showSecretWords: () -> Void
-
-    var body: some View {
-        Button("Show Me", action: showSecretWords)
-        Button("Cancel", role: .cancel) {}
-    }
-}
-
-private struct WalletXprvExportWarningActions: View {
-    let startExport: (XprvPostVerificationAction) -> Void
-
-    var body: some View {
-        Button("Reveal and Copy") { startExport(.reveal) }
-        Button("Continue with KeyTeleport") { startExport(.keyTeleport) }
-        Button("Cancel", role: .cancel) {}
-    }
-}
-
-private struct WalletInitialDeleteConfirmationActions: View {
-    let plan: WalletDeletionConfirmationPlan
-    let confirm: (WalletDeletionConfirmationPlan) -> Void
-
-    var body: some View {
-        Button("Delete", role: .destructive) {
-            confirm(plan)
-        }
-        Button("Cancel", role: .cancel) {}
-    }
-}
-
-private struct WalletSettingsConfirmationDialogMessage: View {
-    let presentation: WalletSettingsPresentationState
-    let context: WalletSettingsPresentationContext
-
-    var body: some View {
-        switch presentation {
-        case .secretWordsConfirmation:
-            Text(
-                "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
-            )
-        case .xprvExportWarning:
-            Text(
-                "Whoever has access to your extended private key, has access to your bitcoin. Please keep it safe, don't show it to anyone."
-            )
-        case .deleteConfirmation:
-            Text(context.deleteConfirmationMessage)
-        default:
-            EmptyView()
-        }
     }
 }
 

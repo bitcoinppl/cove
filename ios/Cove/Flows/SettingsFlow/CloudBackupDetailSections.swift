@@ -149,19 +149,15 @@ struct DisableCloudBackupSection: View {
         DisableCloudBackupFinalAlert(
             manager: manager,
             isPresented: $showingFinalConfirmation,
-            content: DisableCloudBackupConfirmationDialog(
-                manager: manager,
-                isPresented: $showingFirstConfirmation,
-                showFinalConfirmation: $showingFinalConfirmation,
-                content: DisableCloudBackupUnavailableAlert(
+            content: DisableCloudBackupUnavailableAlert(
+                unavailableMessage: unavailableMessage,
+                isPresented: $showingUnavailableAlert,
+                content: DisableCloudBackupControls(
+                    manager: manager,
                     unavailableMessage: unavailableMessage,
-                    isPresented: $showingUnavailableAlert,
-                    content: DisableCloudBackupControls(
-                        manager: manager,
-                        unavailableMessage: unavailableMessage,
-                        showingUnavailableAlert: $showingUnavailableAlert,
-                        showingFirstConfirmation: $showingFirstConfirmation
-                    )
+                    showingUnavailableAlert: $showingUnavailableAlert,
+                    showingFirstConfirmation: $showingFirstConfirmation,
+                    showingFinalConfirmation: $showingFinalConfirmation
                 )
             )
         )
@@ -173,6 +169,7 @@ private struct DisableCloudBackupControls: View {
     let unavailableMessage: String?
     @Binding var showingUnavailableAlert: Bool
     @Binding var showingFirstConfirmation: Bool
+    @Binding var showingFinalConfirmation: Bool
 
     var body: some View {
         Section {
@@ -194,6 +191,18 @@ private struct DisableCloudBackupControls: View {
             }
             .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+            .confirmationDialog(
+                "Disable Cloud Backup?",
+                isPresented: $showingFirstConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Continue", role: .destructive, action: presentFinalConfirmation)
+                    .disabled(!manager.isDetailInventoryComplete)
+
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.")
+            }
         }
     }
 
@@ -204,6 +213,16 @@ private struct DisableCloudBackupControls: View {
             showingUnavailableAlert = true
         } else {
             showingFirstConfirmation = true
+        }
+    }
+
+    private func presentFinalConfirmation() {
+        guard manager.isDetailInventoryComplete else { return }
+
+        showingFirstConfirmation = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            showingFinalConfirmation = true
         }
     }
 }
@@ -262,32 +281,6 @@ private struct DisableCloudBackupUnavailableAlert<Content: View>: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(unavailableMessage ?? "Cove is waiting for Cloud Backup to finish another operation.")
-        }
-    }
-}
-
-private struct DisableCloudBackupConfirmationDialog<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    @Binding var showFinalConfirmation: Bool
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Disable Cloud Backup?",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Continue", role: .destructive) {
-                guard manager.isDetailInventoryComplete else { return }
-
-                showFinalConfirmation = true
-            }
-            .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.")
         }
     }
 }
