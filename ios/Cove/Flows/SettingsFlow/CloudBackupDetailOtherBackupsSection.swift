@@ -60,19 +60,17 @@ struct OtherBackupsSection: View {
                 content: OtherBackupsRecoveryResultAlert(
                     manager: manager,
                     recoveryResult: $recoveryResult,
-                    content: OtherBackupsRecoverConfirmationDialog(
+                    content: OtherBackupsSectionContent(
+                        summaryText: summaryText,
+                        isRecovering: isRecovering,
+                        isDeleting: isDeleting,
+                        isOperating: isOperating,
+                        isInventoryComplete: manager.isDetailInventoryComplete,
+                        failure: failure,
                         manager: manager,
-                        isPresented: $showingRecoverConfirmation,
-                        content: OtherBackupsSectionContent(
-                            summaryText: summaryText,
-                            isRecovering: isRecovering,
-                            isDeleting: isDeleting,
-                            isOperating: isOperating,
-                            isInventoryComplete: manager.isDetailInventoryComplete,
-                            failure: failure,
-                            onRequestRecovery: requestRecovery,
-                            onRequestDeletion: requestDeletion
-                        )
+                        showingRecoverConfirmation: $showingRecoverConfirmation,
+                        onRequestRecovery: requestRecovery,
+                        onRequestDeletion: requestDeletion
                     )
                 )
             )
@@ -112,6 +110,8 @@ private struct OtherBackupsSectionContent: View {
     let isOperating: Bool
     let isInventoryComplete: Bool
     let failure: String?
+    let manager: CloudBackupManager
+    @Binding var showingRecoverConfirmation: Bool
     let onRequestRecovery: () -> Void
     let onRequestDeletion: () -> Void
 
@@ -129,6 +129,20 @@ private struct OtherBackupsSectionContent: View {
                 )
             }
             .disabled(isOperating || !isInventoryComplete)
+            .confirmationDialog(
+                "Recover wallets from another passkey?",
+                isPresented: $showingRecoverConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Try Passkey", action: recoverOtherBackups)
+                    .disabled(!manager.isDetailInventoryComplete)
+
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "This will use the selected passkey once to decrypt these other backups. Your current Cloud Backup passkey will not change."
+                )
+            }
 
             Button(role: .destructive, action: onRequestDeletion) {
                 OtherBackupsOperationLabel(
@@ -145,6 +159,12 @@ private struct OtherBackupsSectionContent: View {
                     .foregroundStyle(Color.statusError)
             }
         }
+    }
+
+    private func recoverOtherBackups() {
+        guard manager.isDetailInventoryComplete else { return }
+
+        manager.dispatch(action: .recoverOtherBackups)
     }
 }
 
@@ -163,35 +183,6 @@ private struct OtherBackupsOperationLabel: View {
             }
             Text(title)
         }
-    }
-}
-
-private struct OtherBackupsRecoverConfirmationDialog<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Recover wallets from another passkey?",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Try Passkey", action: recoverOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will use the selected passkey once to decrypt these other backups. Your current Cloud Backup passkey will not change."
-            )
-        }
-    }
-
-    private func recoverOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        manager.dispatch(action: .recoverOtherBackups)
     }
 }
 

@@ -395,7 +395,8 @@ struct CloudBackupPendingEnableRecoveryView: View {
                     CloudBackupRecoveryActions(
                         isCleaning: isCleaning,
                         canRemoveIncompleteSetup: canRemoveIncompleteSetup,
-                        showRemovalConfirmation: $showRemovalConfirmation
+                        showRemovalConfirmation: $showRemovalConfirmation,
+                        removeIncompleteSetup: onRemoveIncompleteSetup
                     )
                 }
                 .padding()
@@ -403,20 +404,6 @@ struct CloudBackupPendingEnableRecoveryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(CloudBackupEnableBackground())
-        .confirmationDialog(
-            "Remove incomplete Cloud Backup setup?",
-            isPresented: $showRemovalConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Remove Incomplete Setup", role: .destructive) {
-                onRemoveIncompleteSetup()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This removes only local data from the interrupted setup. Your active Cloud Backup key, cloud data, and wallets on this device will be preserved."
-            )
-        }
     }
 
     private func copySupportCode() {
@@ -505,6 +492,7 @@ private struct CloudBackupRecoveryActions: View {
     let isCleaning: Bool
     let canRemoveIncompleteSetup: Bool
     @Binding var showRemovalConfirmation: Bool
+    let removeIncompleteSetup: () -> Void
 
     var body: some View {
         if isCleaning {
@@ -529,6 +517,20 @@ private struct CloudBackupRecoveryActions: View {
                 borderColor: Color.red.opacity(0.22)
             ))
             .accessibilityIdentifier("cloudBackup.recovery.removeIncompleteSetup")
+            .confirmationDialog(
+                "Remove incomplete Cloud Backup setup?",
+                isPresented: $showRemovalConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Remove Incomplete Setup", role: .destructive) {
+                    removeIncompleteSetup()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "This removes only local data from the interrupted setup. Your active Cloud Backup key, cloud data, and wallets on this device will be preserved."
+                )
+            }
         }
     }
 }

@@ -78,6 +78,17 @@ struct SendFlowHardwareScreen: View {
                     showInputOutputDetails: showInputOutputDetails,
                     exportTransaction: exportTransaction,
                     importSignature: importSignature,
+                    exportDialogIsPresented: confirmationBinding(for: .exportTxn),
+                    importDialogIsPresented: confirmationBinding(for: .importSignature),
+                    dialogActions: SendFlowHardwareDialogActions(
+                        exportQr: exportQr,
+                        exportNfc: exportNfc,
+                        shareTransaction: shareTransaction,
+                        scanQr: scanQr,
+                        importFile: importFile,
+                        pasteSignature: importPastedSignature,
+                        scanNfc: scanNfc
+                    ),
                     showDetails: showDetails
                 )
             }
@@ -86,19 +97,6 @@ struct SendFlowHardwareScreen: View {
             .padding(.horizontal)
             .background(Color.background)
             .presentingSheet($sheetState, context: presentationContext)
-            .confirmationDialog(
-                confirmationDialogTitle,
-                isPresented: confirmationDialogIsPresented,
-                actions: {
-                    SendFlowHardwareConfirmationDialog(
-                        confirmationState: confirmationState?.item,
-                        details: details,
-                        sheetState: $sheetState,
-                        isPresentingFilePicker: $isPresentingFilePicker,
-                        importPastedSignature: importPastedSignature
-                    )
-                }
-            )
             .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
@@ -219,23 +217,39 @@ struct SendFlowHardwareScreen: View {
         return (record, parsed)
     }
 
-    // MARK: Confirmation Dialog
-
-    var confirmationDialogIsPresented: Binding<Bool> {
+    private func confirmationBinding(for state: ConfirmationState) -> Binding<Bool> {
         Binding(
-            get: { confirmationState != .none },
+            get: { confirmationState?.item == state },
             set: { presented in
-                if !presented { confirmationState = .none }
+                if !presented, confirmationState?.item == state {
+                    confirmationState = .none
+                }
             }
         )
     }
 
-    var confirmationDialogTitle: Text {
-        switch confirmationState?.item {
-        case .exportTxn: Text("Export Transaction")
-        case .importSignature: Text("Import Signature")
-        case .none: Text("")
-        }
+    private func exportQr() {
+        sheetState = .init(.exportQr)
+    }
+
+    private func exportNfc() {
+        app.nfcWriter.writeToTag(data: details.psbtBytes())
+    }
+
+    private func shareTransaction() {
+        ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
+    }
+
+    private func scanQr() {
+        app.sheetState = .init(.qr)
+    }
+
+    private func importFile() {
+        isPresentingFilePicker = true
+    }
+
+    private func scanNfc() {
+        app.nfcReader.scan()
     }
 }
 
@@ -247,6 +261,9 @@ private struct SendFlowHardwareTransactionContent: View {
     let showInputOutputDetails: () -> Void
     let exportTransaction: () -> Void
     let importSignature: () -> Void
+    let exportDialogIsPresented: Binding<Bool>
+    let importDialogIsPresented: Binding<Bool>
+    let dialogActions: SendFlowHardwareDialogActions
     let showDetails: () -> Void
 
     private var metadata: WalletMetadata {
@@ -281,7 +298,10 @@ private struct SendFlowHardwareTransactionContent: View {
             } else {
                 SendFlowHardwareSignTransactionSection(
                     exportTransaction: exportTransaction,
-                    importSignature: importSignature
+                    importSignature: importSignature,
+                    exportDialogIsPresented: exportDialogIsPresented,
+                    importDialogIsPresented: importDialogIsPresented,
+                    dialogActions: dialogActions
                 )
             }
 
@@ -480,60 +500,6 @@ private struct SendFlowTapSignerTransactionSection: View {
     private func signTransaction() {
         let route = TapSignerRoute.enterPin(tapSigner: tapSigner, action: .sign(psbt))
         app.sheetState = .init(.tapSigner(route))
-    }
-}
-
-private struct SendFlowHardwareConfirmationDialog: View {
-    @Environment(AppManager.self) private var app
-
-    let confirmationState: ConfirmationState?
-    let details: ConfirmDetails
-    @Binding var sheetState: TaggedItem<SendFlowHardwareSheetState>?
-    @Binding var isPresentingFilePicker: Bool
-    let importPastedSignature: () -> Void
-
-    var body: some View {
-        switch confirmationState {
-        case .exportTxn:
-            SendFlowHardwareExportTransactionDialog(
-                exportQr: exportQr,
-                exportNfc: exportNfc,
-                shareTransaction: shareTransaction
-            )
-        case .importSignature:
-            SendFlowHardwareImportTransactionDialog(
-                scanQr: scanQr,
-                importFile: importFile,
-                pasteSignature: importPastedSignature,
-                scanNfc: scanNfc
-            )
-        case .none:
-            EmptyView()
-        }
-    }
-
-    private func exportQr() {
-        sheetState = .init(.exportQr)
-    }
-
-    private func exportNfc() {
-        app.nfcWriter.writeToTag(data: details.psbtBytes())
-    }
-
-    private func shareTransaction() {
-        ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
-    }
-
-    private func scanQr() {
-        app.sheetState = .init(.qr)
-    }
-
-    private func importFile() {
-        isPresentingFilePicker = true
-    }
-
-    private func scanNfc() {
-        app.nfcReader.scan()
     }
 }
 

@@ -41,44 +41,44 @@ struct BackupExportView: View {
         PasswordCopiedAlert(
             message: $passwordCopiedMessage,
             continueExport: continuePendingExportIfReady,
-            content: PasswordSetupOptionsDialog(
-                isPresented: $showPasswordSetupOptions,
-                generate: prepareGeneratedPassword,
-                retrieve: retrieveFromPasswords,
-                enterManually: showManualPasswordEntry,
-                cancel: cancelPendingExport,
-                content: SaveToPasswordsAlert(
-                    isPresented: $showSaveToPasswords,
-                    save: saveToPasswords,
-                    skip: continuePendingExportIfReady,
-                    content: ExportWarningAlert(
-                        message: $warningMessage,
-                        content: ExportFailureAlert(
-                            message: $errorMessage,
-                            content: ExportConfirmationAlert(
-                                isPresented: $showConfirmation,
-                                export: exportBackup,
-                                content: BackupExportForm(
-                                    password: $password,
-                                    isPasswordVisible: $isPasswordVisible,
-                                    isManualPasswordEntryVisible: isManualPasswordEntryVisible,
-                                    isManualPasswordFieldFocused: $isManualPasswordFieldFocused,
-                                    generatedPassword: generatedPassword,
-                                    isPasswordValid: isPasswordValid,
-                                    passwordStatusText: passwordStatusText,
-                                    isExporting: isExporting,
-                                    actions: BackupPasswordActions(
-                                        generate: prepareGeneratedPassword,
-                                        retrieve: retrieveFromPasswords,
-                                        toggleManualEntry: showManualPasswordEntry,
-                                        copy: copyPassword
-                                    ),
-                                    saveToPasswords: saveToPasswords,
-                                    clearGeneratedPassword: clearGeneratedPassword,
-                                    export: handleExportTapped
-                                )
-                                .onDisappear(perform: handleDisappear)
+            content: SaveToPasswordsAlert(
+                isPresented: $showSaveToPasswords,
+                save: saveToPasswords,
+                skip: continuePendingExportIfReady,
+                content: ExportWarningAlert(
+                    message: $warningMessage,
+                    content: ExportFailureAlert(
+                        message: $errorMessage,
+                        content: ExportConfirmationAlert(
+                            isPresented: $showConfirmation,
+                            export: exportBackup,
+                            content: BackupExportForm(
+                                password: $password,
+                                isPasswordVisible: $isPasswordVisible,
+                                isManualPasswordEntryVisible: isManualPasswordEntryVisible,
+                                isManualPasswordFieldFocused: $isManualPasswordFieldFocused,
+                                generatedPassword: generatedPassword,
+                                isPasswordValid: isPasswordValid,
+                                passwordStatusText: passwordStatusText,
+                                isExporting: isExporting,
+                                actions: BackupPasswordActions(
+                                    generate: prepareGeneratedPassword,
+                                    retrieve: retrieveFromPasswords,
+                                    toggleManualEntry: showManualPasswordEntry,
+                                    copy: copyPassword
+                                ),
+                                passwordSetupOptions: BackupPasswordSetupOptions(
+                                    isPresented: $showPasswordSetupOptions,
+                                    generate: prepareGeneratedPassword,
+                                    retrieve: retrieveFromPasswords,
+                                    enterManually: showManualPasswordEntry,
+                                    cancel: cancelPendingExport
+                                ),
+                                saveToPasswords: saveToPasswords,
+                                clearGeneratedPassword: clearGeneratedPassword,
+                                export: handleExportTapped
                             )
+                            .onDisappear(perform: handleDisappear)
                         )
                     )
                 )
@@ -278,6 +278,7 @@ private struct BackupExportForm: View {
     let passwordStatusText: String
     let isExporting: Bool
     let actions: BackupPasswordActions
+    let passwordSetupOptions: BackupPasswordSetupOptions
     let saveToPasswords: () -> Void
     let clearGeneratedPassword: () -> Void
     let export: () -> Void
@@ -307,6 +308,7 @@ private struct BackupExportForm: View {
 
             BackupExportActionSection(
                 isExporting: isExporting,
+                passwordSetupOptions: passwordSetupOptions,
                 export: export
             )
         }
@@ -526,6 +528,7 @@ private struct BackupSecurityWarningSection: View {
 
 private struct BackupExportActionSection: View {
     let isExporting: Bool
+    let passwordSetupOptions: BackupPasswordSetupOptions
     let export: () -> Void
 
     var body: some View {
@@ -547,6 +550,18 @@ private struct BackupExportActionSection: View {
                 }
             }
             .disabled(isExporting)
+            .confirmationDialog(
+                "Choose Backup Password",
+                isPresented: passwordSetupOptions.isPresented,
+                titleVisibility: .visible
+            ) {
+                Button("Generate 12-Word Password", action: passwordSetupOptions.generate)
+                Button("Retrieve from Password Manager", action: passwordSetupOptions.retrieve)
+                Button("Enter Password Manually", action: passwordSetupOptions.enterManually)
+                Button("Cancel", role: .cancel, action: passwordSetupOptions.cancel)
+            } message: {
+                Text("Choose how you want to provide the backup password before exporting.")
+            }
         }
     }
 }
@@ -632,29 +647,12 @@ private struct SaveToPasswordsAlert<Content: View>: View {
     }
 }
 
-private struct PasswordSetupOptionsDialog<Content: View>: View {
-    @Binding var isPresented: Bool
-
+private struct BackupPasswordSetupOptions {
+    let isPresented: Binding<Bool>
     let generate: () -> Void
     let retrieve: () -> Void
     let enterManually: () -> Void
     let cancel: () -> Void
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Choose Backup Password",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Generate 12-Word Password", action: generate)
-            Button("Retrieve from Password Manager", action: retrieve)
-            Button("Enter Password Manually", action: enterManually)
-            Button("Cancel", role: .cancel, action: cancel)
-        } message: {
-            Text("Choose how you want to provide the backup password before exporting.")
-        }
-    }
 }
 
 private struct PasswordCopiedAlert<Content: View>: View {

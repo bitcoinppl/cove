@@ -1,12 +1,16 @@
 import SwiftUI
 
+private enum CloudBackupDestructiveConfirmation: Equatable {
+    case recreate
+    case reinitialize
+}
+
 struct CloudBackupDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CloudBackupPresentationCoordinator.self)
     private var cloudBackupPresentationCoordinator
     @State private var manager = CloudBackupManager.shared
-    @State private var showRecreateConfirmation = false
-    @State private var showReinitializeConfirmation = false
+    @State private var destructiveConfirmation: CloudBackupDestructiveConfirmation?
 
     private var isVerifying: Bool {
         if case .running = manager.verificationState { return true }
@@ -40,40 +44,49 @@ struct CloudBackupDetailScreen: View {
     }
 
     private var hasCloudBackupPresentationBlocker: Bool {
-        showRecreateConfirmation || showReinitializeConfirmation
+        destructiveConfirmation != nil
     }
 
     var body: some View {
-        CloudBackupReinitializeDialog(
+        CloudBackupDetailForm(
             manager: manager,
-            isPresented: $showReinitializeConfirmation,
-            content: CloudBackupRecreateDialog(
-                manager: manager,
-                isPresented: $showRecreateConfirmation,
-                content: CloudBackupDetailForm(
-                    manager: manager,
-                    isVerifying: isVerifying,
-                    hasVerificationResult: hasVerificationResult,
-                    isCancelled: isCancelled,
-                    isPasskeyMissing: isPasskeyMissing,
-                    isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
-                    shouldShowLoadingState: shouldShowLoadingState,
-                    onRecreate: showRecreateDialog,
-                    onReinitialize: showReinitializeDialog
-                )
-                .navigationTitle("Cloud Backup")
-                .navigationBarTitleDisplayMode(.inline)
-                .task(enterDetail)
-                .onDisappear(perform: closeDetail)
-                .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
-                    cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
+            isVerifying: isVerifying,
+            hasVerificationResult: hasVerificationResult,
+            isCancelled: isCancelled,
+            isPasskeyMissing: isPasskeyMissing,
+            isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
+            shouldShowLoadingState: shouldShowLoadingState,
+            recreateConfirmationIsPresented: confirmationBinding(for: .recreate),
+            reinitializeConfirmationIsPresented: confirmationBinding(for: .reinitialize)
+        )
+        .navigationTitle("Cloud Backup")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(enterDetail)
+        .onDisappear(perform: closeDetail)
+        .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
+            cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
+        }
+        .onChange(of: manager.isLifecycleDisabled) { _, isDisabled in
+            if isDisabled {
+                dismiss()
+            }
+        }
+    }
+
+    private func confirmationBinding(
+        for confirmation: CloudBackupDestructiveConfirmation
+    ) -> Binding<Bool> {
+        Binding(
+            get: { destructiveConfirmation == confirmation },
+            set: { presented in
+                if presented {
+                    guard manager.isDetailInventoryComplete else { return }
+
+                    destructiveConfirmation = confirmation
+                } else if destructiveConfirmation == confirmation {
+                    destructiveConfirmation = nil
                 }
-                .onChange(of: manager.isLifecycleDisabled) { _, isDisabled in
-                    if isDisabled {
-                        dismiss()
-                    }
-                }
-            )
+            }
         )
     }
 
@@ -85,18 +98,6 @@ struct CloudBackupDetailScreen: View {
         manager.dispatch(action: .closeDetail)
         cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
     }
-
-    private func showRecreateDialog() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        showRecreateConfirmation = true
-    }
-
-    private func showReinitializeDialog() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        showReinitializeConfirmation = true
-    }
 }
 
 private struct CloudBackupDetailForm: View {
@@ -107,8 +108,8 @@ private struct CloudBackupDetailForm: View {
     let isPasskeyMissing: Bool
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
-    let onRecreate: () -> Void
-    let onReinitialize: () -> Void
+    let recreateConfirmationIsPresented: Binding<Bool>
+    let reinitializeConfirmationIsPresented: Binding<Bool>
 
     var body: some View {
         Form {
@@ -120,62 +121,8 @@ private struct CloudBackupDetailForm: View {
                 isPasskeyMissing: isPasskeyMissing,
                 isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                 shouldShowLoadingState: shouldShowLoadingState,
-                onRecreate: onRecreate,
-                onReinitialize: onReinitialize
-            )
-        }
-    }
-}
-
-private struct CloudBackupRecreateDialog<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Recreate Backup Index",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Recreate", role: .destructive) {
-                guard manager.isDetailInventoryComplete else { return }
-
-                manager.dispatch(action: .recreateManifest)
-            }
-            .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will rebuild the backup index from wallets on this device. Wallets that only exist in the cloud backup will no longer be referenced."
-            )
-        }
-    }
-}
-
-private struct CloudBackupReinitializeDialog<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Reinitialize Cloud Backup",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Reinitialize", role: .destructive) {
-                guard manager.isDetailInventoryComplete else { return }
-
-                manager.dispatch(action: .reinitializeBackup)
-            }
-            .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost."
+                recreateConfirmationIsPresented: recreateConfirmationIsPresented,
+                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
         }
     }
@@ -189,8 +136,8 @@ struct CloudBackupDetailFormContent: View {
     let isPasskeyMissing: Bool
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
-    let onRecreate: () -> Void
-    let onReinitialize: () -> Void
+    let recreateConfirmationIsPresented: Binding<Bool>
+    let reinitializeConfirmationIsPresented: Binding<Bool>
 
     var body: some View {
         if isUnsupportedPasskeyProvider {
@@ -213,8 +160,8 @@ struct CloudBackupDetailFormContent: View {
             )
             VerificationSection(
                 manager: manager,
-                onRecreate: onRecreate,
-                onReinitialize: onReinitialize
+                recreateConfirmationIsPresented: recreateConfirmationIsPresented,
+                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
             if manager.detail != nil, manager.isDetailInventoryComplete {
                 DisableCloudBackupSection(manager: manager, detail: manager.detail)
