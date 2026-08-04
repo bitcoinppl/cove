@@ -23,6 +23,7 @@
 		C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */; };
 		C0B0001C2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */; };
 		C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */; };
+		C0B000202F30000000000001 /* QrExportLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000212F30000000000001 /* QrExportLayoutTests.swift */; };
 		C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */; };
 		C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */; };
 		C0D000012F10000000000001 /* WalletTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D000022F10000000000001 /* WalletTransitionTests.swift */; };
@@ -87,6 +88,7 @@
 		C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateScreenLayoutTests.swift; sourceTree = "<group>"; };
 		C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftLogStoreTests.swift; sourceTree = "<group>"; };
+		C0B000212F30000000000001 /* QrExportLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrExportLayoutTests.swift; sourceTree = "<group>"; };
 		C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupIOSSafetyHelpersTests.swift; sourceTree = "<group>"; };
 		C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyProviderImplTests.swift; sourceTree = "<group>"; };
 		C0D000022F10000000000001 /* WalletTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransitionTests.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 				C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */,
 				C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */,
 				C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */,
+				C0B000212F30000000000001 /* QrExportLayoutTests.swift */,
 				C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */,
 				C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
@@ -453,6 +456,7 @@
 				C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */,
 				C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */,
 				C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */,
+				C0B000202F30000000000001 /* QrExportLayoutTests.swift in Sources */,
 				C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */,
 				C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
