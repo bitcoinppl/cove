@@ -578,6 +578,13 @@ impl PayjoinActor {
 
         self.poll_deadline = Some(Instant::now() + PAYJOIN_SESSION_TIMEOUT);
         self.session = PayjoinSession::Polling { polling_sender };
+
+        let deadline_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() + PAYJOIN_SESSION_TIMEOUT.as_secs())
+            .unwrap_or(0);
+        send!(self.wallet_addr.notify_payjoin_polling_started(deadline_secs));
+
         self.begin_next_poll();
         Produces::ok(())
     }

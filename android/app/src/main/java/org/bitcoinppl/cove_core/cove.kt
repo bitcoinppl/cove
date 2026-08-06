@@ -1673,6 +1673,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_cancel_payjoin(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_current_block_height(
@@ -2912,6 +2914,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_balance_presentation_for_state(`ptr`: Long,`ledgerState`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_cancel_payjoin(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,`prices`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4805,6 +4809,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_cancel_payjoin() != 3646.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string() != 26279.toShort()) {
@@ -23576,6 +23583,8 @@ public interface RustWalletManagerInterface {
 
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
 
+    suspend fun `cancelPayjoin`()
+
     fun `convertFromFiatString`(`fiatAmount`: kotlin.String, `prices`: PriceResponse): Amount
 
     suspend fun `currentBlockHeight`(): kotlin.UInt
@@ -23988,6 +23997,28 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
                 uniffiHandle,
 
         FfiConverterTypeBitcoinTransaction.lower(`signedTransaction`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `cancelPayjoin`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_cancel_payjoin(
+                uniffiHandle,
+
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -61373,6 +61404,15 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     object PayjoinTxBroadcast : WalletManagerReconcileMessage()
 
 
+    data class PayjoinPollingStarted(
+        val `deadlineSecs`: kotlin.ULong) : WalletManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -61522,6 +61562,13 @@ sealed class WalletManagerReconcileMessage: Disposable  {
             }
             is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {// Nothing to destroy
             }
+            is WalletManagerReconcileMessage.PayjoinPollingStarted -> {
+
+    Disposable.destroy(
+        this.`deadlineSecs`
+    )
+
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
@@ -61601,6 +61648,9 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 FfiConverterULong.read(buf),
                 )
             22 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
+            23 -> WalletManagerReconcileMessage.PayjoinPollingStarted(
+                FfiConverterULong.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -61758,6 +61808,13 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 4UL
             )
         }
+        is WalletManagerReconcileMessage.PayjoinPollingStarted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`deadlineSecs`)
+            )
+        }
     }
 
     override fun write(value: WalletManagerReconcileMessage, buf: ByteBuffer) {
@@ -61868,6 +61925,11 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             }
             is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
                 buf.putInt(22)
+                Unit
+            }
+            is WalletManagerReconcileMessage.PayjoinPollingStarted -> {
+                buf.putInt(23)
+                FfiConverterULong.write(value.`deadlineSecs`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
