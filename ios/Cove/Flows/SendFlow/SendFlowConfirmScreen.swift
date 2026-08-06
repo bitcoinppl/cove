@@ -77,7 +77,14 @@ struct SendFlowConfirmScreen: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
+            .overlay(alignment: .bottom) {
+                if case let .payjoinWaiting(deadline) = sendState {
+                    PayjoinWaitingBanner(deadlineSecs: deadline, onCancel: cancelPayjoin)
+                        .padding(.bottom, sendConfirmationFooterHeight + 16)
+                }
+            }
             .onDisappear(perform: handleDisappear)
+            .onChange(of: manager.payjoinDeadlineSecs, payjoinPollingStarted)
             .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
             .presentingAlert(
@@ -101,21 +108,38 @@ struct SendFlowConfirmScreen: View {
         if sinceLocked < 5 { auth.lockState = .unlocked }
     }
 
+    private func payjoinPollingStarted(_: UInt64?, _ deadline: UInt64?) {
+        guard let deadline, case .sending = sendState else { return }
+        sendState = .payjoinWaiting(deadlineSecs: deadline)
+    }
+
     private func payjoinBroadcastChanged(_: UUID?, _ uuid: UUID?) {
-        // UUID changes each time so this fires reliably across multiple sends
-        guard uuid != nil, case .sending = sendState else { return }
+        guard uuid != nil else { return }
+        switch sendState {
+        case .sending, .payjoinWaiting: break
+        default: return
+        }
 
         sendState = .sent
         presenter.confirmationAlertState = .init(.sent(id))
         auth.unlock()
     }
 
+    private func cancelPayjoin() {
+        Task {
+            try? await manager.rust.cancelPayjoin()
+        }
+    }
+
     private func sendFlowErrorChanged(
         _: TaggedItem<SendFlowErrorAlert>?,
         _ alert: TaggedItem<SendFlowErrorAlert>?
     ) {
-        // payjoin broadcast failure arrives via reconcile, so unblock the sending UI here
-        guard let alert, case .sending = sendState else { return }
+        switch sendState {
+        case .sending, .payjoinWaiting: break
+        default: return
+        }
+        guard let alert else { return }
 
         let errorMessage =
             switch alert.item {
@@ -556,5 +580,38 @@ private enum SendConfirmationError: LocalizedError {
                 manager: WalletManager(preview: "preview_only")
             )
         )
+    }
+}
+
+private struct PayjoinWaitingBanner: View {
+    let deadlineSecs: UInt64
+    let onCancel: () -> Void
+
+    @State private var remainingSecs: Int = 0
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Waiting for receiver")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Text("\(remainingSecs / 60):\(String(format: "%02d", remainingSecs % 60)) remaining")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Cancel and send normally", action: onCancel)
+                .font(.subheadline)
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
+        .task {
+            while !Task.isCancelled {
+                let now = UInt64(Date().timeIntervalSince1970)
+                remainingSecs = max(0, Int(deadlineSecs) - Int(now))
+                if remainingSecs <= 0 { break }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 }

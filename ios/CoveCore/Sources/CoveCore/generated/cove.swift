@@ -10140,6 +10140,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     func broadcastTransaction(signedTransaction: BitcoinTransaction) async throws
 
+    func cancelPayjoin() async throws
+
     func convertFromFiatString(fiatAmount: String, prices: PriceResponse)  -> Amount
 
     func currentBlockHeight() async throws  -> UInt32
@@ -10522,6 +10524,23 @@ open func broadcastTransaction(signedTransaction: BitcoinTransaction)async throw
                 uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(
                     self.uniffiCloneHandle(),
                     FfiConverterTypeBitcoinTransaction_lower(signedTransaction)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+
+open func cancelPayjoin()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_cancel_payjoin(
+                    self.uniffiCloneHandle()
+
                 )
             },
             pollFunc: ffi_cove_rust_future_poll_void,
@@ -39202,6 +39221,8 @@ public enum WalletManagerReconcileMessage {
     case receiveAddressClosed(UInt64
     )
     case payjoinTxBroadcast
+    case payjoinPollingStarted(deadlineSecs: UInt64
+    )
 
 
 
@@ -39286,6 +39307,9 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         )
 
         case 22: return .payjoinTxBroadcast
+
+        case 23: return .payjoinPollingStarted(deadlineSecs: try FfiConverterUInt64.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -39401,6 +39425,11 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
 
         case .payjoinTxBroadcast:
             writeInt(&buf, Int32(22))
+
+
+        case let .payjoinPollingStarted(deadlineSecs):
+            writeInt(&buf, Int32(23))
+            FfiConverterUInt64.write(deadlineSecs, into: &buf)
 
         }
     }
@@ -45322,6 +45351,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_cancel_payjoin() != 3646) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string() != 26279) {
