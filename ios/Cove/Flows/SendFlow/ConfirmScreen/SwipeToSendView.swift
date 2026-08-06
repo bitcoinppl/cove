@@ -13,6 +13,7 @@ private let swipeToSendMinimumTrailingTextPadding: CGFloat = 16
 enum SendState: Hashable, Equatable {
     case idle
     case sending
+    case payjoinWaiting(deadlineSecs: UInt64)
     case sent
     case error(String)
 }
@@ -207,7 +208,7 @@ private struct SwipeToSendStatus: View {
             switch sendState {
             case .idle:
                 EmptyView()
-            case .sending:
+            case .sending, .payjoinWaiting:
                 SwipeToSendSendingStatus()
             case .sent:
                 SwipeToSendSentStatus()

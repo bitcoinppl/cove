@@ -470,7 +470,21 @@ impl WalletActor {
     }
 
     pub async fn notify_payjoin_error(&mut self, msg: String) -> ActorResult<()> {
-        self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(msg)));
+        self.send(WalletManagerReconcileMessage::SendFlowError(
+            SendFlowErrorAlert::SignAndBroadcast(msg),
+        ));
+        Produces::ok(())
+    }
+
+    pub async fn cancel_payjoin(&mut self) -> ActorResult<Result<(), Error>> {
+        if let Some(actor) = self.payjoin_actor.take() {
+            send!(actor.cancel_and_fallback());
+        }
+        Produces::ok(Ok(()))
+    }
+
+    pub async fn notify_payjoin_polling_started(&mut self, deadline_secs: u64) -> ActorResult<()> {
+        self.send(WalletManagerReconcileMessage::PayjoinPollingStarted { deadline_secs });
         Produces::ok(())
     }
 

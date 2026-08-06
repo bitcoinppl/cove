@@ -174,6 +174,9 @@ enum WalletManagerPreview {
     /// UUID changes each time so onChange always fires even across multiple sends
     var payjoinTxBroadcast: UUID? = nil
 
+    /// epoch seconds when the payjoin session will expire, set when polling starts
+    var payjoinDeadlineSecs: UInt64? = nil
+
     /// cached transaction detail presentations
     var transactionDetailsPresentations: [TxId: TransactionDetailsPresentation] = [:]
     var transactionLockStates: [TxId: TransactionLockState] = [:]
@@ -700,7 +703,8 @@ enum WalletManagerPreview {
             applyTransactionMessage(message)
         case .walletBalanceChanged, .unsignedTransactionsChanged, .walletMetadataChanged,
              .walletScannerResponse, .nodeConnectionFailed, .walletError, .unknownError,
-             .sendFlowError, .hotWalletKeyMissing, .payjoinTxBroadcast:
+             .sendFlowError, .hotWalletKeyMissing, .payjoinTxBroadcast,
+             .payjoinPollingStarted:
             applyWalletStateMessage(message)
         case .receiveAddressUpdated, .receiveAddressPresentationUpdated,
              .receiveAddressLoadingChanged, .receiveAddressError, .receiveAddressClosed:
@@ -903,6 +907,7 @@ extension WalletManager {
 
         case let .walletError(error):
             logger.error("WalletError \(error)")
+            payjoinDeadlineSecs = nil
 
         case let .unknownError(error):
             // TODO: show to user
@@ -910,12 +915,17 @@ extension WalletManager {
 
         case let .sendFlowError(error):
             sendFlowErrorAlert = TaggedItem(error)
+            payjoinDeadlineSecs = nil
 
         case let .hotWalletKeyMissing(walletId):
             delegate?.showWalletAlert(.hotWalletKeyMissing(walletId: walletId))
 
         case .payjoinTxBroadcast:
             payjoinTxBroadcast = UUID()
+            payjoinDeadlineSecs = nil
+
+        case let .payjoinPollingStarted(deadlineSecs):
+            payjoinDeadlineSecs = deadlineSecs
 
         default:
             preconditionFailure("Expected a wallet state reconcile message")

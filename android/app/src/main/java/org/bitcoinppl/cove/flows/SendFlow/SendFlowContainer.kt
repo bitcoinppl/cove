@@ -43,6 +43,10 @@ sealed interface SendState {
 
     data object Sending : SendState
 
+    data class PayjoinWaiting(
+        val deadlineSecs: ULong,
+    ) : SendState
+
     data object Sent : SendState
 
     data class Error(
@@ -468,10 +472,21 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // restore or transition to waiting UI from manager-owned deadline;
+            // survives Compose recreation on config changes like rotation
+            LaunchedEffect(walletManager.payjoinDeadlineSecs) {
+                val deadline = walletManager.payjoinDeadlineSecs
+                if (deadline != null) {
+                    sendState = SendState.PayjoinWaiting(deadline)
+                }
+            }
+
             // show success UI on payjoin broadcast; TaggedItem key changes each time so
             // no manual reset is needed even if the user sends multiple payjoin transactions
             LaunchedEffect(walletManager.payjoinTxBroadcast) {
-                if (walletManager.payjoinTxBroadcast != null && sendState == SendState.Sending) {
+                val isWaiting =
+                    sendState == SendState.Sending || sendState is SendState.PayjoinWaiting
+                if (walletManager.payjoinTxBroadcast != null && isWaiting) {
                     sendState = SendState.Sent
                     showSuccessAlert = true
                     Auth.unlock()
@@ -481,7 +496,9 @@ private fun SendFlowRouteToScreen(
             // payjoin broadcast failure arrives via sendFlowErrorAlert reconcile (not the
             // catch block), so unblock the UI from Sending and show the error alert
             LaunchedEffect(walletManager.sendFlowErrorAlert) {
-                if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
+                val isWaiting =
+                    sendState == SendState.Sending || sendState is SendState.PayjoinWaiting
+                if (walletManager.sendFlowErrorAlert != null && isWaiting) {
                     val message =
                         when (val alert = walletManager.sendFlowErrorAlert!!.item) {
                             is SendFlowErrorAlert.SignAndBroadcast -> alert.v1
@@ -585,6 +602,12 @@ private fun SendFlowRouteToScreen(
                             sendState = SendState.Error(e.message ?: "Unknown error")
                             showErrorAlert = true
                         }
+                    }
+                },
+                onCancelPayjoin = {
+                    sendState = SendState.Sending
+                    scope.launch {
+                        walletManager.cancelPayjoin()
                     }
                 },
             )
