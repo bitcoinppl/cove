@@ -86,6 +86,7 @@ fun SendFlowConfirmScreen(
     sendState: SendState,
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
+    onCancelPayjoin: () -> Unit = {},
 ) {
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
@@ -195,6 +196,13 @@ fun SendFlowConfirmScreen(
                         }
 
                         Column {
+                            if (sendState is SendState.PayjoinWaiting) {
+                                PayjoinWaitingBanner(
+                                    deadlineSecs = sendState.deadlineSecs,
+                                    onCancel = onCancelPayjoin,
+                                )
+                            }
+
                             SwipeToSendStub(
                                 text = stringResource(R.string.action_swipe_to_send),
                                 sendState = sendState,
@@ -597,7 +605,9 @@ private fun SwipeToSendStub(
         // state overlay - matches iOS SwipeToSendView
         when (sendState) {
             is SendState.Idle -> Unit // handled above
-            is SendState.Sending -> {
+            is SendState.Sending,
+            is SendState.PayjoinWaiting,
+            -> {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -706,6 +716,57 @@ private fun ThreeDotsAnimation() {
                         }
                         .background(Color.White, CircleShape),
             )
+        }
+    }
+}
+
+@Composable
+private fun PayjoinWaitingBanner(
+    deadlineSecs: ULong,
+    onCancel: () -> Unit,
+) {
+    var remainingSecs by remember { mutableIntStateOf(0) }
+
+    @Suppress("MagicNumber")
+    LaunchedEffect(deadlineSecs) {
+        val msPerSec = 1000L
+        while (true) {
+            val now = System.currentTimeMillis() / msPerSec
+            val remaining = (deadlineSecs.toLong() - now).coerceAtLeast(0)
+            remainingSecs = remaining.toInt()
+            if (remaining <= 0) break
+            kotlinx.coroutines.delay(msPerSec)
+        }
+    }
+
+    val minutes = remainingSecs / 60
+    val seconds = remainingSecs % 60
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(24.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = "Waiting for receiver",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = String.format(java.util.Locale.US, "%d:%02d remaining", minutes, seconds),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onCancel) {
+            Text("Cancel and send normally")
         }
     }
 }

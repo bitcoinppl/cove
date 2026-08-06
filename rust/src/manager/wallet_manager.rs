@@ -97,6 +97,7 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressClosed(u64),
 
     PayjoinTxBroadcast,
+    PayjoinPollingStarted { deadline_secs: u64 },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -749,6 +750,13 @@ impl RustWalletManager {
 
         self.force_wallet_scan().await;
 
+        Ok(())
+    }
+
+    #[uniffi::method]
+    pub async fn cancel_payjoin(&self) -> Result<(), Error> {
+        call!(self.actor.cancel_payjoin()).await.unwrap()?;
+        self.force_wallet_scan().await;
         Ok(())
     }
 
