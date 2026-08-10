@@ -301,9 +301,11 @@ uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
 bdk_wallet = { workspace = true, features = ["test-utils"] }
+ciborium = "0.2.2"
 tempfile = "3.27.0"
 pretty_assertions = "1.4.1"
 minicbor = { workspace = true }
+serde_bytes = "0.11.17"
 
 tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
