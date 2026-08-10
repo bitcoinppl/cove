@@ -7,7 +7,8 @@ use parking_lot::{Mutex as SyncMutex, RwLock};
 use rust_cktap::{
     CkTapCard,
     apdu::DeriveResponse,
-    commands::{Authentication, CkTransport as _, Wait as _},
+    commands::{Authentication, Certificate as _, CkTransport as _, Wait as _},
+    factory_root_key::FactoryRootKey,
     tap_signer::TapSignerError,
 };
 
@@ -68,7 +69,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, uniffi::Object)]
 pub struct TapSignerReader {
     id: String,
-    reader: Mutex<rust_cktap::TapSigner<TapcardTransport>>,
+    reader: Mutex<VerifiedTapSigner>,
     cmd: RwLock<Option<TapSignerCmd>>,
     transport: TapcardTransport,
 
@@ -76,6 +77,34 @@ pub struct TapSignerReader {
     last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
 
     network: Network,
+}
+
+#[derive(Debug, derive_more::Deref, derive_more::DerefMut)]
+struct VerifiedTapSigner(rust_cktap::TapSigner<TapcardTransport>);
+
+impl VerifiedTapSigner {
+    async fn connect(transport: TapcardTransport) -> Result<Self> {
+        let card = transport.clone().to_cktap().await.map_err(TransportError::from)?;
+        let mut card = match card {
+            CkTapCard::TapSigner(card) => Ok(card),
+            CkTapCard::SatsCard(_) => {
+                Err(TapSignerReaderError::UnknownCardType("SatsCard".to_string()))
+            }
+            CkTapCard::SatsChip(_) => {
+                Err(TapSignerReaderError::UnknownCardType("SatsChip".to_string()))
+            }
+        }?;
+
+        let root = card.check_certificate().await.map_err(TransportError::from)?;
+        if matches!(root, FactoryRootKey::Dev(_)) {
+            return Err(TransportError::IncorrectSignature(
+                "TAPSIGNER uses a development factory certificate".to_string(),
+            )
+            .into());
+        }
+
+        Ok(Self(card))
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -155,19 +184,9 @@ impl TapSignerReader {
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
         let transport = TapcardTransport(Arc::new(transport));
-        let card = transport.clone().to_cktap().await.map_err(TransportError::from)?;
+        let card = VerifiedTapSigner::connect(transport.clone()).await?;
 
         debug!("tap_card_from_status: {:?}", card);
-
-        let card = match card {
-            CkTapCard::TapSigner(card) => Ok(card),
-            CkTapCard::SatsCard(_) => {
-                Err(TapSignerReaderError::UnknownCardType("SatsCard".to_string()))
-            }
-            CkTapCard::SatsChip(_) => {
-                Err(TapSignerReaderError::UnknownCardType("SatsChip".to_string()))
-            }
-        }?;
 
         let id: Nanoid = Nanoid::new();
         let network = Database::global().global_config.selected_network();
@@ -561,6 +580,144 @@ impl TapSignerReaderError {
 
     pub const fn is_no_backup_error(&self) -> bool {
         matches!(self, Self::TapSignerError(TransportError::CkTap(CkTapError::BackupFirst)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use bitcoin::secp256k1::{
+        Message, PublicKey, Secp256k1, SecretKey,
+        hashes::{Hash as _, sha256},
+    };
+    use serde::{Deserialize, Serialize};
+
+    use super::*;
+
+    const CARD_NONCE: [u8; 16] = [7; 16];
+    const NEXT_CARD_NONCE: [u8; 16] = [9; 16];
+
+    #[derive(Debug)]
+    struct CounterfeitTransport {
+        calls: Arc<AtomicUsize>,
+        card_secret: SecretKey,
+    }
+
+    #[derive(Serialize)]
+    struct StatusResponse {
+        proto: u8,
+        ver: &'static str,
+        birth: u32,
+        tapsigner: bool,
+        #[serde(with = "serde_bytes")]
+        pubkey: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        card_nonce: [u8; 16],
+    }
+
+    #[derive(Serialize)]
+    struct CertsResponse {
+        cert_chain: Vec<Vec<u8>>,
+    }
+
+    #[derive(Deserialize)]
+    struct CheckCommand {
+        cmd: String,
+        #[serde(with = "serde_bytes")]
+        nonce: Vec<u8>,
+    }
+
+    #[derive(Serialize)]
+    struct CheckResponse {
+        #[serde(with = "serde_bytes")]
+        auth_sig: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        card_nonce: [u8; 16],
+    }
+
+    impl CounterfeitTransport {
+        fn new(calls: Arc<AtomicUsize>) -> Self {
+            let card_secret = SecretKey::from_slice(&[3; 32]).expect("valid card secret");
+            Self { calls, card_secret }
+        }
+
+        fn status_response(&self) -> Vec<u8> {
+            let secp = Secp256k1::new();
+            let pubkey = PublicKey::from_secret_key(&secp, &self.card_secret).serialize().to_vec();
+
+            encode_response(&StatusResponse {
+                proto: 1,
+                ver: "1.0.0",
+                birth: 700_000,
+                tapsigner: true,
+                pubkey,
+                card_nonce: CARD_NONCE,
+            })
+        }
+
+        fn check_response(&self, command_apdu: &[u8]) -> Vec<u8> {
+            let command: CheckCommand =
+                ciborium::de::from_reader(&command_apdu[5..]).expect("valid check command");
+            assert_eq!(command.cmd, "check");
+
+            let app_nonce: [u8; 16] = command.nonce.try_into().expect("16-byte app nonce");
+            let message_bytes = [b"OPENDIME".as_slice(), &CARD_NONCE, &app_nonce].concat();
+            let message = Message::from_digest(sha256::Hash::hash(&message_bytes).to_byte_array());
+            let signature =
+                Secp256k1::new().sign_ecdsa(&message, &self.card_secret).serialize_compact();
+
+            encode_response(&CheckResponse {
+                auth_sig: signature.to_vec(),
+                card_nonce: NEXT_CARD_NONCE,
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl TapcardTransportProtocol for CounterfeitTransport {
+        fn set_message(&self, _message: String) {}
+
+        fn append_message(&self, _message: String) {}
+
+        async fn transmit_apdu(
+            &self,
+            command_apdu: Vec<u8>,
+        ) -> std::result::Result<Vec<u8>, TransportError> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            let response = match call {
+                0 => self.status_response(),
+                1 => encode_response(&CertsResponse { cert_chain: Vec::new() }),
+                2 => self.check_response(&command_apdu),
+                _ => panic!("authenticated command sent to counterfeit card"),
+            };
+
+            Ok(response)
+        }
+    }
+
+    fn encode_response(response: &impl Serialize) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        ciborium::ser::into_writer(response, &mut bytes).expect("response encodes");
+        bytes
+    }
+
+    #[tokio::test]
+    async fn rejects_counterfeit_before_authenticated_command() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let transport = CounterfeitTransport::new(Arc::clone(&calls));
+        let command = TapSignerCmd::Backup { pin: "123456".to_string() };
+
+        let error = TapSignerReader::new(Box::new(transport), Some(command))
+            .await
+            .expect_err("counterfeit card must be rejected");
+
+        assert!(matches!(
+            error,
+            TapSignerReaderError::TapSignerError(TransportError::IncorrectSignature(message))
+                if message.contains("counterfeit")
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
 }
 
