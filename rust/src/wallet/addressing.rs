@@ -36,9 +36,8 @@ impl Wallet {
 
         if is_persistent {
             // delete the bdk wallet filestore
-            BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
-                WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
-            })?;
+            BdkStore::delete_sqlite_store(&self.id)
+                .map_err_prefix("failed to delete wallet filestore", WalletError::PersistError)?;
         }
 
         let store = if is_persistent {
@@ -78,9 +77,8 @@ impl Wallet {
 
         if self.uses_persistent_storage() {
             // delete the bdk wallet filestore
-            BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
-                WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
-            })?;
+            BdkStore::delete_sqlite_store(&self.id)
+                .map_err_prefix("failed to delete wallet filestore", WalletError::PersistError)?;
         }
 
         let secret = Keychain::global()
