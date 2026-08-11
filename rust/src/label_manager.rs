@@ -262,7 +262,7 @@ impl LabelManager {
 }
 
 impl LabelManager {
-    pub(crate) fn try_new_with_db(db: WalletDataDb) -> Self {
+    pub(crate) fn new_with_db(db: WalletDataDb) -> Self {
         Self { db }
     }
 

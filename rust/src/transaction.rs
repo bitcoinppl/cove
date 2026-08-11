@@ -11,10 +11,7 @@ use bdk_wallet::chain::{
 use bip329::Labels;
 
 use crate::{
-    database::{
-        Database,
-        wallet_data::{WalletDataDb, label::LabelsTable},
-    },
+    database::{Database, wallet_data::WalletDataDb},
     fiat::FiatAmount,
     wallet::metadata::WalletId,
 };
@@ -79,16 +76,14 @@ impl Transaction {
             .and_then(|db| db.labels.all_labels_for_txn(tx.tx_node.txid).ok())
             .unwrap_or_default();
 
-        Self::new_with_label_values(sent_and_received, tx, labels.into())
+        Self::new_with_labels(sent_and_received, tx, labels.into())
     }
 
     pub(crate) fn new_with_labels(
         sent_and_received: SentAndReceived,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
-        labels_table: &LabelsTable,
+        labels: Labels,
     ) -> Self {
-        let labels = labels_table.all_labels_for_txn(tx.tx_node.txid).unwrap_or_default().into();
-
         Self::new_with_label_values(sent_and_received, tx, labels)
     }
 

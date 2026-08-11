@@ -654,7 +654,7 @@ impl RustWalletManager {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
-        fees.fee_rate_options().map_err(|error| Error::FeesError(error.to_string()))
+        fees.fee_rate_options().map_err_str(Error::FeesError)
     }
 
     #[uniffi::method]
@@ -982,7 +982,7 @@ impl RustWalletManager {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
-        fees.fee_rate_options().map_err(|error| Error::FeesError(error.to_string()))
+        fees.fee_rate_options().map_err_str(Error::FeesError)
     }
 
     #[uniffi::method]
@@ -1295,7 +1295,7 @@ impl RustWalletManager {
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         let wallet_data_db = WalletDataDb::new_in_memory(wallet.metadata.id.clone())
             .expect("failed to open in-memory wallet data database for preview wallet");
-        let label_manager = LabelManager::try_new_with_db(wallet_data_db.clone()).into();
+        let label_manager = LabelManager::new_with_db(wallet_data_db.clone()).into();
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
@@ -1305,8 +1305,7 @@ impl RustWalletManager {
             scan_status.clone(),
             wallet_snapshot.clone(),
             wallet_data_db,
-        )
-        .expect("failed to open in-memory wallet data database for preview wallet");
+        );
         let actor = task::spawn_actor(wallet_actor);
 
         Self {

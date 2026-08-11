@@ -28,7 +28,7 @@ use crate::{
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
-        actor::{WalletActor, current_wallet_unspent_outpoints_for_txid},
+        actor::{SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid},
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
     node::client::NodeClient,
@@ -67,9 +67,9 @@ impl WalletActor {
         option: FeeRateOption,
         amount: Amount,
         address: Address,
+        spend_policy: &SpendPolicy,
     ) -> Result<FeeRateOptionWithTotalFee, Error> {
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
-        let spend_policy = self.automatic_spend_policy()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
 
         spend_policy.apply(&mut tx_builder);
@@ -241,15 +241,27 @@ impl WalletActor {
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
         self.ensure_ledger_ready_for_spend()?;
+        let spend_policy = self.automatic_spend_policy()?;
 
         let options = FeeRateOptionsWithTotalFee {
-            fast: self.fee_option_with_total_fee(fee_rate_options.fast, amount, address.clone())?,
+            fast: self.fee_option_with_total_fee(
+                fee_rate_options.fast,
+                amount,
+                address.clone(),
+                &spend_policy,
+            )?,
             medium: self.fee_option_with_total_fee(
                 fee_rate_options.medium,
                 amount,
                 address.clone(),
+                &spend_policy,
             )?,
-            slow: self.fee_option_with_total_fee(fee_rate_options.slow, amount, address.clone())?,
+            slow: self.fee_option_with_total_fee(
+                fee_rate_options.slow,
+                amount,
+                address.clone(),
+                &spend_policy,
+            )?,
             custom: None,
         };
 
@@ -1067,7 +1079,14 @@ impl WalletActor {
         };
 
         let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
-        Ok(Some(Transaction::new(&self.wallet.id, sent_and_received, tx)))
+        let labels = self
+            .db
+            .labels
+            .all_labels_for_txn(tx.tx_node.txid)
+            .map_err_str(Error::TransactionDetailsError)?
+            .into();
+
+        Ok(Some(Transaction::new_with_labels(sent_and_received, tx, labels)))
     }
 
     pub(crate) fn transaction_details_for_tx_id(
@@ -1193,9 +1212,46 @@ async fn broadcast_to_node_with_connection(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use bdk_wallet::test_utils::{ReceiveTo, receive_output};
     use bitcoin::Amount;
+    use parking_lot::RwLock;
 
     use super::{WalletActor, WalletManagerError};
+    use crate::{
+        database::wallet_data::{WalletDataDb, wallet_data_artifact_paths},
+        manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
+        wallet::{Wallet, metadata::WalletMetadata},
+    };
+
+    #[test]
+    fn preview_transaction_lookup_uses_in_memory_labels() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        crate::test_support::init_test_keychain();
+        let metadata = WalletMetadata::preview_new();
+        let wallet_data_paths = wallet_data_artifact_paths(&metadata.id);
+        let mut wallet = Wallet::preview_new_wallet_with_metadata(metadata);
+        let outpoint =
+            receive_output(&mut wallet.bdk, Amount::from_sat(50_000), ReceiveTo::Mempool(1));
+        let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
+        let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
+        let wallet_data_db =
+            WalletDataDb::new_in_memory(wallet.id.clone()).expect("in-memory label database opens");
+        let (reconciler, _) = flume::bounded(1);
+        let actor = WalletActor::new_with_db(
+            wallet,
+            reconciler,
+            scan_status,
+            wallet_snapshot,
+            wallet_data_db,
+        );
+
+        assert!(actor.transaction_for_tx_id(outpoint.txid).unwrap().is_some());
+        assert!(wallet_data_paths.iter().all(|path| !path.exists()));
+    }
 
     #[test]
     fn insufficient_funds_needed_amount_derives_fee() {

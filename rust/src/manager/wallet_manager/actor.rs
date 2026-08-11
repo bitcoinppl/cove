@@ -158,7 +158,7 @@ impl WalletActor {
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
 
-        Self::new_with_db(wallet, reconciler, scan_status, wallet_snapshot, db)
+        Ok(Self::new_with_db(wallet, reconciler, scan_status, wallet_snapshot, db))
     }
 
     pub(crate) fn new_with_db(
@@ -167,10 +167,10 @@ impl WalletActor {
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
         db: WalletDataDb,
-    ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
+    ) -> Self {
         let seed = rand::rng().random();
 
-        Ok(Self {
+        Self {
             addr: Default::default(),
             reconciler,
             seed,
@@ -191,7 +191,7 @@ impl WalletActor {
             scan_generation: WalletScanGeneration::INITIAL,
             payjoin_actor: None,
             db,
-        })
+        }
     }
 
     pub async fn balance(&mut self) -> ActorResult<Balance> {
@@ -246,7 +246,7 @@ impl WalletActor {
     pub async fn transactions(&mut self) -> Vec<Transaction> {
         let zero = Amount::ZERO.into();
 
-        let mut transactions = self
+        let transaction_data = self
             .wallet
             .bdk
             .transactions()
@@ -254,8 +254,21 @@ impl WalletActor {
                 let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
                 (tx, sent_and_received)
             })
+            .collect::<Vec<_>>();
+
+        let mut labels_by_txid = self
+            .db
+            .labels
+            .all_labels_for_txns(transaction_data.iter().map(|(tx, _)| tx.tx_node.txid))
+            .unwrap_or_else(|error| {
+                warn!("failed to batch load transaction labels: {error}");
+                Default::default()
+            });
+        let mut transactions = transaction_data
+            .into_iter()
             .map(|(tx, sent_and_received)| {
-                Transaction::new_with_labels(sent_and_received, tx, &self.db.labels)
+                let labels = labels_by_txid.remove(&tx.tx_node.txid).unwrap_or_default().into();
+                Transaction::new_with_labels(sent_and_received, tx, labels)
             })
             .filter(|tx| tx.sent_and_received().amount() > zero)
             .inspect(|tx| {
