@@ -32,8 +32,11 @@ const HARD_LIMIT: u64 = 30;
 /// Do not use a persisted fee snapshot as a fallback after this amount of time
 const STALE_FALLBACK_MAX_AGE: Duration = Duration::from_secs(60 * 60);
 
-/// Maximum fee rate accepted from the remote fee service, in sat/vB
-const MAX_REMOTE_FEE_RATE: f32 = 500.0;
+/// Maximum fee rate accepted as plausible remote input, in sat/vB
+const MAX_REMOTE_FEE_RATE: f32 = 100_000.0;
+
+/// Maximum remote fee rate used for automatic transaction building, in sat/vB
+const MAX_AUTOMATIC_FEE_RATE: f32 = 500.0;
 
 // Global client for getting fees
 pub static FEE_CLIENT: LazyLock<FeeClient> = LazyLock::new(FeeClient::new);
@@ -129,7 +132,9 @@ impl FeeClient {
     pub fn fees(&self) -> Option<FeeResponse> {
         if let Some(cached) = self.cached_fees() {
             if cached.snapshot().is_usable_fallback() {
-                if cached.last_fetched.elapsed() <= Duration::from_secs(BACKGROUND_REFRESH_INTERVAL)
+                if cached
+                    .age()
+                    .is_some_and(|age| age <= Duration::from_secs(BACKGROUND_REFRESH_INTERVAL))
                 {
                     return Some(cached.fees);
                 }
@@ -151,7 +156,7 @@ impl FeeClient {
         let cached = self.cached_fees();
         if let Some(cached) = cached
             && cached.snapshot().is_usable_fallback()
-            && cached.last_fetched.elapsed() < Duration::from_secs(HARD_LIMIT)
+            && cached.age().is_some_and(|age| age < Duration::from_secs(HARD_LIMIT))
         {
             return Ok(cached.fees);
         }
@@ -190,8 +195,13 @@ impl FeeClient {
     fn cached_fees(&self) -> Option<CachedFeeResponse> {
         if let Some(cached) = FEES.load().as_ref() {
             let cached = *cached;
-            if ValidatedFeeResponse::try_from(cached.fees).is_ok() {
-                return Some(cached);
+            if let Ok(validated) = ValidatedFeeResponse::try_from(cached.fees) {
+                let normalized = cached.with_fees(validated.0);
+                if normalized.fees != cached.fees {
+                    FEES.swap(Arc::new(Some(normalized)));
+                }
+
+                return Some(normalized);
             }
 
             warn!("ignoring invalid fee snapshot from memory");
@@ -207,10 +217,14 @@ impl FeeClient {
             }
         };
 
-        if let Err(error) = ValidatedFeeResponse::try_from(snapshot.fees) {
-            warn!("ignoring invalid fee snapshot from database: {error}");
-            return None;
-        }
+        let validated = match ValidatedFeeResponse::try_from(snapshot.fees) {
+            Ok(validated) => validated,
+            Err(error) => {
+                warn!("ignoring invalid fee snapshot from database: {error}");
+                return None;
+            }
+        };
+        let snapshot = FeeSnapshot { fees: validated.0, ..snapshot };
 
         let cached = CachedFeeResponse::from_persisted_snapshot(snapshot);
         debug!("loaded cached fees from database");
@@ -261,18 +275,7 @@ impl TryFrom<FeeResponse> for ValidatedFeeResponse {
             }
         }
 
-        let options = derive_fee_rate_options(fees);
-        for (field, value) in [
-            ("slow", options.slow.fee_rate.sat_per_vb()),
-            ("medium", options.medium.fee_rate.sat_per_vb()),
-            ("fast", options.fast.fee_rate.sat_per_vb()),
-        ] {
-            if !value.is_finite() || value <= 0.0 || value > MAX_REMOTE_FEE_RATE {
-                return Err(FeeValidationError::InvalidRate { field, value });
-            }
-        }
-
-        Ok(Self(fees))
+        Ok(Self(fees.clamped_for_automatic_selection()))
     }
 }
 
@@ -285,28 +288,59 @@ impl ValidatedFeeResponse {
 impl FeeResponse {
     /// Convert a validated remote fee response into display and builder fee tiers
     pub fn fee_rate_options(self) -> Result<FeeRateOptions, FeeValidationError> {
-        Ok(ValidatedFeeResponse::try_from(self)?.fee_rate_options())
+        self.try_into()
     }
+
+    fn clamped_for_automatic_selection(self) -> Self {
+        Self {
+            fastest_fee: self.fastest_fee.min(MAX_AUTOMATIC_FEE_RATE),
+            half_hour_fee: self.half_hour_fee.min(MAX_AUTOMATIC_FEE_RATE),
+            hour_fee: self.hour_fee.min(MAX_AUTOMATIC_FEE_RATE),
+            economy_fee: self.economy_fee.min(MAX_AUTOMATIC_FEE_RATE),
+            minimum_fee: self.minimum_fee.min(MAX_AUTOMATIC_FEE_RATE),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FeeCacheOrigin {
+    FetchedInProcess(Instant),
+    Persisted,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct CachedFeeResponse {
     pub fees: FeeResponse,
-    pub last_fetched: Instant,
     pub fetched_at: FeeFetchedAt,
+    origin: FeeCacheOrigin,
 }
 
 impl CachedFeeResponse {
     fn from_fresh_snapshot(snapshot: FeeSnapshot) -> Self {
-        Self { fees: snapshot.fees, last_fetched: Instant::now(), fetched_at: snapshot.fetched_at }
+        Self {
+            fees: snapshot.fees,
+            fetched_at: snapshot.fetched_at,
+            origin: FeeCacheOrigin::FetchedInProcess(Instant::now()),
+        }
     }
 
     fn from_persisted_snapshot(snapshot: FeeSnapshot) -> Self {
-        let now = Instant::now();
-        let last_fetched =
-            snapshot.fetched_at.age().and_then(|age| now.checked_sub(age)).unwrap_or(now);
+        Self {
+            fees: snapshot.fees,
+            fetched_at: snapshot.fetched_at,
+            origin: FeeCacheOrigin::Persisted,
+        }
+    }
 
-        Self { fees: snapshot.fees, last_fetched, fetched_at: snapshot.fetched_at }
+    fn with_fees(self, fees: FeeResponse) -> Self {
+        Self { fees, ..self }
+    }
+
+    fn age(self) -> Option<Duration> {
+        match self.origin {
+            FeeCacheOrigin::FetchedInProcess(fetched_at) => Some(fetched_at.elapsed()),
+            FeeCacheOrigin::Persisted => self.fetched_at.age(),
+        }
     }
 
     fn snapshot(self) -> FeeSnapshot {
@@ -321,13 +355,15 @@ fn derive_fee_rate_options(fees: FeeResponse) -> FeeRateOptions {
     /// Minimum gap between fee tiers to ensure they're visually distinct
     const TIER_GAP: f32 = 0.1;
 
-    let min_relay_rate = fees.minimum_fee.max(POLICY_MIN_FEE_RATE);
+    let min_relay_rate = fees.minimum_fee.clamp(POLICY_MIN_FEE_RATE, MAX_AUTOMATIC_FEE_RATE);
 
-    let slow_rate =
-        f32::midpoint(fees.economy_fee, fees.hour_fee).min(fees.hour_fee).max(min_relay_rate);
+    let slow_rate = f32::midpoint(fees.economy_fee, fees.hour_fee)
+        .min(fees.hour_fee)
+        .max(min_relay_rate)
+        .min(MAX_AUTOMATIC_FEE_RATE);
 
-    let medium_rate = fees.half_hour_fee.max(slow_rate + TIER_GAP);
-    let fast_rate = fees.fastest_fee.max(medium_rate + TIER_GAP);
+    let medium_rate = fees.half_hour_fee.max(slow_rate + TIER_GAP).min(MAX_AUTOMATIC_FEE_RATE);
+    let fast_rate = fees.fastest_fee.max(medium_rate + TIER_GAP).min(MAX_AUTOMATIC_FEE_RATE);
 
     let slow =
         FeeRateOption { fee_speed: FeeSpeed::Slow, fee_rate: FeeRate::from_sat_per_vb(slow_rate) };
@@ -408,7 +444,7 @@ pub async fn init_and_update_fees() {
 pub async fn fetch_and_update_fees_if_needed() -> Result<()> {
     if let Some(cached) = FEE_CLIENT.cached_fees()
         && cached.snapshot().is_usable_fallback()
-        && cached.last_fetched.elapsed() < Duration::from_secs(HARD_LIMIT)
+        && cached.age().is_some_and(|age| age < Duration::from_secs(HARD_LIMIT))
     {
         return Ok(());
     }
@@ -441,20 +477,23 @@ mod tests {
             fee_response(0.0, 1.0, 1.0, 1.0),
             fee_response(f32::NAN, 1.0, 1.0, 1.0),
             fee_response(1.0, f32::INFINITY, 1.0, 1.0),
-            fee_response(1.0, 1.0, 501.0, 1.0),
+            fee_response(1.0, 1.0, MAX_REMOTE_FEE_RATE + 1.0, 1.0),
         ] {
             assert!(ValidatedFeeResponse::try_from(invalid).is_err());
         }
     }
 
     #[test]
-    fn derived_fee_rates_are_bounded_after_tier_separation() {
-        let fees = fee_response(499.9, 499.9, 499.9, 499.9);
+    fn high_remote_fee_rates_are_clamped_for_automatic_selection() {
+        let fees = fee_response(600.0, 700.0, 800.0, 900.0);
+        let validated = ValidatedFeeResponse::try_from(fees).expect("high fees remain usable");
+        let options = validated.fee_rate_options();
 
-        assert!(matches!(
-            ValidatedFeeResponse::try_from(fees),
-            Err(FeeValidationError::InvalidRate { field: "medium" | "fast", .. })
-        ));
+        assert_eq!(validated.0.fastest_fee, MAX_AUTOMATIC_FEE_RATE);
+        assert_eq!(validated.0.minimum_fee, MAX_AUTOMATIC_FEE_RATE);
+        assert_eq!(options.slow.fee_rate.sat_per_vb(), MAX_AUTOMATIC_FEE_RATE);
+        assert_eq!(options.medium.fee_rate.sat_per_vb(), MAX_AUTOMATIC_FEE_RATE);
+        assert_eq!(options.fast.fee_rate.sat_per_vb(), MAX_AUTOMATIC_FEE_RATE);
     }
 
     #[test]
@@ -478,11 +517,12 @@ mod tests {
 
         let cached = CachedFeeResponse::from_persisted_snapshot(snapshot);
 
-        assert!(cached.last_fetched.elapsed() >= Duration::from_secs(30));
+        assert!(cached.age().is_some_and(|age| age >= Duration::from_secs(30)));
     }
 
     #[tokio::test]
     async fn fee_client_rejects_http_error_status() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener binds");
         let address = listener.local_addr().expect("listener has an address");
         let server = tokio::spawn(async move {

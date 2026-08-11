@@ -20,7 +20,7 @@ use cove_tokio::DebouncedTask;
 
 use crate::{
     app::App,
-    fee_client::FEE_CLIENT,
+    fee_client::{FEE_CLIENT, FeeResponse},
     fiat::client::PriceResponse,
     wallet::{
         Address,
@@ -36,7 +36,7 @@ use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
     amount::Amount,
-    fees::{FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed},
+    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
     unit::BitcoinUnit,
     utxo::Utxo,
 };
@@ -44,7 +44,7 @@ use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 
 use super::{
     deferred_sender,
@@ -53,6 +53,16 @@ use super::{
 };
 
 pub type Error = error::SendFlowError;
+
+fn remote_fee_rate_options(fees: FeeResponse) -> Option<FeeRateOptions> {
+    match fees.fee_rate_options() {
+        Ok(options) => Some(options),
+        Err(error) => {
+            warn!("ignoring invalid remote fee rates: {error}");
+            None
+        }
+    }
+}
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 type Action = SendFlowManagerAction;
@@ -167,21 +177,20 @@ impl RustSendFlowManager {
         let state = State::new(metadata, balance);
 
         // immediately populate cached values if available
-        let has_base_fees = if let Some(base_options) =
-            FEE_CLIENT.fees().and_then(|fees| fees.fee_rate_options().ok())
-        {
-            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
-            let selected = Arc::new(fee_options.medium);
-            let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
+        let has_base_fees =
+            if let Some(base_options) = FEE_CLIENT.fees().and_then(remote_fee_rate_options) {
+                let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+                let selected = Arc::new(fee_options.medium);
+                let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
 
-            let mut state_guard = state.lock();
-            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-            state_guard.fee_selection = Some(fee_selection);
-            state_guard.has_base_fees = true;
-            true
-        } else {
-            false
-        };
+                let mut state_guard = state.lock();
+                state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+                state_guard.fee_selection = Some(fee_selection);
+                state_guard.has_base_fees = true;
+                true
+            } else {
+                false
+            };
 
         debug!(
             "SendFlowManager::new - has_base_fees: {}, balance: {:?}",
@@ -674,7 +683,7 @@ impl RustSendFlowManager {
                 return;
             };
 
-            let Ok(base_options) = fee_response.fee_rate_options() else {
+            let Some(base_options) = remote_fee_rate_options(fee_response) else {
                 return;
             };
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
