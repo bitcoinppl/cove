@@ -200,10 +200,8 @@ impl RestoreArtifactSnapshot {
 
         for network in Network::iter() {
             for mode in WalletMode::iter() {
-                let wallets = database
-                    .wallets
-                    .get_all(network, mode)
-                    .map_err(|error| BackupError::Database(error.to_string()))?;
+                let wallets =
+                    database.wallets.get_all(network, mode).map_err_str(BackupError::Database)?;
 
                 if wallets.iter().any(|wallet| wallet.id == metadata.id) {
                     metadata_present = true;
@@ -273,12 +271,16 @@ impl Drop for WalletRestoreReservation {
 
 struct RestoreJournal {
     metadata: WalletMetadata,
-    initial: RestoreArtifactSnapshot,
+    reservation: WalletRestoreReservation,
 }
 
 impl RestoreJournal {
-    fn new(metadata: &WalletMetadata, initial: RestoreArtifactSnapshot) -> Self {
-        Self { metadata: metadata.clone(), initial }
+    fn new(metadata: &WalletMetadata, reservation: WalletRestoreReservation) -> Self {
+        Self { metadata: metadata.clone(), reservation }
+    }
+
+    fn initial(&self) -> &RestoreArtifactSnapshot {
+        &self.reservation.snapshot
     }
 
     fn rollback(&self) -> Vec<String> {
@@ -287,13 +289,13 @@ impl RestoreJournal {
         self.rollback_keychain(&mut failures);
         self.rollback_paths(
             crate::bdk_store::BdkStore::wallet_store_artifact_paths(&self.metadata.id),
-            &self.initial.bdk_paths,
+            &self.initial().bdk_paths,
             "BDK store",
             &mut failures,
         );
         self.rollback_paths(
             crate::database::wallet_data::wallet_data_artifact_paths(&self.metadata.id),
-            &self.initial.wallet_data_paths,
+            &self.initial().wallet_data_paths,
             "wallet data",
             &mut failures,
         );
@@ -303,7 +305,7 @@ impl RestoreJournal {
     }
 
     fn rollback_keychain(&self, failures: &mut Vec<String>) {
-        if self.initial.keychain_items {
+        if self.initial().keychain_items {
             return;
         }
 
@@ -349,33 +351,17 @@ impl RestoreJournal {
     }
 
     fn rollback_metadata(&self, failures: &mut Vec<String>) {
-        if self.initial.metadata {
+        if self.initial().metadata {
             return;
         }
 
         let database = Database::global();
-        match database.wallets.get_all(self.metadata.network, self.metadata.wallet_mode) {
-            Ok(mut wallets) => {
-                let before = wallets.len();
-                wallets.retain(|wallet| wallet.id != self.metadata.id);
-
-                if wallets.len() < before
-                    && let Err(error) = database.wallets.save_all_wallets(
-                        self.metadata.network,
-                        self.metadata.wallet_mode,
-                        wallets,
-                    )
-                {
-                    failures.push(format!(
-                        "{}: failed to delete metadata: {error}",
-                        self.metadata.name
-                    ));
-                }
-            }
-            Err(error) => failures.push(format!(
-                "{}: failed to read wallets for cleanup: {error}",
-                self.metadata.name
-            )),
+        if let Err(error) = database.wallets.remove_wallet_metadata(
+            self.metadata.network,
+            self.metadata.wallet_mode,
+            &self.metadata.id,
+        ) {
+            failures.push(format!("{}: failed to delete metadata: {error}", self.metadata.name));
         }
     }
 }
@@ -518,7 +504,7 @@ where
 {
     let reservation =
         WalletRestoreReservation::acquire(metadata).map_err(|error| (error, Vec::new()))?;
-    let journal = RestoreJournal::new(metadata, reservation.snapshot.clone());
+    let journal = RestoreJournal::new(metadata, reservation);
 
     f().map_err(|error| (error, journal.rollback()))
 }
@@ -1022,19 +1008,30 @@ mod tests {
     #[test]
     fn restore_journal_preserves_preexisting_bdk_artifact() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
         let mut metadata = hot_metadata("Existing BDK artifact");
         metadata.id = WalletId::preview_new_random();
-        let artifact =
-            crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id)[2].clone();
+        let artifact = crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id)
+            .into_iter()
+            .find(|path| path.to_string_lossy().ends_with("-wal"))
+            .expect("wallet store artifact paths include a WAL path");
+
+        if let Some(parent) = artifact.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+
         std::fs::write(&artifact, b"pre-existing WAL").unwrap();
 
         let initial = RestoreArtifactSnapshot {
             metadata: true,
-            keychain_items: true,
+            keychain_items: false,
             bdk_paths: HashSet::from([artifact.clone()]),
             ..RestoreArtifactSnapshot::default()
         };
-        let journal = RestoreJournal::new(&metadata, initial);
+        let reservation = WalletRestoreReservation { id: metadata.id.clone(), snapshot: initial };
+        let journal = RestoreJournal::new(&metadata, reservation);
 
         assert!(journal.rollback().is_empty());
         assert!(artifact.exists());

@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
+use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata, TableDefinition};
 use tracing::{debug, warn};
 
 use cove_util::result_ext::ResultExt as _;
@@ -157,16 +157,16 @@ impl WalletsTable {
     ) -> Result<(), Error> {
         let network = wallet.network;
         let mode = wallet.wallet_mode;
-
-        let mut wallets = self.get_all(network, mode)?;
-
-        if wallets.iter().any(|w| w.id == wallet.id) {
-            return Err(WalletTableError::WalletAlreadyExists.into());
-        }
-
         let wallet_for_backup = should_backup_to_cloud.then(|| wallet.clone());
-        wallets.push(wallet);
-        self.save_all_wallets(network, mode, wallets)?;
+
+        self.update_wallets(network, mode, |wallets| {
+            if wallets.iter().any(|stored| stored.id == wallet.id) {
+                return Err(WalletTableError::WalletAlreadyExists.into());
+            }
+
+            wallets.push(wallet);
+            Ok(())
+        })?;
 
         Updater::send_update(Update::WalletsChanged);
         if let Some(wallet_for_backup) = wallet_for_backup {
@@ -318,14 +318,25 @@ impl WalletsTable {
     }
 
     fn delete_inner(&self, network: Network, mode: WalletMode, id: &WalletId) -> Result<(), Error> {
-        let mut wallets = self.get_all(network, mode)?;
-
-        wallets.retain(|wallet| &wallet.id != id);
-        self.save_all_wallets(network, mode, wallets)?;
+        self.remove_wallet_metadata(network, mode, id)?;
 
         Updater::send_update(Update::WalletsChanged);
 
         Ok(())
+    }
+
+    pub(crate) fn remove_wallet_metadata(
+        &self,
+        network: Network,
+        mode: WalletMode,
+        id: &WalletId,
+    ) -> Result<bool, Error> {
+        self.update_wallets(network, mode, |wallets| {
+            let before = wallets.len();
+            wallets.retain(|wallet| &wallet.id != id);
+
+            Ok(wallets.len() < before)
+        })
     }
 
     fn reorder(
@@ -416,6 +427,34 @@ impl WalletsTable {
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         Ok(())
+    }
+
+    fn update_wallets<T>(
+        &self,
+        network: Network,
+        mode: WalletMode,
+        update: impl FnOnce(&mut Vec<WalletMetadata>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let write_txn = self.db.begin_write()?;
+
+        let result = {
+            let mut table = write_txn.open_table(TABLE)?;
+            let key = WalletKey::from((network, mode)).to_string();
+            let mut wallets = table
+                .get(key.as_str())
+                .map_err_str(WalletTableError::ReadError)?
+                .map(|value| value.value())
+                .unwrap_or_default();
+            let result = update(&mut wallets)?;
+
+            table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
+            result
+        };
+
+        write_txn.commit().map_err_str(WalletTableError::SaveError)?;
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
+
+        Ok(result)
     }
 
     pub fn find_by_tap_signer_ident(
@@ -555,6 +594,48 @@ mod tests {
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
         assert_eq!(names(&persisted), ["third", "first", "second", "fourth"]);
+    }
+
+    #[test]
+    fn concurrent_restore_add_and_rollback_preserve_new_wallet() {
+        let (_tmp, table) = wallet_table();
+        let restored = wallet("restored");
+        let concurrent = wallet("concurrent");
+
+        for _ in 0..20 {
+            table
+                .save_all_wallets(restored.network, restored.wallet_mode, vec![restored.clone()])
+                .unwrap();
+
+            let barrier = Arc::new(std::sync::Barrier::new(3));
+            std::thread::scope(|scope| {
+                let remove_table = table.clone();
+                let remove_barrier = barrier.clone();
+                let remove_id = restored.id.clone();
+                let network = restored.network;
+                let mode = restored.wallet_mode;
+                scope.spawn(move || {
+                    remove_barrier.wait();
+                    remove_table.remove_wallet_metadata(network, mode, &remove_id).unwrap();
+                });
+
+                let add_table = table.clone();
+                let add_barrier = barrier.clone();
+                let concurrent = concurrent.clone();
+                scope.spawn(move || {
+                    add_barrier.wait();
+                    add_table
+                        .save_new_wallet_metadata_with_backup_behavior(concurrent, false)
+                        .unwrap();
+                });
+
+                barrier.wait();
+            });
+
+            let persisted = table.get_all(restored.network, restored.wallet_mode).unwrap();
+            assert_eq!(persisted.len(), 1);
+            assert_eq!(persisted[0].id, concurrent.id);
+        }
     }
 
     #[test]
