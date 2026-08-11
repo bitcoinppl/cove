@@ -22,7 +22,7 @@ struct TapSignerImportSuccess: View {
             let manager = try WalletManager(tapSigner: tapSigner, deriveInfo: deriveInfo)
             walletId = manager.id
         } catch {
-            Log.error("Failed to save wallet: \(error.localizedDescription)")
+            Log.error("Failed to save TapSigner wallet")
         }
     }
 

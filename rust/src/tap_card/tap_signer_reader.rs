@@ -1,5 +1,4 @@
-use std::hash::Hasher;
-use std::sync::Arc;
+use std::{fmt, hash::Hasher, sync::Arc};
 
 use bitcoin::{bip32::Fingerprint, hashes::HashEngine as _, secp256k1};
 use nid::Nanoid;
@@ -14,6 +13,7 @@ use rust_cktap::{
 
 use tokio::sync::Mutex;
 use tracing::debug;
+use zeroize::Zeroize;
 
 use crate::{
     database::Database,
@@ -46,11 +46,11 @@ pub enum TapSignerReaderError {
     #[error("No command")]
     NoCommand,
 
-    #[error("Invalid pin length, must be betweeen 6 and 32, found {0}")]
-    InvalidPinLength(u8),
+    #[error("PIN must be between 6 and 32 digits")]
+    InvalidPinLength,
 
-    #[error("PIN must be numeric only, found {0}")]
-    NonNumericPin(String),
+    #[error("PIN must contain only ASCII digits")]
+    NonNumericPin,
 
     #[error("Setup is already complete")]
     SetupAlreadyComplete,
@@ -65,18 +65,69 @@ pub enum TapSignerReaderError {
 type Error = TapSignerReaderError;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+const MIN_PIN_LENGTH: usize = 6;
+const MAX_PIN_LENGTH: usize = 32;
+
+#[derive(Clone, Eq, Hash, PartialEq, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+struct TapSignerPin(String);
+
+impl TapSignerPin {
+    fn try_new(mut pin: String) -> Result<Self> {
+        let pin_length = pin.len();
+        if !(MIN_PIN_LENGTH..=MAX_PIN_LENGTH).contains(&pin_length) {
+            pin.zeroize();
+            return Err(TapSignerReaderError::InvalidPinLength);
+        }
+
+        if !pin.bytes().all(|byte| byte.is_ascii_digit()) {
+            pin.zeroize();
+            return Err(TapSignerReaderError::NonNumericPin);
+        }
+
+        Ok(Self(pin))
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for TapSignerPin {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Debug for TapSignerPin {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("<redacted PIN>")
+    }
+}
+
 // Main interface exposed to Swift
-#[derive(Debug, uniffi::Object)]
+#[derive(uniffi::Object)]
 pub struct TapSignerReader {
     id: String,
     reader: Mutex<VerifiedTapSigner>,
-    cmd: RwLock<Option<TapSignerCmd>>,
+    cmd: RwLock<Option<TapSignerOperation>>,
     transport: TapcardTransport,
 
     /// Last response from the setup process, has started, if the last response is `Complete` then the setup process is complete
     last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
 
     network: Network,
+}
+
+impl fmt::Debug for TapSignerReader {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let operation = self.cmd.read().as_ref().map(TapSignerOperation::kind);
+
+        formatter
+            .debug_struct("TapSignerReader")
+            .field("id", &self.id)
+            .field("operation", &operation)
+            .finish()
+    }
 }
 
 #[derive(Debug, derive_more::Deref, derive_more::DerefMut)]
@@ -107,7 +158,7 @@ impl VerifiedTapSigner {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
+#[derive(Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
     Backup { pin: String },
@@ -116,11 +167,76 @@ pub enum TapSignerCmd {
     Sign { psbt: Arc<Psbt>, pin: String },
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
+impl fmt::Debug for TapSignerCmd {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let operation = match self {
+            Self::Setup(_) => "setup",
+            Self::Backup { .. } => "backup",
+            Self::Derive { .. } => "derive",
+            Self::Change { .. } => "change",
+            Self::Sign { .. } => "sign",
+        };
+
+        formatter.debug_struct("TapSignerCmd").field("operation", &operation).finish()
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq, uniffi::Object)]
 pub struct SetupCmd {
-    pub factory_pin: String,
-    pub new_pin: String,
+    factory_pin: TapSignerPin,
+    new_pin: TapSignerPin,
     pub chain_code: [u8; 32],
+}
+
+impl fmt::Debug for SetupCmd {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SetupCmd")
+            .field("factory_pin", &"<redacted PIN>")
+            .field("new_pin", &"<redacted PIN>")
+            .field("chain_code", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+enum TapSignerOperation {
+    Setup(Arc<SetupCmd>),
+    Backup(TapSignerPin),
+    Derive(TapSignerPin),
+    Change { current_pin: TapSignerPin, new_pin: TapSignerPin },
+    Sign { psbt: Arc<Psbt>, pin: TapSignerPin },
+}
+
+impl TapSignerOperation {
+    const fn kind(&self) -> &'static str {
+        match self {
+            Self::Setup(_) => "setup",
+            Self::Backup(_) => "backup",
+            Self::Derive(_) => "derive",
+            Self::Change { .. } => "change",
+            Self::Sign { .. } => "sign",
+        }
+    }
+}
+
+impl TryFrom<TapSignerCmd> for TapSignerOperation {
+    type Error = TapSignerReaderError;
+
+    fn try_from(command: TapSignerCmd) -> Result<Self> {
+        match command {
+            TapSignerCmd::Setup(command) => Ok(Self::Setup(command)),
+            TapSignerCmd::Backup { pin } => Ok(Self::Backup(TapSignerPin::try_new(pin)?)),
+            TapSignerCmd::Derive { pin } => Ok(Self::Derive(TapSignerPin::try_new(pin)?)),
+            TapSignerCmd::Change { current_pin, new_pin } => Ok(Self::Change {
+                current_pin: TapSignerPin::try_new(current_pin)?,
+                new_pin: TapSignerPin::try_new(new_pin)?,
+            }),
+            TapSignerCmd::Sign { psbt, pin } => {
+                Ok(Self::Sign { psbt, pin: TapSignerPin::try_new(pin)? })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum, derive_more::From)]
@@ -183,10 +299,11 @@ impl TapSignerReader {
         transport: Box<dyn TapcardTransportProtocol>,
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
+        let cmd = cmd.map(TapSignerOperation::try_from).transpose()?;
         let transport = TapcardTransport(Arc::new(transport));
         let card = VerifiedTapSigner::connect(transport.clone()).await?;
 
-        debug!("tap_card_from_status: {:?}", card);
+        debug!("TapSigner card authenticated");
 
         let id: Nanoid = Nanoid::new();
         let network = Database::global().global_config.selected_network();
@@ -211,31 +328,33 @@ impl TapSignerReader {
 impl TapSignerReader {
     #[uniffi::method]
     pub async fn run(&self) -> Result<TapSignerResponse> {
-        let cmd = self.cmd.write().take().ok_or(TapSignerReaderError::NoCommand)?;
+        let operation = self.cmd.write().take().ok_or(TapSignerReaderError::NoCommand)?;
 
-        match cmd {
-            TapSignerCmd::Setup(cmd) => {
+        debug!(operation = operation.kind(), "running TapSigner operation");
+
+        match operation {
+            TapSignerOperation::Setup(cmd) => {
                 let response = self.setup(cmd).await?;
                 Ok(TapSignerResponse::Setup(response))
             }
 
-            TapSignerCmd::Backup { pin } => {
+            TapSignerOperation::Backup(pin) => {
                 let response = self.backup(&pin).await?;
                 Ok(TapSignerResponse::Backup(response))
             }
 
-            TapSignerCmd::Derive { pin } => {
+            TapSignerOperation::Derive(pin) => {
                 let response = self.derive(&pin).await?;
                 Ok(TapSignerResponse::Import(response))
             }
 
-            TapSignerCmd::Change { current_pin, new_pin } => {
+            TapSignerOperation::Change { current_pin, new_pin } => {
                 self.change(&new_pin, &current_pin).await?;
                 Ok(TapSignerResponse::Change)
             }
 
-            TapSignerCmd::Sign { psbt, pin } => {
-                let txn = self.sign(psbt, &pin).await?;
+            TapSignerOperation::Sign { psbt, pin } => {
+                let txn = self.sign_with_pin(psbt, &pin).await?;
                 Ok(TapSignerResponse::Sign(txn.into()))
             }
         }
@@ -243,15 +362,6 @@ impl TapSignerReader {
 
     /// Start the setup process
     pub async fn setup(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse, Error> {
-        let new_pin = cmd.new_pin.as_bytes();
-        if new_pin.len() < 6 || new_pin.len() > 32 {
-            return Err(TapSignerReaderError::InvalidPinLength(new_pin.len() as u8));
-        }
-
-        if !cmd.new_pin.trim().chars().all(char::is_numeric) {
-            return Err(TapSignerReaderError::NonNumericPin(cmd.new_pin.to_string()));
-        }
-
         self.init_backup_change(cmd).await
     }
 
@@ -279,17 +389,8 @@ impl TapSignerReader {
     }
 
     pub async fn sign(&self, psbt: Arc<Psbt>, pin: &str) -> Result<Psbt, Error> {
-        let psbt = Arc::unwrap_or_clone(psbt);
-
-        let psbt: bitcoin::Psbt = self
-            .reader
-            .lock()
-            .await
-            .sign_psbt(psbt.into(), pin)
-            .await
-            .map_err_str(Error::PsbtSignError)?;
-
-        Ok(psbt.into())
+        let pin = TapSignerPin::try_new(pin.to_owned())?;
+        self.sign_with_pin(psbt, &pin).await
     }
 
     /// Get the last response from the reader
@@ -302,6 +403,20 @@ impl TapSignerReader {
 }
 
 impl TapSignerReader {
+    async fn sign_with_pin(&self, psbt: Arc<Psbt>, pin: &TapSignerPin) -> Result<Psbt, Error> {
+        let psbt = Arc::unwrap_or_clone(psbt);
+
+        let psbt: bitcoin::Psbt = self
+            .reader
+            .lock()
+            .await
+            .sign_psbt(psbt.into(), pin.as_str())
+            .await
+            .map_err_str(Error::PsbtSignError)?;
+
+        Ok(psbt.into())
+    }
+
     async fn wait_if_needed(&self) -> Result<(), Error> {
         let mut auth_delay = self.reader.lock().await.auth_delay;
 
@@ -323,7 +438,7 @@ impl TapSignerReader {
             .reader
             .lock()
             .await
-            .init(cmd.chain_code, &cmd.factory_pin)
+            .init(cmd.chain_code, cmd.factory_pin.as_str())
             .await
             .map_err(TransportError::from)?;
 
@@ -397,27 +512,31 @@ impl TapSignerReader {
         SetupCmdResponse::Complete(complete)
     }
 
-    async fn backup(&self, pin: &str) -> Result<Vec<u8>, Error> {
+    async fn backup(&self, pin: &TapSignerPin) -> Result<Vec<u8>, Error> {
         let backup_response =
-            self.reader.lock().await.backup(pin).await.map_err(TransportError::from)?;
+            self.reader.lock().await.backup(pin.as_str()).await.map_err(TransportError::from)?;
 
         Ok(backup_response.data)
     }
 
-    async fn change(&self, new_pin: &str, current_pin: &str) -> Result<(), Error> {
+    async fn change(
+        &self,
+        new_pin: &TapSignerPin,
+        current_pin: &TapSignerPin,
+    ) -> Result<(), Error> {
         debug!("starting pin change");
 
         self.reader
             .lock()
             .await
-            .change(new_pin, current_pin)
+            .change(new_pin.as_str(), current_pin.as_str())
             .await
             .map_err(TransportError::from)?;
 
         Ok(())
     }
 
-    async fn derive(&self, pin: &str) -> Result<DeriveInfo, Error> {
+    async fn derive(&self, pin: &TapSignerPin) -> Result<DeriveInfo, Error> {
         debug!("starting derive");
 
         let path: [u32; 3] = match self.network {
@@ -430,7 +549,7 @@ impl TapSignerReader {
             let birth_height = valid_birth_height(Some(
                 reader.birth.try_into().expect("usize birth height fits in u64"),
             ));
-            let derive_response = reader.derive(&path, pin).await?;
+            let derive_response = reader.derive(&path, pin.as_str()).await?;
             (derive_response, birth_height)
         };
         let derive_info =
@@ -459,6 +578,9 @@ impl SetupCmd {
         new_pin: String,
         chain_code: Option<Vec<u8>>,
     ) -> Result<Self, Error> {
+        let factory_pin = TapSignerPin::try_new(factory_pin)?;
+        let new_pin = TapSignerPin::try_new(new_pin)?;
+
         let chain_code = match chain_code {
             Some(chain_code) => {
                 let chain_code_len = chain_code.len() as u32;
@@ -473,9 +595,9 @@ impl SetupCmd {
 
 impl std::hash::Hash for TapSignerReader {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.cmd.read().as_ref().hash(state);
-        self.last_response.lock().as_ref().hash(state);
+        std::hash::Hash::hash(&self.id, state);
+        std::hash::Hash::hash(&self.cmd.read().as_ref(), state);
+        std::hash::Hash::hash(&self.last_response.lock().as_ref(), state);
     }
 }
 
@@ -719,6 +841,38 @@ mod tests {
         ));
         assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
+
+    #[test]
+    fn pin_errors_and_debug_output_do_not_include_pin_values() {
+        for submitted_pin in ["123", "12345a", "１２３４５６"] {
+            let error = TapSignerPin::try_new(submitted_pin.to_string()).unwrap_err();
+
+            assert!(!error.to_string().contains(submitted_pin));
+            assert!(!format!("{error:?}").contains(submitted_pin));
+        }
+
+        let pin = TapSignerPin::try_new("123456".to_string()).expect("valid PIN");
+        assert_eq!(format!("{pin:?}"), "<redacted PIN>");
+    }
+
+    #[test]
+    fn commands_and_setup_state_redact_pin_values() {
+        let command = TapSignerCmd::Backup { pin: "123456".to_string() };
+        assert!(!format!("{command:?}").contains("123456"));
+
+        let setup =
+            SetupCmd::try_new("123456".to_string(), "654321".to_string(), Some([0u8; 32].to_vec()))
+                .expect("valid setup command");
+        assert!(!format!("{setup:?}").contains("123456"));
+        assert!(!format!("{setup:?}").contains("654321"));
+
+        let response = SetupCmdResponse::ContinueFromInit(ContinueFromInit {
+            continue_cmd: Arc::new(setup),
+            error: TapSignerReaderError::NoCommand,
+        });
+        assert!(!format!("{response:?}").contains("123456"));
+        assert!(!format!("{response:?}").contains("654321"));
+    }
 }
 
 mod ffi {
@@ -778,11 +932,12 @@ fn _ffi_tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
     assert!(preview);
 
     let backup = vec![0u8; 32];
-    let setup_cmd = SetupCmd {
-        factory_pin: "123456".to_string(),
-        new_pin: "000000".to_string(),
-        chain_code: cove_util::generate_random_chain_code(),
-    };
+    let setup_cmd = SetupCmd::try_new(
+        "123456".to_string(),
+        "000000".to_string(),
+        Some(cove_util::generate_random_chain_code().to_vec()),
+    )
+    .expect("preview PINs and chain code are valid");
 
     SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
         backup,

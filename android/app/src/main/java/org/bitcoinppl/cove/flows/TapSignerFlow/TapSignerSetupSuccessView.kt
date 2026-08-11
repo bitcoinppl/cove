@@ -58,7 +58,7 @@ fun TapSignerSetupSuccessView(
                     walletId = walletManager.id
                 }
         } catch (e: Exception) {
-            android.util.Log.e("TapSignerSetupSuccess", "Failed to save wallet", e)
+            android.util.Log.e("TapSignerSetupSuccess", "Failed to save TapSigner wallet")
         }
     }
 

@@ -32,7 +32,6 @@ class TapCardNfcManager private constructor() {
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // current operation state
-    private var currentCmd: TapSignerCmd? = null
     private var tagDetected = CompletableDeferred<Tag>()
     private var isScanning = false
     private var pendingDisableRunnable: Runnable? = null
@@ -68,7 +67,7 @@ class TapCardNfcManager private constructor() {
                 throw Exception("NFC is disabled. Please enable it in Settings")
             }
 
-            Log.d(tag, "Starting NFC scan for command: $cmd")
+            Log.d(tag, "Starting NFC scan for operation: ${operationKind(cmd)}")
 
             return@withLock suspendCancellableCoroutine { continuation ->
                 // cancel any pending disable from previous operation
@@ -76,7 +75,6 @@ class TapCardNfcManager private constructor() {
                 pendingDisableRunnable = null
 
                 // reset state for new operation
-                currentCmd = cmd
                 tagDetected = CompletableDeferred()
                 isScanning = true
 
@@ -138,7 +136,7 @@ class TapCardNfcManager private constructor() {
 
                             Log.d(
                                 tag,
-                                "Connected to IsoDep tag (timeout=${timeout}ms, cmd=${cmd::class.simpleName})",
+                                "Connected to IsoDep tag (timeout=${timeout}ms, operation=${operationKind(cmd)})",
                             )
 
                             // send proactive UX guidance for heavy NFC operations
@@ -174,14 +172,14 @@ class TapCardNfcManager private constructor() {
                                 continuation.resume(resultPair)
                             }
                         } catch (e: TapSignerReaderException) {
-                            Log.e(tag, "TapSigner error", e)
+                            Log.e(tag, "TapSigner operation failed: ${operationKind(cmd)}")
 
                             // guard against cancelled continuation
                             if (continuation.isActive) {
                                 continuation.resumeWithException(e)
                             }
                         } catch (e: Exception) {
-                            Log.e(tag, "NFC operation failed", e)
+                            Log.e(tag, "NFC operation failed: ${operationKind(cmd)}")
                             // guard against cancelled continuation
                             if (continuation.isActive) {
                                 continuation.resumeWithException(e)
@@ -228,6 +226,15 @@ class TapCardNfcManager private constructor() {
         }
     }
 
+    private fun operationKind(cmd: TapSignerCmd): String =
+        when (cmd) {
+            is TapSignerCmd.Setup -> "setup"
+            is TapSignerCmd.Backup -> "backup"
+            is TapSignerCmd.Derive -> "derive"
+            is TapSignerCmd.Change -> "change"
+            is TapSignerCmd.Sign -> "sign"
+        }
+
     companion object {
         @Volatile
         private var instance: TapCardNfcManager? = null
@@ -258,13 +265,13 @@ private class TapCardTransport(
     private var currentMessage = ""
 
     override fun setMessage(message: String) {
-        Log.d(tag, "Message: $message")
+        Log.d(tag, "TapSigner progress message updated")
         currentMessage = message
         onMessageUpdate?.invoke(currentMessage)
     }
 
     override fun appendMessage(message: String) {
-        Log.d(tag, "Append: $message")
+        Log.d(tag, "TapSigner progress message appended")
         currentMessage += message
         onMessageUpdate?.invoke(currentMessage)
     }
@@ -281,8 +288,8 @@ private class TapCardTransport(
             val response = isoDep.transceive(commandApdu)
             Log.d(tag, "APDU response: ${response.size} bytes")
             response
-        } catch (e: Exception) {
-            Log.e(tag, "APDU error", e)
+        } catch (_: Exception) {
+            Log.e(tag, "TapSigner APDU transmission failed")
             throw TransportException.UnknownException(
                 "Tag connection lost, please hold your phone still and try again"
             )

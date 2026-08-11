@@ -261,7 +261,9 @@ private suspend fun setupTapSigner(
             app.sheetState = null
             app.alertState =
                 TaggedItem(
-                    AppAlertState.TapSignerSetupFailed(e.message ?: "Unknown error"),
+                    AppAlertState.TapSignerSetupFailed(
+                        "TapSigner setup failed. Please try again.",
+                    ),
                 )
         }
     }
@@ -310,7 +312,12 @@ private suspend fun changeTapSignerPin(
         Log.e("TapSignerConfirmPin", "Error changing PIN")
 
         // check error type and show appropriate alert
-        val errorMessage = e.message ?: "Unknown error"
+        val errorMessage =
+            if (isAuthError(e)) {
+                "Wrong PIN, please try again"
+            } else {
+                "TapSigner PIN change failed. Please try again."
+            }
         app.alertState =
             TaggedItem(
                 AppAlertState.General(

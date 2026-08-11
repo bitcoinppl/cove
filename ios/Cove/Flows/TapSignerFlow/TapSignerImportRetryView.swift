@@ -47,8 +47,12 @@ struct TapSignerImportRetry: View {
             switch await nfc.derive(pin: pin) {
             case let .success(deriveInfo):
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
-            case let .failure(error):
-                app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
+            case .failure:
+                app.alertState = .init(
+                    .tapSignerDeriveFailed(
+                        message: "TapSigner import failed. Please try again."
+                    )
+                )
             }
         }
     }

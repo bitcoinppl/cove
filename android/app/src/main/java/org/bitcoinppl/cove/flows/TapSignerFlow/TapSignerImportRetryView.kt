@@ -143,7 +143,7 @@ fun TapSignerImportRetryView(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.TapSignerDeriveFailed(
-                                    e.message ?: "Unknown error occurred",
+                                    "TapSigner import failed. Please try again.",
                                 ),
                             )
                     }

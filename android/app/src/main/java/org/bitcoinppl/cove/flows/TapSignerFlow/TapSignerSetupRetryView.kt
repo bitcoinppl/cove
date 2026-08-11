@@ -161,7 +161,7 @@ fun TapSignerSetupRetryView(
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.TapSignerSetupFailed(
-                                    e.message ?: "Unknown error",
+                                    "TapSigner setup failed. Please try again.",
                                 ),
                             )
                     }

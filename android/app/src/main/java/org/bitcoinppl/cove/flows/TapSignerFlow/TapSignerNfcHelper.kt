@@ -23,9 +23,9 @@ class TapSignerNfcHelper(
     ): SetupCmdResponse =
         try {
             doSetupTapSigner(factoryPin, newPin, chainCode)
-        } catch (e: Exception) {
-            Log.e(tag, "Setup failed", e)
-            throw e
+        } catch (error: Exception) {
+            Log.e(tag, "TapSigner setup failed")
+            throw error
         }
 
     suspend fun derive(pin: String): DeriveInfo =
@@ -94,9 +94,9 @@ class TapSignerNfcHelper(
             lastResponse?.destroy()
             lastResponse = response
             return result
-        } catch (e: Exception) {
-            Log.e(tag, "TapSigner command failed", e)
-            throw e
+        } catch (error: Exception) {
+            Log.e(tag, "TapSigner operation failed")
+            throw error
         }
     }
 
