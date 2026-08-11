@@ -47,7 +47,9 @@ struct TapSignerSetupRetry: View {
                 Log.error("TapSigner setup retry returned an incomplete response")
                 app.sheetState = nil
                 app.alertState = .init(
-                    .tapSignerSetupFailed(message: "Failed to setup TapSigner")
+                    .tapSignerSetupFailed(
+                        message: "TapSigner setup failed. Please try again."
+                    )
                 )
             case .failure:
                 app.sheetState = nil
