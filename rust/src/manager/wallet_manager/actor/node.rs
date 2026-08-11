@@ -344,6 +344,12 @@ impl WalletActor {
         let now = std::time::UNIX_EPOCH.elapsed().unwrap_or_default();
         self.last_height_fetched = Some((now, block_height));
 
+        if !self.wallet.uses_persistent_storage() {
+            self.wallet.metadata.internal.last_height_fetched =
+                Some(BlockSizeLast { block_height: block_height as u64, last_seen: now });
+            return Some(());
+        }
+
         let wallets = Database::global().wallets();
 
         let mut metadata = wallets

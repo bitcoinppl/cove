@@ -262,6 +262,10 @@ impl LabelManager {
 }
 
 impl LabelManager {
+    pub(crate) fn try_new_with_db(db: WalletDataDb) -> Self {
+        Self { db }
+    }
+
     pub fn try_new(
         id: WalletId,
     ) -> std::result::Result<Self, crate::database::wallet_data::WalletDataError> {
@@ -376,6 +380,10 @@ impl LabelManager {
     }
 
     fn mark_cloud_backup_dirty(&self) {
+        if self.db.is_in_memory() {
+            return;
+        }
+
         CLOUD_BACKUP_MANAGER.handle_wallet_backup_change(self.db.id.clone());
     }
 

@@ -145,7 +145,7 @@ private struct VerificationCompleteContent: View {
 
 #Preview {
     AsyncPreview {
-        VerificationCompleteScreen(manager: WalletManager(preview: "preview_only"))
+        VerificationCompleteScreen(manager: WalletManager(preview: .only))
             .environment(AppManager.shared)
     }
 }

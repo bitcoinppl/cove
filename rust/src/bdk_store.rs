@@ -18,9 +18,17 @@ pub struct BdkStore {
     id: WalletId,
     network: Network,
     pub conn: bdk_wallet::rusqlite::Connection,
+    storage: BdkStoreStorage,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum BdkStoreStorage {
+    Persistent,
+    InMemory,
 }
 
 impl BdkStore {
+    /// Open the persistent BDK wallet store for a real wallet
     pub fn try_new(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
         crate::bootstrap::ensure_storage_bootstrapped()
             .map_err(|e| eyre::eyre!("storage bootstrap failed: {e}"))?;
@@ -51,7 +59,12 @@ impl BdkStore {
         // in pages (4096 bytes) 2000 pages = 8MB
         conn.pragma_update(None, "cache_size", 2000)?;
 
-        let mut me = Self { id: id.clone(), network: network.into(), conn };
+        let mut me = Self {
+            id: id.clone(),
+            network: network.into(),
+            conn,
+            storage: BdkStoreStorage::Persistent,
+        };
 
         if let Err(e) = me.check_and_migrate_from_file_store() {
             tracing::error!("{id} failed to migrate from file store: {e:?}");
@@ -59,6 +72,19 @@ impl BdkStore {
         }
 
         Ok(me)
+    }
+
+    /// Open an in-memory BDK wallet store for ephemeral wallet views
+    pub fn in_memory(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
+        let network = network.into();
+        let conn = bdk_wallet::rusqlite::Connection::open_in_memory()
+            .context("unable to open in-memory rusqlite connection")?;
+
+        Ok(Self { id: id.clone(), network, conn, storage: BdkStoreStorage::InMemory })
+    }
+
+    pub(crate) const fn is_in_memory(&self) -> bool {
+        matches!(self.storage, BdkStoreStorage::InMemory)
     }
 
     // check if we have a file store
@@ -157,6 +183,18 @@ impl BdkStore {
         remove_sqlite_auxiliary_files(&sqlite_data_path);
 
         Ok(())
+    }
+
+    pub(crate) fn wallet_store_artifact_paths(wallet_id: &WalletId) -> [PathBuf; 5] {
+        let sqlite_data_path = sqlite_data_path(wallet_id);
+
+        [
+            file_store_data_path(wallet_id),
+            sqlite_data_path.clone(),
+            sqlite_auxiliary_path(&sqlite_data_path, "wal"),
+            sqlite_auxiliary_path(&sqlite_data_path, "shm"),
+            sqlite_data_path.with_extension("db-journal"),
+        ]
     }
 }
 

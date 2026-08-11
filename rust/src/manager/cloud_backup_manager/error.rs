@@ -504,6 +504,12 @@ impl From<CloudBackupInternalError> for CloudBackupError {
     }
 }
 
+impl From<crate::backup::BackupError> for CloudBackupInternalError {
+    fn from(error: crate::backup::BackupError) -> Self {
+        Self(CloudBackupErrorSource::source(error))
+    }
+}
+
 impl From<serde_json::Error> for CloudBackupError {
     fn from(error: serde_json::Error) -> Self {
         Self::internal(error)

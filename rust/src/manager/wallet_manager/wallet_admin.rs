@@ -20,6 +20,10 @@ use super::{Error, Message, RustWalletManager};
 
 impl RustWalletManager {
     pub(crate) fn delete_wallet_internal(&self) -> Result<(), Error> {
+        if !self.uses_persistent_storage() {
+            return Err(Error::PreviewOperationUnavailable);
+        }
+
         let wallet_id = self.metadata.read().id.clone();
         tracing::debug!("deleting wallet {wallet_id}");
 
@@ -65,15 +69,19 @@ impl RustWalletManager {
         let mut metadata = before_metadata.clone();
         metadata.wallet_type = wallet_type;
 
-        metadata = Database::global()
-            .wallets
-            .update_wallet_metadata(metadata.clone())
-            .map_err_debug(Error::SetWalletTypeError)?;
+        if self.uses_persistent_storage() {
+            metadata = Database::global()
+                .wallets
+                .update_wallet_metadata(metadata.clone())
+                .map_err_debug(Error::SetWalletTypeError)?;
+        }
 
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
 
-        CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
+        if self.uses_persistent_storage() {
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
+        }
 
         Ok(())
     }
@@ -90,28 +98,33 @@ impl RustWalletManager {
         let mut metadata = before_metadata.clone();
         metadata.name = name;
 
-        let metadata = match Database::global().wallets.update_wallet_metadata(metadata.clone()) {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                error!("Unable to update wallet metadata: {error:?}");
-                return;
+        let metadata = if self.uses_persistent_storage() {
+            match Database::global().wallets.update_wallet_metadata(metadata.clone()) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    error!("Unable to update wallet metadata: {error:?}");
+                    return;
+                }
             }
+        } else {
+            metadata
         };
 
         *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
-        CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
+        if self.uses_persistent_storage() {
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
+        }
     }
     pub(crate) fn mark_wallet_as_verified_internal(&self) -> Result<(), Error> {
-        // clone metadata and release lock before I/O
-        let metadata = {
-            let mut wallet_metadata = self.metadata.write();
-            wallet_metadata.verified = true;
-            wallet_metadata.clone()
-        };
+        let mut metadata = self.metadata.read().clone();
+        metadata.verified = true;
 
-        Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
+        if self.uses_persistent_storage() {
+            Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
+        }
 
+        *self.metadata.write() = metadata.clone();
         self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
 
         Ok(())

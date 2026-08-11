@@ -719,7 +719,7 @@ private struct VerifyWordsCompactActions: View {
 
 #Preview {
     struct Container: View {
-        @State var manager = WalletManager(preview: "preview_only")
+        @State var manager = WalletManager(preview: .only)
         @State var stateMachine: WordVerifyStateMachine
 
         init() {

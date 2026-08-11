@@ -528,7 +528,7 @@ private enum SendConfirmationError: LocalizedError {
                         }
                     }
                     .task {
-                        manager = WalletManager(preview: "preview_only", metadata)
+                        manager = WalletManager(preview: .only, metadata)
                         manager?.dispatch(action: .updateUnit(.sat))
                     }
                 }
@@ -543,7 +543,7 @@ private enum SendConfirmationError: LocalizedError {
     AsyncPreview {
         SendFlowConfirmScreen(
             id: WalletId(),
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew(),
             input: .unsigned,
             payjoinEndpoint: nil
@@ -553,7 +553,7 @@ private enum SendConfirmationError: LocalizedError {
         .environment(
             SendFlowPresenter(
                 app: AppManager.shared,
-                manager: WalletManager(preview: "preview_only")
+                manager: WalletManager(preview: .only)
             )
         )
     }

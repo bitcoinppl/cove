@@ -11,7 +11,10 @@ use bdk_wallet::chain::{
 use bip329::Labels;
 
 use crate::{
-    database::{Database, wallet_data::WalletDataDb},
+    database::{
+        Database,
+        wallet_data::{WalletDataDb, label::LabelsTable},
+    },
     fiat::FiatAmount,
     wallet::metadata::WalletId,
 };
@@ -71,16 +74,40 @@ impl Transaction {
         sent_and_received: SentAndReceived,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
     ) -> Self {
+        let labels = WalletDataDb::new_or_existing(wallet_id.clone())
+            .ok()
+            .and_then(|db| db.labels.all_labels_for_txn(tx.tx_node.txid).ok())
+            .unwrap_or_default();
+
+        Self::new_with_label_values(sent_and_received, tx, labels.into())
+    }
+
+    pub(crate) fn new_with_labels(
+        sent_and_received: SentAndReceived,
+        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+        labels_table: &LabelsTable,
+    ) -> Self {
+        let labels = labels_table.all_labels_for_txn(tx.tx_node.txid).unwrap_or_default().into();
+
+        Self::new_with_label_values(sent_and_received, tx, labels)
+    }
+
+    pub(crate) fn new_without_labels(
+        sent_and_received: SentAndReceived,
+        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+    ) -> Self {
+        Self::new_with_label_values(sent_and_received, tx, Labels::default())
+    }
+
+    fn new_with_label_values(
+        sent_and_received: SentAndReceived,
+        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+        labels: Labels,
+    ) -> Self {
         let txid = tx.tx_node.txid.into();
         let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
-
-        let labels = WalletDataDb::new_or_existing(wallet_id.clone())
-            .ok()
-            .and_then(|db| db.labels.all_labels_for_txn(tx.tx_node.txid).ok())
-            .unwrap_or_default()
-            .into();
 
         match tx.chain_position {
             BdkChainPosition::Unconfirmed { last_seen, .. } => {

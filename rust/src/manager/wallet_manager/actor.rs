@@ -157,6 +157,17 @@ impl WalletActor {
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
+
+        Self::new_with_db(wallet, reconciler, scan_status, wallet_snapshot, db)
+    }
+
+    pub(crate) fn new_with_db(
+        wallet: Wallet,
+        reconciler: Sender<SingleOrMany>,
+        scan_status: Arc<RwLock<WalletScanStatus>>,
+        wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+        db: WalletDataDb,
+    ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let seed = rand::rng().random();
 
         Ok(Self {
@@ -243,7 +254,9 @@ impl WalletActor {
                 let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
                 (tx, sent_and_received)
             })
-            .map(|(tx, sent_and_received)| Transaction::new(&self.wallet.id, sent_and_received, tx))
+            .map(|(tx, sent_and_received)| {
+                Transaction::new_with_labels(sent_and_received, tx, &self.db.labels)
+            })
             .filter(|tx| tx.sent_and_received().amount() > zero)
             .inspect(|tx| {
                 if let Transaction::Unconfirmed(unconfirmed) = &tx {
@@ -816,6 +829,10 @@ impl WalletActor {
     // the balance is not updated after the second full scan if I don't reload
     // the wallet from the file storage
     fn reload_wallet(&mut self) {
+        if !self.wallet.uses_persistent_storage() {
+            return;
+        }
+
         match Wallet::try_load_persisted(self.wallet.id.clone()) {
             Ok(wallet) => self.wallet = wallet,
             Err(error) => error!("failed to reload wallet: {error:?}"),
@@ -842,6 +859,11 @@ impl WalletActor {
         let now = UNIX_EPOCH.elapsed().unwrap_or_default();
         self.last_scan_finished = Some(now);
 
+        if !self.wallet.uses_persistent_storage() {
+            self.wallet.metadata.internal.last_scan_finished = Some(now);
+            return Some(());
+        }
+
         let wallets = Database::global().wallets();
 
         let mut metadata = wallets
@@ -856,6 +878,11 @@ impl WalletActor {
     }
 
     fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<WalletMetadata, Error> {
+        if !self.wallet.uses_persistent_storage() {
+            self.wallet.metadata.internal.performed_full_scan_at = Some(completed_at);
+            return Ok(self.wallet.metadata.clone());
+        }
+
         let wallets = Database::global().wallets();
         let current_metadata = wallets
             .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
@@ -1436,10 +1463,13 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
         test_keychain();
 
-        let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+        let wallet =
+            Wallet::try_new_persisted_from_mnemonic_segwit(metadata, test_mnemonic(), None)
+                .expect("test wallet is persisted");
         crate::database::Database::global()
             .wallets
-            .save_new_wallet_metadata(metadata)
+            .save_new_wallet_metadata(wallet.metadata.clone())
             .expect("wallet metadata is persisted");
 
         wallet

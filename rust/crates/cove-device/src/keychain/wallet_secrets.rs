@@ -238,6 +238,11 @@ impl WalletSecretStore {
         self.pair(id).delete_existing_value_then_cryptor()
     }
 
+    pub(crate) fn has_any(&self, id: &WalletId) -> bool {
+        let _guard = self.1.lock();
+        !matches!(self.pair(id).state(), State::Empty)
+    }
+
     fn pair(&self, id: &WalletId) -> EncryptedPair {
         EncryptedPair::new(self.0.clone(), mnemonic_key_name(id), mnemonic_cryptor_key_name(id))
     }

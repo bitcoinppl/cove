@@ -125,6 +125,13 @@ pub struct WalletDataDb {
     pub id: WalletId,
     pub db: Arc<redb::Database>,
     pub labels: LabelsTable,
+    storage: WalletDataStorage,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum WalletDataStorage {
+    Persistent,
+    InMemory,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -155,8 +162,28 @@ impl WalletDataDb {
         Self::new_with_db_location(id, &WALLET_DATA_DIR)
     }
 
+    /// Creates an ephemeral wallet-data database that never touches the wallet-data directory
+    pub(crate) fn new_in_memory(id: WalletId) -> Result<Self> {
+        let db = redb::Database::builder()
+            .create_with_backend(redb::backends::InMemoryBackend::new())
+            .map_err(|error| WalletDataError::DatabaseAccess {
+                id: id.clone(),
+                error: error.to_string(),
+            })?;
+
+        Self::new_with_db(id, Arc::new(db), WalletDataStorage::InMemory)
+    }
+
     fn new_with_db_location(id: WalletId, db_location: &Path) -> Result<Self> {
         let db = get_or_create_database(&id, db_location)?;
+        Self::new_with_db(id, db, WalletDataStorage::Persistent)
+    }
+
+    fn new_with_db(
+        id: WalletId,
+        db: Arc<redb::Database>,
+        storage: WalletDataStorage,
+    ) -> Result<Self> {
         let write_txn = db.begin_write().map_err(|e| WalletDataError::DatabaseAccess {
             id: id.clone(),
             error: e.to_string(),
@@ -174,7 +201,11 @@ impl WalletDataDb {
             error: e.to_string(),
         })?;
 
-        Ok(Self { id, db, labels })
+        Ok(Self { id, db, labels, storage })
+    }
+
+    pub(crate) const fn is_in_memory(&self) -> bool {
+        matches!(self.storage, WalletDataStorage::InMemory)
     }
 
     pub fn get_scan_state(&self, address_type: WalletAddressType) -> Result<Option<ScanState>> {
@@ -347,6 +378,27 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb
 
 pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
     delete_database_at_location(id, &WALLET_DATA_DIR)
+}
+
+pub(crate) fn wallet_data_artifact_paths(id: &WalletId) -> Vec<PathBuf> {
+    let directory = WALLET_DATA_DIR.join(id.as_str());
+    let mut paths = vec![directory.clone()];
+
+    let Ok(entries) = std::fs::read_dir(&directory) else {
+        return paths;
+    };
+
+    paths.extend(entries.filter_map(std::result::Result::ok).map(|entry| entry.path()));
+    paths
+}
+
+pub(crate) fn wallet_data_artifacts_exist(id: &WalletId) -> bool {
+    let directory = WALLET_DATA_DIR.join(id.as_str());
+    if directory.is_file() {
+        return true;
+    }
+
+    std::fs::read_dir(directory).is_ok_and(|mut entries| entries.next().is_some())
 }
 
 /// Drop all cached wallet data connections and open locks

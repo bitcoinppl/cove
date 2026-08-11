@@ -569,7 +569,10 @@ pub(crate) mod test_support {
     use redb::TableDefinition;
 
     use super::LabelsTable;
-    use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletId};
+    use crate::{
+        database::wallet_data::{WalletDataDb, WalletDataStorage},
+        wallet::metadata::WalletId,
+    };
 
     const MISMATCHED_OUTPUT_TABLE: TableDefinition<&'static str, &'static str> =
         TableDefinition::new("output_records_v2.cbor");
@@ -589,7 +592,7 @@ pub(crate) mod test_support {
         write_txn.commit().expect("failed to commit write transaction");
 
         let labels = LabelsTable { db: db.clone() };
-        let wallet_db = WalletDataDb { id, db, labels };
+        let wallet_db = WalletDataDb { id, db, labels, storage: WalletDataStorage::Persistent };
 
         (wallet_db, tmp)
     }

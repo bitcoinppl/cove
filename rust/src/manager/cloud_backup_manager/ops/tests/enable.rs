@@ -525,18 +525,25 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     globals.cloud.set_wallet_backup(
         first_namespace.clone(),
         first_record_id.clone(),
-        encrypted_wallet_backup_bytes(&first_wallet, &first_master_key, &first_revision, 1).await,
-    );
-    globals.cloud.set_wallet_backup(
-        second_namespace.clone(),
-        second_record_id.clone(),
-        encrypted_wallet_backup_bytes(&second_wallet, &second_master_key, &second_revision, 1)
+        encrypted_remote_wallet_backup_bytes(&first_wallet, &first_master_key, &first_revision, 1)
             .await,
     );
     globals.cloud.set_wallet_backup(
         second_namespace.clone(),
+        second_record_id.clone(),
+        encrypted_remote_wallet_backup_bytes(
+            &second_wallet,
+            &second_master_key,
+            &second_revision,
+            1,
+        )
+        .await,
+    );
+    globals.cloud.set_wallet_backup(
+        second_namespace.clone(),
         third_record_id.clone(),
-        encrypted_wallet_backup_bytes(&third_wallet, &second_master_key, &third_revision, 1).await,
+        encrypted_remote_wallet_backup_bytes(&third_wallet, &second_master_key, &third_revision, 1)
+            .await,
     );
     globals.cloud.set_wallet_files(
         first_namespace.clone(),

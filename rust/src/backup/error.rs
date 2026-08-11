@@ -1,4 +1,5 @@
 use crate::wallet_identity::WalletIdentityError;
+use cove_types::WalletId;
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -45,6 +46,10 @@ pub enum BackupError {
 
     #[error("Failed to access database: {0}")]
     Database(String),
+
+    /// The wallet id is already used by local wallet state or restore artifacts
+    #[error("Wallet id is already occupied: {0}")]
+    WalletIdOccupied(WalletId),
 
     #[error("Failed to decompress: {0}")]
     Decompression(String),

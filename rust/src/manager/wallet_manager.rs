@@ -33,7 +33,7 @@ use cove_util::result_ext::ResultExt as _;
 use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
-    database::{Database, error::DatabaseError},
+    database::{Database, error::DatabaseError, wallet_data::WalletDataDb},
     discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
     fee_client::{FEE_CLIENT, FEES, FeeResponse},
     fiat::client::PriceResponse,
@@ -249,6 +249,10 @@ impl WalletBootstrapUnsignedTransactions {
         Self::InMemory(unsigned_transactions)
     }
 
+    pub(crate) const fn is_in_memory(&self) -> bool {
+        matches!(self, Self::InMemory(_))
+    }
+
     fn load(&self) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
         match self {
             Self::Database(wallet_id) => unsigned_transactions_for_wallet(wallet_id),
@@ -290,6 +294,9 @@ pub enum WalletManagerError {
 
     #[error("wallet does not exist")]
     WalletDoesNotExist,
+
+    #[error("operation is unavailable for a preview wallet")]
+    PreviewOperationUnavailable,
 
     #[error("unable to retrieve the secret words for the wallet {0}")]
     SecretRetrievalError(#[from] KeychainError),
@@ -857,6 +864,10 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn non_default_account_number(&self) -> Option<u32> {
+        if !self.uses_persistent_storage() {
+            return None;
+        }
+
         wallet_account_number(&self.id).filter(|account| *account != 0)
     }
 
@@ -1172,12 +1183,17 @@ impl RustWalletManager {
             }
         }
 
-        let candidate = match Database::global().wallets.update_wallet_metadata(candidate.clone()) {
-            Ok(candidate) => candidate,
-            Err(error) => {
-                error!("Unable to update wallet metadata: {error:?}");
-                return;
+        let uses_persistent_storage = self.uses_persistent_storage();
+        let candidate = if uses_persistent_storage {
+            match Database::global().wallets.update_wallet_metadata(candidate.clone()) {
+                Ok(candidate) => candidate,
+                Err(error) => {
+                    error!("Unable to update wallet metadata: {error:?}");
+                    return;
+                }
             }
+        } else {
+            candidate
         };
 
         *self.metadata.write() = candidate.clone();
@@ -1186,7 +1202,9 @@ impl RustWalletManager {
         self.reconciler.send(Message::LedgerStateChanged(
             WalletLedgerState::from_metadata_and_scan_status(&candidate, &scan_status),
         ));
-        CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
+        if uses_persistent_storage {
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
+        }
     }
 
     pub fn shutdown(&self) {
@@ -1203,12 +1221,20 @@ impl RustWalletManager {
 }
 
 impl RustWalletManager {
+    fn uses_persistent_storage(&self) -> bool {
+        !self.unsigned_transactions.is_in_memory()
+    }
+
     fn current_scan_status(&self) -> WalletScanStatus {
         self.scan_status.read().clone()
     }
 
     fn current_metadata(&self) -> WalletMetadata {
         let cached_metadata = self.metadata.read().clone();
+        if !self.uses_persistent_storage() {
+            return cached_metadata;
+        }
+
         let database_metadata = Database::global().wallets().get(
             &self.id,
             cached_metadata.network,
@@ -1247,6 +1273,10 @@ impl RustWalletManager {
     }
 
     fn refresh_metadata_from_database(&self) -> Result<WalletMetadata, Error> {
+        if !self.uses_persistent_storage() {
+            return Ok(self.metadata.read().clone());
+        }
+
         let before_metadata = self.metadata.read().clone();
         let metadata = Database::global()
             .wallets()
@@ -1288,17 +1318,20 @@ impl RustWalletManager {
         let channel = ReconcileChannel::new(100);
 
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
-        let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
+        let wallet_data_db = WalletDataDb::new_in_memory(wallet.metadata.id.clone())
+            .expect("failed to open in-memory wallet data database for preview wallet");
+        let label_manager = LabelManager::try_new_with_db(wallet_data_db.clone()).into();
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(
+        let wallet_actor = WalletActor::new_with_db(
             wallet,
             channel.raw_sender(),
             scan_status.clone(),
             wallet_snapshot.clone(),
+            wallet_data_db,
         )
-        .expect("failed to open wallet database for preview wallet");
+        .expect("failed to open in-memory wallet data database for preview wallet");
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
@@ -1386,9 +1419,9 @@ mod tests {
     use bitcoin::Amount;
 
     use super::{
-        Balance, BalancePresentation, Error, PREVIEW_FULL_SCAN_COMPLETED_AT, WalletLedgerState,
-        WalletLoadState, WalletManagerError, WalletScanPhase, WalletScanProgress, WalletScanStatus,
-        WalletSnapshot, initial_state_from_snapshot,
+        Balance, BalancePresentation, Error, PREVIEW_FULL_SCAN_COMPLETED_AT, RustWalletManager,
+        WalletLedgerState, WalletLoadState, WalletManagerError, WalletScanPhase,
+        WalletScanProgress, WalletScanStatus, WalletSnapshot, initial_state_from_snapshot,
         initial_state_from_snapshot_with_pending_unsigned_transactions, ledger_state,
         preview_ledger_ready_metadata,
     };
@@ -1414,6 +1447,50 @@ mod tests {
             fiat: None,
             labels: Default::default(),
         }))
+    }
+
+    #[test]
+    fn preview_manager_construction_has_no_persistent_side_effects() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let metadata = WalletMetadata::preview_new();
+        let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id);
+        let wallet_data_paths =
+            crate::database::wallet_data::wallet_data_artifact_paths(&metadata.id);
+
+        let manager = RustWalletManager::preview_new_wallet_with_metadata(metadata);
+
+        assert!(manager.get_unsigned_transactions().unwrap().is_empty());
+        assert_eq!(manager.non_default_account_number(), None);
+        assert!(bdk_paths.iter().all(|path| !path.exists()));
+        assert!(wallet_data_paths.iter().all(|path| !path.exists()));
+    }
+
+    #[tokio::test]
+    async fn preview_manager_rejects_xpub_export_without_persistent_side_effects() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let metadata = WalletMetadata::preview_new();
+        let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id);
+        let wallet_data_paths =
+            crate::database::wallet_data::wallet_data_artifact_paths(&metadata.id);
+        let manager = RustWalletManager::preview_new_wallet_with_metadata(metadata);
+
+        assert!(matches!(
+            manager.export_xpub_for_share().await,
+            Err(Error::PreviewOperationUnavailable)
+        ));
+        assert!(bdk_paths.iter().all(|path| !path.exists()));
+        assert!(wallet_data_paths.iter().all(|path| !path.exists()));
+    }
+
+    #[test]
+    fn preview_manager_rejects_wallet_deletion() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let manager = RustWalletManager::preview_new_wallet();
+
+        assert_eq!(manager.delete_wallet(), Err(Error::PreviewOperationUnavailable));
     }
 
     #[test]

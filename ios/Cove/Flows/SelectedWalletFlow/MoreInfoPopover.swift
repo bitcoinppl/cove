@@ -225,7 +225,7 @@ private struct MoreInfoWalletActions: View {
 #Preview {
     AsyncPreview {
         MoreInfoPopover(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             importLabels: {},
             exportLabels: {},
             exportXpub: {}

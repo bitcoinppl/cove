@@ -60,6 +60,10 @@ impl RustWalletManager {
     /// Export public descriptors (xpub) for share
     #[uniffi::method]
     pub async fn export_xpub_for_share(&self) -> Result<XpubExportResult, Error> {
+        if !self.uses_persistent_storage() {
+            return Err(Error::PreviewOperationUnavailable);
+        }
+
         let id = self.id.clone();
         let name = self.metadata.read().name.clone();
 
@@ -84,6 +88,10 @@ impl RustWalletManager {
     /// Export public descriptors (xpub) as QR codes
     #[uniffi::method]
     pub async fn export_xpub_for_qr(&self, density: Arc<QrDensity>) -> Result<Vec<String>, Error> {
+        if !self.uses_persistent_storage() {
+            return Err(Error::PreviewOperationUnavailable);
+        }
+
         use bbqr::{
             encode::Encoding,
             file_type::FileType,

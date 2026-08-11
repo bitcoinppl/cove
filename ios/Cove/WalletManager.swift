@@ -46,6 +46,10 @@ private struct WalletManagerBootstrap {
     let initialState: WalletInitialState
 }
 
+enum WalletManagerPreview {
+    case only
+}
+
 @Observable final class WalletManager: ReconcilingManager, WalletManagerReconciler {
     typealias Message = WalletManagerReconcileMessage
     typealias Action = WalletManagerAction
@@ -669,9 +673,7 @@ private struct WalletManagerBootstrap {
     }
 
     /// PREVIEW only
-    convenience init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
-        assert(preview == "preview_only")
-
+    convenience init(preview _: WalletManagerPreview, _ walletMetadata: WalletMetadata? = nil) {
         let rust =
             if let walletMetadata {
                 RustWalletManager.previewNewWalletWithMetadata(metadata: walletMetadata)

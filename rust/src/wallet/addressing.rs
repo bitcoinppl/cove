@@ -32,12 +32,20 @@ impl Wallet {
 
         let id = self.id.clone();
 
-        // delete the bdk wallet filestore
-        BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
-            WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
-        })?;
+        let is_persistent = self.uses_persistent_storage();
 
-        let store = BdkStore::try_new(&id, self.network);
+        if is_persistent {
+            // delete the bdk wallet filestore
+            BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
+                WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
+            })?;
+        }
+
+        let store = if is_persistent {
+            BdkStore::try_new(&id, self.network)
+        } else {
+            BdkStore::in_memory(&id, self.network)
+        };
         let mut db = store.map_err_str(WalletError::LoadError)?.conn;
 
         let descriptors: Descriptors = descriptors.into();
@@ -49,7 +57,11 @@ impl Wallet {
 
         // switch db and wallet
         self.bdk = wallet;
-        self.db = parking_lot::Mutex::new(db);
+        self.storage = if is_persistent {
+            super::WalletStorage::persistent(db)
+        } else {
+            super::WalletStorage::in_memory(db)
+        };
         let metadata = self.current_database_metadata()?;
         let metadata = metadata_for_address_type_switch(metadata, address_type);
         self.persist_address_type_switch_metadata(metadata)?;
@@ -64,10 +76,12 @@ impl Wallet {
     ) -> Result<(), WalletError> {
         debug!("switching private wallet to new address type");
 
-        // delete the bdk wallet filestore
-        BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
-            WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
-        })?;
+        if self.uses_persistent_storage() {
+            // delete the bdk wallet filestore
+            BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
+                WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
+            })?;
+        }
 
         let secret = Keychain::global()
             .get_wallet_secret(&self.id)
@@ -138,7 +152,9 @@ impl Wallet {
         let address_info = addresses[index_to_use].clone();
         self.metadata.internal.set_last_seen_address_index(&addresses, index_to_use);
 
-        Database::global().wallets.update_internal_metadata(&self.metadata)?;
+        if self.uses_persistent_storage() {
+            Database::global().wallets.update_internal_metadata(&self.metadata)?;
+        }
 
         let public_descriptor = self.bdk.public_descriptor(KeychainKind::External);
         let derivation_path = public_descriptor.derivation_path().ok();

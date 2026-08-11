@@ -364,7 +364,7 @@ private struct UtxoRowIdentity: View {
 
 #Preview {
     AsyncPreview {
-        let wm = WalletManager(preview: "preview_only")
+        let wm = WalletManager(preview: .only)
         let ap = AppManager.shared
         let presenter = SendFlowPresenter(app: ap, manager: wm)
         let utxos = previewNewUtxoList(outputCount: 2, changeCount: 1)

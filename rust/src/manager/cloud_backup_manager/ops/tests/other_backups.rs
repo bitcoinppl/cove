@@ -224,7 +224,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     globals.cloud.set_wallet_backup(
         other_namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
     );
     globals.cloud.set_wallet_files(
         other_namespace.clone(),
@@ -342,8 +342,13 @@ async fn recover_other_backups_keeps_partially_moved_namespace() {
     globals.cloud.set_wallet_backup(
         other_namespace.clone(),
         restored_record_id.clone(),
-        encrypted_wallet_backup_bytes(&restored_wallet, &other_master_key, "other-revision", 1)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &restored_wallet,
+            &other_master_key,
+            "other-revision",
+            1,
+        )
+        .await,
     );
     globals.cloud.set_wallet_files(
         other_namespace.clone(),
@@ -395,7 +400,7 @@ async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
     globals.cloud.set_wallet_backup(
         other_namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
     );
     globals.cloud.set_wallet_files(
         other_namespace.clone(),
