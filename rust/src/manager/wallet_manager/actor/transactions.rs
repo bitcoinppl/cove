@@ -28,7 +28,7 @@ use crate::{
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
-        actor::{WalletActor, current_wallet_unspent_outpoints_for_txid, exclude_locked_outpoints},
+        actor::{WalletActor, current_wallet_unspent_outpoints_for_txid},
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
     node::client::NodeClient,
@@ -69,10 +69,10 @@ impl WalletActor {
         address: Address,
     ) -> Result<FeeRateOptionWithTotalFee, Error> {
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
-        let locked_outpoints = self.locked_output_outpoints()?;
+        let spend_policy = self.automatic_spend_policy()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
 
-        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        spend_policy.apply(&mut tx_builder);
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(address.script_pubkey(), amount);
         tx_builder.fee_rate(*option.fee_rate);
@@ -103,10 +103,10 @@ impl WalletActor {
 
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
-        let locked_outpoints = self.locked_output_outpoints()?;
+        let spend_policy = self.automatic_spend_policy()?;
         let mut tx_builder = self.wallet.bdk.build_tx();
 
-        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        spend_policy.apply(&mut tx_builder);
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish()?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
@@ -129,10 +129,10 @@ impl WalletActor {
         let script_pubkey = address.script_pubkey();
 
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
-        let locked_outpoints = self.locked_output_outpoints()?;
+        let spend_policy = self.automatic_spend_policy()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
 
-        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        spend_policy.apply(&mut tx_builder);
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);

@@ -586,6 +586,12 @@ impl WalletActor {
         Ok(outpoints)
     }
 
+    fn automatic_spend_policy(&self) -> Result<SpendPolicy, Error> {
+        let locked_outpoints = self.locked_output_outpoints()?;
+
+        Ok(SpendPolicy::from_wallet_outputs(self.wallet.bdk.list_unspent(), locked_outpoints))
+    }
+
     fn reject_locked_outpoints(&self, outpoints: &[OutPoint]) -> Result<(), Error> {
         let locked_outpoints =
             self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
@@ -1207,11 +1213,45 @@ fn reject_locked_selected_outpoints(
     Ok(())
 }
 
+#[cfg(test)]
 fn exclude_locked_outpoints<Cs>(
     tx_builder: &mut TxBuilder<'_, Cs>,
     locked_outpoints: Vec<OutPoint>,
 ) {
     tx_builder.unspendable(locked_outpoints);
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct SpendPolicy {
+    locked_outpoints: HashSet<OutPoint>,
+    unconfirmed_external_outpoints: HashSet<OutPoint>,
+}
+
+impl SpendPolicy {
+    fn from_wallet_outputs(
+        outputs: impl IntoIterator<Item = LocalOutput>,
+        locked_outpoints: impl IntoIterator<Item = OutPoint>,
+    ) -> Self {
+        let unconfirmed_external_outpoints = outputs
+            .into_iter()
+            .filter(|output| {
+                output.keychain == KeychainKind::External
+                    && matches!(output.chain_position, ChainPosition::Unconfirmed { .. })
+            })
+            .map(|output| output.outpoint)
+            .collect();
+
+        Self {
+            locked_outpoints: locked_outpoints.into_iter().collect(),
+            unconfirmed_external_outpoints,
+        }
+    }
+
+    fn apply<Cs>(&self, tx_builder: &mut TxBuilder<'_, Cs>) {
+        let mut unspendable = self.locked_outpoints.iter().copied().collect::<Vec<_>>();
+        unspendable.extend(self.unconfirmed_external_outpoints.iter().copied());
+        tx_builder.unspendable(unspendable);
+    }
 }
 
 #[cfg(test)]
@@ -1228,7 +1268,7 @@ mod tests {
     use bip39::Mnemonic;
     use bitcoin::{
         Address as BdkAddress, Amount, BlockHash, Network, OutPoint, ScriptBuf,
-        Transaction as BdkTransaction, TxOut, Txid, absolute::LockTime, hashes::Hash as _,
+        Transaction as BdkTransaction, TxIn, TxOut, Txid, absolute::LockTime, hashes::Hash as _,
         transaction::Version,
     };
     use cove_bdk_progressive_scan::ScanUpdate;
@@ -2043,6 +2083,83 @@ mod tests {
 
         assert!(!spent_outpoints.contains(&locked));
         assert!(spent_outpoints.contains(&unlocked));
+    }
+
+    #[test]
+    fn automatic_spend_policy_excludes_unconfirmed_external_outputs_but_keeps_internal_outputs() {
+        let (mut wallet, initial_txid) = get_funded_wallet_wpkh();
+        let external = receive_output(&mut wallet, Amount::from_sat(80_000), ReceiveTo::Mempool(1));
+        let internal_address = wallet.next_unused_address(KeychainKind::Internal).address;
+        let internal = receive_output_to_address(
+            &mut wallet,
+            internal_address,
+            Amount::from_sat(80_000),
+            ReceiveTo::Mempool(2),
+        );
+        let policy = super::SpendPolicy::from_wallet_outputs(
+            wallet.list_unspent(),
+            [OutPoint { txid: initial_txid, vout: 0 }],
+        );
+
+        let mut tx_builder = wallet.build_tx();
+        policy.apply(&mut tx_builder);
+        tx_builder.add_recipient(regtest_address().script_pubkey(), Amount::from_sat(40_000));
+        tx_builder.fee_absolute(Amount::from_sat(500));
+
+        let psbt = tx_builder.finish().expect("trusted internal output can fund transaction");
+        let spent_outpoints = spent_outpoints(&psbt);
+
+        assert!(!spent_outpoints.contains(&external));
+        assert!(spent_outpoints.contains(&internal));
+    }
+
+    #[test]
+    fn automatic_spend_policy_leaves_immature_coinbase_filtering_to_bdk() {
+        let (desc, change_desc) = bdk_wallet::test_utils::get_test_wpkh_and_change_desc();
+        let mut wallet = bdk_wallet::Wallet::create(desc, change_desc)
+            .network(Network::Regtest)
+            .create_wallet_no_persist()
+            .expect("wallet is created");
+        let confirmation_height = 5;
+        insert_checkpoint(
+            &mut wallet,
+            BlockId { height: confirmation_height, hash: BlockHash::all_zeros() },
+        );
+
+        let coinbase = BdkTransaction {
+            version: Version::ONE,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn { previous_output: OutPoint::null(), ..Default::default() }],
+            output: vec![TxOut {
+                script_pubkey: wallet.next_unused_address(KeychainKind::External).script_pubkey(),
+                value: Amount::from_sat(25_000),
+            }],
+        };
+        let coinbase_txid = coinbase.compute_txid();
+        let confirmation = ConfirmationBlockTime {
+            block_id: BlockId { height: confirmation_height, hash: BlockHash::all_zeros() },
+            confirmation_time: 30_000,
+        };
+        let mut tx_update = bdk_wallet::chain::TxUpdate::default();
+        tx_update.txs = vec![Arc::new(coinbase)];
+        tx_update.anchors = [(confirmation, coinbase_txid)].into();
+        wallet
+            .apply_update(bdk_wallet::Update { tx_update, ..Default::default() })
+            .expect("confirmed coinbase update applies without a mempool timestamp");
+
+        let policy = super::SpendPolicy::from_wallet_outputs(wallet.list_unspent(), []);
+        let mut tx_builder = wallet.build_tx();
+        policy.apply(&mut tx_builder);
+        tx_builder
+            .add_recipient(regtest_address().script_pubkey(), Amount::from_sat(10_000))
+            .current_height(confirmation_height);
+
+        assert!(matches!(
+            tx_builder.finish(),
+            Err(bdk_wallet::error::CreateTxError::CoinSelection(
+                bdk_wallet::coin_selection::InsufficientFunds { available: Amount::ZERO, .. }
+            ))
+        ));
     }
 
     #[test]
