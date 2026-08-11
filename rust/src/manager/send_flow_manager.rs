@@ -36,7 +36,7 @@ use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
     amount::Amount,
-    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
+    fees::{FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed},
     unit::BitcoinUnit,
     utxo::Utxo,
 };
@@ -167,8 +167,9 @@ impl RustSendFlowManager {
         let state = State::new(metadata, balance);
 
         // immediately populate cached values if available
-        let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
-            let base_options = FeeRateOptions::from(fee_response);
+        let has_base_fees = if let Some(base_options) =
+            FEE_CLIENT.fees().and_then(|fees| fees.fee_rate_options().ok())
+        {
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
             let selected = Arc::new(fee_options.medium);
             let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
@@ -673,7 +674,9 @@ impl RustSendFlowManager {
                 return;
             };
 
-            let base_options = FeeRateOptions::from(fee_response);
+            let Ok(base_options) = fee_response.fee_rate_options() else {
+                return;
+            };
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
             let previous_selected =
                 state.lock().fee_selection.as_ref().map(|selection| selection.selected.clone());
@@ -745,7 +748,10 @@ mod tests {
     use std::sync::Arc;
 
     use cove_types::{
-        fees::{FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed},
+        fees::{
+            FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
+            FeeSpeed,
+        },
         utxo::{UtxoList, ffi_preview::preview_new_utxo_list},
     };
 
@@ -803,7 +809,7 @@ mod tests {
     }
 
     fn set_selected_fee_without_total(manager: &super::RustSendFlowManager) {
-        let base_options = super::FeeRateOptions::_ffi_preview_new();
+        let base_options = FeeRateOptions::_ffi_preview_new();
         let fee_option = FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0);
         let selected = FeeRateOptionWithTotalFee::without_total(fee_option);
         let options = FeeRateOptionsWithTotalFee::without_totals(base_options);

@@ -11,10 +11,7 @@ mod transaction_locks;
 mod unsigned_transactions;
 mod wallet_admin;
 
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
@@ -35,7 +32,7 @@ use crate::{
     converter::{Converter, ConverterError},
     database::{Database, error::DatabaseError, wallet_data::WalletDataDb},
     discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
-    fee_client::{FEE_CLIENT, FEES, FeeResponse},
+    fee_client::{FEE_CLIENT, FeeClientError, FeeResponse},
     fiat::client::PriceResponse,
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
@@ -439,7 +436,7 @@ impl From<AddUtxoError> for WalletManagerError {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum WalletManagerFeesError {
     #[error(transparent)]
-    Fetch(#[from] reqwest::Error),
+    Fetch(#[from] FeeClientError),
 
     #[error(transparent)]
     Psbt(#[from] bitcoin::psbt::Error),
@@ -657,7 +654,7 @@ impl RustWalletManager {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
-        Ok(fees.into())
+        fees.fee_rate_options().map_err(|error| Error::FeesError(error.to_string()))
     }
 
     #[uniffi::method]
@@ -978,36 +975,14 @@ impl RustWalletManager {
     }
 
     pub fn fees(&self) -> Option<FeeResponse> {
-        let cached_fees = *FEES.load().as_ref();
-
-        match cached_fees {
-            Some(cached_fees)
-                if cached_fees.last_fetched > Instant::now() - Duration::from_secs(30) =>
-            {
-                cove_tokio::task::spawn(
-                    async move { crate::fee_client::get_and_update_fees().await },
-                );
-            }
-            None => {
-                cove_tokio::task::spawn(
-                    async move { crate::fee_client::get_and_update_fees().await },
-                );
-            }
-            _ => {}
-        }
-
-        if let Some(cached_fees) = cached_fees {
-            return Some(cached_fees.fees);
-        }
-
-        None
+        FEE_CLIENT.fees()
     }
 
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
-        Ok(fees.into())
+        fees.fee_rate_options().map_err(|error| Error::FeesError(error.to_string()))
     }
 
     #[uniffi::method]

@@ -77,7 +77,7 @@ impl RustSendFlowManager {
         self: &Arc<Self>,
     ) -> Option<Arc<FeeRateOptions>> {
         let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
-        let fees = Arc::new(FeeRateOptions::from(fee_response));
+        let fees = Arc::new(fee_response.fee_rate_options().ok()?);
 
         {
             let mut state = self.state.lock();
