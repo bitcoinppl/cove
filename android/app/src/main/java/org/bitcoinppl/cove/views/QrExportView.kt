@@ -290,7 +290,7 @@ fun QrExportView(
 }
 
 @Composable
-private fun QrExportProgressIndicator(
+internal fun QrExportProgressIndicator(
     qrCount: Int,
     currentIndex: Int,
     modifier: Modifier = Modifier,
