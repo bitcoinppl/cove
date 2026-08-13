@@ -138,17 +138,19 @@ fun TapSignerSetupRetryView(
                     manager.isScanning = true
 
                     val result =
-                        runCatchingCancellable(
-                            "TapSignerSetupRetryView",
-                            "TapSigner setup retry failed",
-                        ) {
-                            nfc.continueSetup(response)
+                        try {
+                            runCatchingCancellable(
+                                "TapSignerSetupRetryView",
+                                "TapSigner setup retry failed",
+                            ) {
+                                nfc.continueSetup(response)
+                            }
+                        } finally {
+                            manager.isScanning = false
+                            manager.isTagDetected = false
+                            nfcManager.onMessageUpdate = null
+                            nfcManager.onTagDetected = null
                         }
-
-                    manager.isScanning = false
-                    manager.isTagDetected = false
-                    nfcManager.onMessageUpdate = null
-                    nfcManager.onTagDetected = null
 
                     result
                         .onSuccess { setupResponse ->
