@@ -450,7 +450,7 @@ private struct TransactionLockErrorModifier: ViewModifier {
             id: WalletId(),
             txId: details.txId(),
             transactionDetailsPresentation: presentation,
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: .only)
         )
         .environment(AppManager.shared)
     }
@@ -465,7 +465,7 @@ private struct TransactionLockErrorModifier: ViewModifier {
             id: WalletId(),
             txId: details.txId(),
             transactionDetailsPresentation: presentation,
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: .only)
         )
         .environment(AppManager.shared)
     }
@@ -480,7 +480,7 @@ private struct TransactionLockErrorModifier: ViewModifier {
             id: WalletId(),
             txId: details.txId(),
             transactionDetailsPresentation: presentation,
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: .only)
         )
         .environment(AppManager.shared)
     }
@@ -495,7 +495,7 @@ private struct TransactionLockErrorModifier: ViewModifier {
             id: WalletId(),
             txId: details.txId(),
             transactionDetailsPresentation: presentation,
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: .only)
         )
         .environment(AppManager.shared)
     }

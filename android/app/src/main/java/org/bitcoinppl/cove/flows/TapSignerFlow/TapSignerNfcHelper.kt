@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
-import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.tapcard.TapSigner
@@ -12,7 +11,6 @@ import org.bitcoinppl.cove_core.types.Psbt
 class TapSignerNfcHelper(
     private val tapSigner: TapSigner,
 ) {
-    private val tag = "TapSignerNfcHelper"
     private val nfcManager = TapCardNfcManager.getInstance()
     private var lastResponse: TapSignerResponse? = null
 
@@ -20,13 +18,7 @@ class TapSignerNfcHelper(
         factoryPin: String,
         newPin: String,
         chainCode: ByteArray? = null,
-    ): SetupCmdResponse =
-        try {
-            doSetupTapSigner(factoryPin, newPin, chainCode)
-        } catch (e: Exception) {
-            Log.e(tag, "Setup failed", e)
-            throw e
-        }
+    ): SetupCmdResponse = doSetupTapSigner(factoryPin, newPin, chainCode)
 
     suspend fun derive(pin: String): DeriveInfo =
         performTapSignerCmd(TapSignerCmd.Derive(pin)) { response ->
@@ -87,17 +79,12 @@ class TapSignerNfcHelper(
         cmd: TapSignerCmd,
         successResult: (TapSignerResponse?) -> T?,
     ): T {
-        try {
-            val (result, response) = nfcManager.performTapSignerCmd(cmd, successResult)
-            // store last response for retry scenarios (matches iOS behavior)
-            // clean up previous response before storing new one
-            lastResponse?.destroy()
-            lastResponse = response
-            return result
-        } catch (e: Exception) {
-            Log.e(tag, "TapSigner command failed", e)
-            throw e
-        }
+        val (result, response) = nfcManager.performTapSignerCmd(cmd, successResult)
+        // store last response for retry scenarios (matches iOS behavior)
+        // clean up previous response before storing new one
+        lastResponse?.destroy()
+        lastResponse = response
+        return result
     }
 
     private suspend fun doSetupTapSigner(

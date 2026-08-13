@@ -784,7 +784,7 @@ private struct TxnIcon: View {
             unsignedTransactions: [],
             metadata: walletMetadataPreview()
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }
 
@@ -797,7 +797,7 @@ private struct TxnIcon: View {
                 metadata: walletMetadataPreview()
             )
             .background(.thickMaterial)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
     }
 }
@@ -809,7 +809,7 @@ private struct TxnIcon: View {
             unsignedTransactions: [],
             metadata: walletMetadataPreview()
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }
 
@@ -820,7 +820,7 @@ private struct TxnIcon: View {
             unsignedTransactions: [],
             metadata: walletMetadataPreview()
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }
 
@@ -833,7 +833,7 @@ private struct TxnIcon: View {
             ],
             metadata: walletMetadataPreview()
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }
 
@@ -847,7 +847,7 @@ private struct TxnIcon: View {
             unsignedTransactions: [],
             metadata: metadata
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }
 
@@ -862,7 +862,7 @@ private struct TxnIcon: View {
                 unsignedTransactions: [],
                 metadata: metadata
             )
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }
 
@@ -893,6 +893,6 @@ private struct TxnIcon: View {
             }
             .ignoresSafeArea()
         }
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }

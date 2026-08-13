@@ -50,8 +50,25 @@ class TapSignerManager {
             }
         }
 
-        logger.debug("Navigating to \(newRoute), current path: \(path)")
+        logger.debug(
+            "Navigating to \(routeKind(newRoute)), current path count: \(path.count)"
+        )
         path.append(newRoute)
+    }
+
+    private func routeKind(_ route: TapSignerRoute) -> String {
+        switch route {
+        case .initSelect: "initSelect"
+        case .initAdvanced: "initAdvanced"
+        case .startingPin: "startingPin"
+        case .newPin: "newPin"
+        case .confirmPin: "confirmPin"
+        case .setupSuccess: "setupSuccess"
+        case .setupRetry: "setupRetry"
+        case .importSuccess: "importSuccess"
+        case .importRetry: "importRetry"
+        case .enterPin: "enterPin"
+        }
     }
 
     func popRoute() {

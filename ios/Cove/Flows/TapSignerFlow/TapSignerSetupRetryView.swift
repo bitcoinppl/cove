@@ -44,16 +44,20 @@ struct TapSignerSetupRetry: View {
             case let .success(.complete(complete)):
                 manager.resetRoute(to: .setupSuccess(tapSigner, complete))
             case let .success(incomplete):
-                Log.error(
-                    "Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)"
-                )
+                Log.error("TapSigner setup retry returned an incomplete response")
                 app.sheetState = nil
                 app.alertState = .init(
-                    .tapSignerSetupFailed(message: "Failed to setup TapSigner")
+                    .tapSignerSetupFailed(
+                        message: "TapSigner setup failed. Please try again."
+                    )
                 )
-            case let .failure(error):
+            case .failure:
                 app.sheetState = nil
-                app.alertState = .init(.tapSignerSetupFailed(message: error.description))
+                app.alertState = .init(
+                    .tapSignerSetupFailed(
+                        message: "TapSigner setup failed. Please try again."
+                    )
+                )
             }
         }
     }

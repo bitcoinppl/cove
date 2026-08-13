@@ -27,7 +27,7 @@ struct TapSignerSetupSuccess: View {
 
             walletId = manager.id
         } catch {
-            Log.error("Failed to save wallet: \(error.localizedDescription)")
+            Log.error("Failed to save TapSigner wallet")
         }
     }
 

@@ -56,9 +56,26 @@ class TapSignerManager(
             return
         }
 
-        android.util.Log.d(tag, "Navigating to $to, current path: $path")
+        android.util.Log.d(
+            tag,
+            "Navigating to ${routeKind(to)}, current path count: ${path.size}",
+        )
         path.add(to)
     }
+
+    private fun routeKind(route: org.bitcoinppl.cove_core.TapSignerRoute): String =
+        when (route) {
+            is org.bitcoinppl.cove_core.TapSignerRoute.InitSelect -> "initSelect"
+            is org.bitcoinppl.cove_core.TapSignerRoute.InitAdvanced -> "initAdvanced"
+            is org.bitcoinppl.cove_core.TapSignerRoute.StartingPin -> "startingPin"
+            is org.bitcoinppl.cove_core.TapSignerRoute.NewPin -> "newPin"
+            is org.bitcoinppl.cove_core.TapSignerRoute.ConfirmPin -> "confirmPin"
+            is org.bitcoinppl.cove_core.TapSignerRoute.SetupSuccess -> "setupSuccess"
+            is org.bitcoinppl.cove_core.TapSignerRoute.SetupRetry -> "setupRetry"
+            is org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess -> "importSuccess"
+            is org.bitcoinppl.cove_core.TapSignerRoute.ImportRetry -> "importRetry"
+            is org.bitcoinppl.cove_core.TapSignerRoute.EnterPin -> "enterPin"
+        }
 
     private fun shouldPreventNavigation(
         from: org.bitcoinppl.cove_core.TapSignerRoute,

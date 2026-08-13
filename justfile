@@ -19,7 +19,7 @@ list:
 # [variable] Run an xtask command
 [group('utils')]
 xtask *args:
-    cd rust && cargo xtask {{ args }}
+    cd rust && cargo --locked xtask {{ args }}
 
 # [bounded] Rebase current branch onto new-base after choosing the old squash-merged base
 [group('utils')]
@@ -40,11 +40,11 @@ sign-psbt psbt:
     mkdir -p "$OUTPUT_DIR"
     echo "Signing PSBT and outputting to: $OUTPUT_DIR"
     cd rust
-    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f base64 -O "$OUTPUT_DIR/signed.base64.txt"
-    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f hex -O "$OUTPUT_DIR/signed.hex.txt"
-    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f binary -O "$OUTPUT_DIR/signed.psbt"
-    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f bbqr-gif -O "$OUTPUT_DIR/signed-bbqr.gif"
-    cargo xtask util sign-psbt --psbt "{{ psbt }}" -f ur-gif -O "$OUTPUT_DIR/signed-ur.gif"
+    cargo --locked xtask util sign-psbt --psbt "{{ psbt }}" -f base64 -O "$OUTPUT_DIR/signed.base64.txt"
+    cargo --locked xtask util sign-psbt --psbt "{{ psbt }}" -f hex -O "$OUTPUT_DIR/signed.hex.txt"
+    cargo --locked xtask util sign-psbt --psbt "{{ psbt }}" -f binary -O "$OUTPUT_DIR/signed.psbt"
+    cargo --locked xtask util sign-psbt --psbt "{{ psbt }}" -f bbqr-gif -O "$OUTPUT_DIR/signed-bbqr.gif"
+    cargo --locked xtask util sign-psbt --psbt "{{ psbt }}" -f ur-gif -O "$OUTPUT_DIR/signed-ur.gif"
     echo ""
     echo "All formats saved to: $OUTPUT_DIR"
     ls -la "$OUTPUT_DIR"
@@ -223,7 +223,7 @@ android-preview-screenshots-validate:
 [group('test')]
 [script('bash')]
 ios-ui-background device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
-    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --device "{{ device }}" --test "{{ test }}"
+    cd rust && cargo build --locked --package xtask -q && ./target/debug/xtask ios-ui --device "{{ device }}" --test "{{ test }}"
 
 alias iub := ios-ui-background
 
@@ -231,7 +231,7 @@ alias iub := ios-ui-background
 [group('test')]
 [script('bash')]
 ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITests":
-    cd rust && cargo build --package xtask -q && ./target/debug/xtask ios-ui --foreground --device "{{ device }}" --test "{{ test }}"
+    cd rust && cargo build --locked --package xtask -q && ./target/debug/xtask ios-ui --foreground --device "{{ device }}" --test "{{ test }}"
 
 alias iuf := ios-ui-foreground
 
@@ -239,19 +239,19 @@ alias iuf := ios-ui-foreground
 [group('test')]
 [working-directory('rust')]
 test test="" flags="":
-    cargo nextest run {{ test }} --workspace {{ flags }}
+    cargo nextest run --locked {{ test }} --workspace {{ flags }}
 
 # [bounded] Run tests the same way as GitHub Actions
 [group('test')]
 [working-directory('rust')]
 test-gh test="" flags="":
-    cargo test {{ test }} --workspace {{ flags }}
+    cargo test --locked {{ test }} --workspace {{ flags }}
 
 # [bounded] Run tests with cargo test
 [group('test')]
 [working-directory('rust')]
 ctest test="" flags="":
-    cargo test {{ test }} --workspace -- {{ flags }}
+    cargo test --locked {{ test }} --workspace -- {{ flags }}
 
 # [indefinite] Run tests with bacon
 [group('test')]
@@ -280,7 +280,7 @@ alias wtest := watch-test
 [group('lint')]
 [working-directory('rust')]
 lint-rust *flags="":
-    cargo clippy --all-targets --all-features -- -D warnings {{ flags }}
+    cargo clippy --locked --all-targets --all-features -- -D warnings {{ flags }}
 
 # [bounded] Lint Android code
 [group('lint')]
@@ -301,13 +301,13 @@ lint-swift *flags="":
 [group('lint')]
 [working-directory('rust')]
 clippy *flags="":
-    cargo clippy {{ flags }}
+    cargo clippy --locked {{ flags }}
 
 # [bounded] Run pedantic clippy checks (excluding must_use, truncation, single_match, if_not_else, needless_continue, option_if_let_else)
 [group('lint')]
 [working-directory('rust')]
 pedantic *flags="":
-    cargo clippy -- -D clippy::pedantic -D clippy::nursery \
+    cargo clippy --locked -- -D clippy::pedantic -D clippy::nursery \
         -A clippy::must_use_candidate \
         -A clippy::cast_possible_truncation \
         -A clippy::single_match \
@@ -325,7 +325,7 @@ pedantic *flags="":
 [group('lint')]
 [working-directory('rust')]
 pedantic-all *flags="":
-    cargo clippy -- -D clippy::pedantic -D clippy::nursery {{ flags }}
+    cargo clippy --locked -- -D clippy::pedantic -D clippy::nursery {{ flags }}
 
 # ------------------------------------------------------------------------------
 # format
@@ -379,7 +379,7 @@ bcheck:
 [group('dev')]
 [working-directory('rust')]
 check *flags="--workspace --all-targets --all-features":
-    cargo check {{ flags }}
+    cargo check --locked {{ flags }}
 
 # [indefinite] Watch and rebuild iOS on file changes
 [group('dev')]
@@ -392,7 +392,7 @@ alias wb := watch-build
 [group('dev')]
 [working-directory('rust')]
 fix *flags="":
-    cargo fix --workspace {{ flags }}
+    cargo fix --locked --workspace {{ flags }}
 
 # ------------------------------------------------------------------------------
 # release

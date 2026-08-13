@@ -55,7 +55,11 @@ struct TapSignerEnterPin: View {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
                 } else {
-                    app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
+                    app.alertState = .init(
+                        .tapSignerDeriveFailed(
+                            message: "TapSigner import failed. Please try again."
+                        )
+                    )
                 }
             }
 
@@ -85,7 +89,10 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .backup))
                 } else {
                     app.alertState = .init(
-                        .general(title: "Backup Failed!", message: error.description)
+                        .general(
+                            title: "Backup Failed!",
+                            message: "TapSigner backup failed. Please try again."
+                        )
                     )
                 }
 
@@ -117,7 +124,10 @@ struct TapSignerEnterPin: View {
                 } catch {
                     await MainActor.run {
                         app.alertState = .init(
-                            .general(title: "Error", message: error.localizedDescription)
+                            .general(
+                                title: "Error",
+                                message: "Unable to load the pending transaction."
+                            )
                         )
 
                         self.pin = ""
@@ -130,7 +140,10 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .sign(psbt)))
                 } else {
                     app.alertState = .init(
-                        .general(title: "Signing Failed!", message: error.description)
+                        .general(
+                            title: "Signing Failed!",
+                            message: "TapSigner signing failed. Please try again."
+                        )
                     )
                     app.sheetState = .none
                 }

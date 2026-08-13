@@ -174,7 +174,7 @@ private struct TransactionDetailsEditingLabelField: View {
     AsyncPreview {
         TransactionDetailsLabelView(
             details: TransactionDetails.previewNewConfirmed(),
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: .only)
         )
         .environment(AppManager.shared)
     }
@@ -184,7 +184,7 @@ private struct TransactionDetailsEditingLabelField: View {
     AsyncPreview {
         TransactionDetailsLabelView(
             details: TransactionDetails.previewNewWithLabel(),
-            manager: WalletManager(preview: "preview_only")
+            manager: WalletManager(preview: .only)
         )
         .environment(AppManager.shared)
     }
@@ -194,7 +194,7 @@ private struct TransactionDetailsEditingLabelField: View {
     AsyncPreview {
         TransactionDetailsLabelView(
             details: TransactionDetails.previewNewWithLabel(label: "Car payment"),
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             isEditing: true
         )
         .environment(AppManager.shared)

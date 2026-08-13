@@ -302,14 +302,14 @@ private struct SectionCard: View {
 #Preview {
     AsyncPreview {
         SendFlowAdvancedDetailsView(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew()
         )
         .environment(AppManager.shared)
         .environment(
             SendFlowPresenter(
                 app: AppManager.shared,
-                manager: WalletManager(preview: "preview_only")
+                manager: WalletManager(preview: .only)
             )
         )
     }

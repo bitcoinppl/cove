@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.TapSignerRoute
 
@@ -126,27 +127,30 @@ fun TapSignerImportRetryView(
                     manager.isTagDetected = false
                     manager.isScanning = true
 
-                    try {
-                        val deriveInfo = nfc.derive(pin)
-                        manager.isScanning = false
-                        manager.isTagDetected = false
-                        nfcManager.onMessageUpdate = null
-                        nfcManager.onTagDetected = null
+                    val result =
+                        runCatchingCancellable(
+                            "TapSignerImportRetryView",
+                            "TapSigner import retry failed",
+                        ) {
+                            nfc.derive(pin)
+                        }
 
-                        manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
-                    } catch (e: Exception) {
-                        manager.isScanning = false
-                        manager.isTagDetected = false
-                        nfcManager.onMessageUpdate = null
-                        nfcManager.onTagDetected = null
+                    manager.isScanning = false
+                    manager.isTagDetected = false
+                    nfcManager.onMessageUpdate = null
+                    nfcManager.onTagDetected = null
 
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.TapSignerDeriveFailed(
-                                    e.message ?: "Unknown error occurred",
-                                ),
-                            )
-                    }
+                    result
+                        .onSuccess { deriveInfo ->
+                            manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
+                        }.onFailure {
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.TapSignerDeriveFailed(
+                                        "TapSigner import failed. Please try again.",
+                                    ),
+                                )
+                        }
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),

@@ -452,7 +452,7 @@ private struct SendFlowCoinControlFeeSelectionSheet: View {
 #Preview {
     AsyncPreview {
         NavigationStack {
-            let manager = WalletManager(preview: "preview_only")
+            let manager = WalletManager(preview: .only)
             let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
 
             if let rustSendFlowManager = try? manager.rust.newSendFlowManager(balance: manager.balance) {

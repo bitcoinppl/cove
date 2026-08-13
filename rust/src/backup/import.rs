@@ -1,16 +1,23 @@
-use std::{collections::BTreeMap, str::FromStr as _};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+    str::FromStr as _,
+    sync::LazyLock,
+};
 
 use bip39::Mnemonic;
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_types::network::Network;
 use cove_util::ResultExt as _;
+use parking_lot::Mutex;
+use strum::IntoEnumIterator as _;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use crate::database::global_config::{GlobalConfigKey, GlobalConfigTable, GlobalConfigTableError};
 use crate::database::{Database, Error as DatabaseError};
 use crate::label_manager::LabelManager;
-use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
+use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
     fallback_identity_key_for_backup, identity_key_for_backup,
@@ -174,6 +181,191 @@ enum RestoreSaveBehavior {
     SkipCloudBackup,
 }
 
+static ACTIVE_WALLET_RESTORE_RESERVATIONS: LazyLock<Mutex<HashSet<WalletId>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+#[derive(Clone, Default)]
+struct RestoreArtifactSnapshot {
+    metadata: bool,
+    keychain_items: bool,
+    bdk_paths: HashSet<PathBuf>,
+    wallet_data_paths: HashSet<PathBuf>,
+    wallet_data_occupied: bool,
+}
+
+impl RestoreArtifactSnapshot {
+    fn capture(metadata: &WalletMetadata) -> Result<Self, BackupError> {
+        let database = Database::global();
+        let mut metadata_present = false;
+
+        for network in Network::iter() {
+            for mode in WalletMode::iter() {
+                let wallets =
+                    database.wallets.get_all(network, mode).map_err_str(BackupError::Database)?;
+
+                if wallets.iter().any(|wallet| wallet.id == metadata.id) {
+                    metadata_present = true;
+                }
+            }
+        }
+
+        let keychain_items = Keychain::global().wallet_items_exist(&metadata.id);
+        let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id)
+            .into_iter()
+            .filter(|path| path.exists())
+            .collect();
+        let wallet_data_paths =
+            crate::database::wallet_data::wallet_data_artifact_paths(&metadata.id)
+                .into_iter()
+                .filter(|path| path.exists())
+                .collect();
+        let wallet_data_occupied =
+            crate::database::wallet_data::wallet_data_artifacts_exist(&metadata.id);
+
+        Ok(Self {
+            metadata: metadata_present,
+            keychain_items,
+            bdk_paths,
+            wallet_data_paths,
+            wallet_data_occupied,
+        })
+    }
+
+    fn is_occupied(&self) -> bool {
+        self.metadata
+            || self.keychain_items
+            || !self.bdk_paths.is_empty()
+            || self.wallet_data_occupied
+    }
+}
+
+struct WalletRestoreReservation {
+    id: WalletId,
+    snapshot: RestoreArtifactSnapshot,
+}
+
+impl WalletRestoreReservation {
+    fn acquire(metadata: &WalletMetadata) -> Result<Self, BackupError> {
+        let mut active = ACTIVE_WALLET_RESTORE_RESERVATIONS.lock();
+
+        if active.contains(&metadata.id) {
+            return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
+        }
+
+        let snapshot = RestoreArtifactSnapshot::capture(metadata)?;
+        if snapshot.is_occupied() {
+            return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
+        }
+
+        active.insert(metadata.id.clone());
+
+        Ok(Self { id: metadata.id.clone(), snapshot })
+    }
+}
+
+impl Drop for WalletRestoreReservation {
+    fn drop(&mut self) {
+        ACTIVE_WALLET_RESTORE_RESERVATIONS.lock().remove(&self.id);
+    }
+}
+
+struct RestoreJournal {
+    metadata: WalletMetadata,
+    reservation: WalletRestoreReservation,
+}
+
+impl RestoreJournal {
+    fn new(metadata: &WalletMetadata, reservation: WalletRestoreReservation) -> Self {
+        Self { metadata: metadata.clone(), reservation }
+    }
+
+    fn initial(&self) -> &RestoreArtifactSnapshot {
+        &self.reservation.snapshot
+    }
+
+    fn rollback(&self) -> Vec<String> {
+        let mut failures = Vec::new();
+
+        self.rollback_keychain(&mut failures);
+        self.rollback_paths(
+            crate::bdk_store::BdkStore::wallet_store_artifact_paths(&self.metadata.id),
+            &self.initial().bdk_paths,
+            "BDK store",
+            &mut failures,
+        );
+        self.rollback_paths(
+            crate::database::wallet_data::wallet_data_artifact_paths(&self.metadata.id),
+            &self.initial().wallet_data_paths,
+            "wallet data",
+            &mut failures,
+        );
+        self.rollback_metadata(&mut failures);
+
+        failures
+    }
+
+    fn rollback_keychain(&self, failures: &mut Vec<String>) {
+        if self.initial().keychain_items {
+            return;
+        }
+
+        let keychain = Keychain::global();
+        if keychain.wallet_items_exist(&self.metadata.id)
+            && !keychain.delete_wallet_items(&self.metadata.id)
+        {
+            failures.push(format!("{}: incomplete keychain deletion", self.metadata.name));
+        }
+    }
+
+    fn rollback_paths(
+        &self,
+        paths: impl IntoIterator<Item = PathBuf>,
+        initial: &HashSet<PathBuf>,
+        description: &str,
+        failures: &mut Vec<String>,
+    ) {
+        let mut paths = paths.into_iter().collect::<Vec<_>>();
+        paths.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+
+        for path in paths {
+            if initial.contains(&path) || !path.exists() {
+                continue;
+            }
+
+            let result = if path.is_dir() {
+                std::fs::remove_dir(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+
+            if let Err(error) = result
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                failures.push(format!(
+                    "{}: failed to delete {description} {}: {error}",
+                    self.metadata.name,
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    fn rollback_metadata(&self, failures: &mut Vec<String>) {
+        if self.initial().metadata {
+            return;
+        }
+
+        let database = Database::global();
+        if let Err(error) = database.wallets.remove_wallet_metadata(
+            self.metadata.network,
+            self.metadata.wallet_mode,
+            &self.metadata.id,
+        ) {
+            failures.push(format!("{}: failed to delete metadata: {error}", self.metadata.name));
+        }
+    }
+}
+
 #[derive(Clone)]
 struct RestoredWalletMetadataStore(Database);
 
@@ -310,10 +502,11 @@ fn with_cleanup<F>(metadata: &WalletMetadata, f: F) -> Result<(), (BackupError, 
 where
     F: FnOnce() -> Result<(), BackupError>,
 {
-    f().map_err(|e| {
-        let cleanup_failures = cleanup_failed_wallet(metadata);
-        (e, cleanup_failures)
-    })
+    let reservation =
+        WalletRestoreReservation::acquire(metadata).map_err(|error| (error, Vec::new()))?;
+    let journal = RestoreJournal::new(metadata, reservation);
+
+    f().map_err(|error| (error, journal.rollback()))
 }
 
 pub(crate) fn restore_mnemonic_wallet(
@@ -490,43 +683,6 @@ fn restore_descriptor_wallet_inner(
     RestoredWalletMetadataStore::new(&db).save(metadata, name, save_behavior)?;
 
     Ok(())
-}
-
-/// Clean up a partially-imported wallet on failure
-///
-/// Returns a list of cleanup failures; empty means fully cleaned
-pub(crate) fn cleanup_failed_wallet(metadata: &WalletMetadata) -> Vec<String> {
-    let wallet_id = &metadata.id;
-    let name = &metadata.name;
-    let mut failures = Vec::new();
-
-    let keychain_ok = Keychain::global().delete_wallet_items(wallet_id);
-    if !keychain_ok {
-        failures.push(format!("{name}: incomplete keychain deletion"));
-    }
-
-    if let Err(e) = crate::wallet::delete_wallet_specific_data(wallet_id) {
-        failures.push(format!("{name}: failed to delete wallet data: {e}"));
-    }
-
-    let db = Database::global();
-    match db.wallets.get_all(metadata.network, metadata.wallet_mode) {
-        Ok(mut wallets) => {
-            let before = wallets.len();
-            wallets.retain(|w| w.id != *wallet_id);
-            if wallets.len() < before
-                && let Err(e) =
-                    db.wallets.save_all_wallets(metadata.network, metadata.wallet_mode, wallets)
-            {
-                failures.push(format!("{name}: failed to delete metadata: {e}"));
-            }
-        }
-        Err(e) => {
-            failures.push(format!("{name}: failed to read wallets for cleanup: {e}"));
-        }
-    }
-
-    failures
 }
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
@@ -826,5 +982,59 @@ mod tests {
             Ok(RestoreResult::Imported { .. }) => panic!("expected duplicate skip"),
             Err(error) => panic!("expected duplicate skip, got {}", error.error),
         }
+    }
+
+    #[test]
+    fn wallet_id_reservation_rejects_existing_keychain_items() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = hot_metadata("Occupied wallet");
+        metadata.id = WalletId::preview_new_random();
+        let xpub = bdk_wallet::bitcoin::bip32::Xpub::from_str(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+        let result = WalletRestoreReservation::acquire(&metadata);
+
+        assert!(matches!(result, Err(BackupError::WalletIdOccupied(id)) if id == metadata.id));
+        assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
+    }
+
+    #[test]
+    fn restore_journal_preserves_preexisting_bdk_artifact() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = hot_metadata("Existing BDK artifact");
+        metadata.id = WalletId::preview_new_random();
+        let artifact = crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id)
+            .into_iter()
+            .find(|path| path.to_string_lossy().ends_with("-wal"))
+            .expect("wallet store artifact paths include a WAL path");
+
+        if let Some(parent) = artifact.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+
+        std::fs::write(&artifact, b"pre-existing WAL").unwrap();
+
+        let initial = RestoreArtifactSnapshot {
+            metadata: true,
+            keychain_items: false,
+            bdk_paths: HashSet::from([artifact.clone()]),
+            ..RestoreArtifactSnapshot::default()
+        };
+        let reservation = WalletRestoreReservation { id: metadata.id.clone(), snapshot: initial };
+        let journal = RestoreJournal::new(&metadata, reservation);
+
+        assert!(journal.rollback().is_empty());
+        assert!(artifact.exists());
+        std::fs::remove_file(artifact).unwrap();
     }
 }

@@ -1338,6 +1338,22 @@ pub(crate) async fn encrypted_wallet_backup_bytes(
     serde_json::to_vec(&encrypted).unwrap()
 }
 
+pub(crate) async fn encrypted_remote_wallet_backup_bytes(
+    metadata: &WalletMetadata,
+    master_key: &cove_cspp::master_key::MasterKey,
+    revision_hash: &str,
+    version: u32,
+) -> Vec<u8> {
+    let bytes = encrypted_wallet_backup_bytes(metadata, master_key, revision_hash, version).await;
+
+    assert!(Keychain::global().delete_wallet_items(&metadata.id));
+    assert!(!Keychain::global().wallet_items_exist(&metadata.id));
+    crate::wallet::delete_wallet_specific_data(&metadata.id)
+        .expect("remote restore fixture has no local wallet data");
+
+    bytes
+}
+
 pub(crate) fn wallet_entry_with_labels(
     metadata: &WalletMetadata,
     labels_jsonl: Option<&str>,

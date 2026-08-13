@@ -12,8 +12,8 @@ use cove_types::{
 };
 
 use super::{
-    Error, Message, Result, RustSendFlowManager, SendFlowError, state::EnterMode,
-    state::FeeSelection,
+    Error, Message, Result, RustSendFlowManager, SendFlowError, remote_fee_rate_options,
+    state::EnterMode, state::FeeSelection,
 };
 
 fn selected_fee_rate_for_options(
@@ -77,7 +77,7 @@ impl RustSendFlowManager {
         self: &Arc<Self>,
     ) -> Option<Arc<FeeRateOptions>> {
         let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
-        let fees = Arc::new(FeeRateOptions::from(fee_response));
+        let fees = Arc::new(remote_fee_rate_options(fee_response)?);
 
         {
             let mut state = self.state.lock();

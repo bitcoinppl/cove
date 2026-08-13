@@ -30,6 +30,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.SetupCmdResponse
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -136,35 +137,44 @@ fun TapSignerSetupRetryView(
                     manager.isTagDetected = false
                     manager.isScanning = true
 
-                    try {
-                        val result = nfc.continueSetup(response)
-                        manager.isScanning = false
-                        manager.isTagDetected = false
-                        nfcManager.onMessageUpdate = null
-                        nfcManager.onTagDetected = null
-
-                        when (result) {
-                            is SetupCmdResponse.Complete -> {
-                                manager.resetRoute(TapSignerRoute.SetupSuccess(tapSigner, result.v1))
+                    val result =
+                        try {
+                            runCatchingCancellable(
+                                "TapSignerSetupRetryView",
+                                "TapSigner setup retry failed",
+                            ) {
+                                nfc.continueSetup(response)
                             }
-                            else -> {
-                                manager.resetRoute(TapSignerRoute.SetupRetry(tapSigner, result))
-                            }
+                        } finally {
+                            manager.isScanning = false
+                            manager.isTagDetected = false
+                            nfcManager.onMessageUpdate = null
+                            nfcManager.onTagDetected = null
                         }
-                    } catch (e: Exception) {
-                        manager.isScanning = false
-                        manager.isTagDetected = false
-                        nfcManager.onMessageUpdate = null
-                        nfcManager.onTagDetected = null
 
-                        app.sheetState = null
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.TapSignerSetupFailed(
-                                    e.message ?: "Unknown error",
-                                ),
-                            )
-                    }
+                    result
+                        .onSuccess { setupResponse ->
+                            when (setupResponse) {
+                                is SetupCmdResponse.Complete -> {
+                                    manager.resetRoute(
+                                        TapSignerRoute.SetupSuccess(tapSigner, setupResponse.v1),
+                                    )
+                                }
+                                else -> {
+                                    manager.resetRoute(
+                                        TapSignerRoute.SetupRetry(tapSigner, setupResponse),
+                                    )
+                                }
+                            }
+                        }.onFailure {
+                            app.sheetState = null
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.TapSignerSetupFailed(
+                                        "TapSigner setup failed. Please try again.",
+                                    ),
+                                )
+                        }
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),

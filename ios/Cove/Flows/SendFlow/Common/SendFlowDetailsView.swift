@@ -146,7 +146,7 @@ private struct SendFlowDetailsAmountRows: View {
 #Preview {
     AsyncPreview {
         SendFlowDetailsView(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew(),
             prices: nil
         )
@@ -154,7 +154,7 @@ private struct SendFlowDetailsAmountRows: View {
         .environment(AppManager.shared)
         .environment(
             SendFlowPresenter(
-                app: AppManager.shared, manager: WalletManager(preview: "preview_only")
+                app: AppManager.shared, manager: WalletManager(preview: .only)
             )
         )
     }

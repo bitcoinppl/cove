@@ -20819,6 +20819,11 @@ enum BackupError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
     )
     case Database(String
     )
+    /**
+     * The wallet id is already used by local wallet state or restore artifacts
+     */
+    case WalletIdOccupied(WalletId
+    )
     case Decompression(String
     )
 
@@ -20893,7 +20898,10 @@ public struct FfiConverterTypeBackupError: FfiConverterRustBuffer {
         case 14: return .Database(
             try FfiConverterString.read(from: &buf)
             )
-        case 15: return .Decompression(
+        case 15: return .WalletIdOccupied(
+            try FfiConverterTypeWalletId.read(from: &buf)
+            )
+        case 16: return .Decompression(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -20973,8 +20981,13 @@ public struct FfiConverterTypeBackupError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Decompression(v1):
+        case let .WalletIdOccupied(v1):
             writeInt(&buf, Int32(15))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+
+
+        case let .Decompression(v1):
+            writeInt(&buf, Int32(16))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -33897,6 +33910,7 @@ enum SeedQrError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
 
     case ContainsNonNumericChars
+    case InvalidLength
     case IndexOutOfBounds(UInt16
     )
     case IncorrectWordLength(UInt16
@@ -33944,13 +33958,14 @@ public struct FfiConverterTypeSeedQrError: FfiConverterRustBuffer {
 
 
         case 1: return .ContainsNonNumericChars
-        case 2: return .IndexOutOfBounds(
+        case 2: return .InvalidLength
+        case 3: return .IndexOutOfBounds(
             try FfiConverterUInt16.read(from: &buf)
             )
-        case 3: return .IncorrectWordLength(
+        case 4: return .IncorrectWordLength(
             try FfiConverterUInt16.read(from: &buf)
             )
-        case 4: return .InvalidMnemonic(
+        case 5: return .InvalidMnemonic(
             try FfiConverterTypeBip39Error.read(from: &buf)
             )
 
@@ -33969,18 +33984,22 @@ public struct FfiConverterTypeSeedQrError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case let .IndexOutOfBounds(v1):
+        case .InvalidLength:
             writeInt(&buf, Int32(2))
-            FfiConverterUInt16.write(v1, into: &buf)
 
 
-        case let .IncorrectWordLength(v1):
+        case let .IndexOutOfBounds(v1):
             writeInt(&buf, Int32(3))
             FfiConverterUInt16.write(v1, into: &buf)
 
 
-        case let .InvalidMnemonic(v1):
+        case let .IncorrectWordLength(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterUInt16.write(v1, into: &buf)
+
+
+        case let .InvalidMnemonic(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeBip39Error.write(v1, into: &buf)
 
         }
@@ -36188,10 +36207,8 @@ enum TapSignerReaderError: Swift.Error, Equatable, Hashable, Foundation.Localize
     case UnknownCardType(String
     )
     case NoCommand
-    case InvalidPinLength(UInt8
-    )
-    case NonNumericPin(String
-    )
+    case InvalidPinLength
+    case NonNumericPin
     case SetupAlreadyComplete
     case InvalidChainCodeLength(UInt32
     )
@@ -36268,12 +36285,8 @@ public struct FfiConverterTypeTapSignerReaderError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 5: return .NoCommand
-        case 6: return .InvalidPinLength(
-            try FfiConverterUInt8.read(from: &buf)
-            )
-        case 7: return .NonNumericPin(
-            try FfiConverterString.read(from: &buf)
-            )
+        case 6: return .InvalidPinLength
+        case 7: return .NonNumericPin
         case 8: return .SetupAlreadyComplete
         case 9: return .InvalidChainCodeLength(
             try FfiConverterUInt32.read(from: &buf)
@@ -36317,14 +36330,12 @@ public struct FfiConverterTypeTapSignerReaderError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
 
 
-        case let .InvalidPinLength(v1):
+        case .InvalidPinLength:
             writeInt(&buf, Int32(6))
-            FfiConverterUInt8.write(v1, into: &buf)
 
 
-        case let .NonNumericPin(v1):
+        case .NonNumericPin:
             writeInt(&buf, Int32(7))
-            FfiConverterString.write(v1, into: &buf)
 
 
         case .SetupAlreadyComplete:
@@ -38769,6 +38780,7 @@ enum WalletManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedE
     case GetSelectedWalletError(String
     )
     case WalletDoesNotExist
+    case PreviewOperationUnavailable
     case SecretRetrievalError(KeychainError
     )
     case MarkWalletAsVerifiedError(DatabaseError
@@ -38876,98 +38888,99 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 2: return .WalletDoesNotExist
-        case 3: return .SecretRetrievalError(
+        case 3: return .PreviewOperationUnavailable
+        case 4: return .SecretRetrievalError(
             try FfiConverterTypeKeychainError.read(from: &buf)
             )
-        case 4: return .MarkWalletAsVerifiedError(
+        case 5: return .MarkWalletAsVerifiedError(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
-        case 5: return .LoadWalletError(
+        case 6: return .LoadWalletError(
             try FfiConverterTypeWalletError.read(from: &buf)
             )
-        case 6: return .NodeConnectionFailed(
+        case 7: return .NodeConnectionFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 7: return .WalletScanError(
+        case 8: return .WalletScanError(
             try FfiConverterString.read(from: &buf)
             )
-        case 8: return .TransactionsRetrievalError(
+        case 9: return .TransactionsRetrievalError(
             try FfiConverterString.read(from: &buf)
             )
-        case 9: return .WalletBalanceError(
+        case 10: return .WalletBalanceError(
             try FfiConverterString.read(from: &buf)
             )
-        case 10: return .NextAddressError(
+        case 11: return .NextAddressError(
             try FfiConverterString.read(from: &buf)
             )
-        case 11: return .SetWalletTypeError(
+        case 12: return .SetWalletTypeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 12: return .GetHeightError
-        case 13: return .TransactionDetailsError(
+        case 13: return .GetHeightError
+        case 14: return .TransactionDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 14: return .ActorNotFound
-        case 15: return .UnableToSwitch(
+        case 15: return .ActorNotFound
+        case 16: return .UnableToSwitch(
             try FfiConverterTypeWalletAddressType.read(from: &buf),
             try FfiConverterString.read(from: &buf)
             )
-        case 16: return .FiatError(
+        case 17: return .FiatError(
             try FfiConverterString.read(from: &buf)
             )
-        case 17: return .FeesError(
+        case 18: return .FeesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 18: return .InitialScanIncomplete
-        case 19: return .BuildTxError(
+        case 19: return .InitialScanIncomplete
+        case 20: return .BuildTxError(
             try FfiConverterString.read(from: &buf)
             )
-        case 20: return .InsufficientFunds(
+        case 21: return .InsufficientFunds(
             try FfiConverterString.read(from: &buf)
             )
-        case 21: return .OutputBelowDustLimit
-        case 22: return .LockedOutputsSelected
-        case 23: return .GetConfirmDetailsError(
+        case 22: return .OutputBelowDustLimit
+        case 23: return .LockedOutputsSelected
+        case 24: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 24: return .SigningError(
+        case 25: return .SigningError(
             try FfiConverterString.read(from: &buf)
             )
-        case 25: return .BroadcastError(
+        case 26: return .BroadcastError(
             try FfiConverterString.read(from: &buf)
             )
-        case 26: return .PayjoinSessionError(
+        case 27: return .PayjoinSessionError(
             try FfiConverterString.read(from: &buf)
             )
-        case 27: return .Converter(
+        case 28: return .Converter(
             try FfiConverterTypeConverterError.read(from: &buf)
             )
-        case 28: return .UnknownError(
+        case 29: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
-        case 29: return .PsbtFinalizeError(
+        case 30: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
-        case 30: return .GetHistoricalPricesError(
+        case 31: return .GetHistoricalPricesError(
             try FfiConverterString.read(from: &buf)
             )
-        case 31: return .CsvCreationError(
+        case 32: return .CsvCreationError(
             try FfiConverterString.read(from: &buf)
             )
-        case 32: return .AddUtxosError(
+        case 33: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
-        case 33: return .OutputLabelsError(
+        case 34: return .OutputLabelsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 34: return .DatabaseCorruption(
+        case 35: return .DatabaseCorruption(
             id: try FfiConverterTypeWalletId.read(from: &buf),
             error: try FfiConverterString.read(from: &buf)
             )
-        case 35: return .PendingUnsignedTransactionsLoadError(
+        case 36: return .PendingUnsignedTransactionsLoadError(
             try FfiConverterString.read(from: &buf)
             )
-        case 36: return .ReceiveAddressError(
+        case 37: return .ReceiveAddressError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -38991,170 +39004,174 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
 
 
-        case let .SecretRetrievalError(v1):
+        case .PreviewOperationUnavailable:
             writeInt(&buf, Int32(3))
+
+
+        case let .SecretRetrievalError(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeKeychainError.write(v1, into: &buf)
 
 
         case let .MarkWalletAsVerifiedError(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
 
 
         case let .LoadWalletError(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeWalletError.write(v1, into: &buf)
 
 
         case let .NodeConnectionFailed(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .WalletScanError(v1):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .TransactionsRetrievalError(v1):
+        case let .WalletScanError(v1):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .WalletBalanceError(v1):
+        case let .TransactionsRetrievalError(v1):
             writeInt(&buf, Int32(9))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .NextAddressError(v1):
+        case let .WalletBalanceError(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SetWalletTypeError(v1):
+        case let .NextAddressError(v1):
             writeInt(&buf, Int32(11))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .GetHeightError:
+        case let .SetWalletTypeError(v1):
             writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .GetHeightError:
+            writeInt(&buf, Int32(13))
 
 
         case let .TransactionDetailsError(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
 
 
         case .ActorNotFound:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
 
 
         case let .UnableToSwitch(v1,v2):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             FfiConverterString.write(v2, into: &buf)
 
 
         case let .FiatError(v1):
-            writeInt(&buf, Int32(16))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .FeesError(v1):
             writeInt(&buf, Int32(17))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .InitialScanIncomplete:
+        case let .FeesError(v1):
             writeInt(&buf, Int32(18))
-
-
-        case let .BuildTxError(v1):
-            writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .InsufficientFunds(v1):
+        case .InitialScanIncomplete:
+            writeInt(&buf, Int32(19))
+
+
+        case let .BuildTxError(v1):
             writeInt(&buf, Int32(20))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .OutputBelowDustLimit:
+        case let .InsufficientFunds(v1):
             writeInt(&buf, Int32(21))
-
-
-        case .LockedOutputsSelected:
-            writeInt(&buf, Int32(22))
-
-
-        case let .GetConfirmDetailsError(v1):
-            writeInt(&buf, Int32(23))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .SigningError(v1):
+        case .OutputBelowDustLimit:
+            writeInt(&buf, Int32(22))
+
+
+        case .LockedOutputsSelected:
+            writeInt(&buf, Int32(23))
+
+
+        case let .GetConfirmDetailsError(v1):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .BroadcastError(v1):
+        case let .SigningError(v1):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .PayjoinSessionError(v1):
+        case let .BroadcastError(v1):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Converter(v1):
+        case let .PayjoinSessionError(v1):
             writeInt(&buf, Int32(27))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .Converter(v1):
+            writeInt(&buf, Int32(28))
             FfiConverterTypeConverterError.write(v1, into: &buf)
 
 
         case let .UnknownError(v1):
-            writeInt(&buf, Int32(28))
-            FfiConverterString.write(v1, into: &buf)
-
-
-        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(29))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .GetHistoricalPricesError(v1):
+        case let .PsbtFinalizeError(v1):
             writeInt(&buf, Int32(30))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .CsvCreationError(v1):
+        case let .GetHistoricalPricesError(v1):
             writeInt(&buf, Int32(31))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .AddUtxosError(v1):
+        case let .CsvCreationError(v1):
             writeInt(&buf, Int32(32))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .OutputLabelsError(v1):
+        case let .AddUtxosError(v1):
             writeInt(&buf, Int32(33))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DatabaseCorruption(id,error):
+        case let .OutputLabelsError(v1):
             writeInt(&buf, Int32(34))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .DatabaseCorruption(id,error):
+            writeInt(&buf, Int32(35))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
 
         case let .PendingUnsignedTransactionsLoadError(v1):
-            writeInt(&buf, Int32(35))
+            writeInt(&buf, Int32(36))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .ReceiveAddressError(v1):
-            writeInt(&buf, Int32(36))
+            writeInt(&buf, Int32(37))
             FfiConverterString.write(v1, into: &buf)
 
         }

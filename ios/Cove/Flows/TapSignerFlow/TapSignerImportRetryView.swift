@@ -48,7 +48,18 @@ struct TapSignerImportRetry: View {
             case let .success(deriveInfo):
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
             case let .failure(error):
-                app.alertState = .init(.tapSignerDeriveFailed(message: error.description))
+                if error.isAuthError() {
+                    app.sheetState = nil
+                    app.alertState = .init(
+                        .tapSignerWrongPin(tapSigner: tapSigner, action: .derive)
+                    )
+                } else {
+                    app.alertState = .init(
+                        .tapSignerDeriveFailed(
+                            message: "TapSigner import failed. Please try again."
+                        )
+                    )
+                }
             }
         }
     }

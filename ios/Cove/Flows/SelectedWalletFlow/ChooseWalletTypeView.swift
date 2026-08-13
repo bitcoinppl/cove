@@ -125,7 +125,7 @@ private struct FoundWalletTypeButton: View {
 #Preview {
     AsyncPreview {
         ChooseWalletTypeView(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             foundAddresses: [
                 previewNewLegacyFoundAddress(),
                 previewNewWrappedFoundAddress(),

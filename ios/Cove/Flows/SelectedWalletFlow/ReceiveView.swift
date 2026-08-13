@@ -375,7 +375,7 @@ private struct AddressView: View {
 
 #Preview {
     AsyncPreview {
-        ReceiveView(manager: WalletManager(preview: "preview_only"))
+        ReceiveView(manager: WalletManager(preview: .only))
             .environment(AppManager.shared)
     }
 }

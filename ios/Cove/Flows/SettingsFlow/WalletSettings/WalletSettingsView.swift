@@ -243,7 +243,7 @@ private struct WalletSettingsContent: View {
 
 #Preview {
     AsyncPreview {
-        WalletSettingsView(manager: WalletManager(preview: "preview_only"))
+        WalletSettingsView(manager: WalletManager(preview: .only))
             .environment(AppManager.shared)
             .environment(AuthManager.shared)
             .environment(\.navigate) { _ in

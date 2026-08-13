@@ -317,6 +317,13 @@ impl Keychain {
         key_ok && xpub_ok && descriptor_ok && tap_signer_ok
     }
 
+    /// Checks whether any wallet-specific keychain entry exists
+    pub fn wallet_items_exist(&self, id: &WalletId) -> bool {
+        self.wallet_secrets.has_any(id)
+            || self.wallet_public.has_any(id)
+            || matches!(self.get_tap_signer_backup(id), Ok(Some(_)) | Err(_))
+    }
+
     fn from_access(access: SharedAccess) -> Self {
         Self {
             local_encryption: LocalEncryptionKeyStore::new(access.clone()),

@@ -541,7 +541,7 @@ private struct SendFlowHardwareConfirmationDialog: View {
     AsyncPreview {
         SendFlowHardwareScreen(
             id: WalletId(),
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew()
         )
         .environment(AppManager.shared)

@@ -86,7 +86,7 @@ private struct EnterAddressHeader: View {
 #Preview {
     AsyncPreview {
         let app = AppManager.shared
-        let manager = WalletManager(preview: "preview_only")
+        let manager = WalletManager(preview: .only)
         let presenter = SendFlowPresenter(app: app, manager: manager)
 
         EnterAddressView(address: Binding.constant("bc1qdgxdn046v8tvxtx2k6ml7q7mcanj6dy63atva9"))

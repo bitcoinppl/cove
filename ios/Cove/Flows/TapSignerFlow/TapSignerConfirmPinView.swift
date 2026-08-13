@@ -49,16 +49,20 @@ struct TapSignerConfirmPinView: View {
                     manager.resetRoute(to: .setupSuccess(args.tapSigner, c))
                 case let .success(incomplete):
                     manager.resetRoute(to: .setupRetry(args.tapSigner, incomplete))
-                case let .failure(error):
+                case .failure:
                     // failed to setup but we can continue
                     if let incomplete = nfc.lastResponse()?.setupResponse {
                         return manager.resetRoute(to: .setupRetry(args.tapSigner, incomplete))
                     }
 
                     // failed to setup and can't continue from a screen, send back to home and ask them to restart the process
-                    Log.error("Failed to setup TapSigner: \(error)")
+                    Log.error("TapSigner setup failed")
                     app.sheetState = .none
-                    app.alertState = .init(.tapSignerSetupFailed(message: error.description))
+                    app.alertState = .init(
+                        .tapSignerSetupFailed(
+                            message: "TapSigner setup failed. Please try again."
+                        )
+                    )
                 }
             }
         }
@@ -81,7 +85,12 @@ struct TapSignerConfirmPinView: View {
             case let .failure(error):
                 if error.isAuthError() { return app.alertState = .init(.tapSignerInvalidAuth) }
                 if error.isNoBackupError() { return app.alertState = .init(.tapSignerNoBackup(tapSigner: args.tapSigner)) }
-                app.alertState = .init(.general(title: "Error", message: error.description))
+                app.alertState = .init(
+                    .general(
+                        title: "Error",
+                        message: "TapSigner PIN change failed. Please try again."
+                    )
+                )
             }
         }
     }
