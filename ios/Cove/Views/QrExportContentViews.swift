@@ -43,7 +43,6 @@ private struct QrExportAnimatedQrView: View {
                 let index = abs(Int(context.date.distance(to: startedAt) / animationInterval) % qrs.count)
                 qrs[index]
                     .frame(maxWidth: .infinity)
-                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 11)
                     .onChange(of: index) { _, newIndex in
                         currentIndex = newIndex
@@ -99,20 +98,44 @@ private struct QrExportAnimatedQrView: View {
     }
 }
 
-private struct QrExportProgressIndicator: View {
+struct QrExportProgressIndicator: View {
     let qrCount: Int
     let currentIndex: Int
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0 ..< qrCount, id: \.self) { index in
-                Rectangle()
-                    .fill(Color.blue)
-                    .opacity(index == currentIndex ? 1 : 0.3)
-                    .frame(height: 12)
-                    .cornerRadius(2)
+        Canvas { context, size in
+            let minimumSegmentWidth: CGFloat = 1
+            let preferredSpacing: CGFloat = 4
+            let spacing = min(
+                preferredSpacing,
+                max(0, (size.width - (CGFloat(qrCount) * minimumSegmentWidth)) / CGFloat(qrCount - 1))
+            )
+            let segmentWidth = max(
+                0,
+                (size.width - (CGFloat(qrCount - 1) * spacing)) / CGFloat(qrCount)
+            )
+            let cornerRadius = min(2, segmentWidth / 2, size.height / 2)
+
+            for index in 0 ..< qrCount {
+                let rect = CGRect(
+                    x: CGFloat(index) * (segmentWidth + spacing),
+                    y: 0,
+                    width: segmentWidth,
+                    height: size.height
+                )
+                let color = Color.blue.opacity(index == currentIndex ? 1 : 0.3)
+
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: cornerRadius),
+                    with: .color(color)
+                )
             }
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("QR frame")
+        .accessibilityValue("\(currentIndex + 1) of \(qrCount)")
     }
 }
 

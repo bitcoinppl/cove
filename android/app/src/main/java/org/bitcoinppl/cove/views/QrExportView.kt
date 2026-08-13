@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,9 +46,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -256,27 +263,11 @@ fun QrExportView(
                             onClick = { density = density.decrease() },
                         )
 
-                        // progress indicator
-                        Row(
+                        QrExportProgressIndicator(
+                            qrCount = qrStrings.size,
+                            currentIndex = currentIndex,
                             modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            qrStrings.indices.forEach { index ->
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .weight(1f)
-                                            .height(12.dp)
-                                            .background(
-                                                color =
-                                                    MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = if (index == currentIndex) 1f else 0.3f,
-                                                    ),
-                                                shape = RoundedCornerShape(2.dp),
-                                            ),
-                                )
-                            }
-                        }
+                        )
 
                         PlusButton(
                             enabled = density.canIncrease() && qrStrings.size > 1,
@@ -294,6 +285,46 @@ fun QrExportView(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun QrExportProgressIndicator(
+    qrCount: Int,
+    currentIndex: Int,
+    modifier: Modifier = Modifier,
+) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val inactiveColor = activeColor.copy(alpha = 0.3f)
+
+    Canvas(
+        modifier =
+            modifier
+                .height(12.dp)
+                .semantics {
+                    contentDescription = "QR frame"
+                    stateDescription = "${currentIndex + 1} of $qrCount"
+                },
+    ) {
+        val minimumSegmentWidth = 1.dp.toPx()
+        val preferredSpacing = 4.dp.toPx()
+        val spacing =
+            minOf(
+                preferredSpacing,
+                ((size.width - (qrCount * minimumSegmentWidth)) / (qrCount - 1)).coerceAtLeast(0f),
+            )
+        val segmentWidth =
+            ((size.width - ((qrCount - 1) * spacing)) / qrCount).coerceAtLeast(0f)
+        val cornerRadius = minOf(2.dp.toPx(), segmentWidth / 2, size.height / 2)
+
+        repeat(qrCount) { index ->
+            drawRoundRect(
+                color = if (index == currentIndex) activeColor else inactiveColor,
+                topLeft = Offset(x = index * (segmentWidth + spacing), y = 0f),
+                size = Size(width = segmentWidth, height = size.height),
+                cornerRadius = CornerRadius(cornerRadius),
+            )
         }
     }
 }
