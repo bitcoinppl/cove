@@ -48,42 +48,6 @@ struct NodeSelectionView: View {
         }
     }
 
-    var certificateAlertTitle: String {
-        switch certificateAlert {
-        case .changed: "Certificate changed"
-        default: "Unrecognized certificate"
-        }
-    }
-
-    @ViewBuilder
-    private func certificateAlertActions(_ alert: CertificateDecision) -> some View {
-        switch alert {
-        case let .unrecognized(certificate):
-            Button("Trust this certificate") {
-                certificateAlert = nil
-                customTls = .pinnedFingerprint(sha256: certificate.sha256)
-                customTlsUrl = customUrl
-                checkAndSaveNode()
-            }
-            Button("Cancel", role: .cancel) {
-                certificateAlert = nil
-                Task { await dismissAllPopups() }
-            }
-        case .changed:
-            Button("OK", role: .cancel) { certificateAlert = nil }
-        }
-    }
-
-    @ViewBuilder
-    private func certificateAlertMessage(_ alert: CertificateDecision) -> some View {
-        switch alert {
-        case let .unrecognized(certificate):
-            Text("This server uses a certificate Cove cannot verify. Only continue if this fingerprint matches the one your server reports.\n\n\(certificate.display)")
-        case .changed:
-            Text("This server is presenting a different certificate to the one you trusted. It may have been reissued, or something may be intercepting the connection. Cove will not connect until it presents the certificate you trusted.")
-        }
-    }
-
     var showCustomUrlField: Bool {
         selectedNodeName.hasPrefix("Custom")
     }
@@ -211,24 +175,35 @@ struct NodeSelectionView: View {
             // custom esplora or electrum is selected
             if showCustomUrlField { checkAndSaveNode() }
         }
-        .alert(isPresented: $showParseUrlAlert) {
-            Alert(
-                title: Text("Unable to parse URL"),
-                message: Text(parseUrlMessage),
-                dismissButton: .default(Text("OK")) {
-                    showParseUrlAlert = false
-                    parseUrlMessage = ""
-                    Task { await dismissAllPopups() }
-                }
+        .modifier(
+            NodeSelectionAlertsModifier(
+                showParseUrlAlert: $showParseUrlAlert,
+                parseUrlMessage: parseUrlMessage,
+                showCertificateAlert: $showCertificateAlert,
+                certificateAlert: $certificateAlert,
+                dismissParseUrlAlert: dismissParseUrlAlert,
+                trustCertificate: trustCertificate,
+                cancelCertificateAlert: cancelCertificateAlert
             )
-        }
-        .alert(
-            certificateAlertTitle,
-            isPresented: $showCertificateAlert,
-            presenting: certificateAlert,
-            actions: certificateAlertActions,
-            message: certificateAlertMessage
         )
+    }
+
+    private func dismissParseUrlAlert() {
+        showParseUrlAlert = false
+        parseUrlMessage = ""
+        Task { await dismissAllPopups() }
+    }
+
+    private func trustCertificate(_ certificate: NodeCertificate) {
+        certificateAlert = nil
+        customTls = .pinnedFingerprint(sha256: certificate.sha256)
+        customTlsUrl = customUrl
+        checkAndSaveNode()
+    }
+
+    private func cancelCertificateAlert() {
+        certificateAlert = nil
+        Task { await dismissAllPopups() }
     }
 
     private func nodeSelectionChanged(to newSelectedNodeName: String) {
@@ -263,6 +238,64 @@ struct NodeSelectionView: View {
 
         customUrl = savedSelectedNode.url
         customNodeName = savedSelectedNode.name
+    }
+}
+
+private struct NodeSelectionAlertsModifier: ViewModifier {
+    @Binding var showParseUrlAlert: Bool
+    let parseUrlMessage: String
+    @Binding var showCertificateAlert: Bool
+    @Binding var certificateAlert: CertificateDecision?
+    let dismissParseUrlAlert: () -> Void
+    let trustCertificate: (NodeCertificate) -> Void
+    let cancelCertificateAlert: () -> Void
+
+    private var certificateAlertTitle: String {
+        switch certificateAlert {
+        case .changed: "Certificate changed"
+        default: "Unrecognized certificate"
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .alert(isPresented: $showParseUrlAlert) {
+                Alert(
+                    title: Text("Unable to parse URL"),
+                    message: Text(parseUrlMessage),
+                    dismissButton: .default(Text("OK"), action: dismissParseUrlAlert)
+                )
+            }
+            .alert(
+                certificateAlertTitle,
+                isPresented: $showCertificateAlert,
+                presenting: certificateAlert,
+                actions: certificateAlertActions,
+                message: certificateAlertMessage
+            )
+    }
+
+    @ViewBuilder
+    private func certificateAlertActions(_ alert: CertificateDecision) -> some View {
+        switch alert {
+        case let .unrecognized(certificate):
+            Button("Trust this certificate") {
+                trustCertificate(certificate)
+            }
+            Button("Cancel", role: .cancel, action: cancelCertificateAlert)
+        case .changed:
+            Button("OK", role: .cancel) { certificateAlert = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func certificateAlertMessage(_ alert: CertificateDecision) -> some View {
+        switch alert {
+        case let .unrecognized(certificate):
+            Text("This server uses a certificate Cove cannot verify. Only continue if this fingerprint matches the one your server reports.\n\n\(certificate.display)")
+        case .changed:
+            Text("This server is presenting a different certificate to the one you trusted. It may have been reissued, or something may be intercepting the connection. Cove will not connect until it presents the certificate you trusted.")
+        }
     }
 }
 
