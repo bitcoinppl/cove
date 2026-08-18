@@ -20,7 +20,6 @@ use rust_cktap::{
 };
 use tokio::sync::Mutex;
 use tracing::debug;
-use zeroize::Zeroize as _;
 
 use crate::{
     database::Database,
@@ -41,16 +40,16 @@ const MAX_UNLUCKY_NUMBER_RETRIES: u8 = 3;
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 #[uniffi::export(Display)]
 pub enum TapSignerCvcError {
-    /// The input contains an odd length or non-hexadecimal value
-    #[error("CVC must contain an even number of hexadecimal characters")]
-    InvalidHex,
+    /// The input contains a value other than an ASCII digit
+    #[error("CVC must contain ASCII digits only")]
+    InvalidCharacters,
 
-    /// The input is outside the six to 32 byte protocol range
-    #[error("CVC must contain between 12 and 64 hexadecimal characters")]
+    /// The input is outside the six to 32 digit protocol range
+    #[error("CVC must contain between 6 and 32 ASCII digits")]
     InvalidLength(u32),
 }
 
-/// An opaque protocol-byte CVC used to authenticate a TAPSIGNER
+/// An opaque numeric CVC used to authenticate a TAPSIGNER
 #[derive(Clone, PartialEq, Eq, uniffi::Object)]
 pub struct TapSignerCvc(rust_cktap::Cvc);
 
@@ -74,40 +73,19 @@ impl TapSignerCvc {
 
 #[uniffi::export]
 impl TapSignerCvc {
-    /// Construct a CVC from its exact hexadecimal protocol representation
+    /// Construct a CVC from six to 32 ASCII digits
     #[uniffi::constructor]
-    pub fn try_from_hex(mut hex: String) -> Result<Self, TapSignerCvcError> {
-        let hex_len = hex.len();
-        if !hex_len.is_multiple_of(2) {
-            hex.zeroize();
-            return Err(TapSignerCvcError::InvalidHex);
-        }
-
-        if !(12..=64).contains(&hex_len) {
-            hex.zeroize();
-            return Err(TapSignerCvcError::InvalidLength(hex_len as u32));
-        }
-
-        let bytes = match hex::decode(&hex) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                hex.zeroize();
-                return Err(TapSignerCvcError::InvalidHex);
-            }
-        };
-        hex.zeroize();
-
-        let cvc = rust_cktap::Cvc::try_from(bytes)
-            .map_err(|error| TapSignerCvcError::InvalidLength(error_length(error)))?;
-
-        Ok(Self(cvc))
+    pub fn try_new(value: String) -> Result<Self, TapSignerCvcError> {
+        rust_cktap::Cvc::try_from(value).map(Self).map_err(Into::into)
     }
 }
 
-fn error_length(error: rust_cktap::CvcError) -> u32 {
-    match error {
-        rust_cktap::CvcError::TooShort { length } | rust_cktap::CvcError::TooLong { length } => {
-            length as u32
+impl From<rust_cktap::CvcError> for TapSignerCvcError {
+    fn from(error: rust_cktap::CvcError) -> Self {
+        match error {
+            rust_cktap::CvcError::TooShort { length }
+            | rust_cktap::CvcError::TooLong { length } => Self::InvalidLength(length as u32),
+            rust_cktap::CvcError::NonAsciiDigit { .. } => Self::InvalidCharacters,
         }
     }
 }
@@ -1852,6 +1830,8 @@ mod tests {
     use bitcoin::secp256k1::{Secp256k1, SecretKey};
     use serde::Serialize;
 
+    type MockResponseQueue = Arc<SyncMutex<VecDeque<Result<Vec<u8>, TransportError>>>>;
+
     #[derive(Debug, Serialize)]
     struct MockStatus {
         proto: u32,
@@ -1907,7 +1887,7 @@ mod tests {
 
     #[derive(Debug)]
     struct MockStatusTransport {
-        responses: Arc<SyncMutex<VecDeque<Result<Vec<u8>, TransportError>>>>,
+        responses: MockResponseQueue,
         calls: Arc<SyncMutex<Vec<Vec<u8>>>>,
     }
 
@@ -2080,45 +2060,21 @@ mod tests {
     }
 
     #[test]
-    fn cvc_accepts_strict_hex_bounds_and_arbitrary_bytes() {
-        let minimum =
-            TapSignerCvc::try_from_hex("00ff8080017f".to_string()).expect("minimum CVC is valid");
-        let maximum = TapSignerCvc::try_from_hex("ff".repeat(32)).expect("maximum CVC is valid");
-        let upper =
-            TapSignerCvc::try_from_hex("ABCDEF010203".to_string()).expect("uppercase hex is valid");
-        let lower =
-            TapSignerCvc::try_from_hex("abcdef010203".to_string()).expect("lowercase hex is valid");
-
-        assert_eq!(minimum.0.as_bytes(), [0x00, 0xff, 0x80, 0x80, 0x01, 0x7f]);
-        assert_eq!(maximum.0.len(), 32);
-        assert_eq!(upper, lower);
-    }
-
-    #[test]
-    fn cvc_rejects_non_hex_odd_and_out_of_bounds_values() {
-        assert!(matches!(
-            TapSignerCvc::try_from_hex("12345".to_string()),
-            Err(TapSignerCvcError::InvalidHex)
-        ));
-        assert!(matches!(
-            TapSignerCvc::try_from_hex("zzzzzzzzzzzz".to_string()),
-            Err(TapSignerCvcError::InvalidHex)
-        ));
-        assert!(matches!(
-            TapSignerCvc::try_from_hex("12".repeat(5)),
-            Err(TapSignerCvcError::InvalidLength(10))
-        ));
-        assert!(matches!(
-            TapSignerCvc::try_from_hex("12".repeat(33)),
-            Err(TapSignerCvcError::InvalidLength(66))
-        ));
+    fn cvc_errors_map_to_uniffi_domain() {
+        assert_eq!(
+            TapSignerCvcError::from(rust_cktap::CvcError::TooShort { length: 5 }),
+            TapSignerCvcError::InvalidLength(5)
+        );
+        assert_eq!(
+            TapSignerCvcError::from(rust_cktap::CvcError::NonAsciiDigit { index: 5 }),
+            TapSignerCvcError::InvalidCharacters
+        );
     }
 
     #[test]
     fn cvc_and_setup_values_are_redacted() {
-        let cvc =
-            Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).expect("valid CVC"));
-        assert!(!format!("{cvc:?}").contains("313233343536"));
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).expect("valid CVC"));
+        assert!(!format!("{cvc:?}").contains("123456"));
         assert_eq!(format!("{cvc:?}"), "<redacted CVC>");
 
         let setup = SetupCmd::try_new(cvc.clone(), cvc, Some([0u8; 32].to_vec()))
@@ -2128,7 +2084,7 @@ mod tests {
 
     #[test]
     fn setup_chain_code_is_optional_but_strictly_32_bytes_when_provided() {
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let generated = SetupCmd::try_new(cvc.clone(), cvc.clone(), None).unwrap();
         assert_eq!(generated.chain_code.len(), 32);
 
@@ -2144,8 +2100,7 @@ mod tests {
 
     #[test]
     fn continuation_has_stable_id_and_redacted_debug() {
-        let cvc =
-            Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).expect("valid CVC"));
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).expect("valid CVC"));
         let setup = Arc::new(
             SetupCmd::try_new(cvc.clone(), cvc, Some([0u8; 32].to_vec()))
                 .expect("valid setup command"),
@@ -2197,7 +2152,7 @@ mod tests {
             Some(0),
             "OTHER-CARD".to_string(),
         );
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
         let continuation = TapSignerSetupContinuation::new(
             "TEST-CARD".to_string(),
@@ -2220,7 +2175,7 @@ mod tests {
         let (first, first_calls) = reader_for_status(status_response(MAX_BACKUPS));
         let (second, second_calls) =
             reader_for_responses(Vec::new(), Some(vec![84, 0, 0]), Some(0));
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
         let continuation = TapSignerSetupContinuation::new(
             "TEST-CARD".to_string(),
@@ -2244,7 +2199,7 @@ mod tests {
     #[tokio::test]
     async fn operation_guard_rejects_overlapping_setup() {
         let (reader, calls) = reader_for_responses(Vec::new(), None, None);
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
         let _guard = reader.operation_guard.try_lock().expect("test owns operation guard");
 
@@ -2267,7 +2222,7 @@ mod tests {
             },
         )));
         reader.record_response(TapSignerResponse::Change);
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
         let result = reader.setup(setup).await;
@@ -2280,7 +2235,7 @@ mod tests {
     async fn backup_count_advance_returns_data_unavailable_without_replay() {
         let (reader, calls) =
             reader_for_responses(vec![Ok(status_response(1))], Some(vec![84, 0, 0]), Some(1));
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
         let continuation = TapSignerSetupContinuation::new(
             "TEST-CARD".to_string(),
@@ -2302,7 +2257,7 @@ mod tests {
     async fn mutating_cbor_decode_is_an_uncertain_setup_result() {
         let (reader, calls) =
             reader_for_responses(vec![Ok(vec![0xff])], Some(vec![84, 0, 0]), Some(0));
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
         let result = reader.setup(setup).await.unwrap();
@@ -2319,7 +2274,7 @@ mod tests {
         let responses =
             vec![Ok(status_response(0)), Ok(xpub_response(true)), Ok(xpub_response(false))];
         let (reader, calls) = reader_for_responses(responses, Some(vec![84, 0, 0]), Some(0));
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
 
         reader.derive(&cvc).await.expect("xpub reads succeed");
 
@@ -2336,7 +2291,7 @@ mod tests {
             Ok(xpub_response(false)),
         ];
         let (reader, calls) = reader_for_responses(responses, None, None);
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
 
         reader.derive(&cvc).await.expect("derive and xpub reads succeed");
 
@@ -2349,8 +2304,8 @@ mod tests {
     async fn standalone_change_decode_uncertainty_returns_operation_continuation() {
         let (reader, calls) =
             reader_for_responses(vec![Ok(vec![0xff])], Some(vec![84, 0, 0]), Some(1));
-        let current_cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
-        let new_cvc = Arc::new(TapSignerCvc::try_from_hex("616263646566".to_string()).unwrap());
+        let current_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
         *reader.cmd.write() = Some(TapSignerOperation::Change { current_cvc, new_cvc });
 
         let result = reader.run().await.unwrap();
@@ -2373,11 +2328,11 @@ mod tests {
     }
 
     #[test]
-    fn unknown_status_word_is_not_cbor_error() {
+    fn unknown_card_error_code_is_not_cbor_error() {
         let error = crate::tap_card::create_transport_error_from_code(499, "unknown".to_string());
         assert!(matches!(
             error,
-            TransportError::UnknownStatusWord { code: 499, detail } if detail == "unknown"
+            TransportError::UnknownCardErrorCode { code: 499, detail } if detail == "unknown"
         ));
     }
 
@@ -2393,18 +2348,34 @@ mod tests {
     }
 
     #[test]
-    fn unknown_status_survives_transport_adapter() {
-        let original =
-            TransportError::UnknownStatusWord { code: 499, detail: "unknown status".to_string() };
+    fn unknown_card_error_survives_transport_adapter() {
+        let original = TransportError::UnknownCardErrorCode {
+            code: 499,
+            detail: "unknown card error".to_string(),
+        };
         let round_trip = TransportError::from(rust_cktap::CkTapError::from(original.clone()));
 
         assert_eq!(round_trip, original);
     }
 
+    #[test]
+    fn apdu_status_word_remains_a_transport_failure_at_the_cktap_boundary() {
+        let error = rust_cktap::CkTapError::from(TransportError::UnknownStatusWord {
+            code: 0x6a80,
+            detail: "incorrect parameters".to_string(),
+        });
+
+        assert!(matches!(
+            error,
+            rust_cktap::CkTapError::Transport(message)
+                if message == "unknown APDU status word (0x6a80): incorrect parameters"
+        ));
+    }
+
     #[tokio::test]
     async fn backup_retry_at_protocol_limit_cannot_initialize() {
         let (reader, calls) = reader_for_status(status_response(MAX_BACKUPS));
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
         let continuation = TapSignerSetupContinuation::new(
             "TEST-CARD".to_string(),
@@ -2431,7 +2402,7 @@ mod tests {
     async fn backup_retry_does_not_initialize_an_uninitialized_card() {
         let (reader, calls) =
             reader_for_responses(vec![Ok(uninitialized_status_response())], None, None);
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
         let continuation = TapSignerSetupContinuation::new(
             "TEST-CARD".to_string(),
@@ -2461,7 +2432,7 @@ mod tests {
             }
         }
         let (reader, calls) = reader_for_responses(responses, None, None);
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
         let result = reader.setup(setup).await;
@@ -2483,7 +2454,7 @@ mod tests {
             Err(TransportError::Transport("backup response was lost".to_string())),
         ];
         let (reader, calls) = reader_for_responses(responses, None, None);
-        let cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
         let first = reader.setup(setup).await.unwrap();
@@ -2512,8 +2483,8 @@ mod tests {
             Err(TransportError::Transport("change response was lost".to_string())),
         ];
         let (reader, calls) = reader_for_responses(responses, Some(vec![84, 0, 0]), Some(1));
-        let factory_cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
-        let new_cvc = Arc::new(TapSignerCvc::try_from_hex("616263646566".to_string()).unwrap());
+        let factory_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
         let setup =
             Arc::new(SetupCmd::try_new(factory_cvc, new_cvc, Some([0; 32].to_vec())).unwrap());
         let continuation = TapSignerSetupContinuation::new(
@@ -2562,8 +2533,8 @@ mod tests {
             Ok(wait_success_response()),
         ];
         let (reader, calls) = reader_for_responses(responses, Some(vec![84, 0, 0]), Some(0));
-        let factory_cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
-        let new_cvc = Arc::new(TapSignerCvc::try_from_hex("616263646566".to_string()).unwrap());
+        let factory_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
         let setup =
             Arc::new(SetupCmd::try_new(factory_cvc, new_cvc, Some([0; 32].to_vec())).unwrap());
         let derive_info = ffi::derive_info();
@@ -2596,8 +2567,8 @@ mod tests {
     async fn change_reconciliation_requires_old_cvc_authentication() {
         let responses = vec![Ok(bad_auth_response()), Ok(bad_auth_response())];
         let (reader, _) = reader_for_responses(responses, Some(vec![84, 0, 0]), Some(0));
-        let factory_cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
-        let new_cvc = Arc::new(TapSignerCvc::try_from_hex("616263646566".to_string()).unwrap());
+        let factory_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
         let setup =
             Arc::new(SetupCmd::try_new(factory_cvc, new_cvc, Some([0; 32].to_vec())).unwrap());
         let derive_info = ffi::derive_info();
@@ -2625,8 +2596,8 @@ mod tests {
             Err(TransportError::Transport("old CVC probe was lost".to_string())),
         ];
         let (reader, _) = reader_for_responses(responses, Some(vec![84, 0, 0]), Some(0));
-        let factory_cvc = Arc::new(TapSignerCvc::try_from_hex("313233343536".to_string()).unwrap());
-        let new_cvc = Arc::new(TapSignerCvc::try_from_hex("616263646566".to_string()).unwrap());
+        let factory_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
         let setup =
             Arc::new(SetupCmd::try_new(factory_cvc, new_cvc, Some([0; 32].to_vec())).unwrap());
         let derive_info = ffi::derive_info();
@@ -2715,9 +2686,7 @@ fn _ffi_tap_signer_response_sign_response(response: TapSignerResponse) -> Option
 fn _ffi_tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
     assert!(preview);
 
-    let cvc = Arc::new(
-        TapSignerCvc::try_from_hex("313233343536".to_string()).expect("preview CVC is valid"),
-    );
+    let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).expect("preview CVC is valid"));
     let setup_cmd = Arc::new(
         SetupCmd::try_new(cvc.clone(), cvc, Some([0u8; 32].to_vec()))
             .expect("preview setup command is valid"),

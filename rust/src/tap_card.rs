@@ -39,6 +39,10 @@ pub enum TransportError {
     #[error("UnknownStatusWord ({code}): {detail}")]
     UnknownStatusWord { code: u16, detail: String },
 
+    /// The card returned a protocol error code that this version does not know
+    #[error("UnknownCardErrorCode ({code}): {detail}")]
+    UnknownCardErrorCode { code: u16, detail: String },
+
     /// An error without a more specific public classification
     #[error("UnknownError: {0}")]
     UnknownError(String),
@@ -119,8 +123,8 @@ impl From<CkTapTransportError> for TransportError {
             CkTapTransportError::CborDe(message) => Self::CiborDe(message),
             CkTapTransportError::CborValue(message) => Self::CiborValue(message),
             CkTapTransportError::Transport(message) => Self::Transport(message),
-            CkTapTransportError::UnknownStatusWord { code, message } => {
-                Self::UnknownStatusWord { code, detail: message }
+            CkTapTransportError::UnknownErrorCode { code, message } => {
+                Self::UnknownCardErrorCode { code, detail: message }
             }
             CkTapTransportError::UnknownCardType => {
                 Self::UnknownCardType("rust-cktap reported an unknown card type".to_string())
@@ -140,8 +144,13 @@ impl From<TransportError> for CkTapTransportError {
             TransportError::IncorrectSignature(message)
             | TransportError::CvcChangeError(message)
             | TransportError::UnknownError(message) => Self::Transport(message),
+            TransportError::UnknownCardErrorCode { code, detail } => {
+                Self::UnknownErrorCode { code, message: detail }
+            }
+
+            // rust-cktap has no APDU status-word variant at the pinned revision
             TransportError::UnknownStatusWord { code, detail } => {
-                Self::UnknownStatusWord { code, message: detail }
+                Self::Transport(format!("unknown APDU status word ({code:#06x}): {detail}"))
             }
         }
     }
@@ -247,12 +256,12 @@ impl From<rust_cktap::SignPsbtError> for TransportError {
     }
 }
 
-/// Convert an APDU status word from the mobile transport into a typed error
+/// Convert a card protocol error code into a typed error
 #[uniffi::export]
 fn create_transport_error_from_code(code: u16, message: String) -> TransportError {
     match rust_cktap::CardError::error_from_code(code) {
         Some(error) => TransportError::CkTap(error.into()),
-        None => TransportError::UnknownStatusWord { code, detail: message },
+        None => TransportError::UnknownCardErrorCode { code, detail: message },
     }
 }
 
