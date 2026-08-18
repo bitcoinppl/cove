@@ -1,6 +1,10 @@
 package org.bitcoinppl.cove
 
 import androidx.compose.runtime.Stable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.tapcard.*
@@ -9,6 +13,7 @@ import org.bitcoinppl.cove_core.types.*
 @Stable
 class ScanManager private constructor() {
     private val tag = "ScanManager"
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val app: AppManager get() = AppManager.getInstance()
     private val keyTeleport = KeyTeleportScanHandler(app)
@@ -145,11 +150,16 @@ class ScanManager private constructor() {
                     app.selectWalletOrThrow(id)
                 }
 
-                if (app.walletManager?.id == id && app.walletManager?.walletMetadata?.walletType != WalletType.HOT) {
-                    try {
-                        app.walletManager?.setWalletType(WalletType.COLD)
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to set wallet type to cold", e)
+                val walletManager = app.walletManager
+                if (walletManager?.id == id && walletManager.walletMetadata?.walletType != WalletType.HOT) {
+                    mainScope.launch {
+                        try {
+                            walletManager.setWalletType(WalletType.COLD)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.e(tag, "Failed to set wallet type to cold", e)
+                        }
                     }
                 }
             } finally {

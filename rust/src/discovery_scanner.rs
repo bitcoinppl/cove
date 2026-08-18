@@ -15,11 +15,12 @@ use bdk_wallet::{
     descriptor::ExtendedDescriptor,
 };
 use cove_device::keychain::{Keychain, KeychainError, WalletSecret};
-use cove_tokio::task::spawn_actor;
+use cove_tokio::task::{self, spawn_actor};
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
 use flume::Sender;
 use pubport::formats::Json;
+use tokio::task::JoinHandle;
 use tracing::{debug, error, info, trace, warn};
 
 /// Default number of addresses to scan
@@ -31,7 +32,9 @@ use crate::{
         global_config::GlobalConfigTable,
         wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
-    manager::wallet_manager::{SingleOrMany, WalletManagerError, WalletManagerReconcileMessage},
+    manager::wallet_manager::{
+        SingleOrMany, WalletManagerError, WalletManagerReconcileMessage, actor::WalletActor,
+    },
     network::Network as CoveNetwork,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     wallet::{
@@ -96,16 +99,16 @@ pub enum ScannerResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct WalletDiscoveryScanner {
+pub(crate) struct WalletDiscoveryScanner {
     pub id: WalletId,
-    origin: DiscoveryOrigin,
     pub addr: WeakAddr<Self>,
     pub workers: Workers,
     pub started_at: Instant,
-    pub node_client_builder: NodeClientBuilder,
     pub scan_source: ScanSource,
     pub responder: Sender<SingleOrMany>,
+    pub wallet_actor: Addr<WalletActor>,
     failure_reconciled: bool,
+    shutting_down: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -211,8 +214,9 @@ impl WalletDiscoveryScanner {
     /// Create a new scanner based on the DiscoveryState of the wallet metadata
     /// Only create a scanner if the discovery state is not already completed, and if
     /// have the required information to start a scan.
-    pub fn try_new(
+    pub(crate) fn try_new(
         metadata: WalletMetadata,
+        wallet_actor: Addr<WalletActor>,
         reconciler: Sender<SingleOrMany>,
     ) -> Result<Self, WalletScannerError> {
         debug!("starting wallet discovery scanner for {}, metadata: {metadata:?}", metadata.id);
@@ -259,15 +263,15 @@ impl WalletDiscoveryScanner {
         }
 
         let client_builder = node_client_builder(&db.global_config(), origin);
-        Self::new(metadata.id, origin, client_builder, wallets, scan_source, reconciler)
+        Self::new(metadata.id, client_builder, wallets, scan_source, wallet_actor, reconciler)
     }
 
     fn new(
         id: WalletId,
-        origin: DiscoveryOrigin,
         node_client_builder: NodeClientBuilder,
         wallets: Wallets,
         scan_source: ScanSource,
+        wallet_actor: Addr<WalletActor>,
         reconciler: Sender<SingleOrMany>,
     ) -> Result<Self, WalletScannerError> {
         let mut started_workers = 0;
@@ -298,14 +302,14 @@ impl WalletDiscoveryScanner {
 
         Ok(Self {
             id,
-            origin,
             addr: Default::default(),
             workers,
             started_at: Instant::now(),
-            node_client_builder,
             scan_source,
             responder: reconciler,
+            wallet_actor,
             failure_reconciled: false,
+            shutting_down: false,
         })
     }
 
@@ -322,9 +326,10 @@ impl WalletDiscoveryScanner {
 
     pub async fn shutdown(&mut self) -> ActorResult<()> {
         debug!("shutting down wallet discovery scanner for {}", self.id);
+        self.shutting_down = true;
 
         for worker in self.workers.iter_mut().flatten() {
-            send!(worker.addr.shutdown());
+            call!(worker.addr.shutdown()).await?;
             worker.addr = Default::default();
         }
 
@@ -332,28 +337,34 @@ impl WalletDiscoveryScanner {
     }
 
     pub async fn mark_found_txn(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
+        if self.shutting_down {
+            return Produces::ok(());
+        }
+
         info!("marked worker {wallet_type:?} as found");
 
         let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         let address = call!(worker.addr.first_address()).await?;
         worker.state = WorkerState::FoundAddress(address);
-        worker.addr = Default::default();
 
-        self.finish_if_all_workers_stopped()?;
+        self.finish_if_all_workers_stopped().await?;
 
         Produces::ok(())
     }
 
     pub async fn mark_limit_reached(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
+        if self.shutting_down {
+            return Produces::ok(());
+        }
+
         info!("marked worker {wallet_type:?} limit reached");
 
         let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         worker.state = WorkerState::NoneFound;
-        worker.addr = Default::default();
 
-        self.finish_if_all_workers_stopped()?;
+        self.finish_if_all_workers_stopped().await?;
 
         Produces::ok(())
     }
@@ -364,18 +375,21 @@ impl WalletDiscoveryScanner {
         wallet_type: WalletAddressType,
         message: String,
     ) -> ActorResult<()> {
+        if self.shutting_down {
+            return Produces::ok(());
+        }
+
         error!("wallet discovery worker {wallet_type:?} failed: {message}");
 
         let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
         worker.state = WorkerState::Failed(message);
-        worker.addr = Default::default();
 
-        self.finish_if_all_workers_stopped()?;
+        self.finish_if_all_workers_stopped().await?;
 
         Produces::ok(())
     }
 
-    fn finish_if_all_workers_stopped(&mut self) -> ActorResult<()> {
+    async fn finish_if_all_workers_stopped(&mut self) -> ActorResult<()> {
         if self.failure_reconciled {
             return Produces::ok(());
         }
@@ -402,12 +416,12 @@ impl WalletDiscoveryScanner {
 
         let found_addresses = self.found_addresses();
         if found_addresses.is_empty() {
-            self.set_metadata(DiscoveryState::NoneFound)?;
+            self.set_metadata(DiscoveryState::NoneFound).await?;
 
             let message = WalletManagerReconcileMessage::from(ScannerResponse::NoneFound);
             self.responder.send(message.into())?;
         } else {
-            self.set_metadata_address_found()?;
+            self.set_metadata_address_found().await?;
 
             let message = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
                 found_addresses,
@@ -435,42 +449,36 @@ impl WalletDiscoveryScanner {
             .collect::<Vec<FoundAddress>>()
     }
 
-    fn set_metadata_address_found(&mut self) -> ActorResult<()> {
+    async fn set_metadata_address_found(&mut self) -> ActorResult<()> {
         match &self.scan_source {
             ScanSource::Json(json) => {
                 self.set_metadata(DiscoveryState::FoundAddressesFromJson(
                     self.found_addresses(),
                     json.clone(),
-                ))?;
+                ))
+                .await?;
             }
 
             ScanSource::Mnemonic => {
                 self.set_metadata(DiscoveryState::FoundAddressesFromMnemonic(
                     self.found_addresses(),
-                ))?;
+                ))
+                .await?;
             }
 
             ScanSource::Xprv => {
-                self.set_metadata(DiscoveryState::FoundAddressesFromXprv(self.found_addresses()))?;
+                self.set_metadata(DiscoveryState::FoundAddressesFromXprv(self.found_addresses()))
+                    .await?;
             }
         }
 
         Produces::ok(())
     }
 
-    fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
+    async fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
         debug!("setting wallet metadata: {discovery_state:?}");
-        let db = Database::global().wallets();
+        call!(self.wallet_actor.update_discovery_state(discovery_state)).await??;
 
-        let mut metadata = db
-            .get(&self.id, self.origin.network, self.origin.wallet_mode)?
-            .ok_or_else(|| eyre::eyre!("wallet metadata not found for discovery scan"))?;
-
-        metadata.discovery_state = discovery_state;
-        db.update_metadata_discovery_state(&metadata)?;
-
-        let msg = WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(metadata));
-        self.responder.send(msg.into())?;
         Produces::ok(())
     }
 }
@@ -488,6 +496,8 @@ pub struct WalletDiscoveryWorker {
     scan_info: ScanningInfo,
     db: WalletDataDb,
     scan_limit: u32,
+    scan_task: Option<JoinHandle<()>>,
+    shutdown_requested: bool,
 }
 
 #[async_trait::async_trait]
@@ -541,10 +551,16 @@ impl WalletDiscoveryWorker {
             scan_info,
             db,
             scan_limit: DEFAULT_SCAN_LIMIT,
+            scan_task: None,
+            shutdown_requested: false,
         })
     }
 
-    pub async fn start(&mut self, parent: WeakAddr<WalletDiscoveryScanner>) {
+    pub(crate) async fn start(&mut self, parent: WeakAddr<WalletDiscoveryScanner>) {
+        if self.shutdown_requested {
+            return;
+        }
+
         self.parent = parent;
 
         let addr = self.addr.clone();
@@ -554,6 +570,10 @@ impl WalletDiscoveryWorker {
     }
 
     async fn start_scan(&mut self) -> ActorResult<()> {
+        if self.shutdown_requested {
+            return Produces::ok(());
+        }
+
         let wallet_type = self.wallet_type;
         let client = match self.client_builder.build().await {
             Ok(client) => client,
@@ -569,8 +589,9 @@ impl WalletDiscoveryWorker {
         let parent = self.parent.clone();
         let failure_parent = parent.clone();
         let db = self.db.clone();
+        let addr = self.addr.clone();
 
-        self.addr.send_fut_with(|addr| async move {
+        self.scan_task = Some(task::spawn(async move {
             let run_with_error = || async move {
                 let mut current_address = current_address;
 
@@ -624,13 +645,19 @@ impl WalletDiscoveryWorker {
                     error!("unable to report wallet discovery scan failure: {report_error}");
                 }
             }
-        });
+        }));
 
         Produces::ok(())
     }
 
     pub async fn shutdown(&mut self) -> ActorResult<()> {
+        self.shutdown_requested = true;
         self.parent = Default::default();
+
+        if let Some(scan_task) = self.scan_task.take() {
+            scan_task.abort();
+            let _ = scan_task.await;
+        }
 
         Produces::ok(())
     }

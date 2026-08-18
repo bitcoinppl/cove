@@ -172,12 +172,13 @@ private struct HotWalletKeyMissingActions: View {
     }
 
     private func useAsHardwareWallet() {
-        do {
-            try app.ensureWalletManager(id: walletId).rust.setWalletType(walletType: .cold)
-            app.alertState = .none
-        } catch {
-            Log.error("Failed to set wallet type to cold: \(error)")
-            DispatchQueue.main.async {
+        Task { @MainActor in
+            do {
+                let manager = try app.ensureWalletManager(id: walletId)
+                try await manager.setWalletType(.cold)
+                app.alertState = .none
+            } catch {
+                Log.error("Failed to set wallet type to cold: \(error)")
                 app.alertState = .init(
                     .general(
                         title: "Error",

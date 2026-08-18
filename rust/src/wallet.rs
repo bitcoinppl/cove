@@ -86,6 +86,12 @@ pub struct Wallet {
     storage: WalletStorage,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct AddressTypeSwitchMetadata {
+    pub master_fingerprint: Option<Arc<fingerprint::Fingerprint>>,
+    pub origin: Option<String>,
+}
+
 #[derive(Debug)]
 pub(crate) enum WalletStorage {
     Persistent(Mutex<Connection>),
@@ -160,33 +166,6 @@ impl WalletAddressType {
 }
 
 impl Wallet {
-    fn current_database_metadata(&self) -> Result<WalletMetadata, WalletError> {
-        if !self.uses_persistent_storage() {
-            return Ok(self.metadata.clone());
-        }
-
-        Database::global()
-            .wallets
-            .get(&self.id, self.network, self.metadata.wallet_mode)?
-            .ok_or(WalletError::MetadataNotFound)
-    }
-
-    fn persist_address_type_switch_metadata(
-        &mut self,
-        metadata: WalletMetadata,
-    ) -> Result<(), WalletError> {
-        if !self.uses_persistent_storage() {
-            self.metadata = metadata;
-            return Ok(());
-        }
-
-        let metadata = Database::global().wallets.replace_wallet_metadata(metadata)?;
-
-        self.metadata = metadata;
-
-        Ok(())
-    }
-
     /// Create a new wallet from the given mnemonic save the bdk wallet filestore, save in our database and select it
     pub fn try_new_persisted_and_selected(
         metadata: WalletMetadata,

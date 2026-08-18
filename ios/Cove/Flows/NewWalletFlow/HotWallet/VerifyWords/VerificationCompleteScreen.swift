@@ -38,15 +38,17 @@ struct VerificationCompleteScreen: View {
     }
 
     private func completeVerification() {
-        do {
-            try manager.rust.markWalletAsVerified()
-            if let onVerified {
-                onVerified()
-            } else {
-                app.resetRoute(to: Route.selectedWallet(manager.id))
+        Task { @MainActor in
+            do {
+                try await manager.markWalletAsVerified()
+                if let onVerified {
+                    onVerified()
+                } else {
+                    app.resetRoute(to: Route.selectedWallet(manager.id))
+                }
+            } catch {
+                Log.error("Error marking wallet as verified: \(error)")
             }
-        } catch {
-            Log.error("Error marking wallet as verified: \(error)")
         }
     }
 }

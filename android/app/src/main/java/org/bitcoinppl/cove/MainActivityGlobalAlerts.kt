@@ -21,11 +21,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.views.ChoiceAlertDialog
 import org.bitcoinppl.cove.views.DialogChoice
 import org.bitcoinppl.cove_core.AfterPinAction
@@ -78,6 +80,7 @@ private fun GlobalAlertDialog(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     fun copyToClipboard(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -133,17 +136,21 @@ private fun GlobalAlertDialog(
                     add(
                         DialogChoice("Use with Hardware Wallet") {
                             onDismiss()
-                            try {
-                                app.getWalletManager(walletId).setWalletType(WalletType.COLD)
-                            } catch (e: Exception) {
-                                Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
-                                app.alertState =
-                                    TaggedItem(
-                                        AppAlertState.General(
-                                            title = "Error",
-                                            message = e.message ?: "Failed to convert wallet",
-                                        ),
-                                    )
+                            scope.launch {
+                                try {
+                                    app.getWalletManager(walletId).setWalletType(WalletType.COLD)
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
+                                    app.alertState =
+                                        TaggedItem(
+                                            AppAlertState.General(
+                                                title = "Error",
+                                                message = e.message ?: "Failed to convert wallet",
+                                            ),
+                                        )
+                                }
                             }
                         },
                     )

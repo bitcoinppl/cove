@@ -85,20 +85,31 @@ struct WalletSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .foregroundColor(.primary)
         .onDisappear(perform: handleDisappear)
-        .onAppear(perform: manager.validateMetadata)
         .onChange(of: scenePhase, handleScenePhaseChange)
         .task {
             accountNumber = manager.rust.nonDefaultAccountNumber()
+
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
         }
         .scrollContentBackground(.hidden)
     }
 
     private func deleteWallet() {
-        do {
-            try manager.rust.deleteWallet()
-            dismiss()
-        } catch {
-            Log.error("Unable to delete wallet: \(error)")
+        Task { @MainActor in
+            do {
+                try await manager.deleteWallet()
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to delete wallet: \(error)")
+            }
         }
     }
 
@@ -186,7 +197,16 @@ struct WalletSettingsView: View {
 
     private func handleDisappear() {
         dismissXprvReveal()
-        manager.validateMetadata()
+
+        Task { @MainActor in
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
+        }
     }
 
     private func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {

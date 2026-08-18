@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
@@ -55,6 +60,7 @@ fun WalletSettingsScreen(
     var pendingXprvExport by remember { mutableStateOf<PendingXprvExport?>(null) }
     var revealedXprv by remember { mutableStateOf<String?>(null) }
     var accountNumber by remember { mutableStateOf<UInt?>(null) }
+    val scope = rememberCoroutineScope()
     val finalDeleteConfirmationMessage =
         if (app.cloudBackupManager.isCloudBackupEnabled) {
             "This wallet will be deleted from this device. You can recover it from " +
@@ -66,29 +72,49 @@ fun WalletSettingsScreen(
     val finalDeleteButtonTitle = if (app.cloudBackupManager.isCloudBackupEnabled) "Delete" else "Delete Forever"
 
     fun deleteWallet() {
-        try {
-            manager.deleteWallet()
-            app.popRoute()
-        } catch (e: Exception) {
-            deletionDialog =
-                WalletDeletionDialog.Error(
-                    e.message ?: "Failed to delete wallet",
-                )
-            Log.e("WalletSettingsScreen", "failed to delete wallet", e)
+        scope.launch {
+            try {
+                manager.deleteWallet()
+                app.popRoute()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deletionDialog =
+                    WalletDeletionDialog.Error(
+                        e.message ?: "Failed to delete wallet",
+                    )
+                Log.e("WalletSettingsScreen", "failed to delete wallet", e)
+            }
         }
     }
 
     // validate metadata on appear and disappear
     LaunchedEffect(manager) {
-        manager.validateMetadata()
-        accountNumber = manager.nonDefaultAccountNumber()
+        try {
+            try {
+                manager.validateMetadata()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("WalletSettingsScreen", "failed to validate wallet metadata", e)
+            }
+            accountNumber = manager.nonDefaultAccountNumber()
+            awaitCancellation()
+        } finally {
+            withContext(NonCancellable) {
+                try {
+                    manager.validateMetadata()
+                } catch (e: Exception) {
+                    Log.e("WalletSettingsScreen", "failed to validate wallet metadata", e)
+                }
+            }
+        }
     }
 
     DisposableEffect(Unit) {
         onDispose {
             pendingXprvExport = null
             revealedXprv = null
-            manager.validateMetadata()
         }
     }
 

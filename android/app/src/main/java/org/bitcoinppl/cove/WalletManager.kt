@@ -24,7 +24,6 @@ import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.coroutines.cancellation.CancellationException
 
 private val WalletScanStatus.isActive: Boolean
     get() =
@@ -53,7 +52,6 @@ class WalletManager :
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
@@ -349,8 +347,8 @@ class WalletManager :
         block: suspend RustWalletManager.() -> T,
     ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, block)
 
-    fun validateMetadata() {
-        withRustOr(Unit) {
+    suspend fun validateMetadata() {
+        withRustSuspend {
             validateMetadata()
         }
     }
@@ -432,8 +430,8 @@ class WalletManager :
         }
     }
 
-    fun deleteWallet() {
-        withRust {
+    suspend fun deleteWallet() {
+        withRustSuspend {
             deleteWallet()
         }
     }
@@ -483,14 +481,14 @@ class WalletManager :
             exportXpubForShare()
         }
 
-    fun setWalletType(walletType: WalletType) {
-        withRust {
+    suspend fun setWalletType(walletType: WalletType) {
+        withRustSuspend {
             setWalletType(walletType)
         }
     }
 
-    fun markWalletAsVerified() {
-        withRust {
+    suspend fun markWalletAsVerified() {
+        withRustSuspend {
             markWalletAsVerified()
         }
     }
@@ -831,7 +829,10 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
-                persistWalletMetadata(message.v1)
+            }
+
+            is WalletManagerReconcileMessage.WalletMetadataDelta -> {
+                applyMetadataDelta(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -937,13 +938,102 @@ class WalletManager :
             is Transaction.Unconfirmed -> v1.id()
         }
 
-    private fun persistWalletMetadata(metadata: WalletMetadata) {
-        ioScope.launch {
-            withRustOr(Unit) {
-                setWalletMetadata(metadata)
-            }
+    private fun applyMetadataDelta(delta: WalletMetadataDelta) {
+        val metadata = walletMetadata ?: return
+        val update = metadataDeltaUpdate(metadata, delta)
+
+        walletMetadata = update.metadata
+
+        if (update.affectsLedgerState) {
+            ledgerState =
+                if (update.metadata.internal.performedFullScanAt != null) {
+                    WalletLedgerState.Complete
+                } else {
+                    WalletLedgerState.InitialScanIncomplete(
+                        if (scanStatus.isActive) InitialScanActivity.ACTIVE else InitialScanActivity.IDLE,
+                    )
+                }
+            balancePresentationState =
+                withRustOr(balancePresentationState) {
+                    balancePresentationForState(ledgerState)
+                }
+            reconcileLoadStateWithLedgerState()
         }
     }
+
+    private data class MetadataDeltaUpdate(
+        val metadata: WalletMetadata,
+        val affectsLedgerState: Boolean,
+    )
+
+    private fun metadataDeltaUpdate(
+        metadata: WalletMetadata,
+        delta: WalletMetadataDelta,
+    ): MetadataDeltaUpdate =
+        updateBasicMetadataFields(metadata, delta)
+            ?: updateOptionalMetadataFields(metadata, delta)
+            ?: updateInternalMetadataFields(metadata, delta)
+            ?: error("Unhandled wallet metadata delta: $delta")
+
+    private fun updateBasicMetadataFields(
+        metadata: WalletMetadata,
+        delta: WalletMetadataDelta,
+    ): MetadataDeltaUpdate? =
+        when (delta) {
+            is WalletMetadataDelta.Name -> MetadataDeltaUpdate(metadata.copy(name = delta.v1), false)
+            is WalletMetadataDelta.Color -> MetadataDeltaUpdate(metadata.copy(color = delta.v1), false)
+            is WalletMetadataDelta.Verified -> MetadataDeltaUpdate(metadata.copy(verified = delta.v1), false)
+            is WalletMetadataDelta.WalletType -> MetadataDeltaUpdate(metadata.copy(walletType = delta.v1), false)
+            is WalletMetadataDelta.AddressType -> MetadataDeltaUpdate(metadata.copy(addressType = delta.v1), true)
+            is WalletMetadataDelta.SelectedUnit -> MetadataDeltaUpdate(metadata.copy(selectedUnit = delta.v1), false)
+            is WalletMetadataDelta.FiatOrBtc -> MetadataDeltaUpdate(metadata.copy(fiatOrBtc = delta.v1), false)
+            is WalletMetadataDelta.SensitiveVisible ->
+                MetadataDeltaUpdate(metadata.copy(sensitiveVisible = delta.v1), false)
+            is WalletMetadataDelta.DetailsExpanded ->
+                MetadataDeltaUpdate(metadata.copy(detailsExpanded = delta.v1), false)
+            is WalletMetadataDelta.ShowLabels -> MetadataDeltaUpdate(metadata.copy(showLabels = delta.v1), false)
+            else -> null
+        }
+
+    private fun updateOptionalMetadataFields(
+        metadata: WalletMetadata,
+        delta: WalletMetadataDelta,
+    ): MetadataDeltaUpdate? =
+        when (delta) {
+            is WalletMetadataDelta.DiscoveryState -> MetadataDeltaUpdate(metadata.copy(discoveryState = delta.v1), true)
+            is WalletMetadataDelta.Origin -> MetadataDeltaUpdate(metadata.copy(origin = delta.v1), false)
+            is WalletMetadataDelta.MasterFingerprint ->
+                MetadataDeltaUpdate(metadata.copy(masterFingerprint = delta.v1), false)
+            else -> null
+        }
+
+    private fun updateInternalMetadataFields(
+        metadata: WalletMetadata,
+        delta: WalletMetadataDelta,
+    ): MetadataDeltaUpdate? =
+        when (delta) {
+            is WalletMetadataDelta.AddressIndex ->
+                MetadataDeltaUpdate(
+                    metadata.copy(internal = metadata.internal.copy(addressIndex = delta.v1)),
+                    false,
+                )
+            is WalletMetadataDelta.LastScanFinished ->
+                MetadataDeltaUpdate(
+                    metadata.copy(internal = metadata.internal.copy(lastScanFinished = delta.v1)),
+                    false,
+                )
+            is WalletMetadataDelta.LastHeightFetched ->
+                MetadataDeltaUpdate(
+                    metadata.copy(internal = metadata.internal.copy(lastHeightFetched = delta.v1)),
+                    false,
+                )
+            is WalletMetadataDelta.PerformedFullScanAt ->
+                MetadataDeltaUpdate(
+                    metadata.copy(internal = metadata.internal.copy(performedFullScanAt = delta.v1)),
+                    true,
+                )
+            else -> null
+        }
 
     private fun reconcileLoadStateWithLedgerState() {
         when (val current = loadState) {
@@ -969,7 +1059,6 @@ class WalletManager :
         rustGuard.closeOnce {
             logDebug("Closing WalletManager for $id")
             rust.shutdown()
-            ioScope.cancel()
             mainScope.cancel()
             rust.close()
         }

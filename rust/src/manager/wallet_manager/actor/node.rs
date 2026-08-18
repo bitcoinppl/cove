@@ -9,7 +9,10 @@ use eyre::Result;
 use tracing::debug;
 
 use crate::{
-    database::Database,
+    database::{
+        Database,
+        wallet::{WalletInternalMetadataPatch, WalletMetadataPatch},
+    },
     manager::wallet_manager::{
         Error, WalletManagerReconcileMessage,
         actor::{WalletActor, WalletScanGeneration},
@@ -239,9 +242,7 @@ impl WalletActor {
                 Ok(refresh) => {
                     let block_height = refresh.block_height;
                     self.node_client = Some(refresh.node_client);
-                    let applied_height = self.apply_last_height_fetched(block_height);
-
-                    Ok(applied_height)
+                    self.apply_last_height_fetched(block_height)
                 }
 
                 Err(error) => {
@@ -271,9 +272,10 @@ impl WalletActor {
             Ok(refresh) => {
                 let block_id = refresh.block_id;
                 self.node_client = Some(refresh.node_client);
-                self.apply_last_height_fetched(block_id.height as usize);
-
-                Produces::ok(Ok(block_id))
+                match self.apply_last_height_fetched(block_id.height as usize) {
+                    Ok(_) => Produces::ok(Ok(block_id)),
+                    Err(error) => Produces::ok(Err(error)),
+                }
             }
 
             Err(error) => {
@@ -327,12 +329,8 @@ impl WalletActor {
             return Some(last_height_fetched);
         }
 
-        let metadata = Database::global()
-            .wallets()
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .ok()??;
-
-        let BlockSizeLast { block_height, last_seen } = &metadata.internal.last_height_fetched?;
+        let BlockSizeLast { block_height, last_seen } =
+            &self.wallet.metadata.internal.last_height_fetched?;
 
         let last_height_fetched = Some((*last_seen, *(block_height) as usize));
         self.last_height_fetched = last_height_fetched;
@@ -340,50 +338,42 @@ impl WalletActor {
         last_height_fetched
     }
 
-    fn save_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
+    fn save_last_height_fetched(&mut self, block_height: usize) -> Result<(), Error> {
         let now = std::time::UNIX_EPOCH.elapsed().unwrap_or_default();
-        self.last_height_fetched = Some((now, block_height));
-
-        if !self.wallet.uses_persistent_storage() {
-            self.wallet.metadata.internal.last_height_fetched =
-                Some(BlockSizeLast { block_height: block_height as u64, last_seen: now });
-            return Some(());
-        }
-
-        let wallets = Database::global().wallets();
-
-        let mut metadata = wallets
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .ok()??;
-
         let last_height_fetched =
             BlockSizeLast { block_height: block_height as u64, last_seen: now };
 
-        metadata.internal.last_height_fetched = Some(last_height_fetched);
-        wallets.update_internal_metadata(&metadata).ok();
+        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
+            last_height_fetched: Some(Some(last_height_fetched)),
+            ..Default::default()
+        }))?;
+
+        self.last_height_fetched = Some((now, block_height));
+
+        if !self.wallet.uses_persistent_storage() {
+            return Ok(());
+        }
 
         Database::global()
             .global_cache
             .set_block_height(self.wallet.network, last_height_fetched)
             .ok();
 
-        self.wallet.metadata = metadata.clone();
-
-        Some(())
+        Ok(())
     }
 
-    fn apply_last_height_fetched(&mut self, block_height: usize) -> usize {
+    fn apply_last_height_fetched(&mut self, block_height: usize) -> Result<usize, Error> {
         let Some((_, current_height)) = self.last_height_fetched() else {
-            self.save_last_height_fetched(block_height);
-            return block_height;
+            self.save_last_height_fetched(block_height)?;
+            return Ok(block_height);
         };
 
         if block_height < current_height {
-            return current_height;
+            return Ok(current_height);
         }
 
-        self.save_last_height_fetched(block_height);
-        block_height
+        self.save_last_height_fetched(block_height)?;
+        Ok(block_height)
     }
 
     pub(crate) fn node_client(&mut self) -> Result<&NodeClient, Error> {

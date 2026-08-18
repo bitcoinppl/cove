@@ -22,6 +22,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,6 +43,7 @@ import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
+import kotlinx.coroutines.launch
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
@@ -62,13 +64,18 @@ fun VerificationCompleteScreen(
     manager: WalletManager?,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    val scope = rememberCoroutineScope()
+
     fun goToWallet() {
-        manager?.let {
+        val walletManager = manager ?: return
+        scope.launch {
             try {
-                it.markWalletAsVerified()
-                app.resetRoute(Route.SelectedWallet(it.id))
+                walletManager.markWalletAsVerified()
+                app.resetRoute(Route.SelectedWallet(walletManager.id))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e("VerificationComplete", "error marking wallet as verified: $e")
+                Log.e("VerificationComplete", "error marking wallet as verified", e)
             }
         }
     }

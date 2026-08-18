@@ -377,8 +377,16 @@ struct SelectedWalletScreen: View {
         .onChange(of: manager.walletMetadata.discoveryState, discoveryStateChanged)
         .onAppear(perform: initializePresentation)
         .onAppear(perform: ensureWalletIsSelected)
-        .onAppear(perform: manager.validateMetadata)
         .onAppear(perform: resetHeaderState)
+        .task {
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
+        }
         .onDisappear(perform: cleanUp)
         .presentingAlert(
             Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),

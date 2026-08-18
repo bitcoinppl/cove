@@ -27,6 +27,7 @@ use super::{
 
 fn start_discovery_scanner(
     metadata: WalletMetadata,
+    wallet_actor: Addr<WalletActor>,
     sender: flume::Sender<SingleOrMany>,
 ) -> Option<Addr<WalletDiscoveryScanner>> {
     if !matches!(
@@ -39,7 +40,7 @@ fn start_discovery_scanner(
     }
 
     let id = metadata.id.clone();
-    match WalletDiscoveryScanner::try_new(metadata, sender.clone()) {
+    match WalletDiscoveryScanner::try_new(metadata, wallet_actor, sender.clone()) {
         Ok(scanner) => Some(spawn_actor(scanner)),
         Err(error) => {
             warn!("unable to start wallet discovery scanner for {id}: {error}");
@@ -83,6 +84,7 @@ impl RustWalletManager {
         }
 
         let id = metadata.id.clone();
+        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
 
         // read cached and send to UI immediately
         let cached_balance: Balance = wallet.balance();
@@ -98,23 +100,25 @@ impl RustWalletManager {
             transactions: cached_transactions,
         }));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
-        let wallet_actor = WalletActor::new(
+        let wallet_actor = WalletActor::new_with_metadata(
             wallet,
             channel.raw_sender(),
             scan_status.clone(),
             wallet_snapshot.clone(),
+            shared_metadata.clone(),
         )
         .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
 
-        let discovery_scanner = start_discovery_scanner(metadata.clone(), channel.raw_sender());
+        let discovery_scanner =
+            start_discovery_scanner(metadata.clone(), actor.clone(), channel.raw_sender());
 
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
             id,
             actor,
-            metadata: Arc::new(RwLock::new(metadata)),
+            metadata: shared_metadata,
             reconciler: channel,
             scan_status,
             wallet_snapshot,
@@ -131,25 +135,28 @@ impl RustWalletManager {
         let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
+        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(
+        let wallet_actor = WalletActor::new_with_metadata(
             wallet,
             channel.raw_sender(),
             scan_status.clone(),
             wallet_snapshot.clone(),
+            shared_metadata.clone(),
         )
         .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
-        let discovery_scanner = start_discovery_scanner(metadata.clone(), channel.raw_sender());
+        let discovery_scanner =
+            start_discovery_scanner(metadata.clone(), actor.clone(), channel.raw_sender());
         let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
             id,
             actor,
-            metadata: Arc::new(RwLock::new(metadata)),
+            metadata: shared_metadata,
             reconciler: channel,
             scan_status,
             wallet_snapshot,
@@ -176,15 +183,17 @@ impl RustWalletManager {
         )?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
+        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new(
+        let wallet_actor = WalletActor::new_with_metadata(
             wallet,
             channel.raw_sender(),
             scan_status.clone(),
             wallet_snapshot.clone(),
+            shared_metadata.clone(),
         )
         .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
@@ -193,7 +202,7 @@ impl RustWalletManager {
         Ok(Self {
             id,
             actor,
-            metadata: Arc::new(RwLock::new(metadata)),
+            metadata: shared_metadata,
             reconciler: channel,
             scan_status,
             wallet_snapshot,

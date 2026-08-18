@@ -13,6 +13,7 @@ use cove_util::result_ext::ResultExt as _;
 use tracing::warn;
 
 use crate::{
+    database::wallet::{WalletInternalMetadataPatch, WalletMetadataPatch},
     database::{Database, wallet_data::ReceiveAddressCache},
     manager::wallet_manager::{
         Error, WalletManagerReconcileMessage,
@@ -334,7 +335,21 @@ impl WalletActor {
         now: u64,
         status: ReceiveAddressStatus,
     ) -> Result<ReceiveAddressState, Error> {
+        let before_metadata = self.wallet.metadata.clone();
         let address = self.wallet.get_next_address()?;
+
+        if before_metadata.internal.address_index != self.wallet.metadata.internal.address_index {
+            let address_index = self.wallet.metadata.internal.address_index.clone();
+            self.wallet.metadata = before_metadata.clone();
+
+            self.apply_metadata_patch(WalletMetadataPatch::Internal(
+                WalletInternalMetadataPatch {
+                    address_index: Some(address_index),
+                    ..Default::default()
+                },
+            ))?;
+        }
+
         let cache = ReceiveAddressCache {
             derivation_index: address.info.index,
             first_shown_at_secs: now,

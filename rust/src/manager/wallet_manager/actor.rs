@@ -1,15 +1,27 @@
 use crate::{
-    database::{Database, wallet_data::WalletDataDb},
+    database::{
+        Database,
+        wallet::{
+            WalletAddressTypePatch, WalletInternalMetadataPatch, WalletMetadataPatch,
+            WalletUserMetadataPatch,
+        },
+        wallet_data::WalletDataDb,
+    },
     historical_price_service::HistoricalPriceService,
+    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletScanPhase,
-        WalletScanStatus, WalletSnapshot, receive_address::ReceiveAddressSession,
+        Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletManagerAction,
+        WalletMetadataDelta, WalletScanPhase, WalletScanStatus, WalletSnapshot,
+        receive_address::ReceiveAddressSession,
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
     transaction::{ConfirmedTransaction, Transaction, TransactionDetailsPresentation, TxId},
     transaction_watcher::TransactionWatcher,
-    wallet::{Wallet, WalletAddressType, balance::Balance, metadata::WalletMetadata},
+    wallet::{
+        AddressTypeSwitchMetadata, Wallet, WalletAddressType, balance::Balance,
+        metadata::WalletMetadata,
+    },
 };
 mod node;
 mod receive_address;
@@ -49,7 +61,7 @@ use self::scan::{
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
 #[derive(Debug)]
-pub struct WalletActor {
+pub(crate) struct WalletActor {
     pub addr: WeakAddr<Self>,
     pub reconciler: Sender<SingleOrMany>,
     pub wallet: Wallet,
@@ -57,6 +69,7 @@ pub struct WalletActor {
 
     pub db: WalletDataDb,
     pub state: ActorState,
+    pub metadata: Arc<RwLock<WalletMetadata>>,
     pub receive_address: ReceiveAddressSession,
     pub scan_status: Arc<RwLock<WalletScanStatus>>,
     pub wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
@@ -77,7 +90,7 @@ pub struct WalletActor {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ActorState {
+pub(crate) enum ActorState {
     Initial,
     PerformingIncrementalScan,
     PerformingFullScan(FullScanType),
@@ -150,17 +163,241 @@ impl Actor for WalletActor {
 }
 
 impl WalletActor {
-    pub fn new(
+    pub async fn dispatch_metadata_action(
+        &mut self,
+        action: WalletManagerAction,
+    ) -> ActorResult<()> {
+        let Some(patch) = self.metadata_patch_for_action(action) else {
+            return Produces::ok(());
+        };
+
+        if let Err(error) = self.apply_metadata_patch(patch) {
+            self.send(WalletManagerReconcileMessage::WalletError(error));
+        }
+
+        Produces::ok(())
+    }
+
+    pub async fn set_wallet_type(
+        &mut self,
+        wallet_type: crate::wallet::metadata::WalletType,
+    ) -> ActorResult<Result<(), Error>> {
+        let result = self.apply_metadata_patch(WalletMetadataPatch::WalletType(wallet_type));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn validate_metadata(&mut self) -> ActorResult<Result<(), Error>> {
+        if !self.wallet.metadata.name.trim().is_empty() {
+            return Produces::ok(Ok(()));
+        }
+
+        let name = self.wallet.metadata.master_fingerprint.as_deref().map_or_else(
+            || "Unnamed Wallet".to_string(),
+            crate::wallet::fingerprint::Fingerprint::as_uppercase,
+        );
+
+        let result =
+            self.apply_metadata_patch(WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                name: Some(name),
+                ..Default::default()
+            }));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn mark_wallet_as_verified(&mut self) -> ActorResult<Result<(), Error>> {
+        let result = self.apply_metadata_patch(WalletMetadataPatch::Verified(true));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn update_discovery_state(
+        &mut self,
+        discovery_state: crate::wallet::metadata::DiscoveryState,
+    ) -> ActorResult<Result<(), Error>> {
+        let result =
+            self.apply_metadata_patch(WalletMetadataPatch::DiscoveryState(discovery_state));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    fn metadata_patch_for_action(
+        &self,
+        action: WalletManagerAction,
+    ) -> Option<WalletMetadataPatch> {
+        let metadata = &self.wallet.metadata;
+
+        let patch = match action {
+            WalletManagerAction::UpdateName(name) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    name: Some(name),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::UpdateColor(color) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    color: Some(color),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::UpdateUnit(unit) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    selected_unit: Some(unit),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::UpdateFiatOrBtc(fiat_or_btc) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    fiat_or_btc: Some(fiat_or_btc),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleSensitiveVisibility => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    sensitive_visible: Some(!metadata.sensitive_visible),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleDetailsExpanded => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    details_expanded: Some(!metadata.details_expanded),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleFiatOrBtc => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    fiat_or_btc: Some(match metadata.fiat_or_btc {
+                        crate::wallet::metadata::FiatOrBtc::Btc => {
+                            crate::wallet::metadata::FiatOrBtc::Fiat
+                        }
+                        crate::wallet::metadata::FiatOrBtc::Fiat => {
+                            crate::wallet::metadata::FiatOrBtc::Btc
+                        }
+                    }),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleFiatBtcPrimarySecondary => {
+                const ORDER: &[(crate::wallet::metadata::FiatOrBtc, crate::transaction::Unit); 4] =
+                    &[
+                        (crate::wallet::metadata::FiatOrBtc::Btc, crate::transaction::Unit::Btc),
+                        (crate::wallet::metadata::FiatOrBtc::Fiat, crate::transaction::Unit::Btc),
+                        (crate::wallet::metadata::FiatOrBtc::Btc, crate::transaction::Unit::Sat),
+                        (crate::wallet::metadata::FiatOrBtc::Fiat, crate::transaction::Unit::Sat),
+                    ];
+                let current = (metadata.fiat_or_btc, metadata.selected_unit);
+                let current_index = ORDER.iter().position(|option| option == &current)?;
+                let (fiat_or_btc, selected_unit) = ORDER[(current_index + 1) % ORDER.len()];
+
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    fiat_or_btc: Some(fiat_or_btc),
+                    selected_unit: Some(selected_unit),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleShowLabels => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    show_labels: Some(!metadata.show_labels),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::SelectCurrentWalletAddressType => {
+                WalletMetadataPatch::DiscoveryState(
+                    crate::wallet::metadata::DiscoveryState::ChoseAdressType,
+                )
+            }
+            WalletManagerAction::SelectedWalletDisappeared
+            | WalletManagerAction::OpenReceiveAddress
+            | WalletManagerAction::CreateNewReceiveAddress
+            | WalletManagerAction::CloseReceiveAddress(_) => return None,
+        };
+
+        Some(patch)
+    }
+
+    fn apply_metadata_patch(&mut self, patch: WalletMetadataPatch) -> Result<(), Error> {
+        let before = self.wallet.metadata.clone();
+
+        let after = if self.wallet.uses_persistent_storage() {
+            let result = Database::global()
+                .wallets
+                .patch_wallet_metadata(
+                    &self.wallet.id,
+                    self.wallet.network,
+                    self.wallet.metadata.wallet_mode,
+                    patch,
+                )
+                .map_err_str(Error::UnknownError)?;
+            result.after
+        } else {
+            let mut after = before.clone();
+            patch.apply_to(&mut after);
+            after
+        };
+
+        self.wallet.metadata = after.clone();
+        *self.metadata.write() = after.clone();
+        self.send_metadata_deltas(&before, &after);
+
+        if self.wallet.uses_persistent_storage() {
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before, &after);
+        }
+
+        Ok(())
+    }
+
+    fn send_metadata_deltas(&self, before: &WalletMetadata, after: &WalletMetadata) {
+        let deltas = metadata_deltas(before, after);
+        for delta in deltas.iter().cloned() {
+            self.send(WalletManagerReconcileMessage::WalletMetadataDelta(delta));
+        }
+
+        let ledger_state_changed = deltas.iter().any(|delta| {
+            matches!(
+                delta,
+                WalletMetadataDelta::AddressType(_)
+                    | WalletMetadataDelta::DiscoveryState(_)
+                    | WalletMetadataDelta::PerformedFullScanAt(_)
+            )
+        });
+        if ledger_state_changed {
+            self.send_ledger_state(self.scan_status.read().clone());
+        }
+    }
+
+    pub(crate) fn new_with_metadata(
         wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+        metadata: Arc<RwLock<WalletMetadata>>,
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
 
-        Ok(Self::new_with_db(wallet, reconciler, scan_status, wallet_snapshot, db))
+        Ok(Self::new_with_metadata_and_db(
+            wallet,
+            reconciler,
+            scan_status,
+            wallet_snapshot,
+            db,
+            metadata,
+        ))
     }
 
+    #[cfg(test)]
     pub(crate) fn new_with_db(
         wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
@@ -168,7 +405,28 @@ impl WalletActor {
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
         db: WalletDataDb,
     ) -> Self {
+        let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
+
+        Self::new_with_metadata_and_db(
+            wallet,
+            reconciler,
+            scan_status,
+            wallet_snapshot,
+            db,
+            metadata,
+        )
+    }
+
+    pub(crate) fn new_with_metadata_and_db(
+        mut wallet: Wallet,
+        reconciler: Sender<SingleOrMany>,
+        scan_status: Arc<RwLock<WalletScanStatus>>,
+        wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+        db: WalletDataDb,
+        metadata: Arc<RwLock<WalletMetadata>>,
+    ) -> Self {
         let seed = rand::rng().random();
+        wallet.metadata = metadata.read().clone();
 
         Self {
             addr: Default::default(),
@@ -180,6 +438,7 @@ impl WalletActor {
             last_height_fetched: None,
             height_refreshes_in_flight: HashMap::default(),
             state: ActorState::Initial,
+            metadata,
             receive_address: ReceiveAddressSession::default(),
             scan_status,
             wallet_snapshot,
@@ -405,7 +664,14 @@ impl WalletActor {
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
-        self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
+        let previous_metadata = self.wallet.metadata.clone();
+        let switch_metadata =
+            self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
+        self.apply_metadata_patch(WalletMetadataPatch::AddressType(address_type_patch(
+            address_type,
+            switch_metadata,
+            &previous_metadata,
+        )))?;
         self.restart_scan_after_address_type_switch()
             .await
             .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
@@ -456,7 +722,14 @@ impl WalletActor {
         descriptors: pubport::descriptor::Descriptors,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
-        self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
+        let previous_metadata = self.wallet.metadata.clone();
+        let switch_metadata =
+            self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
+        self.apply_metadata_patch(WalletMetadataPatch::AddressType(address_type_patch(
+            address_type,
+            switch_metadata,
+            &previous_metadata,
+        )))?;
         self.restart_scan_after_address_type_switch()
             .await
             .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
@@ -514,12 +787,12 @@ impl WalletActor {
         Ok(state)
     }
 
-    pub async fn shutdown(&mut self) {
+    pub async fn shutdown(&mut self) -> ActorResult<()> {
         debug!("shutdown wallet actor");
         let scan_generation = self.advance_scan_generation();
 
         if let Some(scan_actor) = &self.scan_actor {
-            send!(scan_actor.shutdown(scan_generation));
+            call!(scan_actor.shutdown(scan_generation)).await?;
         }
 
         self.stop_receive_address_watcher();
@@ -534,6 +807,8 @@ impl WalletActor {
 
         self.transaction_watchers = HashMap::default();
         self.send_scan_idle_status();
+
+        Produces::ok(())
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
@@ -781,10 +1056,17 @@ impl WalletActor {
                 return Err(error.into());
             }
 
-            self.save_last_scan_finished();
-            self.send_metadata_changed();
+            if let Err(error) = self.save_last_scan_finished() {
+                self.state = ActorState::FailedFullScan(full_scan_type);
+                self.send_scan_idle_status();
+                return Err(error.into());
+            }
         } else {
-            self.save_last_scan_finished();
+            if let Err(error) = self.save_last_scan_finished() {
+                self.state = ActorState::FailedFullScan(full_scan_type);
+                self.send_scan_idle_status();
+                return Err(error.into());
+            }
         }
 
         self.notify_scan_complete().await?;
@@ -810,7 +1092,11 @@ impl WalletActor {
 
         self.wallet.bdk.apply_update(sync_result)?;
         self.wallet.persist()?;
-        self.save_last_scan_finished();
+        if let Err(error) = self.save_last_scan_finished() {
+            self.state = ActorState::FailedIncrementalScan;
+            self.send_scan_idle_status();
+            return Err(error.into());
+        }
 
         self.notify_scan_complete().await?;
         self.state = ActorState::IncrementalScanComplete;
@@ -853,7 +1139,11 @@ impl WalletActor {
         }
 
         match Wallet::try_load_persisted(self.wallet.id.clone()) {
-            Ok(wallet) => self.wallet = wallet,
+            Ok(mut wallet) => {
+                // the actor owns metadata; reloading BDK state must not replace it with a stale row
+                wallet.metadata = self.wallet.metadata.clone();
+                self.wallet = wallet;
+            }
             Err(error) => error!("failed to reload wallet: {error:?}"),
         }
     }
@@ -863,56 +1153,31 @@ impl WalletActor {
             return Some(last_scan_finished);
         }
 
-        let metadata = Database::global()
-            .wallets()
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .ok()??;
-
-        let last_scan_finished = metadata.internal.last_scan_finished;
+        let last_scan_finished = self.wallet.metadata.internal.last_scan_finished;
         self.last_scan_finished = last_scan_finished;
 
         last_scan_finished
     }
 
-    fn save_last_scan_finished(&mut self) -> Option<()> {
+    fn save_last_scan_finished(&mut self) -> Result<(), Error> {
         let now = UNIX_EPOCH.elapsed().unwrap_or_default();
+
+        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
+            last_scan_finished: Some(Some(now)),
+            ..Default::default()
+        }))?;
         self.last_scan_finished = Some(now);
 
-        if !self.wallet.uses_persistent_storage() {
-            self.wallet.metadata.internal.last_scan_finished = Some(now);
-            return Some(());
-        }
-
-        let wallets = Database::global().wallets();
-
-        let mut metadata = wallets
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .ok()??;
-
-        metadata.internal.last_scan_finished = Some(now);
-        wallets.update_internal_metadata(&metadata).ok();
-        self.wallet.metadata = metadata;
-
-        Some(())
+        Ok(())
     }
 
-    fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<WalletMetadata, Error> {
-        if !self.wallet.uses_persistent_storage() {
-            self.wallet.metadata.internal.performed_full_scan_at = Some(completed_at);
-            return Ok(self.wallet.metadata.clone());
-        }
+    fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<(), Error> {
+        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
+            performed_full_scan_at: Some(Some(completed_at)),
+            ..Default::default()
+        }))?;
 
-        let wallets = Database::global().wallets();
-        let current_metadata = wallets
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .map_err_str(Error::WalletScanError)?
-            .ok_or(Error::WalletDoesNotExist)?;
-
-        let metadata = metadata_with_full_scan_performed(current_metadata, completed_at);
-        wallets.update_internal_metadata(&metadata).map_err_str(Error::WalletScanError)?;
-        self.wallet.metadata = metadata.clone();
-
-        Ok(metadata)
+        Ok(())
     }
 
     fn completed_initial_scan(&self) -> bool {
@@ -921,6 +1186,96 @@ impl WalletActor {
 
     fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
         ledger_ready_for_spend(self.completed_initial_scan())
+    }
+}
+
+fn metadata_deltas(before: &WalletMetadata, after: &WalletMetadata) -> Vec<WalletMetadataDelta> {
+    let mut deltas = Vec::new();
+
+    if before.name != after.name {
+        deltas.push(WalletMetadataDelta::Name(after.name.clone()));
+    }
+
+    if before.color != after.color {
+        deltas.push(WalletMetadataDelta::Color(after.color));
+    }
+
+    if before.verified != after.verified {
+        deltas.push(WalletMetadataDelta::Verified(after.verified));
+    }
+
+    if before.wallet_type != after.wallet_type {
+        deltas.push(WalletMetadataDelta::WalletType(after.wallet_type));
+    }
+
+    if before.address_type != after.address_type {
+        deltas.push(WalletMetadataDelta::AddressType(after.address_type));
+    }
+
+    if before.selected_unit != after.selected_unit {
+        deltas.push(WalletMetadataDelta::SelectedUnit(after.selected_unit));
+    }
+
+    if before.fiat_or_btc != after.fiat_or_btc {
+        deltas.push(WalletMetadataDelta::FiatOrBtc(after.fiat_or_btc));
+    }
+
+    if before.sensitive_visible != after.sensitive_visible {
+        deltas.push(WalletMetadataDelta::SensitiveVisible(after.sensitive_visible));
+    }
+
+    if before.details_expanded != after.details_expanded {
+        deltas.push(WalletMetadataDelta::DetailsExpanded(after.details_expanded));
+    }
+
+    if before.show_labels != after.show_labels {
+        deltas.push(WalletMetadataDelta::ShowLabels(after.show_labels));
+    }
+
+    if before.discovery_state != after.discovery_state {
+        deltas.push(WalletMetadataDelta::DiscoveryState(after.discovery_state.clone()));
+    }
+
+    if before.origin != after.origin {
+        deltas.push(WalletMetadataDelta::Origin(after.origin.clone()));
+    }
+
+    if before.master_fingerprint != after.master_fingerprint {
+        deltas.push(WalletMetadataDelta::MasterFingerprint(after.master_fingerprint.clone()));
+    }
+
+    if before.internal.address_index != after.internal.address_index {
+        deltas.push(WalletMetadataDelta::AddressIndex(after.internal.address_index.clone()));
+    }
+
+    if before.internal.last_scan_finished != after.internal.last_scan_finished {
+        deltas.push(WalletMetadataDelta::LastScanFinished(after.internal.last_scan_finished));
+    }
+
+    if before.internal.last_height_fetched != after.internal.last_height_fetched {
+        deltas.push(WalletMetadataDelta::LastHeightFetched(after.internal.last_height_fetched));
+    }
+
+    if before.internal.performed_full_scan_at != after.internal.performed_full_scan_at {
+        deltas
+            .push(WalletMetadataDelta::PerformedFullScanAt(after.internal.performed_full_scan_at));
+    }
+
+    deltas
+}
+
+fn address_type_patch(
+    address_type: WalletAddressType,
+    switch_metadata: AddressTypeSwitchMetadata,
+    previous_metadata: &WalletMetadata,
+) -> WalletAddressTypePatch {
+    WalletAddressTypePatch {
+        address_type,
+        discovery_state: crate::wallet::metadata::DiscoveryState::ChoseAdressType,
+        origin: switch_metadata.origin.or_else(|| previous_metadata.origin.clone()),
+        master_fingerprint: switch_metadata
+            .master_fingerprint
+            .or_else(|| previous_metadata.master_fingerprint.clone()),
     }
 }
 
@@ -995,6 +1350,7 @@ const fn full_scan_updates_initial_metadata(full_scan_type: FullScanType) -> boo
     should_update_full_scan_metadata(full_scan_type)
 }
 
+#[cfg(test)]
 fn metadata_with_full_scan_performed(
     mut metadata: WalletMetadata,
     completed_at: u64,
@@ -1078,15 +1434,6 @@ impl WalletActor {
         let state =
             WalletLedgerState::from_metadata_and_scan_status(&self.wallet.metadata, &status);
         self.send(WalletManagerReconcileMessage::LedgerStateChanged(state));
-    }
-
-    fn send_metadata_changed(&self) {
-        self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
-            self.wallet.metadata.clone(),
-        )));
-
-        // metadata may be complete before the active scan status has reconciled idle
-        self.send_ledger_state(self.scan_status.read().clone());
     }
 
     fn reset_scan_lifecycle_for_address_type_switch(&mut self) {
@@ -1313,7 +1660,7 @@ mod tests {
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
         RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
-        metadata_with_full_scan_performed, progressive_scan_update_response,
+        metadata_deltas, metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
         should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
     };
@@ -1323,11 +1670,15 @@ mod tests {
             test_support::new_test_wallet_data_db,
         },
         manager::wallet_manager::{
-            TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot,
+            TransactionLockState, WalletManagerReconcileMessage, WalletMetadataDelta,
+            WalletScanStatus, WalletSnapshot,
         },
         node::Node,
         transaction_watcher::TransactionWatcherEvent,
-        wallet::{Address, Wallet, WalletAddressType, metadata::WalletId},
+        wallet::{
+            Address, Wallet, WalletAddressType,
+            metadata::{WalletId, WalletType},
+        },
     };
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -1468,9 +1819,16 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
 
         let wallet_snapshot = test_wallet_snapshot(&wallet);
+        let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
 
-        super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-            .expect("actor is created")
+        super::WalletActor::new_with_metadata(
+            wallet,
+            sender,
+            test_scan_status(),
+            wallet_snapshot,
+            metadata,
+        )
+        .expect("actor is created")
     }
 
     fn test_keychain() -> &'static Keychain {
@@ -2490,10 +2848,7 @@ mod tests {
             .expect("mnemonic stored in test keychain");
 
         let (sender, _receiver) = flume::bounded(100);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
 
         let result = actor
             .build_tx(Amount::from_sat(50_000), Address::preview_new(), one_sat_vbyte_fee_rate())
@@ -3054,6 +3409,77 @@ mod tests {
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn metadata_patch_failure_leaves_actor_metadata_unchanged() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let expected_metadata = wallet.metadata.clone();
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        crate::database::Database::global()
+            .wallets
+            .remove_wallet_metadata(metadata.network, metadata.wallet_mode, &metadata.id)
+            .expect("metadata row is removed");
+
+        let result =
+            call!(addr.set_wallet_type(WalletType::WatchOnly)).await.expect("actor responds");
+        assert!(result.is_err());
+
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
+        assert_eq!(actor_metadata, expected_metadata);
+
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn receive_address_index_patch_updates_shared_and_persisted_metadata() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let _ = wallet.bdk.reveal_addresses_to(KeychainKind::External, 25).last();
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        call!(addr.create_new_receive_address_intent())
+            .await
+            .expect("receive address actor responds");
+
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
+        let persisted_metadata = persisted_wallet_metadata(&metadata);
+        assert_eq!(
+            actor_metadata.internal.address_index,
+            persisted_metadata.internal.address_index
+        );
+        assert!(actor_metadata.internal.address_index.is_some());
+
+        let emitted_address_index_delta = receiver.try_iter().any(|batch| match batch {
+            SingleOrMany::Single(WalletManagerReconcileMessage::WalletMetadataDelta(
+                WalletMetadataDelta::AddressIndex(Some(_)),
+            )) => true,
+            SingleOrMany::Many(messages) => messages.iter().any(|message| {
+                matches!(
+                    message,
+                    WalletManagerReconcileMessage::WalletMetadataDelta(
+                        WalletMetadataDelta::AddressIndex(Some(_))
+                    )
+                )
+            }),
+            _ => false,
+        });
+        assert!(emitted_address_index_delta);
+
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
     #[test]
     fn prepare_failure_before_first_full_scan_returns_to_initial_state() {
         assert_eq!(
@@ -3131,6 +3557,34 @@ mod tests {
     }
 
     #[test]
+    fn address_type_switch_metadata_deltas_are_field_scoped() {
+        let before = WalletMetadata::preview_new();
+        let mut after = before.clone();
+        after.name = "renamed".to_string();
+        after.address_type = WalletAddressType::Legacy;
+        after.discovery_state = crate::wallet::metadata::DiscoveryState::ChoseAdressType;
+        after.origin = Some("pkh([deadbeef/44'/0'/0'])".to_string());
+        after.master_fingerprint = Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(
+            "deadbeef".parse::<bdk_wallet::bitcoin::bip32::Fingerprint>().unwrap(),
+        )));
+        after.internal.last_scan_finished = Some(Duration::from_secs(1));
+
+        assert_eq!(
+            metadata_deltas(&before, &after),
+            vec![
+                WalletMetadataDelta::Name("renamed".to_string()),
+                WalletMetadataDelta::AddressType(WalletAddressType::Legacy),
+                WalletMetadataDelta::DiscoveryState(
+                    crate::wallet::metadata::DiscoveryState::ChoseAdressType,
+                ),
+                WalletMetadataDelta::Origin(Some("pkh([deadbeef/44'/0'/0'])".to_string())),
+                WalletMetadataDelta::MasterFingerprint(after.master_fingerprint.clone()),
+                WalletMetadataDelta::LastScanFinished(Some(Duration::from_secs(1))),
+            ]
+        );
+    }
+
+    #[test]
     fn spend_guard_rejects_incomplete_initial_scan() {
         assert_eq!(ledger_ready_for_spend(false), Err(super::Error::InitialScanIncomplete));
     }
@@ -3163,10 +3617,7 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let fallback_tx = bitcoin::Transaction {
@@ -3206,10 +3657,7 @@ mod tests {
             (*wallet.bdk.get_tx(outpoint.txid).expect("tx in wallet").tx_node.tx).clone();
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let persister =
@@ -3281,10 +3729,7 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let fallback_tx = bitcoin::Transaction {

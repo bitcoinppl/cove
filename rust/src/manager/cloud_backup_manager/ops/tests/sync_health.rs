@@ -307,7 +307,7 @@ async fn validate_metadata_marks_generated_wallet_names_dirty() {
     enable_cloud_backup_without_reset(&manager, 1);
 
     let wallet_manager = RustWalletManager::try_new(wallet_id.clone()).unwrap();
-    wallet_manager.validate_metadata();
+    wallet_manager.validate_metadata().await.unwrap();
 
     let updated_metadata = Database::global()
         .wallets()
