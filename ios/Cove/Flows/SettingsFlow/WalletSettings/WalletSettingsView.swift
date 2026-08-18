@@ -184,21 +184,25 @@ struct WalletSettingsView: View {
         }
     }
 
-    private func dismissXprvReveal() {
-        guard presentationState?.item.slot == .xprvReveal else { return }
+    private func clearXprvReveal() {
+        if queuedPresentationState?.slot == .xprvReveal {
+            queuedPresentationState = nil
+        }
 
-        presentationState = nil
+        if presentationState?.item.slot == .xprvReveal {
+            presentationState = nil
+        }
     }
 
     private func handleDisappear() {
-        dismissXprvReveal()
+        clearXprvReveal()
         manager.validateMetadata()
     }
 
     private func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
         guard oldPhase == .active, newPhase != .active else { return }
 
-        dismissXprvReveal()
+        clearXprvReveal()
     }
 
     private func present(_ state: WalletSettingsPresentationState) {
@@ -217,6 +221,7 @@ struct WalletSettingsView: View {
         // wait for the current presenter to finish dismissal before replacing it
         try? await Task.sleep(for: .milliseconds(350))
         guard !Task.isCancelled,
+              queuedPresentationState.slot != .xprvReveal || scenePhase == .active,
               presentationState == nil,
               self.queuedPresentationState == queuedPresentationState
         else { return }
