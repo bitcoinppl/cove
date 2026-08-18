@@ -109,10 +109,6 @@ impl FeeSnapshot {
     fn new(fees: FeeResponse) -> Self {
         Self { fees, fetched_at: FeeFetchedAt::now() }
     }
-
-    fn is_usable_fallback(self) -> bool {
-        self.fetched_at.age().is_some_and(|age| age <= STALE_FALLBACK_MAX_AGE)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -131,7 +127,7 @@ impl FeeClient {
     /// Returns None if no cache exists (memory or database)
     pub fn fees(&self) -> Option<FeeResponse> {
         if let Some(cached) = self.cached_fees() {
-            if cached.snapshot().is_usable_fallback() {
+            if cached.is_usable_fallback() {
                 if cached
                     .age()
                     .is_some_and(|age| age <= Duration::from_secs(BACKGROUND_REFRESH_INTERVAL))
@@ -155,7 +151,7 @@ impl FeeClient {
     pub async fn fetch_and_get_fees(&self) -> Result<FeeResponse, FeeClientError> {
         let cached = self.cached_fees();
         if let Some(cached) = cached
-            && cached.snapshot().is_usable_fallback()
+            && cached.is_usable_fallback()
             && cached.age().is_some_and(|age| age < Duration::from_secs(HARD_LIMIT))
         {
             return Ok(cached.fees);
@@ -170,8 +166,7 @@ impl FeeClient {
                 Ok(fees)
             }
             Err(error) => {
-                if let Some(cached) = cached.filter(|cached| cached.snapshot().is_usable_fallback())
-                {
+                if let Some(cached) = cached.filter(|cached| cached.is_usable_fallback()) {
                     warn!("fee refresh failed, using cached fees: {error}");
                     return Ok(cached.fees);
                 }
@@ -343,8 +338,8 @@ impl CachedFeeResponse {
         }
     }
 
-    fn snapshot(self) -> FeeSnapshot {
-        FeeSnapshot { fees: self.fees, fetched_at: self.fetched_at }
+    fn is_usable_fallback(self) -> bool {
+        self.age().is_some_and(|age| age <= STALE_FALLBACK_MAX_AGE)
     }
 }
 
@@ -417,9 +412,7 @@ pub async fn init_and_update_fees() {
     }
 
     // try loading a timestamped database snapshot first
-    if let Some(cached) =
-        FEE_CLIENT.cached_fees().filter(|cached| cached.snapshot().is_usable_fallback())
-    {
+    if let Some(cached) = FEE_CLIENT.cached_fees().filter(|cached| cached.is_usable_fallback()) {
         debug!("loaded fees from database cache");
         Updater::send_update(AppMessage::FeesChanged(cached.fees));
     }
@@ -443,7 +436,7 @@ pub async fn init_and_update_fees() {
 /// Fetch and update fees if needed (respects hard limit)
 pub async fn fetch_and_update_fees_if_needed() -> Result<()> {
     if let Some(cached) = FEE_CLIENT.cached_fees()
-        && cached.snapshot().is_usable_fallback()
+        && cached.is_usable_fallback()
         && cached.age().is_some_and(|age| age < Duration::from_secs(HARD_LIMIT))
     {
         return Ok(());
@@ -504,11 +497,41 @@ mod tests {
             fetched_at: FeeFetchedAt::from_unix_seconds(now.saturating_sub(3_601)),
         };
 
-        assert!(!snapshot.is_usable_fallback());
+        let cached = CachedFeeResponse::from_persisted_snapshot(snapshot);
+
+        assert!(!cached.is_usable_fallback());
     }
 
     #[test]
-    fn persisted_snapshot_keeps_wall_clock_age_for_refresh_limits() {
+    fn fresh_in_process_snapshot_uses_monotonic_age_for_future_wall_timestamp() {
+        let now = UNIX_EPOCH.elapsed().expect("system clock is after Unix epoch").as_secs();
+        let snapshot = FeeSnapshot {
+            fees: fee_response(1.0, 1.0, 1.0, 1.0),
+            fetched_at: FeeFetchedAt::from_unix_seconds(now.saturating_add(3_600)),
+        };
+
+        let cached = CachedFeeResponse::from_fresh_snapshot(snapshot);
+
+        assert!(cached.age().is_some_and(|age| age < Duration::from_secs(HARD_LIMIT)));
+        assert!(cached.is_usable_fallback());
+    }
+
+    #[test]
+    fn persisted_future_snapshot_is_not_usable() {
+        let now = UNIX_EPOCH.elapsed().expect("system clock is after Unix epoch").as_secs();
+        let snapshot = FeeSnapshot {
+            fees: fee_response(1.0, 1.0, 1.0, 1.0),
+            fetched_at: FeeFetchedAt::from_unix_seconds(now.saturating_add(3_600)),
+        };
+
+        let cached = CachedFeeResponse::from_persisted_snapshot(snapshot);
+
+        assert!(cached.age().is_none());
+        assert!(!cached.is_usable_fallback());
+    }
+
+    #[test]
+    fn persisted_snapshot_keeps_wall_clock_age_for_refresh_limits_and_fallback() {
         let now = UNIX_EPOCH.elapsed().expect("system clock is after Unix epoch").as_secs();
         let snapshot = FeeSnapshot {
             fees: fee_response(1.0, 1.0, 1.0, 1.0),
@@ -518,6 +541,22 @@ mod tests {
         let cached = CachedFeeResponse::from_persisted_snapshot(snapshot);
 
         assert!(cached.age().is_some_and(|age| age >= Duration::from_secs(30)));
+        assert!(cached.is_usable_fallback());
+    }
+
+    #[test]
+    fn stale_persisted_snapshot_is_not_usable_fallback() {
+        let now = UNIX_EPOCH.elapsed().expect("system clock is after Unix epoch").as_secs();
+        let snapshot = FeeSnapshot {
+            fees: fee_response(1.0, 1.0, 1.0, 1.0),
+            fetched_at: FeeFetchedAt::from_unix_seconds(
+                now.saturating_sub(STALE_FALLBACK_MAX_AGE.as_secs() + 1),
+            ),
+        };
+
+        let cached = CachedFeeResponse::from_persisted_snapshot(snapshot);
+
+        assert!(!cached.is_usable_fallback());
     }
 
     #[tokio::test]
