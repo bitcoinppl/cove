@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import java.util.UUID
 
 /**
@@ -26,7 +30,7 @@ class TapSignerManager(
     var initialRoute by mutableStateOf(initialRoute)
         private set
 
-    var enteredPin: String? by mutableStateOf(null)
+    var enteredCvc: String? by mutableStateOf(null)
 
     // NFC scanning state
     var isScanning by mutableStateOf(false)
@@ -43,7 +47,7 @@ class TapSignerManager(
         // clean up old NFC helper before replacing
         nfc?.close()
 
-        val newNfc = TapSignerNfcHelper(tapSigner)
+        val newNfc = TapSignerNfcHelper()
         nfc = newNfc
         nfcFor = tapSigner
         return newNfc
@@ -99,18 +103,45 @@ class TapSignerManager(
         if (path.isNotEmpty()) {
             path.removeAt(path.size - 1)
         }
+
+        clearSensitiveState()
     }
 
     fun resetRoute(to: org.bitcoinppl.cove_core.TapSignerRoute) {
         path.clear()
         initialRoute = to
         id = UUID.randomUUID()
-        enteredPin = null
+        clearSensitiveState()
+    }
+
+    fun operationCallbacks(): TapCardNfcManager.OperationCallbacks =
+        TapCardNfcManager.OperationCallbacks(
+            onMessageUpdate = { message -> scanMessage = message },
+            onTagDetected = { isTagDetected = true },
+        )
+
+    fun beginScan(message: String) {
+        scanMessage = message
+        isTagDetected = false
+        isScanning = true
+        errorMessage = null
+    }
+
+    suspend fun endScan() {
+        withContext(NonCancellable + Dispatchers.Main.immediate) {
+            isScanning = false
+            isTagDetected = false
+        }
+    }
+
+    fun clearSensitiveState() {
+        enteredCvc = null
     }
 
     fun close() {
         nfc?.close()
         nfc = null
         nfcFor = null
+        clearSensitiveState()
     }
 }

@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/25/25.
 //
 
+import CoveCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -32,6 +33,7 @@ struct TapSignerImportRetry: View {
     }
 
     private func cancel() {
+        manager.cancel()
         manager.popRoute()
     }
 
@@ -46,6 +48,7 @@ struct TapSignerImportRetry: View {
         Task {
             switch await nfc.derive(pin: pin) {
             case let .success(deriveInfo):
+                manager.enteredPin = nil
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
             case let .failure(error):
                 if error.isAuthError() {

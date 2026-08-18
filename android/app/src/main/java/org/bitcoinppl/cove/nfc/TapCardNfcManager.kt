@@ -4,246 +4,255 @@ import android.app.Activity
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.IsoDep
+import android.os.Handler
+import android.os.Looper
+import java.io.IOException
+import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.bitcoinppl.cove.Log
-import org.bitcoinppl.cove_core.*
+import org.bitcoinppl.cove_core.TapSignerCmd
+import org.bitcoinppl.cove_core.TapSignerReader
+import org.bitcoinppl.cove_core.TapSignerResponse
 import org.bitcoinppl.cove_core.TapcardTransportProtocol
 import org.bitcoinppl.cove_core.TransportException
 import org.bitcoinppl.cove_core.createTapSignerReader
-import java.lang.ref.WeakReference
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
-/**
- * Manages NFC operations for TapCard (TapSigner/SatsCard)
- * singleton that's initialized with Activity context from MainActivity
- */
+/** Owns one serialized stream of TAPSIGNER NFC operations. */
 class TapCardNfcManager private constructor() {
-    private val tag = "TapCardNfcManager"
+    private val logTag = "TapCardNfcManager"
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val operationMutex = Mutex()
+    private val operationGate = NfcOperationGate()
+
     private var activityRef: WeakReference<Activity>? = null
     private var nfcAdapter: NfcAdapter? = null
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var activeSession: OperationSession? = null
+    private var activeOperationJob: Job? = null
+    private var readerOwner: OperationToken? = null
+    private var pendingDisable: PendingDisable? = null
 
-    // current operation state
-    private var tagDetected = CompletableDeferred<Tag>()
-    private var isScanning = false
-    private var pendingDisableRunnable: Runnable? = null
-
-    // message callback for UI updates (setMessage/appendMessage from transport)
-    var onMessageUpdate: ((String) -> Unit)? = null
-
-    // callback when NFC tag is first detected (before reading starts)
-    var onTagDetected: (() -> Unit)? = null
-
-    // prevents concurrent NFC operations
-    private val operationMutex = Mutex()
-
+    /** Initialize the manager with the activity that owns reader mode. */
     fun initialize(activity: Activity) {
-        this.activityRef = WeakReference(activity)
-        this.nfcAdapter = NfcAdapter.getDefaultAdapter(activity)
-        Log.d(tag, "TapCardNfcManager initialized")
+        activityRef = WeakReference(activity)
+        nfcAdapter = NfcAdapter.getDefaultAdapter(activity)
+        cancelPendingDisable()
+        Log.d(logTag, "TapCardNfcManager initialized")
     }
 
-    /**
-     * Perform a TapSigner command by scanning for NFC tag
-     * Returns a Pair of (extracted result, raw response) to enable retry scenarios
-     */
-    suspend fun <T> performTapSignerCmd(
+    /** Callbacks for one NFC operation. They are never shared with another operation. */
+    data class OperationCallbacks(
+        val onMessageUpdate: ((String) -> Unit)? = null,
+        val onTagDetected: (() -> Unit)? = null,
+    )
+
+    /** Perform one command and return its typed response. */
+    suspend fun performTapSignerCmd(
         cmd: TapSignerCmd,
-        successResult: (TapSignerResponse?) -> T?,
-    ): Pair<T, TapSignerResponse?> =
+        callbacks: OperationCallbacks = OperationCallbacks(),
+    ): TapSignerResponse =
         operationMutex.withLock {
-            val activity = activityRef?.get() ?: throw Exception("Activity no longer available")
-            val nfcAdapter = this.nfcAdapter ?: throw Exception("NFC not available on this device")
-
-            if (!nfcAdapter.isEnabled) {
-                throw Exception("NFC is disabled. Please enable it in Settings")
+            val activity = activityRef?.get() ?: throw TapCardNfcException("Activity no longer available")
+            val adapter = nfcAdapter ?: throw TapCardNfcException("NFC is not available on this device")
+            if (!adapter.isEnabled) {
+                throw TapCardNfcException("NFC is disabled. Please enable it in Settings")
             }
 
-            Log.d(tag, "Starting NFC scan for operation: ${operationKind(cmd)}")
+            cancelPendingDisable()
 
-            return@withLock suspendCancellableCoroutine { continuation ->
-                // cancel any pending disable from previous operation
-                pendingDisableRunnable?.let { mainHandler.removeCallbacks(it) }
-                pendingDisableRunnable = null
+            val token = operationGate.begin()
+            val session = OperationSession(token, activity, adapter, callbacks)
+            activeSession = session
+            activeOperationJob = kotlinx.coroutines.currentCoroutineContext()[Job]
+            readerOwner = token
 
-                // reset state for new operation
-                tagDetected = CompletableDeferred()
-                isScanning = true
+            enableReaderMode(adapter, activity, session)
 
-                // enable reader mode for ISO14443 tags (TapSigner uses ISO7816)
-                // must be called on UI thread
-                activity.runOnUiThread {
-                    nfcAdapter.enableReaderMode(
-                        activity,
-                        { nfcTag ->
-                            Log.d(tag, "NFC tag detected: ${nfcTag.techList.joinToString()}")
-                            if (!tagDetected.isCompleted) {
-                                onTagDetected?.invoke()
-                                tagDetected.complete(nfcTag)
-                            }
-                        },
-                        NfcAdapter.FLAG_READER_NFC_A or
-                            NfcAdapter.FLAG_READER_NFC_B or
-                            NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
-                            NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
-                        null,
-                    )
-                    Log.d(tag, "NFC reader mode enabled")
+            var isoDep: IsoDep? = null
+            var reader: TapSignerReader? = null
+
+            try {
+                val detectedTag =
+                    withTimeoutOrNull(NFC_SCAN_TIMEOUT_MS) {
+                        session.tagDetected.await()
+                    } ?: throw TapCardNfcException("NFC scan timed out. Please try again")
+
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                Log.d(logTag, "Processing detected tag for operation ${token.id}")
+
+                isoDep =
+                    IsoDep.get(detectedTag)
+                        ?: throw TapCardNfcException("Tag does not support IsoDep (ISO7816)")
+
+                if (!isoDep.isConnected) {
+                    isoDep.connect()
                 }
 
-                // handle tag detection and command execution
-                val job =
-                    CoroutineScope(Dispatchers.IO).launch {
-                        var isoDep: IsoDep? = null
-                        var reader: TapSignerReader? = null
-                        try {
-                            // wait for tag with timeout
-                            val detectedTag =
-                                withTimeoutOrNull(NFC_SCAN_TIMEOUT_MS) {
-                                    tagDetected.await()
-                                } ?: throw Exception("NFC scan timed out. Please try again")
+                val timeout = timeoutFor(cmd)
+                isoDep.timeout = timeout
+                Log.d(logTag, "Connected to IsoDep tag (timeout=${timeout}ms, operation=${operationKind(cmd)})")
 
-                            Log.d(tag, "Processing detected tag")
+                if (timeout == TapCardTransport.ISODEP_LONG_TIMEOUT_MS) {
+                    session.updateMessage("Keep your phone steady on the card — this may take a few seconds")
+                }
 
-                            // get IsoDep tech (ISO7816)
-                            isoDep =
-                                IsoDep.get(detectedTag)
-                                    ?: throw Exception("Tag doesn't support IsoDep (ISO7816)")
-
-                            // connect to tag with increased timeout for reliability
-                            if (!isoDep.isConnected) {
-                                isoDep.connect()
+                val transport = TapCardTransport(isoDep, session, timeout)
+                reader = createTapSignerReader(transport, cmd)
+                reader.run()
+            } finally {
+                withContext(NonCancellable) {
+                    runCatching { reader?.close() }
+                        .onFailure { Log.e(logTag, "Failed to close TapSigner reader", it) }
+                    runCatching {
+                        isoDep?.let {
+                            if (it.isConnected) {
+                                it.close()
+                                Log.d(logTag, "IsoDep connection closed")
                             }
-
-                            // use higher timeout for backup and setup (both run backup APDUs)
-                            val needsLongTimeout =
-                                cmd is TapSignerCmd.Backup || cmd is TapSignerCmd.Setup
-                            val timeout =
-                                if (needsLongTimeout) {
-                                    TapCardTransport.ISODEP_BACKUP_TIMEOUT_MS
-                                } else {
-                                    TapCardTransport.ISODEP_TIMEOUT_MS
-                                }
-                            isoDep.timeout = timeout
-
-                            Log.d(
-                                tag,
-                                "Connected to IsoDep tag (timeout=${timeout}ms, operation=${operationKind(cmd)})",
-                            )
-
-                            // send proactive UX guidance for heavy NFC operations
-                            if (needsLongTimeout) {
-                                onMessageUpdate?.invoke(
-                                    "Keep your phone steady on the card \u2014 this may take a few seconds"
-                                )
-                            }
-
-                            // create transport with message callback and appropriate timeout
-                            val transport = TapCardTransport(isoDep, onMessageUpdate, timeout)
-
-                            // create TapSignerReader using factory function (workaround for UniFFI async constructor limitation)
-                            Log.d(tag, "Creating TapSignerReader with command using factory function")
-                            reader = createTapSignerReader(transport, cmd)
-
-                            // run the reader and get response
-                            Log.d(tag, "Running TapSignerReader")
-                            val response = reader.run()
-
-                            Log.d(tag, "TapSigner command completed successfully")
-
-                            // extract result using successResult function
-                            val result =
-                                successResult(response)
-                                    ?: throw Exception("Command completed but result extraction failed")
-
-                            // return both extracted result and raw response for retry scenarios
-                            val resultPair = Pair(result, response)
-
-                            // guard against cancelled continuation
-                            if (continuation.isActive) {
-                                continuation.resume(resultPair)
-                            }
-                        } catch (e: TapSignerReaderException) {
-                            Log.e(tag, "TapSigner operation failed: ${operationKind(cmd)}")
-
-                            // guard against cancelled continuation
-                            if (continuation.isActive) {
-                                continuation.resumeWithException(e)
-                            }
-                        } catch (e: Exception) {
-                            Log.e(tag, "NFC operation failed: ${operationKind(cmd)}")
-                            // guard against cancelled continuation
-                            if (continuation.isActive) {
-                                continuation.resumeWithException(e)
-                            }
-                        } finally {
-                            // always clean up NFC resources
-                            stopScanning()
-                            isoDep?.let {
-                                runCatching {
-                                    if (it.isConnected) {
-                                        it.close()
-                                        Log.d(tag, "IsoDep connection closed")
-                                    }
-                                }
-                            }
-                            reader?.close()
                         }
-                    }
+                    }.onFailure { Log.e(logTag, "Failed to close IsoDep connection", it) }
 
-                // handle cancellation
-                continuation.invokeOnCancellation {
-                    Log.d(tag, "NFC operation cancelled")
-                    job.cancel()
-                    stopScanning()
+                    finishSession(session)
+                    cmd.destroy()
                 }
             }
         }
 
-    private fun stopScanning() {
-        if (isScanning) {
-            isScanning = false
-            val activity = activityRef?.get()
-            if (activity != null) {
-                // delay disabling reader mode to prevent system from picking up
-                // the TapSigner's NDEF URL and opening browser
-                pendingDisableRunnable =
-                    Runnable {
-                        nfcAdapter?.disableReaderMode(activity)
-                        Log.d(tag, "Stopped NFC scanning")
-                        pendingDisableRunnable = null
-                    }
-                mainHandler.postDelayed(pendingDisableRunnable!!, READER_MODE_DISABLE_DELAY_MS)
+    /** Cancel the active operation without disabling NFC for a future operation. */
+    fun cancelActiveOperation() {
+        activeOperationJob?.cancel()
+        activeSession?.tagDetected?.cancel(CancellationException("NFC operation cancelled"))
+
+        val session = activeSession
+        if (session != null) {
+            session.cancel()
+            mainHandler.post { scheduleReaderDisable(session) }
+        }
+    }
+
+    /** Cancel active work and release reader-mode callbacks. */
+    fun close() {
+        cancelActiveOperation()
+    }
+
+    private fun enableReaderMode(
+        adapter: NfcAdapter,
+        activity: Activity,
+        session: OperationSession,
+    ) {
+        runOnMain {
+            if (!isCurrent(session)) return@runOnMain
+
+            adapter.enableReaderMode(
+                activity,
+                { detectedTag -> session.onTagDetected(detectedTag) },
+                NfcAdapter.FLAG_READER_NFC_A or
+                    NfcAdapter.FLAG_READER_NFC_B or
+                    NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
+                    NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
+                null,
+            )
+            Log.d(logTag, "NFC reader mode enabled for operation ${session.token.id}")
+        }
+    }
+
+    private fun finishSession(session: OperationSession) {
+        if (activeSession === session) {
+            activeSession = null
+            activeOperationJob = null
+            operationGate.end(session.token)
+        }
+
+        mainHandler.post {
+            scheduleReaderDisable(session)
+        }
+    }
+
+    private fun scheduleReaderDisable(session: OperationSession) {
+        val activity = session.activity
+        if (readerOwner != session.token) return
+
+        pendingDisable?.let { mainHandler.removeCallbacks(it.runnable) }
+
+        val runnable =
+            Runnable {
+                if (readerOwner == session.token) {
+                    session.adapter.disableReaderMode(activity)
+                    readerOwner = null
+                    pendingDisable = null
+                    Log.d(logTag, "NFC reader mode disabled for operation ${session.token.id}")
+                }
+            }
+        pendingDisable = PendingDisable(session.token, runnable)
+        mainHandler.postDelayed(runnable, READER_MODE_DISABLE_DELAY_MS)
+    }
+
+    private fun cancelPendingDisable() {
+        pendingDisable?.let { mainHandler.removeCallbacks(it.runnable) }
+        pendingDisable = null
+    }
+
+    private fun isCurrent(session: OperationSession): Boolean =
+        activeSession === session && operationGate.isCurrent(session.token) && !session.cancelled.get()
+
+    private fun runOnMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.post(block)
+        }
+    }
+
+    private inner class OperationSession(
+        val token: OperationToken,
+        val activity: Activity,
+        val adapter: NfcAdapter,
+        private val callbacks: OperationCallbacks,
+    ) : NfcOperationSession {
+        val tagDetected = CompletableDeferred<Tag>()
+        val cancelled = AtomicBoolean(false)
+
+        fun cancel() {
+            cancelled.set(true)
+        }
+
+        fun onTagDetected(tag: Tag) {
+            if (!isCurrent(this) || tagDetected.isCompleted) return
+
+            postIfCurrent { callbacks.onTagDetected?.invoke() }
+            tagDetected.complete(tag)
+        }
+
+        override fun updateMessage(message: String) {
+            postIfCurrent { callbacks.onMessageUpdate?.invoke(message) }
+        }
+
+        private fun postIfCurrent(block: () -> Unit) {
+            mainHandler.post {
+                if (isCurrent(this)) block()
             }
         }
     }
 
-    private fun operationKind(cmd: TapSignerCmd): String =
-        when (cmd) {
-            is TapSignerCmd.Setup -> "setup"
-            is TapSignerCmd.Backup -> "backup"
-            is TapSignerCmd.Derive -> "derive"
-            is TapSignerCmd.Change -> "change"
-            is TapSignerCmd.Sign -> "sign"
-        }
+    private data class PendingDisable(
+        val token: OperationToken,
+        val runnable: Runnable,
+    )
 
     companion object {
+        private const val NFC_SCAN_TIMEOUT_MS = 60_000L
+        private const val READER_MODE_DISABLE_DELAY_MS = 5_000L
+
         @Volatile
         private var instance: TapCardNfcManager? = null
-
-        // timeout for NFC tag detection
-        private const val NFC_SCAN_TIMEOUT_MS = 60_000L
-
-        // delay before disabling reader mode to give user time to move card away
-        private const val READER_MODE_DISABLE_DELAY_MS = 5000L
 
         fun getInstance(): TapCardNfcManager =
             instance ?: synchronized(this) {
@@ -252,32 +261,53 @@ class TapCardNfcManager private constructor() {
     }
 }
 
-/**
- * Android NFC transport implementation
- * implements TapcardTransportProtocol for IsoDep tags
- */
+internal data class OperationToken(val id: Long)
+
+/** Small token gate used by the NFC manager and race-focused tests. */
+internal class NfcOperationGate {
+    private var nextId = 0L
+    private var current: OperationToken? = null
+
+    @Synchronized
+    fun begin(): OperationToken {
+        val token = OperationToken(++nextId)
+        current = token
+        return token
+    }
+
+    @Synchronized
+    fun isCurrent(token: OperationToken): Boolean = current == token
+
+    @Synchronized
+    fun end(token: OperationToken) {
+        if (current == token) current = null
+    }
+}
+
+/** Android NFC transport for the Rust TAPSIGNER reader. */
 private class TapCardTransport(
     private val isoDep: IsoDep,
-    private val onMessageUpdate: ((String) -> Unit)?,
-    private val timeoutMs: Int = ISODEP_TIMEOUT_MS,
+    private val session: NfcOperationSession,
+    private val timeoutMs: Int,
 ) : TapcardTransportProtocol {
-    private val tag = "TapCardTransport"
+    private val logTag = "TapCardTransport"
     private var currentMessage = ""
 
     override fun setMessage(message: String) {
-        Log.d(tag, "TapSigner progress message updated")
+        Log.d(logTag, "TapSigner progress message updated")
         currentMessage = message
-        onMessageUpdate?.invoke(currentMessage)
+        session.updateMessage(message)
     }
 
     override fun appendMessage(message: String) {
-        Log.d(tag, "TapSigner progress message appended")
+        Log.d(logTag, "TapSigner progress message appended")
         currentMessage += message
-        onMessageUpdate?.invoke(currentMessage)
+        session.updateMessage(currentMessage)
     }
 
     override suspend fun transmitApdu(commandApdu: ByteArray): ByteArray {
-        Log.d(tag, "Transmitting APDU: ${commandApdu.size} bytes")
+        Log.d(logTag, "Transmitting APDU: ${commandApdu.size} bytes")
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
 
         return try {
             if (!isoDep.isConnected) {
@@ -286,21 +316,50 @@ private class TapCardTransport(
             }
 
             val response = isoDep.transceive(commandApdu)
-            Log.d(tag, "APDU response: ${response.size} bytes")
+            Log.d(logTag, "APDU response: ${response.size} bytes")
             response
-        } catch (_: Exception) {
-            Log.e(tag, "TapSigner APDU transmission failed")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            Log.e(logTag, "TapSigner APDU transmission failed", error)
             throw TransportException.UnknownException(
-                "Tag connection lost, please hold your phone still and try again"
+                "Tag connection lost, please hold your phone still and try again",
             )
         }
     }
 
     companion object {
-        // IsoDep transceive timeout (default is ~2s which is too short for some operations)
-        const val ISODEP_TIMEOUT_MS = 5000
-
-        // higher timeout for backup operations (heavier multi-step APDU exchange)
-        const val ISODEP_BACKUP_TIMEOUT_MS = 8000
+        const val ISODEP_TIMEOUT_MS = 5_000
+        const val ISODEP_LONG_TIMEOUT_MS = 15_000
     }
 }
+
+private interface NfcOperationSession {
+    fun updateMessage(message: String)
+}
+
+internal class TapCardNfcException(message: String) : Exception(message)
+
+private fun timeoutFor(cmd: TapSignerCmd): Int =
+    when (cmd) {
+        is TapSignerCmd.Setup,
+        is TapSignerCmd.ContinueSetup,
+        is TapSignerCmd.ContinueOperation,
+        is TapSignerCmd.Backup,
+        is TapSignerCmd.Change,
+        -> TapCardTransport.ISODEP_LONG_TIMEOUT_MS
+        is TapSignerCmd.Derive,
+        is TapSignerCmd.Sign,
+        -> TapCardTransport.ISODEP_TIMEOUT_MS
+    }
+
+private fun operationKind(cmd: TapSignerCmd): String =
+    when (cmd) {
+        is TapSignerCmd.Setup -> "setup"
+        is TapSignerCmd.ContinueSetup -> "continue_setup"
+        is TapSignerCmd.ContinueOperation -> "continue_operation"
+        is TapSignerCmd.Backup -> "backup"
+        is TapSignerCmd.Derive -> "derive"
+        is TapSignerCmd.Change -> "change"
+        is TapSignerCmd.Sign -> "sign"
+    }

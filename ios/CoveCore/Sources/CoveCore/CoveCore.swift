@@ -118,13 +118,122 @@ public extension Data {
     }
 }
 
+/// Errors raised when a TAPSIGNER CVC input is not an exact hexadecimal value
+public enum TapSignerCvcInputError: Error, Equatable, LocalizedError {
+    case invalidHex
+    case invalidLength
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidHex:
+            "Enter the CVC as hexadecimal characters only."
+        case .invalidLength:
+            "Enter between 12 and 64 hexadecimal characters."
+        }
+    }
+}
+
+/// Errors raised when a TAPSIGNER chain-code input is not exactly 32 bytes
+public enum TapSignerChainCodeInputError: Error, Equatable, LocalizedError {
+    case invalidHex
+    case invalidLength
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidHex:
+            "Enter hexadecimal characters only."
+        case .invalidLength:
+            "Enter exactly 64 hexadecimal characters (32 bytes)."
+        }
+    }
+}
+
+private func decodeStrictHex(_ value: String, minBytes: Int, maxBytes: Int) -> Data? {
+    let bytes = Array(value.utf8)
+    guard bytes.count == value.count,
+          bytes.count.isMultiple(of: 2),
+          (minBytes ... maxBytes).contains(bytes.count / 2)
+    else { return nil }
+
+    var decoded = Data(capacity: bytes.count / 2)
+
+    for index in stride(from: 0, to: bytes.count, by: 2) {
+        guard let high = hexNibble(bytes[index]),
+              let low = hexNibble(bytes[index + 1])
+        else { return nil }
+
+        decoded.append((high << 4) | low)
+    }
+
+    return decoded
+}
+
+private func hexNibble(_ value: UInt8) -> UInt8? {
+    switch value {
+    case 48 ... 57: value - 48
+    case 65 ... 70: value - 55
+    case 97 ... 102: value - 87
+    default: nil
+    }
+}
+
+/// Decode a TAPSIGNER CVC after enforcing its six-to-32-byte hexadecimal range
+public func tapSignerCvcBytes(hex: String) -> Data? {
+    decodeStrictHex(hex, minBytes: 6, maxBytes: 32)
+}
+
+/// Return the user-facing validation error for an invalid TAPSIGNER CVC
+public func tapSignerCvcInputError(hex: String) -> TapSignerCvcInputError? {
+    guard tapSignerCvcBytes(hex: hex) == nil else { return nil }
+
+    let length = hex.utf8.count
+    guard (12 ... 64).contains(length), length.isMultiple(of: 2) else {
+        return .invalidLength
+    }
+
+    return .invalidHex
+}
+
+/// Build an opaque TAPSIGNER CVC after enforcing its exact hexadecimal input format
+public func makeTapSignerCvc(hex: String) throws -> TapSignerCvc {
+    guard let bytes = tapSignerCvcBytes(hex: hex) else {
+        throw tapSignerCvcInputError(hex: hex) ?? .invalidHex
+    }
+
+    // validate the decoded bytes before handing the opaque value to Rust. This
+    // also makes comparisons independent of hexadecimal letter casing
+    return try TapSignerCvc.tryFromHex(hex: bytes.hexEncodedString())
+}
+
+/// Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data
+public func tapSignerChainCodeBytes(hex: String) -> Data? {
+    decodeStrictHex(hex, minBytes: 32, maxBytes: 32)
+}
+
+/// Return the user-facing validation error for an invalid TAPSIGNER chain code
+public func tapSignerChainCodeInputError(hex: String) -> TapSignerChainCodeInputError? {
+    guard tapSignerChainCodeBytes(hex: hex) == nil else { return nil }
+
+    let length = hex.utf8.count
+    guard length == 64 else { return .invalidLength }
+
+    return .invalidHex
+}
+
+/// Build an exact 32-byte TAPSIGNER chain code or return a user-facing validation error
+public func makeTapSignerChainCode(hex: String) throws -> Data {
+    guard let bytes = tapSignerChainCodeBytes(hex: hex) else {
+        throw tapSignerChainCodeInputError(hex: hex) ?? .invalidHex
+    }
+
+    return bytes
+}
+
 public extension SetupCmdResponse {
     var error: TapSignerReaderError? {
         switch self {
         case .complete: .none
-        case let .continueFromInit(continueCmd): continueCmd.error
-        case let .continueFromBackup(continueCmd): continueCmd.error
-        case let .continueFromDerive(continueCmd): continueCmd.error
+        case let .retry(continuation): continuation.error()
         }
     }
 }

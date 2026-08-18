@@ -5,10 +5,12 @@
 //  Created by Praveen Perera on 3/25/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerSetupSuccess: View {
     @Environment(AppManager.self) private var app
+    @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
     let setup: TapSignerSetupComplete
@@ -50,6 +52,7 @@ struct TapSignerSetupSuccess: View {
     }
 
     private func cancel() {
+        manager.cancel()
         app.sheetState = .none
     }
 
@@ -70,6 +73,7 @@ struct TapSignerSetupSuccess: View {
             return
         }
 
+        manager.cancel()
         app.selectWallet(walletId)
         app.sheetState = .none
     }

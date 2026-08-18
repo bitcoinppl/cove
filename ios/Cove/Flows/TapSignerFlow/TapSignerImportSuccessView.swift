@@ -5,11 +5,13 @@
 //  Created by Praveen Perera on 3/27/25.
 //
 
+import CoveCore
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct TapSignerImportSuccess: View {
     @Environment(AppManager.self) private var app
+    @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
     let deriveInfo: DeriveInfo
@@ -43,6 +45,7 @@ struct TapSignerImportSuccess: View {
     }
 
     private func cancel() {
+        manager.cancel()
         app.sheetState = .none
     }
 
@@ -52,6 +55,7 @@ struct TapSignerImportSuccess: View {
             return
         }
 
+        manager.cancel()
         app.selectWallet(walletId)
         app.sheetState = .none
     }

@@ -159,80 +159,45 @@ struct TapSignerStartingPinHeader: View {
     }
 }
 
-struct TapSignerPinIndicators: View {
-    let pinCount: Int
-    let focus: FocusState<Bool>.Binding
-
-    var body: some View {
-        HStack {
-            ForEach(0 ..< 6, id: \.self) { index in
-                Circle()
-                    .stroke(.primary, lineWidth: 1.3)
-                    .fill(pinCount <= index ? Color.clear : .primary)
-                    .frame(width: 18)
-                    .padding(.horizontal, 10)
-                    .id(index)
-                    .foregroundStyle(.primary)
-            }
-        }
-        .fixedSize(horizontal: true, vertical: true)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: focusField)
-    }
-
-    private func focusField() {
-        focus.wrappedValue = true
-    }
-}
-
-struct TapSignerShakingPinIndicators: View {
-    let pinCount: Int
-    let animateField: Bool
-    let focus: FocusState<Bool>.Binding
-
-    var body: some View {
-        TapSignerPinIndicators(pinCount: pinCount, focus: focus)
-            .keyframeAnimator(
-                initialValue: CGFloat.zero,
-                trigger: animateField,
-                content: { content, value in
-                    content.offset(x: value)
-                },
-                keyframes: { _ in
-                    KeyframeTrack {
-                        CubicKeyframe(30, duration: 0.07)
-                        CubicKeyframe(-30, duration: 0.07)
-                        CubicKeyframe(20, duration: 0.07)
-                        CubicKeyframe(-20, duration: 0.07)
-                        CubicKeyframe(10, duration: 0.07)
-                        CubicKeyframe(-10, duration: 0.07)
-                        CubicKeyframe(0, duration: 0.07)
-                    }
-                }
-            )
-    }
-}
-
-struct TapSignerPinScreen<Header: View, Indicators: View>: View {
-    @Binding var pin: String
+struct TapSignerCvcScreen<Header: View>: View {
+    @Binding var cvc: String
     let focus: FocusState<Bool>.Binding
     let spacing: CGFloat
     let header: Header
     let description: TapSignerPinDescription
-    let indicators: Indicators
+    let submitTitle: String
+    let errorMessage: String?
+    let submitAction: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(spacing: spacing) {
                 header
                 description
-                indicators
 
-                TextField("Hidden Input", text: $pin)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
+                SecureField("Enter hexadecimal CVC", text: $cvc)
                     .focused(focus)
-                    .keyboardType(.numberPad)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.asciiCapable)
+                    .submitLabel(.continue)
+                    .onSubmit(submitAction)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                Button(submitTitle, action: submitAction)
+                    .buttonStyle(DarkButtonStyle())
+                    .padding(.horizontal)
 
                 Spacer()
             }

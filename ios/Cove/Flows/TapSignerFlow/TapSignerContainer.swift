@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/12/25.
 //
 
+import CoveCore
 import SwiftUI
 
 @Observable
@@ -23,6 +24,8 @@ class TapSignerManager {
     }
 
     deinit {
+        nfc?.cancel()
+        enteredPin = nil
         AppManager.shared.tapSignerNfc = nil
     }
 
@@ -73,6 +76,12 @@ class TapSignerManager {
 
     func popRoute() {
         if !path.isEmpty { path.removeLast() }
+    }
+
+    func cancel() {
+        nfc?.cancel()
+        enteredPin = nil
+        AppManager.shared.tapSignerNfc = nil
     }
 
     func resetRoute(to route: TapSignerRoute) {

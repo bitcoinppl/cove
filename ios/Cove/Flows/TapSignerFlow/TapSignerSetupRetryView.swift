@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/25/25.
 //
 
+import CoveCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -43,7 +44,7 @@ struct TapSignerSetupRetry: View {
             switch await nfc.continueSetup(response) {
             case let .success(.complete(complete)):
                 manager.resetRoute(to: .setupSuccess(tapSigner, complete))
-            case let .success(incomplete):
+            case .success:
                 Log.error("TapSigner setup retry returned an incomplete response")
                 app.sheetState = nil
                 app.alertState = .init(

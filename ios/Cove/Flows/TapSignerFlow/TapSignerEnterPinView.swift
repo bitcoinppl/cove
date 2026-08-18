@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/12/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerEnterPin: View {
@@ -19,11 +20,12 @@ struct TapSignerEnterPin: View {
     }
 
     // private
-    @State private var pin: String = ""
+    @State private var pin = ""
+    @State private var errorMessage: String?
     @FocusState private var isFocused
 
     /// confirmed pin is correct, now run the action
-    func runAction(_ nfc: TapSignerNFC, _ pin: String) {
+    private func runAction(_ nfc: TapSignerNFC, _ pin: String) {
         switch action {
         case .derive: deriveAction(nfc, pin)
         case .change:
@@ -45,10 +47,11 @@ struct TapSignerEnterPin: View {
         }
     }
 
-    func deriveAction(_ nfc: TapSignerNFC, _ pin: String) {
+    private func deriveAction(_ nfc: TapSignerNFC, _ pin: String) {
         Task {
             switch await nfc.derive(pin: pin) {
             case let .success(deriveInfo):
+                manager.enteredPin = nil
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
             case let .failure(error):
                 if error.isAuthError() {
@@ -67,11 +70,12 @@ struct TapSignerEnterPin: View {
         }
     }
 
-    func backupAction(_ nfc: TapSignerNFC, _ pin: String) {
+    private func backupAction(_ nfc: TapSignerNFC, _ pin: String) {
         Task {
             switch await nfc.backup(pin: pin) {
             case let .success(backup):
                 let _ = app.saveTapSignerBackup(tapSigner, backup)
+                manager.enteredPin = nil
                 await MainActor.run {
                     self.pin = ""
                     app.sheetState = .none
@@ -101,7 +105,7 @@ struct TapSignerEnterPin: View {
         }
     }
 
-    func signAction(_ nfc: TapSignerNFC, _ psbt: Psbt, _ pin: String) {
+    private func signAction(_ nfc: TapSignerNFC, _ psbt: Psbt, _ pin: String) {
         Task {
             switch await nfc.sign(psbt: psbt, pin: pin) {
             case let .success(signedPsbt):
@@ -117,6 +121,7 @@ struct TapSignerEnterPin: View {
                         )
 
                     await MainActor.run {
+                        manager.enteredPin = nil
                         self.pin = ""
                         app.sheetState = .none
                         app.pushRoute(route)
@@ -154,52 +159,52 @@ struct TapSignerEnterPin: View {
     }
 
     var body: some View {
-        TapSignerPinScreen(
-            pin: $pin,
+        TapSignerCvcScreen(
+            cvc: $pin,
             focus: $isFocused,
             spacing: 40,
             header: TapSignerPinHeader(actionTitle: "Cancel", systemImage: nil, action: cancel),
             description: TapSignerPinDescription(
-                title: "Enter TAPSIGNER PIN",
+                title: "Enter TAPSIGNER CVC",
                 message: message
             ),
-            indicators: TapSignerPinIndicators(pinCount: pin.count, focus: $isFocused)
+            submitTitle: "Continue",
+            errorMessage: errorMessage,
+            submitAction: submitPin
         )
         .onAppear(perform: resetPin)
-        .onChange(of: isFocused, keepFocused)
-        .onChange(of: pin, handlePinChange)
+        .onDisappear(perform: clearSensitiveState)
     }
 
     private func cancel() {
+        clearSensitiveState()
+        manager.cancel()
         app.sheetState = .none
     }
 
     private func resetPin() {
         pin = ""
+        errorMessage = nil
         isFocused = true
     }
 
-    private func keepFocused(_: Bool, _: Bool) {
-        isFocused = true
+    private func submitPin() {
+        guard let inputError = tapSignerCvcInputError(hex: pin) else {
+            let nfc = manager.getOrCreateNfc(tapSigner)
+            manager.enteredPin = pin
+
+            isFocused = false
+            runAction(nfc, pin)
+            return
+        }
+
+        errorMessage = inputError.errorDescription
     }
 
-    private func handlePinChange(old: String, newPin: String) {
-        let nfc = manager.getOrCreateNfc(tapSigner)
-
-        if newPin.count == 6 {
-            manager.enteredPin = newPin
-            runAction(nfc, newPin)
-            return
-        }
-
-        if newPin.count > 6, old.count < 6 {
-            pin = old
-            return
-        }
-
-        if newPin.count > 6 {
-            pin = String(pin.prefix(6))
-        }
+    private func clearSensitiveState() {
+        pin = ""
+        errorMessage = nil
+        isFocused = false
     }
 }
 

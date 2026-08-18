@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,11 +15,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,12 +33,8 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove_core.TapSignerRoute
-import java.security.SecureRandom
 
-/**
- * advanced chain code entry screen
- * allows entering custom 32-byte hex chain code
- */
+/** Enter a custom chain code that decodes to exactly 32 bytes. */
 @Composable
 fun TapSignerAdvancedChainCode(
     app: AppManager,
@@ -49,7 +43,17 @@ fun TapSignerAdvancedChainCode(
     modifier: Modifier = Modifier,
 ) {
     var chainCode by remember { mutableStateOf("") }
-    val isButtonDisabled = !isValidChainCode(chainCode)
+    val validChainCode = isValidChainCode(chainCode)
+    val chainCodeError =
+        when {
+            chainCode.isEmpty() -> null
+            validChainCode -> null
+            else -> "Chain code must be exactly 64 hexadecimal characters (32 bytes)"
+        }
+
+    DisposableEffect(Unit) {
+        onDispose { chainCode = "" }
+    }
 
     Box(
         modifier =
@@ -61,7 +65,6 @@ fun TapSignerAdvancedChainCode(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            // back button
             Row(
                 modifier =
                     Modifier
@@ -78,7 +81,6 @@ fun TapSignerAdvancedChainCode(
                 }
             }
 
-            // main content
             Column(
                 modifier =
                     Modifier
@@ -88,7 +90,6 @@ fun TapSignerAdvancedChainCode(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                // title
                 Text(
                     text = "Advanced Setup",
                     style = MaterialTheme.typography.headlineLarge,
@@ -96,60 +97,46 @@ fun TapSignerAdvancedChainCode(
                     modifier = Modifier.padding(bottom = 20.dp),
                 )
 
-                // description
                 Text(
                     text =
-                        "Enter your custom 32-byte chain code below. If you're unsure, select automatic on the previous screen.",
+                        "Enter a custom chain code. It must be exactly 32 bytes, written as 64 hexadecimal characters.",
                     style = MaterialTheme.typography.callout,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 30.dp),
                 )
 
-                // chain code input
-                Surface(
+                OutlinedTextField(
+                    value = chainCode,
+                    onValueChange = { chainCode = it.take(CHAIN_CODE_HEX_LENGTH) },
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    TextField(
-                        value = chainCode,
-                        onValueChange = { chainCode = it },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(100.dp),
-                        placeholder = {
-                            Text("Enter a 32 byte hex string")
-                        },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        maxLines = 4,
-                    )
-                }
-
-                // generate button
-                TextButton(
-                    onClick = { chainCode = generateRandomChainCode() },
-                    modifier = Modifier.padding(bottom = 30.dp),
-                ) {
-                    Text(
-                        text = "Generate new string for me",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(40.dp))
+                            .padding(horizontal = 20.dp, vertical = 20.dp),
+                    label = { Text("32-byte chain code") },
+                    placeholder = { Text("64 hexadecimal characters") },
+                    supportingText = {
+                        Text(
+                            text =
+                                chainCodeError
+                                    ?: if (validChainCode) {
+                                        "Decoded bytes: 32"
+                                    } else {
+                                        "Decoded bytes: ${decodeHex(chainCode)?.size ?: 0}"
+                                    },
+                        )
+                    },
+                    isError = chainCodeError != null,
+                    maxLines = 4,
+                )
             }
 
-            // continue button
             Button(
                 onClick = {
-                    manager.navigate(TapSignerRoute.StartingPin(tapSigner, chainCode))
+                    if (isValidChainCode(chainCode) && decodeChainCode(chainCode) != null) {
+                        manager.navigate(TapSignerRoute.StartingPin(tapSigner, chainCode))
+                    }
                 },
-                enabled = !isButtonDisabled,
+                enabled = validChainCode,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -167,14 +154,4 @@ fun TapSignerAdvancedChainCode(
     }
 }
 
-private fun isValidChainCode(chainCode: String): Boolean {
-    // check if valid 32-byte hex string (64 hex characters)
-    if (chainCode.length != 64) return false
-    return chainCode.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
-}
-
-private fun generateRandomChainCode(): String {
-    val bytes = ByteArray(32)
-    SecureRandom().nextBytes(bytes)
-    return bytes.joinToString("") { "%02x".format(it) }
-}
+private const val CHAIN_CODE_HEX_LENGTH = 64

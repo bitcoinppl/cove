@@ -21,21 +21,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove.runCatchingCancellable
+import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.TapSignerRoute
 
-/**
- * import retry screen
- * displays when import fails and user can retry
- */
+/** Retry an opaque derive continuation returned by Rust. */
 @Composable
 fun TapSignerImportRetryView(
     app: AppManager,
@@ -46,18 +45,11 @@ fun TapSignerImportRetryView(
     val scope = rememberCoroutineScope()
 
     Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        // cancel button
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
@@ -65,12 +57,8 @@ fun TapSignerImportRetryView(
             }
         }
 
-        // main content
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -83,79 +71,63 @@ fun TapSignerImportRetryView(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "Import Failed",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+            Text(
+                text = "Import needs to continue",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
 
-                Text(
-                    text =
-                        "The import process failed. Please try again.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                )
-            }
+            Text(
+                text =
+                    "The card operation may have changed the card. Scan the same card again to verify its state.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
 
-        // retry button - uses stored PIN to retry directly (matches iOS behavior)
         Button(
             onClick = {
-                val pin = manager.enteredPin
-                if (pin == null) {
-                    app.alertState =
-                        TaggedItem(
-                            AppAlertState.TapSignerDeriveFailed("No PIN entered"),
-                        )
-                    return@Button
-                }
-
                 scope.launch {
                     val nfc = manager.getOrCreateNfc(tapSigner)
-                    val nfcManager = TapCardNfcManager.getInstance()
-                    nfcManager.onMessageUpdate = { message ->
-                        manager.scanMessage = message
-                    }
-                    nfcManager.onTagDetected = { manager.isTagDetected = true }
-
-                    manager.scanMessage = "Hold your phone near the TapSigner to import wallet"
-                    manager.isTagDetected = false
-                    manager.isScanning = true
-
-                    val result =
+                    manager.beginScan("Hold your phone near the TapSigner to continue import")
+                    val result = try {
                         runCatchingCancellable(
-                            "TapSignerImportRetryView",
-                            "TapSigner import retry failed",
+                            "TapSignerImportRetry",
+                            "TapSigner import continuation failed",
                         ) {
-                            nfc.derive(pin)
+                            nfc.continueDerive(manager.operationCallbacks())
                         }
+                    } finally {
+                        manager.endScan()
+                    }
+                    val deriveInfo = result.getOrNull()
+                    val error = result.exceptionOrNull()
 
-                    manager.isScanning = false
-                    manager.isTagDetected = false
-                    nfcManager.onMessageUpdate = null
-                    nfcManager.onTagDetected = null
-
-                    result
-                        .onSuccess { deriveInfo ->
+                    when {
+                        deriveInfo != null -> {
                             manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
-                        }.onFailure {
+                        }
+                        error is TapSignerOperationRetryException -> {
+                            Log.w("TapSignerImportRetry", "Import continuation still needs a retry")
+                        }
+                        error != null && isAuthError(error) -> {
+                            app.sheetState = null
                             app.alertState =
                                 TaggedItem(
-                                    AppAlertState.TapSignerDeriveFailed(
-                                        "TapSigner import failed. Please try again.",
+                                    AppAlertState.TapSignerWrongPin(
+                                        tapSigner,
+                                        AfterPinAction.Derive,
                                     ),
                                 )
                         }
+                        error != null -> manager.errorMessage = "Connection failed, please try again"
+                    }
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerImportRetry.retry"),
         ) {
-            Text("Retry Import")
+            Text("Continue Import")
         }
     }
 }

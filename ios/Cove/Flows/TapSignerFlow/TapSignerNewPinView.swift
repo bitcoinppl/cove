@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/12/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerNewPinView: View {
@@ -14,58 +15,55 @@ struct TapSignerNewPinView: View {
     let args: TapSignerNewPinArgs
 
     // private
-    @State private var newPin: String = ""
+    @State private var newPin = ""
+    @State private var errorMessage: String?
     @FocusState private var isFocused
 
     var body: some View {
-        TapSignerPinScreen(
-            pin: $newPin,
+        TapSignerCvcScreen(
+            cvc: $newPin,
             focus: $isFocused,
             spacing: 40,
             header: TapSignerPinHeader(actionTitle: "Back", action: goBack),
             description: TapSignerPinDescription(
-                title: "Create New PIN",
+                title: "Create New CVC",
                 message: """
-                The PIN code is a security feature that prevents unauthorized access to your key. \
-                Please back it up and keep it safe. You'll need it for signing transactions.
+                The CVC prevents unauthorized access to your key. Enter 12 to 64 hexadecimal characters, then keep the CVC safe. You'll need it for signing transactions.
                 """
             ),
-            indicators: TapSignerPinIndicators(pinCount: newPin.count, focus: $isFocused)
+            submitTitle: "Continue",
+            errorMessage: errorMessage,
+            submitAction: continueToConfirmation
         )
         .onAppear(perform: resetPin)
-        .onChange(of: isFocused, keepFocused)
-        .onChange(of: newPin, handlePinChange)
+        .onDisappear(perform: clearSensitiveState)
     }
 
     private func goBack() {
+        clearSensitiveState()
         manager.popRoute()
     }
 
     private func resetPin() {
         newPin = ""
+        errorMessage = nil
         isFocused = true
     }
 
-    private func keepFocused(_: Bool, _: Bool) {
-        isFocused = true
+    private func continueToConfirmation() {
+        guard let inputError = tapSignerCvcInputError(hex: newPin) else {
+            isFocused = false
+            manager.navigate(to: .confirmPin(TapSignerConfirmPinArgs(from: args, newPin: newPin)))
+            return
+        }
+
+        errorMessage = inputError.errorDescription
     }
 
-    private func handlePinChange(old: String, pin: String) {
-        if pin.count == 6 {
-            manager.navigate(
-                to: .confirmPin(TapSignerConfirmPinArgs(from: args, newPin: pin))
-            )
-            return
-        }
-
-        if pin.count > 6, old.count < 6 {
-            newPin = old
-            return
-        }
-
-        if pin.count > 6 {
-            newPin = String(args.startingPin.prefix(6))
-        }
+    private func clearSensitiveState() {
+        newPin = ""
+        errorMessage = nil
+        isFocused = false
     }
 }
 
