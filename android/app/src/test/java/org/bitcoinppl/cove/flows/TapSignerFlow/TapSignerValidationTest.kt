@@ -6,7 +6,6 @@ import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.bitcoinppl.cove_core.CkTapException
@@ -15,21 +14,23 @@ import org.bitcoinppl.cove_core.TransportException
 
 class TapSignerValidationTest {
     @Test
-    fun cvcRequiresTwelveToSixtyFourHexCharacters() {
-        assertTrue(isValidCvcHex("00".repeat(6)))
-        assertTrue(isValidCvcHex("ab".repeat(32)))
-        assertFalse(isValidCvcHex("00".repeat(5)))
-        assertFalse(isValidCvcHex("00".repeat(33)))
-        assertFalse(isValidCvcHex("0g".repeat(6)))
-        assertFalse(isValidCvcHex("0".repeat(13)))
+    fun cvcRequiresSixToThirtyTwoAsciiDigits() {
+        assertTrue(isValidCvc("0".repeat(6)))
+        assertTrue(isValidCvc("9".repeat(32)))
+        assertFalse(isValidCvc("0".repeat(5)))
+        assertFalse(isValidCvc("0".repeat(33)))
+        assertFalse(isValidCvc("12345a"))
+        assertFalse(isValidCvc("١٢٣٤٥٦"))
     }
 
     @Test
-    fun cvcDecodedByteCountIsVisibleOnlyForEvenHex() {
-        assertEquals(6, decodedByteCount("313233343536"))
-        assertEquals(32, decodedByteCount("ab".repeat(32)))
-        assertNull(decodedByteCount("abc"))
-        assertNull(decodedByteCount("zz"))
+    fun cvcValidationMessagesExplainEachInvalidInput() {
+        assertEquals("Enter 6–32 ASCII digits", cvcValidationMessage(""))
+        assertEquals("CVC must be at least 6 digits", cvcValidationMessage("12345"))
+        assertEquals("CVC must be at most 32 digits", cvcValidationMessage("1".repeat(33)))
+        assertEquals("Use ASCII digits only: 0–9", cvcValidationMessage("12345a"))
+        assertEquals("Use ASCII digits only: 0–9", cvcValidationMessage("١٢٣٤٥٦"))
+        assertEquals(null, cvcValidationMessage("123456"))
     }
 
     @Test
@@ -38,6 +39,7 @@ class TapSignerValidationTest {
 
         assertTrue(isValidChainCode(chainCode))
         assertArrayEquals(ByteArray(32), decodeChainCode(chainCode))
+        assertFalse(isValidChainCode("0".repeat(63)))
         assertFalse(isValidChainCode("00".repeat(31)))
         assertFalse(isValidChainCode("00".repeat(33)))
         assertFalse(isValidChainCode("0g".repeat(32)))

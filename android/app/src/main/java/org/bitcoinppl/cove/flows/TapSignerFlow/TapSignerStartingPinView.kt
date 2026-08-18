@@ -43,7 +43,7 @@ import org.bitcoinppl.cove_core.TapSignerNewPinArgs
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.TapSignerRoute
 
-/** Enter the factory CVC as hexadecimal text before setup. */
+/** Enter the factory CVC before setup. */
 @Composable
 fun TapSignerStartingPinView(
     app: AppManager,
@@ -53,7 +53,7 @@ fun TapSignerStartingPinView(
     modifier: Modifier = Modifier,
 ) {
     var factoryCvc by remember { mutableStateOf("") }
-    val validCvc = isValidCvcHex(factoryCvc)
+    val validCvc = isValidCvc(factoryCvc)
 
     DisposableEffect(Unit) {
         onDispose { factoryCvc = "" }
@@ -117,8 +117,7 @@ fun TapSignerStartingPinView(
             Text(
                 text =
                     "The factory CVC is printed on the back of your TAPSIGNER. " +
-                        "Enter it as hexadecimal bytes. " +
-                        "For example, printed ASCII 123456 becomes 313233343536.",
+                        "Enter the digits exactly as printed.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
@@ -126,7 +125,7 @@ fun TapSignerStartingPinView(
             TapSignerCvcInput(
                 value = factoryCvc,
                 onValueChange = { factoryCvc = it },
-                label = "Factory CVC (hex)",
+                label = "Factory CVC",
                 testTag = "tapSignerStarting.factoryCvc",
             )
 

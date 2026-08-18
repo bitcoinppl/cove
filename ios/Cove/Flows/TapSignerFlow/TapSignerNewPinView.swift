@@ -28,7 +28,7 @@ struct TapSignerNewPinView: View {
             description: TapSignerPinDescription(
                 title: "Create New CVC",
                 message: """
-                The CVC prevents unauthorized access to your key. Enter 12 to 64 hexadecimal characters, then keep the CVC safe. You'll need it for signing transactions.
+                The CVC prevents unauthorized access to your key. Enter 6 to 32 ASCII digits, then keep the CVC safe. You'll need it for signing transactions.
                 """
             ),
             submitTitle: "Continue",
@@ -51,7 +51,7 @@ struct TapSignerNewPinView: View {
     }
 
     private func continueToConfirmation() {
-        guard let inputError = tapSignerCvcInputError(hex: newPin) else {
+        guard let inputError = tapSignerCvcInputError(value: newPin) else {
             isFocused = false
             manager.navigate(to: .confirmPin(TapSignerConfirmPinArgs(from: args, newPin: newPin)))
             return

@@ -91,8 +91,8 @@ class TapSignerNFC {
         clearLastResponse()
 
         do {
-            let factoryCvc = try makeTapSignerCvc(hex: factoryPin)
-            let newCvc = try makeTapSignerCvc(hex: newPin)
+            let factoryCvc = try makeTapSignerCvc(value: factoryPin)
+            let newCvc = try makeTapSignerCvc(value: newPin)
             let setupCmd = try SetupCmd.tryNew(
                 factoryCvc: factoryCvc,
                 newCvc: newCvc,
@@ -113,7 +113,7 @@ class TapSignerNFC {
         clearLastResponse()
 
         do {
-            let cvc = try makeTapSignerCvc(hex: pin)
+            let cvc = try makeTapSignerCvc(value: pin)
             return await performTapSignerCmd(cmd: .derive(cvc: cvc)) {
                 $0.deriveResponse
             }
@@ -130,8 +130,8 @@ class TapSignerNFC {
         clearLastResponse()
 
         do {
-            let currentCvc = try makeTapSignerCvc(hex: currentPin)
-            let newCvc = try makeTapSignerCvc(hex: newPin)
+            let currentCvc = try makeTapSignerCvc(value: currentPin)
+            let newCvc = try makeTapSignerCvc(value: newPin)
 
             return await performTapSignerCmd(
                 cmd: .change(currentCvc: currentCvc, newCvc: newCvc)
@@ -149,7 +149,7 @@ class TapSignerNFC {
         clearLastResponse()
 
         do {
-            let cvc = try makeTapSignerCvc(hex: pin)
+            let cvc = try makeTapSignerCvc(value: pin)
             return await performTapSignerCmd(cmd: .backup(cvc: cvc)) {
                 $0.backupResponse
             }
@@ -164,7 +164,7 @@ class TapSignerNFC {
         clearLastResponse()
 
         do {
-            let cvc = try makeTapSignerCvc(hex: pin)
+            let cvc = try makeTapSignerCvc(value: pin)
             return await performTapSignerCmd(cmd: .sign(psbt: psbt, cvc: cvc)) {
                 $0.signResponse
             }

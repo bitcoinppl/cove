@@ -175,11 +175,11 @@ struct TapSignerCvcScreen<Header: View>: View {
                 header
                 description
 
-                SecureField("Enter hexadecimal CVC", text: $cvc)
+                SecureField("Enter CVC", text: $cvc)
                     .focused(focus)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .keyboardType(.asciiCapable)
+                    .keyboardType(.numberPad)
                     .submitLabel(.continue)
                     .onSubmit(submitAction)
                     .padding()

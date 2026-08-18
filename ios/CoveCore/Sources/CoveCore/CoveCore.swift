@@ -118,17 +118,17 @@ public extension Data {
     }
 }
 
-/// Errors raised when a TAPSIGNER CVC input is not an exact hexadecimal value
+/// Errors raised when a TAPSIGNER CVC input is not six to 32 ASCII digits
 public enum TapSignerCvcInputError: Error, Equatable, LocalizedError {
-    case invalidHex
+    case invalidCharacters
     case invalidLength
 
     public var errorDescription: String? {
         switch self {
-        case .invalidHex:
-            "Enter the CVC as hexadecimal characters only."
+        case .invalidCharacters:
+            "Enter the CVC as ASCII digits only."
         case .invalidLength:
-            "Enter between 12 and 64 hexadecimal characters."
+            "Enter between 6 and 32 ASCII digits."
         }
     }
 }
@@ -177,32 +177,25 @@ private func hexNibble(_ value: UInt8) -> UInt8? {
     }
 }
 
-/// Decode a TAPSIGNER CVC after enforcing its six-to-32-byte hexadecimal range
-public func tapSignerCvcBytes(hex: String) -> Data? {
-    decodeStrictHex(hex, minBytes: 6, maxBytes: 32)
-}
-
 /// Return the user-facing validation error for an invalid TAPSIGNER CVC
-public func tapSignerCvcInputError(hex: String) -> TapSignerCvcInputError? {
-    guard tapSignerCvcBytes(hex: hex) == nil else { return nil }
-
-    let length = hex.utf8.count
-    guard (12 ... 64).contains(length), length.isMultiple(of: 2) else {
-        return .invalidLength
+public func tapSignerCvcInputError(value: String) -> TapSignerCvcInputError? {
+    let bytes = Array(value.utf8)
+    guard bytes.allSatisfy({ (48 ... 57).contains($0) }) else {
+        return .invalidCharacters
     }
 
-    return .invalidHex
+    guard (6 ... 32).contains(bytes.count) else { return .invalidLength }
+
+    return nil
 }
 
-/// Build an opaque TAPSIGNER CVC after enforcing its exact hexadecimal input format
-public func makeTapSignerCvc(hex: String) throws -> TapSignerCvc {
-    guard let bytes = tapSignerCvcBytes(hex: hex) else {
-        throw tapSignerCvcInputError(hex: hex) ?? .invalidHex
+/// Build an opaque TAPSIGNER CVC after enforcing its six-to-32 ASCII digit format
+public func makeTapSignerCvc(value: String) throws -> TapSignerCvc {
+    if let inputError = tapSignerCvcInputError(value: value) {
+        throw inputError
     }
 
-    // validate the decoded bytes before handing the opaque value to Rust. This
-    // also makes comparisons independent of hexadecimal letter casing
-    return try TapSignerCvc.tryFromHex(hex: bytes.hexEncodedString())
+    return try TapSignerCvc.tryNew(value: value)
 }
 
 /// Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data

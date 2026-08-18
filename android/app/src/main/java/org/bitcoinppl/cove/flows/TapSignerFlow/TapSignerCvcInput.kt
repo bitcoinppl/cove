@@ -16,23 +16,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
-internal const val MIN_CVC_HEX_LENGTH = 12
-internal const val MAX_CVC_HEX_LENGTH = 64
+internal const val MIN_CVC_LENGTH = 6
+internal const val MAX_CVC_LENGTH = 32
 private const val HEX_CHARS_PER_BYTE = 2
 private const val HEX_RADIX = 16
 private const val CHAIN_CODE_BYTE_LENGTH = 32
 
-internal fun isValidCvcHex(value: String): Boolean =
-    value.length in MIN_CVC_HEX_LENGTH..MAX_CVC_HEX_LENGTH &&
-        value.length % HEX_CHARS_PER_BYTE == 0 &&
-        value.all(::isHexCharacter)
-
-internal fun decodedByteCount(value: String): Int? =
-    if (value.length % HEX_CHARS_PER_BYTE == 0 && value.all(::isHexCharacter)) {
-        value.length / HEX_CHARS_PER_BYTE
-    } else {
-        null
-    }
+internal fun isValidCvc(value: String): Boolean =
+    value.length in MIN_CVC_LENGTH..MAX_CVC_LENGTH && value.all(::isAsciiDigit)
 
 internal fun decodeHex(value: String): ByteArray? {
     if (value.length % HEX_CHARS_PER_BYTE != 0 || !value.all(::isHexCharacter)) return null
@@ -53,13 +44,14 @@ internal fun isValidChainCode(value: String): Boolean = decodeChainCode(value) !
 private fun isHexCharacter(value: Char): Boolean =
     value in '0'..'9' || value in 'a'..'f' || value in 'A'..'F'
 
+private fun isAsciiDigit(value: Char): Boolean = value in '0'..'9'
+
 internal fun cvcValidationMessage(value: String): String? =
     when {
-        value.isEmpty() -> "Enter 12–64 hexadecimal characters"
-        value.any { !isHexCharacter(it) } -> "Use hexadecimal characters only: 0–9 and A–F"
-        value.length % HEX_CHARS_PER_BYTE != 0 -> "Enter an even number of hexadecimal characters"
-        value.length < MIN_CVC_HEX_LENGTH -> "CVC must be at least 6 decoded bytes"
-        value.length > MAX_CVC_HEX_LENGTH -> "CVC must be at most 32 decoded bytes"
+        value.isEmpty() -> "Enter 6–32 ASCII digits"
+        value.any { !isAsciiDigit(it) } -> "Use ASCII digits only: 0–9"
+        value.length < MIN_CVC_LENGTH -> "CVC must be at least 6 digits"
+        value.length > MAX_CVC_LENGTH -> "CVC must be at most 32 digits"
         else -> null
     }
 
@@ -80,13 +72,13 @@ internal fun TapSignerCvcInput(
     Column(modifier = inputModifier) {
         OutlinedTextField(
             value = value,
-            onValueChange = { onValueChange(it.take(MAX_CVC_HEX_LENGTH)) },
+            onValueChange = { onValueChange(it.take(MAX_CVC_LENGTH)) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text(label) },
             singleLine = true,
             isError = value.isNotEmpty() && errorMessage != null,
             visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
         )
 
         Text(
@@ -94,7 +86,7 @@ internal fun TapSignerCvcInput(
                 if (errorMessage != null) {
                     errorMessage
                 } else {
-                    "Decoded bytes: ${decodedByteCount(value)}"
+                    "Digits: ${value.length}"
                 },
             modifier = Modifier.padding(start = 16.dp, top = 4.dp),
             style = MaterialTheme.typography.bodySmall,

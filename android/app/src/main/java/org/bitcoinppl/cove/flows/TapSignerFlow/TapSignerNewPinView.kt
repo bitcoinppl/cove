@@ -36,7 +36,7 @@ import org.bitcoinppl.cove_core.TapSignerConfirmPinArgs
 import org.bitcoinppl.cove_core.TapSignerNewPinArgs
 import org.bitcoinppl.cove_core.TapSignerRoute
 
-/** Enter the new card CVC as hexadecimal text. */
+/** Enter the new card CVC. */
 @Composable
 fun TapSignerNewPinView(
     app: AppManager,
@@ -45,7 +45,7 @@ fun TapSignerNewPinView(
     modifier: Modifier = Modifier,
 ) {
     var newCvc by remember { mutableStateOf("") }
-    val validCvc = isValidCvcHex(newCvc)
+    val validCvc = isValidCvc(newCvc)
 
     DisposableEffect(Unit) {
         onDispose { newCvc = "" }
@@ -95,7 +95,7 @@ fun TapSignerNewPinView(
 
             Text(
                 text =
-                    "Choose a CVC of 6–32 bytes and enter it as 12–64 hexadecimal characters. " +
+                    "Choose a CVC of 6–32 ASCII digits. " +
                         "Store it safely because you need it for card operations.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -104,7 +104,7 @@ fun TapSignerNewPinView(
             TapSignerCvcInput(
                 value = newCvc,
                 onValueChange = { newCvc = it },
-                label = "New CVC (hex)",
+                label = "New CVC",
                 testTag = "tapSignerNew.newCvc",
             )
         }

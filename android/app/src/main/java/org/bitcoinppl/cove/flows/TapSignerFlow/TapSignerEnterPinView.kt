@@ -72,7 +72,7 @@ fun TapSignerEnterPinView(
     }
 
     fun submit() {
-        if (isSubmitting || !isValidCvcHex(cvc)) return
+        if (isSubmitting || !isValidCvc(cvc)) return
 
         isSubmitting = true
         manager.enteredCvc = cvc
@@ -83,7 +83,7 @@ fun TapSignerEnterPinView(
                     manager = manager,
                     tapSigner = tapSigner,
                     action = action,
-                    cvcHex = cvc,
+                    cvc = cvc,
                     createBackupLauncher = createBackupLauncher,
                 )
             } finally {
@@ -141,14 +141,14 @@ fun TapSignerEnterPinView(
             TapSignerCvcInput(
                 value = cvc,
                 onValueChange = { cvc = it },
-                label = "CVC (hex)",
+                label = "CVC",
                 testTag = "tapSignerEnter.cvc",
             )
         }
 
         Button(
             onClick = ::submit,
-            enabled = !isSubmitting && isValidCvcHex(cvc),
+            enabled = !isSubmitting && isValidCvc(cvc),
             modifier = Modifier.fillMaxWidth().testTag("tapSignerEnter.submit"),
         ) {
             Text(if (isSubmitting) "Working…" else "Submit")
@@ -163,16 +163,16 @@ private suspend fun runAction(
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     action: AfterPinAction,
-    cvcHex: String,
+    cvc: String,
     createBackupLauncher: ActivityResultLauncher<String>,
 ) {
     when (action) {
-        AfterPinAction.Derive -> deriveAction(app, manager, tapSigner, cvcHex)
-        AfterPinAction.Change -> changeAction(manager, tapSigner, cvcHex)
+        AfterPinAction.Derive -> deriveAction(app, manager, tapSigner, cvc)
+        AfterPinAction.Change -> changeAction(manager, tapSigner, cvc)
         AfterPinAction.Backup -> {
-            backupAction(app, manager, tapSigner, cvcHex, createBackupLauncher)
+            backupAction(app, manager, tapSigner, cvc, createBackupLauncher)
         }
-        is AfterPinAction.Sign -> signAction(app, manager, tapSigner, action.v1, cvcHex)
+        is AfterPinAction.Sign -> signAction(app, manager, tapSigner, action.v1, cvc)
     }
 }
 
@@ -180,13 +180,13 @@ private suspend fun deriveAction(
     app: AppManager,
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    cvcHex: String,
+    cvc: String,
 ) {
     val nfc = manager.getOrCreateNfc(tapSigner)
     manager.beginScan("Hold your phone near the TapSigner to import the wallet")
     val result = try {
         runCatchingCancellable("TapSignerEnterPin", "TapSigner import failed") {
-            nfc.derive(cvcHex, manager.operationCallbacks())
+            nfc.derive(cvc, manager.operationCallbacks())
         }
     } finally {
         manager.endScan()
@@ -219,13 +219,13 @@ private suspend fun deriveAction(
 private fun changeAction(
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    cvcHex: String,
+    cvc: String,
 ) {
     manager.navigate(
         TapSignerRoute.NewPin(
             TapSignerNewPinArgs(
                 tapSigner = tapSigner,
-                startingPin = cvcHex,
+                startingPin = cvc,
                 chainCode = null,
                 action = TapSignerPinAction.CHANGE,
             ),
@@ -237,7 +237,7 @@ private suspend fun backupAction(
     app: AppManager,
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    cvcHex: String,
+    cvc: String,
     createBackupLauncher: ActivityResultLauncher<String>,
 ) {
     val nfc = manager.getOrCreateNfc(tapSigner)
@@ -245,7 +245,7 @@ private suspend fun backupAction(
 
     val result = try {
         runCatchingCancellable("TapSignerEnterPin", "TapSigner backup failed") {
-            nfc.backup(cvcHex, manager.operationCallbacks())
+            nfc.backup(cvc, manager.operationCallbacks())
         }
     } finally {
         manager.endScan()
@@ -280,14 +280,14 @@ private suspend fun signAction(
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     psbt: Psbt,
-    cvcHex: String,
+    cvc: String,
 ) {
     val nfc = manager.getOrCreateNfc(tapSigner)
     manager.beginScan("Hold your phone near the TapSigner to sign")
 
     val result = try {
         runCatchingCancellable("TapSignerEnterPin", "TapSigner signing failed") {
-            nfc.sign(psbt, cvcHex, manager.operationCallbacks())
+            nfc.sign(psbt, cvc, manager.operationCallbacks())
         }
     } finally {
         manager.endScan()

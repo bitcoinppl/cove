@@ -22,76 +22,76 @@ class TapSignerNfcHelper {
 
     /** Set up a card with CVCs and an optional exact 32-byte chain code. */
     suspend fun setupTapSigner(
-        factoryCvcHex: String,
-        newCvcHex: String,
+        factoryCvc: String,
+        newCvc: String,
         chainCode: ByteArray?,
         callbacks: TapCardNfcManager.OperationCallbacks,
     ): SetupCmdResponse {
-        val factoryCvc = TapSignerCvc.tryFromHex(factoryCvcHex)
+        val factoryCvcObject = TapSignerCvc.tryNew(factoryCvc)
         return try {
-            val newCvc = TapSignerCvc.tryFromHex(newCvcHex)
+            val newCvcObject = TapSignerCvc.tryNew(newCvc)
             try {
-                val setup = SetupCmd.tryNew(factoryCvc, newCvc, chainCode)
+                val setup = SetupCmd.tryNew(factoryCvcObject, newCvcObject, chainCode)
                 try {
                     responseOwner.perform(TapSignerCmd.Setup(setup), callbacks).setupResponse()
                 } finally {
                     setup.destroy()
                 }
             } finally {
-                newCvc.destroy()
+                newCvcObject.destroy()
             }
         } finally {
-            factoryCvc.destroy()
+            factoryCvcObject.destroy()
         }
     }
 
     /** Derive wallet data from the card. */
     suspend fun derive(
-        cvcHex: String,
+        cvc: String,
         callbacks: TapCardNfcManager.OperationCallbacks,
     ): org.bitcoinppl.cove_core.DeriveInfo =
-        withTapSignerCvc(cvcHex) { cvc ->
-            responseOwner.perform(TapSignerCmd.Derive(cvc), callbacks).deriveResponse()
+        withTapSignerCvc(cvc) { cvcObject ->
+            responseOwner.perform(TapSignerCmd.Derive(cvcObject), callbacks).deriveResponse()
         }
 
     /** Change the card CVC. */
     suspend fun changePin(
-        currentCvcHex: String,
-        newCvcHex: String,
+        currentCvc: String,
+        newCvc: String,
         callbacks: TapCardNfcManager.OperationCallbacks,
     ) {
-        val currentCvc = TapSignerCvc.tryFromHex(currentCvcHex)
+        val currentCvcObject = TapSignerCvc.tryNew(currentCvc)
         try {
-            val newCvc = TapSignerCvc.tryFromHex(newCvcHex)
+            val newCvcObject = TapSignerCvc.tryNew(newCvc)
             try {
                 responseOwner
-                    .perform(TapSignerCmd.Change(currentCvc, newCvc), callbacks)
+                    .perform(TapSignerCmd.Change(currentCvcObject, newCvcObject), callbacks)
                     .changeResponse()
             } finally {
-                newCvc.destroy()
+                newCvcObject.destroy()
             }
         } finally {
-            currentCvc.destroy()
+            currentCvcObject.destroy()
         }
     }
 
     /** Retrieve and return a card backup. */
     suspend fun backup(
-        cvcHex: String,
+        cvc: String,
         callbacks: TapCardNfcManager.OperationCallbacks,
     ): ByteArray =
-        withTapSignerCvc(cvcHex) { cvc ->
-            responseOwner.perform(TapSignerCmd.Backup(cvc), callbacks).backupResponse()
+        withTapSignerCvc(cvc) { cvcObject ->
+            responseOwner.perform(TapSignerCmd.Backup(cvcObject), callbacks).backupResponse()
         }
 
     /** Sign a PSBT with the card. */
     suspend fun sign(
         psbt: Psbt,
-        cvcHex: String,
+        cvc: String,
         callbacks: TapCardNfcManager.OperationCallbacks,
     ): Psbt =
-        withTapSignerCvc(cvcHex) { cvc ->
-            responseOwner.perform(TapSignerCmd.Sign(psbt, cvc), callbacks).signResponse()
+        withTapSignerCvc(cvc) { cvcObject ->
+            responseOwner.perform(TapSignerCmd.Sign(psbt, cvcObject), callbacks).signResponse()
         }
 
     /** Continue an opaque setup continuation returned by Rust. */
@@ -177,10 +177,10 @@ private class TapSignerResponseOwner {
 }
 
 private suspend fun <T> withTapSignerCvc(
-    hex: String,
+    value: String,
     block: suspend (TapSignerCvc) -> T,
 ): T {
-    val cvc = TapSignerCvc.tryFromHex(hex)
+    val cvc = TapSignerCvc.tryNew(value)
     return try {
         block(cvc)
     } finally {

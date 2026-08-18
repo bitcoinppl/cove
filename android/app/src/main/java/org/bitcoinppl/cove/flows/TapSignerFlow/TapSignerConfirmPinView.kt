@@ -61,7 +61,7 @@ fun TapSignerConfirmPinView(
     }
 
     fun submit() {
-        if (isSubmitting || !isValidCvcHex(confirmCvc)) return
+        if (isSubmitting || !isValidCvc(confirmCvc)) return
 
         if (confirmCvc != args.newPin) {
             confirmCvc = ""
@@ -130,8 +130,7 @@ fun TapSignerConfirmPinView(
 
             Text(
                 text =
-                    "Confirm the same 12–64 hexadecimal characters. " +
-                        "The card stores the decoded bytes, not the text form.",
+                    "Confirm the same 6–32 ASCII digits.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
@@ -142,7 +141,7 @@ fun TapSignerConfirmPinView(
                     confirmCvc = it
                     if (validationError != null) validationError = null
                 },
-                label = "Confirm CVC (hex)",
+                label = "Confirm CVC",
                 testTag = "tapSignerConfirm.newCvc",
             )
 
@@ -158,7 +157,7 @@ fun TapSignerConfirmPinView(
 
         Button(
             onClick = ::submit,
-            enabled = !isSubmitting && isValidCvcHex(confirmCvc),
+            enabled = !isSubmitting && isValidCvc(confirmCvc),
             modifier = Modifier.fillMaxWidth().testTag("tapSignerConfirm.submit"),
         ) {
             Text(if (isSubmitting) "Working…" else "Confirm and continue")
@@ -194,8 +193,8 @@ private suspend fun setupTapSigner(
     val result =
         runCatchingCancellable("TapSignerConfirmPin", "TapSigner setup failed") {
             nfc.setupTapSigner(
-                factoryCvcHex = args.startingPin,
-                newCvcHex = args.newPin,
+                factoryCvc = args.startingPin,
+                newCvc = args.newPin,
                 chainCode = chainCodeBytes,
                 callbacks = manager.operationCallbacks(),
             )
@@ -239,8 +238,8 @@ private suspend fun changeTapSignerPin(
     val result =
         runCatchingCancellable("TapSignerConfirmPin", "TapSigner CVC change failed") {
         nfc.changePin(
-            currentCvcHex = args.startingPin,
-            newCvcHex = args.newPin,
+            currentCvc = args.startingPin,
+            newCvc = args.newPin,
             callbacks = manager.operationCallbacks(),
         )
         }

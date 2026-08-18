@@ -189,7 +189,7 @@ struct TapSignerEnterPin: View {
     }
 
     private func submitPin() {
-        guard let inputError = tapSignerCvcInputError(hex: pin) else {
+        guard let inputError = tapSignerCvcInputError(value: pin) else {
             let nfc = manager.getOrCreateNfc(tapSigner)
             manager.enteredPin = pin
 

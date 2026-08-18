@@ -20,17 +20,17 @@ struct TapSignerConfirmPinView: View {
     @FocusState private var isFocused
 
     private func checkPin() {
-        guard let enteredBytes = tapSignerCvcBytes(hex: confirmPin) else {
-            errorMessage = tapSignerCvcInputError(hex: confirmPin)?.errorDescription
+        if let inputError = tapSignerCvcInputError(value: confirmPin) {
+            errorMessage = inputError.errorDescription
             return
         }
 
-        guard let newPinBytes = tapSignerCvcBytes(hex: args.newPin) else {
-            errorMessage = tapSignerCvcInputError(hex: args.newPin)?.errorDescription
+        if let inputError = tapSignerCvcInputError(value: args.newPin) {
+            errorMessage = inputError.errorDescription
             return
         }
 
-        guard enteredBytes == newPinBytes else {
+        guard confirmPin == args.newPin else {
             errorMessage = "The CVCs do not match."
             confirmPin = ""
             return

@@ -28,7 +28,7 @@ struct TapSignerStartingPin: View {
             description: TapSignerPinDescription(
                 title: "Enter Factory CVC",
                 message: """
-                The factory code is the 6 digit ASCII code printed on the back of your TAPSIGNER. Enter its hexadecimal bytes here. For example, 123456 becomes 313233343536.
+                The factory code is the 6 digit ASCII code printed on the back of your TAPSIGNER. Enter it here.
                 """
             ),
             submitTitle: "Continue",
@@ -46,7 +46,7 @@ struct TapSignerStartingPin: View {
     }
 
     private func continueSetup() {
-        guard let inputError = tapSignerCvcInputError(hex: startingPin) else {
+        guard let inputError = tapSignerCvcInputError(value: startingPin) else {
             isFocused = false
             manager.navigate(to: .newPin(
                 TapSignerNewPinArgs(
