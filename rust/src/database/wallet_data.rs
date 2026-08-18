@@ -380,9 +380,17 @@ pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
     delete_database_at_location(id, &WALLET_DATA_DIR)
 }
 
+#[cfg(test)]
 pub(crate) fn wallet_data_artifact_paths(id: &WalletId) -> Vec<PathBuf> {
-    let directory = WALLET_DATA_DIR.join(id.as_str());
+    let directory = wallet_data_directory_path(id);
     let mut paths = vec![directory.clone()];
+
+    let Ok(metadata) = std::fs::symlink_metadata(&directory) else {
+        return paths;
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return paths;
+    }
 
     let Ok(entries) = std::fs::read_dir(&directory) else {
         return paths;
@@ -392,26 +400,143 @@ pub(crate) fn wallet_data_artifact_paths(id: &WalletId) -> Vec<PathBuf> {
     paths
 }
 
-pub(crate) fn wallet_data_artifacts_exist(id: &WalletId) -> bool {
-    let directory = WALLET_DATA_DIR.join(id.as_str());
-    directory_contains_wallet_data(&directory)
+/// Enumerate wallet-data artifacts without following symbolic links
+///
+/// Restore recovery uses this checked owner API so nested files and directories are cleaned
+/// without hiding permission or I/O failures
+pub(crate) fn wallet_data_artifact_paths_checked(
+    id: &WalletId,
+) -> Result<Vec<PathBuf>, std::io::Error> {
+    let root_metadata = match std::fs::symlink_metadata(&*WALLET_DATA_DIR) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(vec![wallet_data_directory_path(id)]);
+        }
+        Err(error) => return Err(error),
+    };
+    if root_metadata.file_type().is_symlink() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "wallet-data root is a symbolic link",
+        ));
+    }
+    if !root_metadata.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotADirectory,
+            "wallet-data root is not a directory",
+        ));
+    }
+
+    let directory = wallet_data_directory_path(id);
+    let metadata = match std::fs::symlink_metadata(&directory) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![directory]),
+        Err(error) => return Err(error),
+    };
+
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Ok(vec![directory]);
+    }
+
+    let mut paths = vec![directory.clone()];
+    enumerate_wallet_data_children(&directory, &mut paths)?;
+    Ok(paths)
 }
 
+fn enumerate_wallet_data_children(
+    directory: &Path,
+    paths: &mut Vec<PathBuf>,
+) -> Result<(), std::io::Error> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let is_directory = metadata.is_dir() && !metadata.file_type().is_symlink();
+        paths.push(path.clone());
+
+        if is_directory {
+            enumerate_wallet_data_children(&path, paths)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Return the wallet-data directory without opening or creating it
+///
+/// Restore recovery uses this owner-provided path only after the wallet id has
+/// passed restore validation, so inspecting a marker never creates storage
+pub(crate) fn wallet_data_directory_path(id: &WalletId) -> PathBuf {
+    WALLET_DATA_DIR.join(id.as_str())
+}
+
+/// List wallet-data root entries so restore validation can reject case-folded aliases
+pub(crate) fn wallet_data_root_entries() -> Result<Vec<PathBuf>, std::io::Error> {
+    let metadata = match std::fs::symlink_metadata(&*WALLET_DATA_DIR) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "wallet-data root is a symbolic link",
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotADirectory,
+            "wallet-data root is not a directory",
+        ));
+    }
+
+    let entries = std::fs::read_dir(&*WALLET_DATA_DIR)?;
+    entries.map(|entry| entry.map(|entry| entry.path())).collect()
+}
+
+/// Remove one restore-owned wallet-data artifact without opening the database
+pub(crate) fn remove_wallet_artifact(path: &Path) -> std::io::Result<()> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let result = if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        std::fs::remove_file(path)
+    } else {
+        std::fs::remove_dir(path)
+    };
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(test)]
 fn directory_contains_wallet_data(directory: &Path) -> bool {
-    if directory.is_file() {
+    let metadata = match std::fs::symlink_metadata(directory) {
+        Ok(metadata) => metadata,
+        Err(error) => return error.kind() != std::io::ErrorKind::NotFound,
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return true;
     }
 
-    match std::fs::read_dir(directory) {
-        Ok(mut entries) => entries.next().is_some(),
-        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
-    }
+    std::fs::read_dir(directory).map(|mut entries| entries.next().is_some()).unwrap_or(true)
 }
 
 /// Drop all cached wallet data connections and open locks
 pub fn clear_database_connections() {
     DATABASE_CONNECTIONS.write().clear();
     DATABASE_OPEN_LOCKS.lock().clear();
+}
+
+/// Evict cached wallet-data connections before restore cleanup
+pub(crate) fn evict_wallet_data_connections(id: &WalletId) {
+    DATABASE_CONNECTIONS.write().remove(id);
+    DATABASE_OPEN_LOCKS.lock().remove(id);
 }
 
 fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std::io::Error> {

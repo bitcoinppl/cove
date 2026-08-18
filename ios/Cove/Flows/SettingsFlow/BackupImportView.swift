@@ -3,6 +3,22 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct BackupImportView: View {
+    private enum ImportReview: Sendable {
+        case awaitingApproval(preparation: BackupImportPreparation, conflictWalletCount: Int)
+        case approved(
+            preparation: BackupImportPreparation,
+            approval: BackupImportApproval,
+            conflictWalletCount: Int
+        )
+
+        var conflictWalletCount: Int {
+            switch self {
+            case let .awaitingApproval(_, count), let .approved(_, _, count):
+                count
+            }
+        }
+    }
+
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
 
@@ -18,8 +34,10 @@ struct BackupImportView: View {
     @State private var errorMessage: String? = nil
     @State private var verifyReport: BackupVerifyReport? = nil
     @State private var importReport: BackupImportReport? = nil
+    @State private var importReview: ImportReview? = nil
     @State private var importTask: Task<Void, Never>? = nil
     @State private var showConfirmation = false
+    @State private var showCleanupConfirmation = false
     @State private var backupManager = BackupManager()
     @State private var passwordDelegate: PasswordRetrievalDelegate? = nil
 
@@ -45,6 +63,10 @@ struct BackupImportView: View {
         importReport.map(formatReport)
     }
 
+    private var conflictWalletCount: Int {
+        importReview?.conflictWalletCount ?? 0
+    }
+
     init(onImported: (() -> Void)? = nil) {
         self.onImported = onImported
     }
@@ -52,6 +74,10 @@ struct BackupImportView: View {
     var body: some View {
         Form {
             if let report = verifyReport {
+                if conflictWalletCount > 0 {
+                    BackupImportConflictSummarySection(walletCount: conflictWalletCount)
+                }
+
                 BackupImportConfirmationContent(
                     report: report,
                     isImporting: isImporting,
@@ -78,11 +104,23 @@ struct BackupImportView: View {
             }
         }
         .onDisappear(perform: handleDisappear)
+        .onChange(of: fileData) { _, _ in
+            invalidateImportReview(clearVerifyReport: true, cancelTask: true)
+        }
+        .onChange(of: password) { _, _ in
+            invalidateImportReview(clearVerifyReport: true, cancelTask: true)
+        }
         .alert("Import Backup?", isPresented: $showConfirmation) {
-            Button("Import", role: .destructive, action: importBackup)
-            Button("Cancel", role: .cancel) {}
+            Button("Continue", action: prepareImport)
+            Button("Cancel", role: .cancel, action: cancelImportConfirmation)
         } message: {
             Text("This will import wallets and restore settings from the backup. Existing wallets with the same fingerprint will be skipped.")
+        }
+        .alert("Remove Existing Wallet Data?", isPresented: $showCleanupConfirmation) {
+            Button("Approve and Import", role: .destructive, action: approveAndImport)
+            Button("Cancel", role: .cancel, action: cancelCleanupConfirmation)
+        } message: {
+            Text(cleanupWarningMessage)
         }
         .fileImporter(
             isPresented: $showFilePicker,
@@ -112,13 +150,43 @@ struct BackupImportView: View {
 
     private func showBackupSelection() {
         verifyReport = nil
+        invalidateImportReview(clearVerifyReport: false, cancelTask: true)
     }
 
     private func handleDisappear() {
         importTask?.cancel()
+        invalidateImportReview(clearVerifyReport: true)
         password = ""
         fileData = nil
-        verifyReport = nil
+        fileName = nil
+    }
+
+    private var cleanupWarningMessage: String {
+        let walletDescription = conflictWalletCount == 1 ? "1 wallet" : "\(conflictWalletCount) wallets"
+        return "\(walletDescription) has existing wallet data without a matching wallet record. Approving this import will permanently remove that data, including any existing keychain items. Removed keychain items cannot be restored."
+    }
+
+    private func invalidateImportReview(clearVerifyReport: Bool, cancelTask: Bool = false) {
+        if cancelTask {
+            importTask?.cancel()
+        }
+
+        isImporting = false
+        isVerifying = false
+        importReview = nil
+        showCleanupConfirmation = false
+
+        if clearVerifyReport {
+            verifyReport = nil
+        }
+    }
+
+    private func cancelCleanupConfirmation() {
+        invalidateImportReview(clearVerifyReport: false)
+    }
+
+    private func cancelImportConfirmation() {
+        invalidateImportReview(clearVerifyReport: false)
     }
 
     private func updateErrorPresentation(_ isPresented: Bool) {
@@ -163,47 +231,125 @@ struct BackupImportView: View {
             } catch {
                 fileData = nil
                 fileName = nil
-                errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                errorMessage = safeBackupImportErrorMessage(error)
             }
 
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            errorMessage = safeBackupImportErrorMessage(error)
         }
     }
 
     private func verifyBackup() {
         guard let fileData else { return }
+        invalidateImportReview(clearVerifyReport: false)
         isVerifying = true
         importTask = Task {
             do {
                 let report = try await backupManager.verifyBackup(data: fileData, password: password)
+                try Task.checkCancellation()
                 await MainActor.run {
                     isVerifying = false
-                    verifyReport = report
+                    if !Task.isCancelled {
+                        verifyReport = report
+                    }
                 }
             } catch {
+                let isCancelled = Task.isCancelled
                 await MainActor.run {
                     isVerifying = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    if isCancelled {
+                        invalidateImportReview(clearVerifyReport: false)
+                    } else {
+                        errorMessage = safeBackupImportErrorMessage(error)
+                    }
                 }
             }
         }
     }
 
-    private func importBackup() {
+    private func prepareImport() {
         guard let fileData else { return }
+        invalidateImportReview(clearVerifyReport: false, cancelTask: true)
         isImporting = true
         importTask = Task {
             do {
-                let report = try await backupManager.importBackup(data: fileData, password: password)
+                let preparation = try await backupManager.prepareImport(data: fileData, password: password)
+                let conflictWalletCount = preparation.markerlessConflictWalletIds().count
+                try Task.checkCancellation()
+
+                if preparation.requiresImportApproval() {
+                    await MainActor.run {
+                        importReview = .awaitingApproval(
+                            preparation: preparation,
+                            conflictWalletCount: conflictWalletCount
+                        )
+                        isImporting = false
+                        showCleanupConfirmation = true
+                    }
+                    return
+                }
+
+                let report = try await backupManager.importPrepared(
+                    preparation: preparation,
+                    approval: nil
+                )
+
                 await MainActor.run {
                     isImporting = false
+                    invalidateImportReview(clearVerifyReport: false)
                     importReport = report
                 }
             } catch {
+                let isCancelled = Task.isCancelled
                 await MainActor.run {
                     isImporting = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    invalidateImportReview(clearVerifyReport: false)
+                    if !isCancelled {
+                        errorMessage = safeBackupImportErrorMessage(error)
+                    }
+                }
+            }
+        }
+    }
+
+    private func approveAndImport() {
+        guard case let .awaitingApproval(preparation, conflictWalletCount) = importReview else {
+            invalidateImportReview(clearVerifyReport: false)
+            return
+        }
+
+        showCleanupConfirmation = false
+        isImporting = true
+        importTask = Task {
+            do {
+                try Task.checkCancellation()
+                let approval = try backupManager.approveImport(preparation: preparation)
+                await MainActor.run {
+                    importReview = .approved(
+                        preparation: preparation,
+                        approval: approval,
+                        conflictWalletCount: conflictWalletCount
+                    )
+                }
+                try Task.checkCancellation()
+                let report = try await backupManager.importPrepared(
+                    preparation: preparation,
+                    approval: approval
+                )
+
+                await MainActor.run {
+                    isImporting = false
+                    invalidateImportReview(clearVerifyReport: false)
+                    importReport = report
+                }
+            } catch {
+                let isCancelled = Task.isCancelled
+                await MainActor.run {
+                    isImporting = false
+                    invalidateImportReview(clearVerifyReport: false)
+                    if !isCancelled {
+                        errorMessage = safeBackupImportErrorMessage(error)
+                    }
                 }
             }
         }
@@ -211,6 +357,10 @@ struct BackupImportView: View {
 
     private func handleImportCompletionDismissal() {
         importReport = nil
+        invalidateImportReview(clearVerifyReport: true)
+        fileData = nil
+        fileName = nil
+        password = ""
         app.dispatch(action: .refreshAfterImport)
         if let onImported {
             onImported()
@@ -266,6 +416,63 @@ struct BackupImportView: View {
             lines.append("Cleanup warnings: \(report.cleanupWarnings.joined(separator: ", "))")
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+private struct BackupImportConflictSummarySection: View {
+    let walletCount: Int
+
+    var body: some View {
+        Section("Import Review") {
+            Label(
+                summaryText,
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .foregroundStyle(.orange)
+        } footer: {
+            Text("The backup has existing wallet data without a matching wallet record.")
+        }
+    }
+
+    private var summaryText: String {
+        if walletCount == 1 {
+            return "1 existing wallet record needs cleanup approval"
+        }
+
+        return "\(walletCount) existing wallet records need cleanup approval"
+    }
+}
+
+private func safeBackupImportErrorMessage(_ error: Error) -> String {
+    guard let backupError = error as? BackupError else {
+        return "Cove could not import this backup. Check the file and password, then try again."
+    }
+
+    switch backupError {
+    case .PasswordTooShort:
+        return "The backup password is too short."
+    case .DecryptionFailed:
+        return "The backup password is incorrect, or the backup is damaged."
+    case .InvalidFormat:
+        return "The selected file is not a valid Cove backup."
+    case .FileTooLarge:
+        return "The backup file is too large."
+    case .UnsupportedVersion, .UnsupportedPayloadVersion:
+        return "This backup was created by a newer version of Cove. Update Cove and try again."
+    case .Truncated:
+        return "The backup file is incomplete. Select the original backup and try again."
+    case .ImportApprovalStale:
+        return "The existing wallet data changed while the import was waiting for approval. Review the backup again and try again."
+    case .ImportApprovalRequired:
+        return "This import needs approval before existing wallet data can be removed. Review the backup again and try again."
+    case .ImportApprovalUsed:
+        return "This import review has expired. Review the backup again and try again."
+    case .InvalidWalletId:
+        return "The backup contains an invalid wallet record and cannot be imported."
+    case .WalletIdOccupied:
+        return "A wallet changed while the import was waiting. Review the backup again and try again."
+    case .Encryption, .Serialization, .Deserialization, .Gather, .Restore, .Keychain, .Database, .Decompression:
+        return "Cove could not finish importing this backup. Review it and try again."
     }
 }
 

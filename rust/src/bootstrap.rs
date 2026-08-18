@@ -227,6 +227,10 @@ pub enum AppInitError {
 
     #[error("Database verification failed: {0}")]
     DatabaseVerificationFailed(String),
+
+    /// Bootstrap found an interrupted restore that needs recovery
+    #[error("Wallet restore recovery is required: {0}")]
+    RecoveryRequired(String),
 }
 
 /// Idempotent storage bootstrap: derives encryption key and runs all pending
@@ -344,6 +348,8 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
 
     crate::database::encrypted_backend::verify_database_key(&encrypted_db)
         .map_err(map_database_key_verification_error)?;
+
+    crate::backup::recovery::recover_restore_markers().map_err(AppInitError::RecoveryRequired)?;
 
     let known_wallet_ids = crate::database::migration::known_wallet_ids_from_main_database()
         .map_err_display_alt(AppInitError::MainDatabaseMigration)?;

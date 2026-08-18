@@ -196,6 +196,15 @@ impl BdkStore {
             sqlite_data_path.with_extension("db-journal"),
         ]
     }
+
+    /// Remove one restore-owned BDK artifact without touching other wallets
+    pub(crate) fn remove_wallet_artifact(path: &Path) -> std::io::Result<()> {
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
 }
 
 fn remove_sqlite_auxiliary_files(db_path: &Path) {
