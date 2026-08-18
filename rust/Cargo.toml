@@ -311,6 +311,9 @@ tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
 
 
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
 strip = "debuginfo"
