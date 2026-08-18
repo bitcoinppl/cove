@@ -2137,7 +2137,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_setupcmd_try_new(
     ): Short
-    external fun uniffi_cove_checksum_constructor_tapsignercvc_try_from_hex(
+    external fun uniffi_cove_checksum_constructor_tapsignercvc_try_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_bitcointransaction_new(
     ): Short
@@ -3239,7 +3239,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_tapsignercvc(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_constructor_tapsignercvc_try_from_hex(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_constructor_tapsignercvc_try_new(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_clone_tapsigneroperationcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4095,7 +4095,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 1615.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 20210.toShort()) {
+    if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 20311.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_is_valid_chain_code() != 39056.toShort()) {
@@ -5577,7 +5577,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_setupcmd_try_new() != 11780.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_tapsignercvc_try_from_hex() != 1631.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_tapsignercvc_try_new() != 35195.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_bitcointransaction_new() != 3054.toShort()) {
@@ -26962,7 +26962,7 @@ public object FfiConverterTypeSetupCmd: FfiConverter<SetupCmd, Long> {
 
 
 /**
- * An opaque protocol-byte CVC used to authenticate a TAPSIGNER
+ * An opaque numeric CVC used to authenticate a TAPSIGNER
  */
 public interface TapSignerCvcInterface {
 
@@ -26970,7 +26970,7 @@ public interface TapSignerCvcInterface {
 }
 
 /**
- * An opaque protocol-byte CVC used to authenticate a TAPSIGNER
+ * An opaque numeric CVC used to authenticate a TAPSIGNER
  */
 open class TapSignerCvc: Disposable, AutoCloseable, TapSignerCvcInterface
 {
@@ -27082,15 +27082,15 @@ open class TapSignerCvc: Disposable, AutoCloseable, TapSignerCvcInterface
     companion object {
 
     /**
-     * Construct a CVC from its exact hexadecimal protocol representation
+     * Construct a CVC from six to 32 ASCII digits
      */
-    @Throws(TapSignerCvcException::class) fun `tryFromHex`(`hex`: kotlin.String): TapSignerCvc {
+    @Throws(TapSignerCvcException::class) fun `tryNew`(`value`: kotlin.String): TapSignerCvc {
             return FfiConverterTypeTapSignerCvc.lift(
     uniffiRustCallWithError(TapSignerCvcException) { _status ->
-    UniffiLib.uniffi_cove_fn_constructor_tapsignercvc_try_from_hex(
+    UniffiLib.uniffi_cove_fn_constructor_tapsignercvc_try_new(
 
 
-        FfiConverterString.lower(`hex`),_status)
+        FfiConverterString.lower(`value`),_status)
 }
     )
     }
@@ -58619,16 +58619,16 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
 sealed class TapSignerCvcException: kotlin.Exception() {
 
     /**
-     * The input contains an odd length or non-hexadecimal value
+     * The input contains a value other than an ASCII digit
      */
-    class InvalidHex(
+    class InvalidCharacters(
         ) : TapSignerCvcException() {
         override val message
             get() = ""
     }
 
     /**
-     * The input is outside the six to 32 byte protocol range
+     * The input is outside the six to 32 digit protocol range
      */
     class InvalidLength(
 
@@ -58666,7 +58666,7 @@ public object FfiConverterTypeTapSignerCvcError : FfiConverterRustBuffer<TapSign
 
 
         return when(buf.getInt()) {
-            1 -> TapSignerCvcException.InvalidHex()
+            1 -> TapSignerCvcException.InvalidCharacters()
             2 -> TapSignerCvcException.InvalidLength(
                 FfiConverterUInt.read(buf),
                 )
@@ -58676,7 +58676,7 @@ public object FfiConverterTypeTapSignerCvcError : FfiConverterRustBuffer<TapSign
 
     override fun allocationSize(value: TapSignerCvcException): ULong {
         return when(value) {
-            is TapSignerCvcException.InvalidHex -> (
+            is TapSignerCvcException.InvalidCharacters -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -58690,7 +58690,7 @@ public object FfiConverterTypeTapSignerCvcError : FfiConverterRustBuffer<TapSign
 
     override fun write(value: TapSignerCvcException, buf: ByteBuffer) {
         when(value) {
-            is TapSignerCvcException.InvalidHex -> {
+            is TapSignerCvcException.InvalidCharacters -> {
                 buf.putInt(1)
                 Unit
             }
@@ -60199,6 +60199,19 @@ sealed class TransportException: kotlin.Exception() {
     }
 
     /**
+     * The card returned a protocol error code that this version does not know
+     */
+    class UnknownCardErrorCode(
+
+        val `code`: kotlin.UShort,
+
+        val `detail`: kotlin.String
+        ) : TransportException() {
+        override val message
+            get() = "code=${ `code` }, detail=${ `detail` }"
+    }
+
+    /**
      * An error without a more specific public classification
      */
     class UnknownException(
@@ -60262,7 +60275,11 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 FfiConverterUShort.read(buf),
                 FfiConverterString.read(buf),
                 )
-            9 -> TransportException.UnknownException(
+            9 -> TransportException.UnknownCardErrorCode(
+                FfiConverterUShort.read(buf),
+                FfiConverterString.read(buf),
+                )
+            10 -> TransportException.UnknownException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -60307,6 +60324,12 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 + FfiConverterString.allocationSize(value.v1)
             )
             is TransportException.UnknownStatusWord -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUShort.allocationSize(value.`code`)
+                + FfiConverterString.allocationSize(value.`detail`)
+            )
+            is TransportException.UnknownCardErrorCode -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterUShort.allocationSize(value.`code`)
@@ -60363,8 +60386,14 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 FfiConverterString.write(value.`detail`, buf)
                 Unit
             }
-            is TransportException.UnknownException -> {
+            is TransportException.UnknownCardErrorCode -> {
                 buf.putInt(9)
+                FfiConverterUShort.write(value.`code`, buf)
+                FfiConverterString.write(value.`detail`, buf)
+                Unit
+            }
+            is TransportException.UnknownException -> {
+                buf.putInt(10)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -69043,7 +69072,7 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
 
         /**
-         * Convert an APDU status word from the mobile transport into a typed error
+         * Convert a card protocol error code into a typed error
          */ fun `createTransportErrorFromCode`(`code`: kotlin.UShort, `message`: kotlin.String): TransportException {
             return FfiConverterTypeTransportError.lift(
     uniffiRustCall() { _status ->

@@ -12245,13 +12245,13 @@ public func FfiConverterTypeSetupCmd_lower(_ value: SetupCmd) -> UInt64 {
 
 
 /**
- * An opaque protocol-byte CVC used to authenticate a TAPSIGNER
+ * An opaque numeric CVC used to authenticate a TAPSIGNER
  */
 public protocol TapSignerCvcProtocol: AnyObject, Sendable {
 
 }
 /**
- * An opaque protocol-byte CVC used to authenticate a TAPSIGNER
+ * An opaque numeric CVC used to authenticate a TAPSIGNER
  */
 open class TapSignerCvc: TapSignerCvcProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -12305,13 +12305,13 @@ open class TapSignerCvc: TapSignerCvcProtocol, @unchecked Sendable {
 
 
     /**
-     * Construct a CVC from its exact hexadecimal protocol representation
+     * Construct a CVC from six to 32 ASCII digits
      */
-public static func tryFromHex(hex: String)throws  -> TapSignerCvc  {
+public static func tryNew(value: String)throws  -> TapSignerCvc  {
     return try  FfiConverterTypeTapSignerCvc_lift(try rustCallWithError(FfiConverterTypeTapSignerCvcError_lift) {
         uniffiCallStatus in
-    uniffi_cove_fn_constructor_tapsignercvc_try_from_hex(
-        FfiConverterString.lower(hex),uniffiCallStatus
+    uniffi_cove_fn_constructor_tapsignercvc_try_new(
+        FfiConverterString.lower(value),uniffiCallStatus
     )
 })
 }
@@ -36982,11 +36982,11 @@ enum TapSignerCvcError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
 
 
     /**
-     * The input contains an odd length or non-hexadecimal value
+     * The input contains a value other than an ASCII digit
      */
-    case InvalidHex
+    case InvalidCharacters
     /**
-     * The input is outside the six to 32 byte protocol range
+     * The input is outside the six to 32 digit protocol range
      */
     case InvalidLength(UInt32
     )
@@ -37030,7 +37030,7 @@ public struct FfiConverterTypeTapSignerCvcError: FfiConverterRustBuffer {
 
 
 
-        case 1: return .InvalidHex
+        case 1: return .InvalidCharacters
         case 2: return .InvalidLength(
             try FfiConverterUInt32.read(from: &buf)
             )
@@ -37046,7 +37046,7 @@ public struct FfiConverterTypeTapSignerCvcError: FfiConverterRustBuffer {
 
 
 
-        case .InvalidHex:
+        case .InvalidCharacters:
             writeInt(&buf, Int32(1))
 
 
@@ -38107,6 +38107,11 @@ enum TransportError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
     case UnknownStatusWord(code: UInt16, detail: String
     )
     /**
+     * The card returned a protocol error code that this version does not know
+     */
+    case UnknownCardErrorCode(code: UInt16, detail: String
+    )
+    /**
      * An error without a more specific public classification
      */
     case UnknownError(String
@@ -38176,7 +38181,11 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             code: try FfiConverterUInt16.read(from: &buf),
             detail: try FfiConverterString.read(from: &buf)
             )
-        case 9: return .UnknownError(
+        case 9: return .UnknownCardErrorCode(
+            code: try FfiConverterUInt16.read(from: &buf),
+            detail: try FfiConverterString.read(from: &buf)
+            )
+        case 10: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -38232,8 +38241,14 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             FfiConverterString.write(detail, into: &buf)
 
 
-        case let .UnknownError(v1):
+        case let .UnknownCardErrorCode(code,detail):
             writeInt(&buf, Int32(9))
+            FfiConverterUInt16.write(code, into: &buf)
+            FfiConverterString.write(detail, into: &buf)
+
+
+        case let .UnknownError(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -45619,7 +45634,7 @@ public func signedTransactionOrPsbtTryParse(input: String)throws  -> SignedTrans
 })
 }
 /**
- * Convert an APDU status word from the mobile transport into a typed error
+ * Convert a card protocol error code into a typed error
  */
 public func createTransportErrorFromCode(code: UInt16, message: String) -> TransportError  {
     return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
@@ -46006,7 +46021,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 1615) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_create_transport_error_from_code() != 20210) {
+    if (uniffi_cove_checksum_func_create_transport_error_from_code() != 20311) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_valid_chain_code() != 39056) {
@@ -47488,7 +47503,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_setupcmd_try_new() != 11780) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_tapsignercvc_try_from_hex() != 1631) {
+    if (uniffi_cove_checksum_constructor_tapsignercvc_try_new() != 35195) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_bitcointransaction_new() != 3054) {
