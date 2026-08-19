@@ -8,8 +8,7 @@ struct WalletSettingsDangerSection: View {
     let showSecretWordsConfirmation: () -> Void
     let showXprvExportWarning: () -> Void
     let prepareDelete: () -> Void
-
-    @Binding var presentationState: TaggedItem<WalletSettingsPresentationState>?
+    let presentationCoordinator: PresentationTransitionCoordinator<WalletSettingsPresentationState>
 
     var body: some View {
         Section(header: Text("Danger Zone")) {
@@ -17,9 +16,9 @@ struct WalletSettingsDangerSection: View {
                 WalletSecretWordsButton(
                     showConfirmation: showSecretWordsConfirmation,
                     showSecretWords: presentationContext.showSecretWords,
-                    isPresented: $presentationState.isPresenting(
-                        .secretWordsConfirmationDialog
-                    )
+                    isPresented: presentationCoordinator.isPresented {
+                        $0.slot == .secretWordsConfirmationDialog
+                    }
                 )
             }
 
@@ -27,7 +26,9 @@ struct WalletSettingsDangerSection: View {
                 WalletXprvExportButton(
                     showWarning: showXprvExportWarning,
                     startExport: presentationContext.startXprvExport,
-                    isPresented: $presentationState.isPresenting(.xprvExportWarningDialog)
+                    isPresented: presentationCoordinator.isPresented {
+                        $0.slot == .xprvExportWarningDialog
+                    }
                 )
             }
 
@@ -35,9 +36,9 @@ struct WalletSettingsDangerSection: View {
                 action: prepareDelete,
                 message: presentationContext.deleteConfirmationMessage,
                 confirm: presentationContext.confirmInitialDelete,
-                presentation: $presentationState.presentedItem(
-                    for: .deleteConfirmationDialog
-                )
+                presentation: presentationCoordinator.presentedItem {
+                    $0.slot == .deleteConfirmationDialog
+                }
             )
         }
     }

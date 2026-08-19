@@ -75,28 +75,17 @@ func cloudBackupRestoreAllPresentation(
 
 struct CloudOnlySection: View {
     let manager: CloudBackupManager
-    @State private var selectedWallet: CloudBackupWalletItem?
-    @State private var walletToDelete: CloudBackupWalletItem?
-    @State private var unsupportedRestoreWallet: CloudBackupWalletItem?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     private var isOperating: Bool {
         manager.cloudOnlyOperation.operatingRecordId != nil
     }
 
     var body: some View {
-        CloudOnlyUnsupportedRestoreAlert(
-            unsupportedRestoreWallet: $unsupportedRestoreWallet,
-            content: CloudOnlyDeleteWalletAlert(
-                manager: manager,
-                walletToDelete: $walletToDelete,
-                content: CloudOnlyFormSection(
-                    manager: manager,
-                    isOperating: isOperating,
-                    selectedWallet: $selectedWallet,
-                    walletToDelete: $walletToDelete,
-                    unsupportedRestoreWallet: $unsupportedRestoreWallet
-                )
-            )
+        CloudOnlyFormSection(
+            manager: manager,
+            isOperating: isOperating,
+            presentationCoordinator: presentationCoordinator
         )
     }
 }
@@ -104,18 +93,14 @@ struct CloudOnlySection: View {
 private struct CloudOnlyFormSection: View {
     let manager: CloudBackupManager
     let isOperating: Bool
-    @Binding var selectedWallet: CloudBackupWalletItem?
-    @Binding var walletToDelete: CloudBackupWalletItem?
-    @Binding var unsupportedRestoreWallet: CloudBackupWalletItem?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         Section(header: Text("Not on This Device")) {
             CloudOnlySectionContent(
                 manager: manager,
                 isOperating: isOperating,
-                selectedWallet: $selectedWallet,
-                walletToDelete: $walletToDelete,
-                unsupportedRestoreWallet: $unsupportedRestoreWallet
+                presentationCoordinator: presentationCoordinator
             )
         }
     }
@@ -124,9 +109,7 @@ private struct CloudOnlyFormSection: View {
 private struct CloudOnlySectionContent: View {
     let manager: CloudBackupManager
     let isOperating: Bool
-    @Binding var selectedWallet: CloudBackupWalletItem?
-    @Binding var walletToDelete: CloudBackupWalletItem?
-    @Binding var unsupportedRestoreWallet: CloudBackupWalletItem?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         switch manager.cloudOnly {
@@ -150,9 +133,7 @@ private struct CloudOnlySectionContent: View {
                 operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
                 isOperating: isOperating || manager.restoreAllState.isRunning
                     || !manager.isDetailInventoryComplete,
-                selectedWallet: $selectedWallet,
-                walletToDelete: $walletToDelete,
-                unsupportedRestoreWallet: $unsupportedRestoreWallet,
+                presentationCoordinator: presentationCoordinator,
                 onRetryWallet: { item in
                     manager.dispatch(action: .restoreCloudWallet(item.recordId))
                 }
@@ -318,22 +299,17 @@ private struct CloudOnlyWalletRows: View {
     let wallets: [CloudBackupWalletItem]
     let operatingRecordId: String?
     let isOperating: Bool
-    @Binding var selectedWallet: CloudBackupWalletItem?
-    @Binding var walletToDelete: CloudBackupWalletItem?
-    @Binding var unsupportedRestoreWallet: CloudBackupWalletItem?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
     let onRetryWallet: (CloudBackupWalletItem) -> Void
 
     var body: some View {
         ForEach(wallets, id: \.recordId) { item in
             VStack(alignment: .leading, spacing: 8) {
                 CloudOnlyWalletActionButton(
-                    manager: manager,
                     item: item,
                     isOperating: isOperating,
                     isCurrentOperation: operatingRecordId == item.recordId,
-                    selectedWallet: $selectedWallet,
-                    walletToDelete: $walletToDelete,
-                    unsupportedRestoreWallet: $unsupportedRestoreWallet
+                    presentationCoordinator: presentationCoordinator
                 )
 
                 if item.restoreFailure != nil {
@@ -353,17 +329,14 @@ private struct CloudOnlyWalletRows: View {
 }
 
 private struct CloudOnlyWalletActionButton: View {
-    let manager: CloudBackupManager
     let item: CloudBackupWalletItem
     let isOperating: Bool
     let isCurrentOperation: Bool
-    @Binding var selectedWallet: CloudBackupWalletItem?
-    @Binding var walletToDelete: CloudBackupWalletItem?
-    @Binding var unsupportedRestoreWallet: CloudBackupWalletItem?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         Button {
-            selectedWallet = item
+            presentationCoordinator.present(.dialog(.cloudOnlyWalletActions(item)))
         } label: {
             CloudOnlyWalletActionLabel(
                 item: item,
@@ -373,61 +346,6 @@ private struct CloudOnlyWalletActionButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
         .disabled(isOperating)
-        .confirmationDialog(
-            item.name,
-            isPresented: isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Restore to This Device", action: restore)
-                .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Delete from iCloud", role: .destructive, action: requestDeletion)
-                .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-
-    private var isPresented: Binding<Bool> {
-        Binding(
-            get: { selectedWallet?.recordId == item.recordId },
-            set: { presented in
-                if !presented, selectedWallet?.recordId == item.recordId {
-                    selectedWallet = nil
-                }
-            }
-        )
-    }
-
-    private func restore() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        if item.syncStatus == .unsupportedVersion {
-            presentAfterDialogDismissal {
-                unsupportedRestoreWallet = item
-            }
-            return
-        }
-
-        selectedWallet = nil
-        manager.dispatch(action: .restoreCloudWallet(item.recordId))
-    }
-
-    private func requestDeletion() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        presentAfterDialogDismissal {
-            walletToDelete = item
-        }
-    }
-
-    private func presentAfterDialogDismissal(_ action: @escaping @MainActor () -> Void) {
-        selectedWallet = nil
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            action()
-        }
     }
 }
 
@@ -449,67 +367,6 @@ private struct CloudOnlyWalletActionLabel: View {
             }
 
             WalletItemRow(item: item, accessibilityAction: accessibilityAction)
-        }
-    }
-}
-
-private struct CloudOnlyDeleteWalletAlert<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var walletToDelete: CloudBackupWalletItem?
-    let content: Content
-
-    private var isPresented: Binding<Bool> {
-        Binding(
-            get: { walletToDelete != nil },
-            set: { if !$0 { walletToDelete = nil } }
-        )
-    }
-
-    var body: some View {
-        content.alert(
-            "Delete \(walletToDelete?.name ?? "wallet")?",
-            isPresented: isPresented
-        ) {
-            if let item = walletToDelete {
-                Button("Delete Forever", role: .destructive) {
-                    delete(item)
-                }
-                .disabled(!manager.isDetailInventoryComplete)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This wallet backup will be permanently removed from iCloud")
-        }
-    }
-
-    private func delete(_ item: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
-
-        manager.dispatch(action: .deleteCloudWallet(item.recordId))
-    }
-}
-
-private struct CloudOnlyUnsupportedRestoreAlert<Content: View>: View {
-    @Binding var unsupportedRestoreWallet: CloudBackupWalletItem?
-    let content: Content
-
-    private var isPresented: Binding<Bool> {
-        Binding(
-            get: { unsupportedRestoreWallet != nil },
-            set: { if !$0 { unsupportedRestoreWallet = nil } }
-        )
-    }
-
-    var body: some View {
-        content.alert(
-            "Can't Restore \(unsupportedRestoreWallet?.name ?? "Wallet")",
-            isPresented: isPresented
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(
-                "This backup uses a newer version of Cove and can't be restored on this device yet"
-            )
         }
     }
 }

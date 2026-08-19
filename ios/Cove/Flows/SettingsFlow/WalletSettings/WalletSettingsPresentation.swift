@@ -47,7 +47,7 @@ enum WalletSettingsPresentationState: Equatable {
     case finalDeleteConfirmation
     case appLockRequired
     case xprvCredentialVerification(XprvPostVerificationAction)
-    case xprvReveal(String)
+    case xprvReveal
 
     var slot: Slot {
         switch self {
@@ -79,6 +79,7 @@ struct WalletSettingsPresentationContext {
     let confirmSecondDelete: (WalletDeletionConfirmationPlan) -> Void
     let deleteWallet: () -> Void
     let performXprvExport: (XprvPostVerificationAction) -> Void
+    let loadXprv: () throws -> String
 
     func alertTitle(for state: WalletSettingsPresentationState?) -> String {
         switch state {
@@ -97,23 +98,26 @@ struct WalletSettingsPresentationContext {
 struct WalletSettingsPresentationHost<Content: View>: View {
     let context: WalletSettingsPresentationContext
     let content: Content
+    let presentationCoordinator: PresentationTransitionCoordinator<WalletSettingsPresentationState>
 
-    @Binding var presentationState: TaggedItem<WalletSettingsPresentationState>?
+    private var presentationState: TaggedItem<WalletSettingsPresentationState>? {
+        presentationCoordinator.currentPresentation
+    }
 
     private var alertIsPresented: Binding<Bool> {
-        $presentationState.isPresenting(.alert)
+        presentationCoordinator.isPresented { $0.slot == .alert }
     }
 
     private var credentialVerificationPresentation:
         Binding<TaggedItem<WalletSettingsPresentationState>?>
     {
-        $presentationState.presentedItem(for: .credentialVerification)
+        presentationCoordinator.presentedItem { $0.slot == .credentialVerification }
     }
 
     private var xprvRevealPresentation:
         Binding<TaggedItem<WalletSettingsPresentationState>?>
     {
-        $presentationState.presentedItem(for: .xprvReveal)
+        presentationCoordinator.presentedItem { $0.slot == .xprvReveal }
     }
 
     var body: some View {
@@ -140,40 +144,12 @@ struct WalletSettingsPresentationHost<Content: View>: View {
                 )
             }
             .sheet(item: xprvRevealPresentation) { presentation in
-                WalletSettingsXprvRevealDestination(presentation: presentation.item)
+                WalletSettingsXprvRevealDestination(
+                    loadXprv: context.loadXprv
+                )
+                .id(presentation.id)
             }
-    }
-}
-
-extension Binding where Value == TaggedItem<WalletSettingsPresentationState>? {
-    func isPresenting(_ slot: WalletSettingsPresentationState.Slot) -> Binding<Bool> {
-        Binding<Bool>(
-            get: { wrappedValue?.item.slot == slot },
-            set: { isPresented in
-                guard !isPresented, wrappedValue?.item.slot == slot else { return }
-
-                wrappedValue = nil
-            }
-        )
-    }
-
-    func presentedItem(
-        for slot: WalletSettingsPresentationState.Slot
-    ) -> Binding<TaggedItem<WalletSettingsPresentationState>?> {
-        Binding(
-            get: {
-                guard wrappedValue?.item.slot == slot else { return nil }
-
-                return wrappedValue
-            },
-            set: { newValue in
-                if let newValue {
-                    wrappedValue = newValue
-                } else if wrappedValue?.item.slot == slot {
-                    wrappedValue = nil
-                }
-            }
-        )
+            .presentationTransitionHost(presentationCoordinator)
     }
 }
 
@@ -232,13 +208,75 @@ private struct WalletSettingsCredentialVerificationDestination: View {
     }
 }
 
+@MainActor
+@Observable
+final class WalletSettingsXprvRevealPresentation {
+    enum State {
+        case awaitingLoad
+        case loading
+        case loaded(String)
+        case failed
+        case ended
+    }
+
+    private(set) var state = State.awaitingLoad
+
+    func load(using loadXprv: () throws -> String) {
+        guard case .awaitingLoad = state else { return }
+
+        state = .loading
+
+        do {
+            state = try .loaded(loadXprv())
+        } catch {
+            Log.error("Unable to reveal private key: \(error)")
+            state = .failed
+        }
+    }
+
+    func end() {
+        state = .ended
+    }
+}
+
 private struct WalletSettingsXprvRevealDestination: View {
-    let presentation: WalletSettingsPresentationState
+    @Environment(\.dismiss) private var dismiss
+
+    let loadXprv: () throws -> String
+
+    @State private var presentation = WalletSettingsXprvRevealPresentation()
 
     var body: some View {
-        if case let .xprvReveal(xprv) = presentation {
-            XprvRevealSheet(xprv: xprv)
+        Group {
+            switch presentation.state {
+            case .awaitingLoad, .loading:
+                ProgressView()
+            case let .loaded(xprv):
+                XprvRevealSheet(xprv: xprv)
+            case .failed:
+                NavigationStack {
+                    ContentUnavailableView(
+                        "Unable to Reveal Private Key",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text("Cove could not access this wallet's private key.")
+                    )
+                    .navigationTitle("Private Key")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        XprvRevealToolbar(done: dismiss.callAsFunction)
+                    }
+                }
+            case .ended:
+                Color.clear
+                    .task {
+                        dismiss()
+                    }
+            }
         }
+        .task {
+            presentation.load(using: loadXprv)
+        }
+        .onDisappear(perform: presentation.end)
     }
 }
 

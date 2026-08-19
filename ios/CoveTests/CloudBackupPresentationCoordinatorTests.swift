@@ -177,6 +177,32 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.queuedPresentation, CloudBackupRootPresentation.verificationPrompt)
     }
 
+    @MainActor
+    func testLocalDetailBlockerKeepsRootPromptQueuedUntilPresenterIsReady() {
+        let coordinator = CloudBackupPresentationCoordinator {
+            .verification
+        }
+
+        coordinator.update(context: presentableContext(presentationPolicy: .requiresUnlockedAuth))
+        coordinator.setBlocker(.cloudBackupDetailDialog, active: true)
+
+        XCTAssertNil(coordinator.currentPresentation)
+        XCTAssertEqual(coordinator.queuedPresentation, .verificationPrompt)
+        guard let readinessRequestID = coordinator.presentationTransitions.readinessRequestID else {
+            return XCTFail("Expected the root prompt dismissal to wait for presenter readiness")
+        }
+
+        coordinator.presenterDidBecomeReady(readinessRequestID)
+
+        XCTAssertNil(coordinator.currentPresentation)
+        XCTAssertEqual(coordinator.queuedPresentation, .verificationPrompt)
+
+        coordinator.setBlocker(.cloudBackupDetailDialog, active: false)
+
+        XCTAssertEqual(coordinator.currentPresentation, .verificationPrompt)
+        XCTAssertNil(coordinator.queuedPresentation)
+    }
+
     func testRootPromptCompletionShowsSuccessFloaterFeedback() {
         XCTAssertEqual(
             cloudBackupVerificationFeedback(for: .completed(source: .rootPrompt)),

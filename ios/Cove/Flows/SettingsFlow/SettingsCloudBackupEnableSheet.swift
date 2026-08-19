@@ -367,8 +367,6 @@ struct CloudBackupPendingEnableRecoveryView: View {
     let onRemoveIncompleteSetup: () -> Void
     let onCancel: () -> Void
 
-    @State private var showRemovalConfirmation = false
-
     private var isCleaning: Bool {
         recovery.cleanup == .cleaning
     }
@@ -395,7 +393,6 @@ struct CloudBackupPendingEnableRecoveryView: View {
                     CloudBackupRecoveryActions(
                         isCleaning: isCleaning,
                         canRemoveIncompleteSetup: canRemoveIncompleteSetup,
-                        showRemovalConfirmation: $showRemovalConfirmation,
                         removeIncompleteSetup: onRemoveIncompleteSetup
                     )
                 }
@@ -491,46 +488,61 @@ private struct CloudBackupRecoverySupportCodeCard: View {
 private struct CloudBackupRecoveryActions: View {
     let isCleaning: Bool
     let canRemoveIncompleteSetup: Bool
-    @Binding var showRemovalConfirmation: Bool
     let removeIncompleteSetup: () -> Void
 
     var body: some View {
         if isCleaning {
-            HStack {
-                Spacer()
-                ProgressView("Removing incomplete setup...")
-                    .tint(.white)
-                    .foregroundStyle(.white)
-                Spacer()
-            }
-            .padding(.vertical)
+            CloudBackupRecoveryCleanupProgress()
         } else if canRemoveIncompleteSetup {
-            Button(role: .destructive) {
-                showRemovalConfirmation = true
-            } label: {
-                Text("Remove Incomplete Setup")
-                    .frame(maxWidth: .infinity)
+            CloudBackupRecoveryCleanupButton(removeIncompleteSetup: removeIncompleteSetup)
+        }
+    }
+}
+
+private struct CloudBackupRecoveryCleanupProgress: View {
+    var body: some View {
+        HStack {
+            Spacer()
+            ProgressView("Removing incomplete setup...")
+                .tint(.white)
+                .foregroundStyle(.white)
+            Spacer()
+        }
+        .padding(.vertical)
+    }
+}
+
+private struct CloudBackupRecoveryCleanupButton: View {
+    let removeIncompleteSetup: () -> Void
+    @State private var showConfirmation = false
+
+    var body: some View {
+        Button(role: .destructive) {
+            showConfirmation = true
+        } label: {
+            Text("Remove Incomplete Setup")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(OnboardingSecondaryButtonStyle(
+            backgroundColor: Color.red.opacity(0.12),
+            foregroundColor: .red.opacity(0.95),
+            borderColor: Color.red.opacity(0.22)
+        ))
+        .accessibilityIdentifier("cloudBackup.recovery.removeIncompleteSetup")
+        .confirmationDialog(
+            "Remove incomplete Cloud Backup setup?",
+            isPresented: $showConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Incomplete Setup", role: .destructive) {
+                showConfirmation = false
+                removeIncompleteSetup()
             }
-            .buttonStyle(OnboardingSecondaryButtonStyle(
-                backgroundColor: Color.red.opacity(0.12),
-                foregroundColor: .red.opacity(0.95),
-                borderColor: Color.red.opacity(0.22)
-            ))
-            .accessibilityIdentifier("cloudBackup.recovery.removeIncompleteSetup")
-            .confirmationDialog(
-                "Remove incomplete Cloud Backup setup?",
-                isPresented: $showRemovalConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Remove Incomplete Setup", role: .destructive) {
-                    removeIncompleteSetup()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(
-                    "This removes only local data from the interrupted setup. Your active Cloud Backup key, cloud data, and wallets on this device will be preserved."
-                )
-            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This removes only local data from the interrupted setup. Your active Cloud Backup key, cloud data, and wallets on this device will be preserved."
+            )
         }
     }
 }

@@ -134,17 +134,21 @@ func cloudBackupVerificationFeedback(
 @MainActor
 @Observable
 final class CloudBackupPresentationCoordinator {
-    private static let presentationDelayNs: UInt64 = 800_000_000
-
-    @ObservationIgnored private var transitionTask: Task<Void, Never>?
     @ObservationIgnored private var ignoreNextDismissEvent = false
-    @ObservationIgnored private var requiresPresentationDelay = false
     @ObservationIgnored private var context = CloudBackupPresentationContext()
     @ObservationIgnored private var blockers: Set<CloudBackupPresentationBlocker> = []
     @ObservationIgnored private let rootPrompt: () -> CloudBackupRootPrompt
 
-    private(set) var currentPresentation: CloudBackupRootPresentation?
-    private(set) var queuedPresentation: CloudBackupRootPresentation?
+    let presentationTransitions =
+        PresentationTransitionCoordinator<CloudBackupRootPresentation>()
+
+    var currentPresentation: CloudBackupRootPresentation? {
+        presentationTransitions.currentPresentation?.item
+    }
+
+    var queuedPresentation: CloudBackupRootPresentation? {
+        presentationTransitions.queuedPresentation
+    }
 
     init(rootPrompt: @escaping () -> CloudBackupRootPrompt = { CloudBackupManager.shared.rootPrompt }) {
         self.rootPrompt = rootPrompt
@@ -166,13 +170,10 @@ final class CloudBackupPresentationCoordinator {
     }
 
     func dismissCurrentPresentation() {
-        transitionTask?.cancel()
-        transitionTask = nil
-        queuedPresentation = nil
         guard currentPresentation != nil else { return }
-        requiresPresentationDelay = true
+
         ignoreNextDismissEvent = true
-        currentPresentation = nil
+        presentationTransitions.discard { _ in true }
     }
 
     func consumeDismissEvent() -> Bool {
@@ -190,75 +191,71 @@ final class CloudBackupPresentationCoordinator {
         )
 
         guard let desiredPresentation else {
-            requiresPresentationDelay = false
             clearVisiblePresentation()
             return
         }
 
         if !isPromptPresentable(desiredPresentation) {
-            transitionTask?.cancel()
-            transitionTask = nil
-            queuedPresentation = desiredPresentation
-            if blockers.contains(.settingsLocalModal) {
-                requiresPresentationDelay = true
-            }
             if
                 currentPresentation == desiredPresentation,
                 isPromptBlockedOnlyByNavigationSettling(desiredPresentation)
             {
+                presentationTransitions.discardQueued { _ in true }
                 return
             }
+
+            presentationTransitions.queue(desiredPresentation)
             if currentPresentation != nil {
                 ignoreNextDismissEvent = true
-                currentPresentation = nil
+                presentationTransitions.dismissCurrentPresentation()
             }
             return
         }
 
         if currentPresentation == desiredPresentation {
-            transitionTask?.cancel()
-            transitionTask = nil
-            queuedPresentation = nil
-            requiresPresentationDelay = false
+            presentationTransitions.discardQueued { _ in true }
             return
         }
 
         if currentPresentation == nil {
-            transitionTask?.cancel()
-            transitionTask = nil
-            if requiresPresentationDelay {
-                queuedPresentation = desiredPresentation
-                scheduleQueuedPresentation()
+            if presentationTransitions.isAwaitingPresenterReadiness {
+                presentationTransitions.queue(desiredPresentation)
             } else {
-                queuedPresentation = nil
-                currentPresentation = desiredPresentation
+                presentationTransitions.present(desiredPresentation)
             }
             return
         }
 
-        queuedPresentation = desiredPresentation
-        requiresPresentationDelay = true
         ignoreNextDismissEvent = true
-        currentPresentation = nil
-        scheduleQueuedPresentation()
+        presentationTransitions.transition(to: desiredPresentation)
+    }
+
+    func presenterDidBecomeReady(_ requestID: UUID) {
+        let desiredPresentation = CloudBackupRootPresentation(rootPrompt: rootPrompt())
+        let canPresentQueuedPresentation = queuedPresentation == desiredPresentation
+            && queuedPresentation.map(isPromptPresentable) == true
+
+        presentationTransitions.presenterDidBecomeReady(
+            requestID,
+            presentQueuedPresentation: canPresentQueuedPresentation
+        )
+        reconcile()
+    }
+
+    func hostDidDisappear() {
+        if currentPresentation != nil {
+            ignoreNextDismissEvent = true
+        }
+
+        presentationTransitions.hostDidDisappear()
     }
 
     private func clearVisiblePresentation() {
-        transitionTask?.cancel()
-        transitionTask = nil
-        queuedPresentation = nil
-        guard currentPresentation != nil else { return }
-        requiresPresentationDelay = true
-        ignoreNextDismissEvent = true
-        currentPresentation = nil
-    }
-
-    private func scheduleQueuedPresentation() {
-        transitionTask?.cancel()
-        transitionTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: Self.presentationDelayNs)
-            self?.resumeQueuedPresentation()
+        if currentPresentation != nil {
+            ignoreNextDismissEvent = true
         }
+
+        presentationTransitions.discard { _ in true }
     }
 
     private func isPromptPresentable(_ presentation: CloudBackupRootPresentation) -> Bool {
@@ -281,24 +278,6 @@ final class CloudBackupPresentationCoordinator {
             context: settledContext,
             hasBlockers: !blockers.isEmpty
         )
-    }
-
-    private func resumeQueuedPresentation() {
-        transitionTask = nil
-
-        guard let queuedPresentation else { return }
-        guard
-            CloudBackupRootPresentation(rootPrompt: rootPrompt())
-            == queuedPresentation
-        else {
-            self.queuedPresentation = nil
-            return
-        }
-        guard isPromptPresentable(queuedPresentation) else { return }
-
-        requiresPresentationDelay = false
-        currentPresentation = queuedPresentation
-        self.queuedPresentation = nil
     }
 }
 
@@ -550,6 +529,11 @@ struct CloudBackupPresentationHost<Content: View>: View {
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: successFloater)
             .environment(coordinator)
+            .presentationTransitionHost(
+                state: coordinator.presentationTransitions.hostState,
+                presenterDidBecomeReady: coordinator.presenterDidBecomeReady,
+                hostDidDisappear: coordinator.hostDidDisappear
+            )
             .modifier(CloudBackupObservationModifier(
                 presentationContext: presentationContext,
                 rootPrompt: manager.rootPrompt,

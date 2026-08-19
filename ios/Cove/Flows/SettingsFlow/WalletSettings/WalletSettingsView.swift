@@ -11,8 +11,8 @@ struct WalletSettingsView: View {
     private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
 
     @State private var cloudBackupManager = CloudBackupManager.shared
-    @State private var presentationState: TaggedItem<WalletSettingsPresentationState>?
-    @State private var queuedPresentationState: WalletSettingsPresentationState?
+    @State private var presentationCoordinator =
+        PresentationTransitionCoordinator<WalletSettingsPresentationState>()
     @State private var accountNumber: UInt32? = nil
 
     private var metadata: WalletMetadata {
@@ -54,7 +54,8 @@ struct WalletSettingsView: View {
             confirmInitialDelete: confirmInitialDelete,
             confirmSecondDelete: confirmSecondDelete,
             deleteWallet: deleteWallet,
-            performXprvExport: performXprvExport
+            performXprvExport: performXprvExport,
+            loadXprv: manager.rust.exposeXprv
         )
     }
 
@@ -80,9 +81,9 @@ struct WalletSettingsView: View {
                 showSecretWordsConfirmation: presentSecretWordsConfirmation,
                 showXprvExportWarning: presentXprvExportWarning,
                 prepareDelete: prepareDelete,
-                presentationState: $presentationState
+                presentationCoordinator: presentationCoordinator
             ),
-            presentationState: $presentationState
+            presentationCoordinator: presentationCoordinator
         )
         .navigationTitle(manager.walletMetadata.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -90,9 +91,6 @@ struct WalletSettingsView: View {
         .onDisappear(perform: handleDisappear)
         .onAppear(perform: manager.validateMetadata)
         .onChange(of: scenePhase, handleScenePhaseChange)
-        .task(id: queuedPresentationState) {
-            await presentQueuedState()
-        }
         .task {
             accountNumber = manager.rust.nonDefaultAccountNumber()
         }
@@ -164,34 +162,22 @@ struct WalletSettingsView: View {
     }
 
     private func performXprvExport(_ action: XprvPostVerificationAction) {
-        presentationState = nil
-
         switch action {
         case .reveal:
-            do {
-                try queuePresentation(.xprvReveal(manager.rust.exposeXprv()))
-            } catch {
-                Log.error("Unable to reveal private key: \(error)")
-                app.alertState = .init(
-                    .general(
-                        title: "Unable to Reveal Private Key",
-                        message: "Cove could not access this wallet's private key."
-                    )
-                )
+            guard scenePhase == .active else {
+                presentationCoordinator.dismissCurrentPresentation()
+                return
             }
+
+            queuePresentation(.xprvReveal)
         case .keyTeleport:
+            presentationCoordinator.dismissCurrentPresentation()
             app.startKeyTeleportSend(walletId: metadata.id)
         }
     }
 
     private func clearXprvReveal() {
-        if queuedPresentationState?.slot == .xprvReveal {
-            queuedPresentationState = nil
-        }
-
-        if presentationState?.item.slot == .xprvReveal {
-            presentationState = nil
-        }
+        presentationCoordinator.discard { $0.slot == .xprvReveal }
     }
 
     private func handleDisappear() {
@@ -206,27 +192,11 @@ struct WalletSettingsView: View {
     }
 
     private func present(_ state: WalletSettingsPresentationState) {
-        queuedPresentationState = nil
-        presentationState = TaggedItem(state)
+        presentationCoordinator.present(state)
     }
 
     private func queuePresentation(_ state: WalletSettingsPresentationState) {
-        presentationState = nil
-        queuedPresentationState = state
-    }
-
-    private func presentQueuedState() async {
-        guard let queuedPresentationState else { return }
-
-        // wait for the current presenter to finish dismissal before replacing it
-        try? await Task.sleep(for: .milliseconds(350))
-        guard !Task.isCancelled,
-              queuedPresentationState.slot != .xprvReveal || scenePhase == .active,
-              presentationState == nil,
-              self.queuedPresentationState == queuedPresentationState
-        else { return }
-
-        present(queuedPresentationState)
+        presentationCoordinator.transition(to: state)
     }
 }
 
@@ -245,8 +215,7 @@ private struct WalletSettingsContent: View {
     let showSecretWordsConfirmation: () -> Void
     let showXprvExportWarning: () -> Void
     let prepareDelete: () -> Void
-
-    @Binding var presentationState: TaggedItem<WalletSettingsPresentationState>?
+    let presentationCoordinator: PresentationTransitionCoordinator<WalletSettingsPresentationState>
 
     var body: some View {
         List {
@@ -270,7 +239,7 @@ private struct WalletSettingsContent: View {
                 showSecretWordsConfirmation: showSecretWordsConfirmation,
                 showXprvExportWarning: showXprvExportWarning,
                 prepareDelete: prepareDelete,
-                presentationState: $presentationState
+                presentationCoordinator: presentationCoordinator
             )
         }
     }

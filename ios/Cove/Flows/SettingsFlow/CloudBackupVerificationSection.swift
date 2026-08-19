@@ -78,8 +78,7 @@ struct VerificationSection: View {
                 onRetry: retry,
                 onRepairPasskey: repairPasskey,
                 recreateConfirmationIsPresented: recreateConfirmationIsPresented,
-                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented,
-                manager: manager
+                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
         }
     }
@@ -250,7 +249,6 @@ private struct CloudBackupVerificationFailureSection: View {
     let onRepairPasskey: () -> Void
     let recreateConfirmationIsPresented: Binding<Bool>
     let reinitializeConfirmationIsPresented: Binding<Bool>
-    let manager: CloudBackupManager
 
     private var passkeyRepairError: String? {
         guard case let .failed(error) = passkeyRepairState else { return nil }
@@ -277,8 +275,7 @@ private struct CloudBackupVerificationFailureSection: View {
                     isBusy: isBusy,
                     isDetailInventoryComplete: isDetailInventoryComplete,
                     destructiveOperationState: destructiveOperationState,
-                    confirmationIsPresented: recreateConfirmationIsPresented,
-                    manager: manager
+                    confirmationIsPresented: recreateConfirmationIsPresented
                 )
             case let .reinitializeBackup(message, warning, _):
                 CloudBackupReinitializeFailureContent(
@@ -287,8 +284,7 @@ private struct CloudBackupVerificationFailureSection: View {
                     isBusy: isBusy,
                     isDetailInventoryComplete: isDetailInventoryComplete,
                     destructiveOperationState: destructiveOperationState,
-                    confirmationIsPresented: reinitializeConfirmationIsPresented,
-                    manager: manager
+                    confirmationIsPresented: reinitializeConfirmationIsPresented
                 )
             case let .unsupportedVersion(message, _):
                 CloudBackupUnsupportedVersionFailureContent(message: message)
@@ -333,7 +329,6 @@ private struct CloudBackupRecreateManifestFailureContent: View {
     let isDetailInventoryComplete: Bool
     let destructiveOperationState: CloudBackupDestructiveOperationState
     let confirmationIsPresented: Binding<Bool>
-    let manager: CloudBackupManager
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -353,26 +348,6 @@ private struct CloudBackupRecreateManifestFailureContent: View {
             isDetailInventoryComplete: isDetailInventoryComplete,
             action: { confirmationIsPresented.wrappedValue = true }
         )
-        .confirmationDialog(
-            "Recreate Backup Index",
-            isPresented: confirmationIsPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Recreate", role: .destructive, action: recreateManifest)
-                .disabled(!isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will rebuild the backup index from wallets on this device. Wallets that only exist in the cloud backup will no longer be referenced."
-            )
-        }
-    }
-
-    private func recreateManifest() {
-        guard isDetailInventoryComplete else { return }
-
-        manager.dispatch(action: .recreateManifest)
     }
 }
 
@@ -383,7 +358,6 @@ private struct CloudBackupReinitializeFailureContent: View {
     let isDetailInventoryComplete: Bool
     let destructiveOperationState: CloudBackupDestructiveOperationState
     let confirmationIsPresented: Binding<Bool>
-    let manager: CloudBackupManager
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -403,26 +377,6 @@ private struct CloudBackupReinitializeFailureContent: View {
             isDetailInventoryComplete: isDetailInventoryComplete,
             action: { confirmationIsPresented.wrappedValue = true }
         )
-        .confirmationDialog(
-            "Reinitialize Cloud Backup",
-            isPresented: confirmationIsPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Reinitialize", role: .destructive, action: reinitializeBackup)
-                .disabled(!isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost."
-            )
-        }
-    }
-
-    private func reinitializeBackup() {
-        guard isDetailInventoryComplete else { return }
-
-        manager.dispatch(action: .reinitializeBackup)
     }
 }
 

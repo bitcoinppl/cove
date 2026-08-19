@@ -2,6 +2,11 @@ import AuthenticationServices
 import Security
 import SwiftUI
 
+private enum BackupExportPresentation {
+    case passwordSetupOptions
+    case exportConfirmation
+}
+
 struct BackupExportView: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isManualPasswordFieldFocused: Bool
@@ -11,8 +16,6 @@ struct BackupExportView: View {
     @State private var isPasswordVisible = false
     @State private var isManualPasswordEntryVisible = false
     @State private var isExporting = false
-    @State private var showConfirmation = false
-    @State private var showPasswordSetupOptions = false
     @State private var errorMessage: String? = nil
     @State private var warningMessage: String? = nil
     @State private var exportTask: Task<Void, Never>? = nil
@@ -24,6 +27,8 @@ struct BackupExportView: View {
     @State private var passwordDelegate: PasswordRetrievalDelegate? = nil
 
     @State private var backupManager = BackupManager()
+    @State private var presentationCoordinator =
+        PresentationTransitionCoordinator<BackupExportPresentation>()
 
     private var isPasswordValid: Bool {
         backupManager.isPasswordValid(password: password)
@@ -35,6 +40,18 @@ struct BackupExportView: View {
         }
 
         return "Backup password ready"
+    }
+
+    private var exportConfirmationIsPresented: Binding<Bool> {
+        presentationCoordinator.isPresented { presentation in
+            if case .exportConfirmation = presentation { true } else { false }
+        }
+    }
+
+    private var passwordSetupOptionsIsPresented: Binding<Bool> {
+        presentationCoordinator.isPresented { presentation in
+            if case .passwordSetupOptions = presentation { true } else { false }
+        }
     }
 
     var body: some View {
@@ -50,7 +67,7 @@ struct BackupExportView: View {
                     content: ExportFailureAlert(
                         message: $errorMessage,
                         content: ExportConfirmationAlert(
-                            isPresented: $showConfirmation,
+                            isPresented: exportConfirmationIsPresented,
                             export: exportBackup,
                             content: BackupExportForm(
                                 password: $password,
@@ -68,7 +85,7 @@ struct BackupExportView: View {
                                     copy: copyPassword
                                 ),
                                 passwordSetupOptions: BackupPasswordSetupOptions(
-                                    isPresented: $showPasswordSetupOptions,
+                                    isPresented: passwordSetupOptionsIsPresented,
                                     generate: prepareGeneratedPassword,
                                     retrieve: retrieveFromPasswords,
                                     enterManually: showManualPasswordEntry,
@@ -84,6 +101,7 @@ struct BackupExportView: View {
                 )
             )
         )
+        .presentationTransitionHost(presentationCoordinator)
     }
 
     private func prepareGeneratedPassword() {
@@ -131,24 +149,23 @@ struct BackupExportView: View {
             pendingExportAfterPasswordSetup = true
 
             if password.isEmpty {
-                showPasswordSetupOptions = true
+                presentationCoordinator.present(.passwordSetupOptions)
             } else {
                 showManualPasswordEntry()
             }
             return
         }
 
-        showConfirmation = true
+        presentationCoordinator.present(.exportConfirmation)
     }
 
     private func continuePendingExportIfReady() {
         guard pendingExportAfterPasswordSetup, isPasswordValid else { return }
 
         pendingExportAfterPasswordSetup = false
-        Task { @MainActor in
-            await Task.yield()
-            showConfirmation = true
-        }
+        presentationCoordinator.transitionAfterPresenterDismissal(
+            to: .exportConfirmation
+        )
     }
 
     private func cancelPendingExport() {
