@@ -346,7 +346,7 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        match initial_scan_route(completed_initial_scan) {
+        match initial_scan_route(completed_initial_scan, self.wallet_generated_in_app()) {
             InitialScanRoute::Full => send!(addr.perform_full_scan()),
             InitialScanRoute::Incremental => send!(addr.perform_incremental_scan(progress_start)),
         }
@@ -919,8 +919,12 @@ impl WalletActor {
         self.wallet.metadata.internal.performed_full_scan_at.is_some()
     }
 
+    fn wallet_generated_in_app(&self) -> bool {
+        self.wallet.metadata.internal.generated_in_app
+    }
+
     fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
-        ledger_ready_for_spend(self.completed_initial_scan())
+        ledger_ready_for_spend(self.completed_initial_scan() || self.wallet_generated_in_app())
     }
 }
 
@@ -975,8 +979,8 @@ enum InitialScanRoute {
     Incremental,
 }
 
-fn initial_scan_route(completed_initial_scan: bool) -> InitialScanRoute {
-    if completed_initial_scan {
+fn initial_scan_route(completed_initial_scan: bool, generated_in_app: bool) -> InitialScanRoute {
+    if completed_initial_scan || generated_in_app {
         return InitialScanRoute::Incremental;
     }
 
@@ -3098,16 +3102,36 @@ mod tests {
 
     #[test]
     fn incomplete_scan_routes_to_full_scan_even_with_last_scan_finished() {
-        assert_eq!(initial_scan_route(false), InitialScanRoute::Full);
+        assert_eq!(initial_scan_route(false, false), InitialScanRoute::Full);
         assert!(should_skip_recent_scan(Some(UNIX_EPOCH.elapsed().unwrap()), false));
     }
 
     #[test]
     fn recent_scan_skip_applies_only_after_readiness_is_complete() {
-        assert_eq!(initial_scan_route(true), InitialScanRoute::Incremental);
+        assert_eq!(initial_scan_route(true, false), InitialScanRoute::Incremental);
         assert!(should_skip_recent_scan(Some(UNIX_EPOCH.elapsed().unwrap()), false));
         assert!(!should_skip_recent_scan(Some(UNIX_EPOCH.elapsed().unwrap()), true));
         assert!(!should_skip_recent_scan(None, false));
+    }
+
+    #[test]
+    fn generated_in_app_wallet_routes_to_incremental_even_when_never_full_scanned() {
+        assert_eq!(initial_scan_route(false, true), InitialScanRoute::Incremental);
+    }
+
+    #[test]
+    fn imported_wallet_metadata_still_routes_to_full_scan() {
+        // constructor -> generated_in_app coverage lives in wallet::metadata::tests;
+        // here we only need the routing decision for a non-generated wallet.
+        let generated_in_app = false;
+        assert_eq!(initial_scan_route(false, generated_in_app), InitialScanRoute::Full);
+    }
+
+    #[test]
+    fn spend_guard_allows_generated_in_app_wallet_before_any_full_scan() {
+        let completed_initial_scan = false;
+        let generated_in_app = true;
+        assert_eq!(ledger_ready_for_spend(completed_initial_scan || generated_in_app), Ok(()));
     }
 
     #[test]
