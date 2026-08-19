@@ -5,6 +5,7 @@
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing Rust actors, async manager methods, worker tasks, Rust closure-based orchestration, reconciliation, shared state, locks, dispatch, or UniFFI manager boundaries
 - For topic-specific guidance such as passkeys, iCloud Drive, or iOS/Android parity, read the docs linked from [ARCHITECTURE.md](ARCHITECTURE.md)
 - Before changing redb `TableDefinition`s, redb `Value::type_name()` implementations, persisted database structs or enums, or module paths containing persisted types, read [docs/redb.md](docs/redb.md) and verify old and new table metadata compatibility
+- Before changing certificate trust, custom SSL Electrum node selection, trust backup or restore, or certificate request handling on Android or iOS, read [docs/certificate_trust.md](docs/certificate_trust.md)
 - Before changing Android manager ownership, generated UniFFI `.rust` access, `close()`, or route-level `DisposableEffect` cleanup, read the Mobile Frontends manager ownership guidance in [ARCHITECTURE.md](ARCHITECTURE.md) and the lifecycle notes in [docs/ios_android_parity.md](docs/ios_android_parity.md)
 
 ### Architecture and APIs

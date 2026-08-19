@@ -12,6 +12,7 @@
 ## Table of Contents
 
 - [Rust Core](#rust-core)
+- [Certificate Trust](#certificate-trust)
 - [UniFFI Bindings](#uniffi-bindings)
 - [Mobile Frontends](#mobile-frontends)
 - [Extending the Core](#extending-the-core)
@@ -99,6 +100,14 @@ redb stores typed table metadata for each table and validates the key and value 
 **Wallet & hardware integrations.** BDK powers transaction management (`rust/src/wallet`, `rust/src/transaction`). TAPSIGNER/SATSCARD + NFC flows live in `rust/src/tap_card` and the dedicated crates under `rust/crates/`. The utilities crate (`cove-util`) concentrates helpers such as result extensions, formatting, and logging.
 
 **Error conversions.** Prefer `From` implementations for error conversions whenever possible, and avoid standalone conversion functions when `From` would do. This keeps conversion call sites idiomatic and lets `?` perform the conversion directly.
+
+---
+
+## Certificate Trust
+
+Certificate trust for custom SSL Electrum endpoints is durable security state. Rust owns its validation, endpoint identity, migration, conflict handling, recovery, backup behavior, and shared cache. Android and iOS keep an asynchronous certificate result bound to the exact node request that created it.
+
+Read [docs/certificate_trust.md](docs/certificate_trust.md) before you change this flow.
 
 ---
 
