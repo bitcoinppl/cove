@@ -250,6 +250,11 @@ impl Keychain {
         self.wallet_public.get_xpub(id)
     }
 
+    /// Deletes a wallet extended public key
+    pub fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
+        self.wallet_public.delete_xpub(id)
+    }
+
     /// Saves a wallet public descriptor pair
     ///
     /// # Errors
@@ -275,6 +280,11 @@ impl Keychain {
         id: &WalletId,
     ) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, KeychainError> {
         self.wallet_public.get_descriptors(id)
+    }
+
+    /// Deletes a wallet public descriptor pair
+    pub fn delete_public_descriptor(&self, id: &WalletId) -> bool {
+        self.wallet_public.delete_descriptors(id)
     }
 
     /// Saves an encrypted Tap Signer backup

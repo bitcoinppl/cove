@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsStr,
+    fmt,
     fs::{self, File, OpenOptions},
     io::{self, Read as _, Write as _},
     path::{Path, PathBuf},
@@ -280,6 +281,45 @@ fn value_fingerprint(value: &[u8]) -> ArtifactFingerprint {
     }
 }
 
+struct FingerprintWriter {
+    digest: Sha256,
+    size: u64,
+}
+
+impl FingerprintWriter {
+    fn new() -> Self {
+        Self { digest: Sha256::new(), size: 0 }
+    }
+
+    fn write_fragment(&mut self, value: &str) {
+        self.digest.update(value.as_bytes());
+        self.size += value.len() as u64;
+    }
+
+    fn finish(self) -> ArtifactFingerprint {
+        ArtifactFingerprint {
+            kind: ArtifactKind::Value,
+            identity: "value".to_string(),
+            size: self.size,
+            digest: hex::encode(self.digest.finalize()),
+        }
+    }
+}
+
+impl fmt::Write for FingerprintWriter {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        self.write_fragment(value);
+        Ok(())
+    }
+}
+
+fn display_fingerprint(prefix: &str, value: impl fmt::Display) -> ArtifactFingerprint {
+    let mut writer = FingerprintWriter::new();
+    writer.write_fragment(prefix);
+    fmt::write(&mut writer, format_args!("{value}")).expect("fingerprint writer cannot fail");
+    writer.finish()
+}
+
 fn fingerprint_path(path: &Path) -> io::Result<Option<ArtifactFingerprint>> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -359,6 +399,46 @@ fn hash_os_str(value: &OsStr) -> String {
     hash_bytes(value.to_string_lossy().as_bytes())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum KeychainArtifactKind {
+    Secret,
+    Xpub,
+    Descriptors,
+    TapSignerBackup,
+}
+
+impl KeychainArtifactKind {
+    const ALL: [Self; 4] = [Self::Secret, Self::Xpub, Self::Descriptors, Self::TapSignerBackup];
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Secret => "secret",
+            Self::Xpub => "xpub",
+            Self::Descriptors => "descriptors",
+            Self::TapSignerBackup => "tap-signer-backup",
+        }
+    }
+
+    fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "secret" => Some(Self::Secret),
+            "xpub" => Some(Self::Xpub),
+            "descriptors" => Some(Self::Descriptors),
+            "tap-signer-backup" => Some(Self::TapSignerBackup),
+            _ => None,
+        }
+    }
+}
+
+fn delete_keychain_kind(keychain: &Keychain, id: &WalletId, kind: KeychainArtifactKind) -> bool {
+    match kind {
+        KeychainArtifactKind::Secret => keychain.delete_wallet_secret(id),
+        KeychainArtifactKind::Xpub => keychain.delete_wallet_xpub(id),
+        KeychainArtifactKind::Descriptors => keychain.delete_public_descriptor(id),
+        KeychainArtifactKind::TapSignerBackup => keychain.delete_tap_signer_backup(id),
+    }
+}
+
 fn capture_keychain_fingerprints(
     id: &WalletId,
 ) -> Result<BTreeMap<String, ArtifactFingerprint>, BackupError> {
@@ -369,22 +449,25 @@ fn capture_keychain_fingerprints(
         .get_wallet_secret(id)
         .map_err(|error| BackupError::Keychain(format!("wallet secret snapshot: {error}")))?
     {
-        let value = match secret {
+        let fingerprint = match secret {
             cove_device::keychain::WalletSecret::Mnemonic(mnemonic) => {
-                format!("mnemonic:{mnemonic}").into_bytes()
+                display_fingerprint("mnemonic:", mnemonic)
             }
             cove_device::keychain::WalletSecret::Xpriv(xprv) => {
-                format!("xpriv:{}", xprv.expose()).into_bytes()
+                display_fingerprint("xpriv:", xprv.expose())
             }
         };
-        fingerprints.insert("secret".to_string(), value_fingerprint(&value));
+        fingerprints.insert(KeychainArtifactKind::Secret.as_str().to_string(), fingerprint);
     }
 
     if let Some(xpub) = keychain
         .get_wallet_xpub(id)
         .map_err(|error| BackupError::Keychain(format!("wallet xpub snapshot: {error}")))?
     {
-        fingerprints.insert("xpub".to_string(), value_fingerprint(xpub.to_string().as_bytes()));
+        fingerprints.insert(
+            KeychainArtifactKind::Xpub.as_str().to_string(),
+            value_fingerprint(xpub.to_string().as_bytes()),
+        );
     }
 
     if let Some((external, internal)) = keychain
@@ -392,14 +475,20 @@ fn capture_keychain_fingerprints(
         .map_err(|error| BackupError::Keychain(format!("wallet descriptor snapshot: {error}")))?
     {
         let value = format!("{external}\n{internal}");
-        fingerprints.insert("descriptors".to_string(), value_fingerprint(value.as_bytes()));
+        fingerprints.insert(
+            KeychainArtifactKind::Descriptors.as_str().to_string(),
+            value_fingerprint(value.as_bytes()),
+        );
     }
 
     if let Some(backup) = keychain
         .get_tap_signer_backup(id)
         .map_err(|error| BackupError::Keychain(format!("TapSigner backup snapshot: {error}")))?
     {
-        fingerprints.insert("tap-signer-backup".to_string(), value_fingerprint(&backup));
+        fingerprints.insert(
+            KeychainArtifactKind::TapSignerBackup.as_str().to_string(),
+            value_fingerprint(&backup),
+        );
     }
 
     Ok(fingerprints)
@@ -957,20 +1046,118 @@ impl Drop for RestoreMarkerGuard {
 }
 
 fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures: &mut Vec<String>) {
-    if initial.keychain_items {
+    let keychain = Keychain::global();
+
+    if initial.keychain_items && initial.keychain_fingerprints.is_empty() {
+        failures.push(
+            "pre-existing keychain entries have no approved fingerprints; selective cleanup skipped"
+                .to_string(),
+        );
         return;
     }
 
-    let keychain = Keychain::global();
-    let has_items = match capture_keychain_fingerprints(id) {
-        Ok(entries) => !entries.is_empty() || keychain.wallet_items_exist(id),
+    let current = match capture_keychain_fingerprints(id) {
+        Ok(entries) => entries,
         Err(error) => {
-            failures.push(error.to_string());
-            keychain.wallet_items_exist(id)
+            if !initial.keychain_items {
+                if let Err(cleanup_error) = delete_keychain_items_exact(id) {
+                    let entries_remain = keychain.wallet_items_exist(id);
+                    failures.push(format!(
+                        "keychain fingerprint capture failed ({error}); exact cleanup failed ({cleanup_error}); keychain entries remain={entries_remain}"
+                    ));
+                    return;
+                }
+            } else if initial.keychain_fingerprints.is_empty() {
+                let entries_remain = keychain.wallet_items_exist(id);
+                failures.push(format!(
+                    "keychain fingerprint capture failed with pre-existing entries and no approved fingerprints; selective cleanup skipped: {error}; keychain entries remain={entries_remain}"
+                ));
+                return;
+            } else {
+                let mut cleanup_failures = Vec::new();
+                for kind in KeychainArtifactKind::ALL {
+                    if initial.keychain_fingerprints.contains_key(kind.as_str()) {
+                        continue;
+                    }
+
+                    if !delete_keychain_kind(keychain, id, kind) {
+                        cleanup_failures.push(format!(
+                            "failed to delete keychain {} during capture recovery",
+                            kind.as_str()
+                        ));
+                    }
+                }
+
+                if !cleanup_failures.is_empty() {
+                    let entries_remain = keychain.wallet_items_exist(id);
+                    failures.push(format!(
+                        "keychain fingerprint capture failed ({error}); selective cleanup failed: {}; keychain entries remain={entries_remain}",
+                        cleanup_failures.join("; ")
+                    ));
+                    return;
+                }
+            }
+
+            match capture_keychain_fingerprints(id) {
+                Ok(entries) => entries,
+                Err(retry_error) => {
+                    let entries_remain = keychain.wallet_items_exist(id);
+                    failures.push(format!(
+                        "keychain fingerprint capture failed ({error}); retry failed ({retry_error}); keychain entries remain={entries_remain}"
+                    ));
+                    return;
+                }
+            }
         }
     };
-    if has_items && let Err(error) = delete_keychain_items_exact(id) {
-        failures.push(error);
+
+    let mut reported_kinds = BTreeSet::new();
+
+    for (kind, fingerprint) in &current {
+        match initial.keychain_fingerprints.get(kind) {
+            Some(expected) if expected == fingerprint => continue,
+            Some(_) => {
+                failures.push(format!("pre-existing keychain {kind} changed during restore"));
+                reported_kinds.insert(kind.clone());
+                continue;
+            }
+            None => {}
+        }
+
+        let deleted = KeychainArtifactKind::from_str(kind)
+            .is_some_and(|kind| delete_keychain_kind(keychain, id, kind));
+        if !deleted {
+            failures.push(format!("failed to delete keychain {kind} added during restore"));
+            reported_kinds.insert(kind.clone());
+        }
+    }
+
+    let remaining = match capture_keychain_fingerprints(id) {
+        Ok(entries) => entries,
+        Err(error) => {
+            failures.push(error.to_string());
+            return;
+        }
+    };
+    for (kind, fingerprint) in &remaining {
+        if reported_kinds.contains(kind) {
+            continue;
+        }
+
+        if initial.keychain_fingerprints.get(kind) != Some(fingerprint) {
+            failures.push(format!("keychain {kind} added during restore remains after rollback"));
+            reported_kinds.insert(kind.clone());
+        }
+    }
+    for (kind, fingerprint) in &initial.keychain_fingerprints {
+        if reported_kinds.contains(kind) {
+            continue;
+        }
+
+        if remaining.get(kind) != Some(fingerprint) {
+            failures
+                .push(format!("pre-existing keychain {kind} was not preserved during rollback"));
+        }
     }
 }
 
@@ -1318,9 +1505,29 @@ fn cleanup_owned_marker_artifacts(
     initial: &PersistedArtifactSnapshot,
     cleanup_complete: bool,
 ) -> Result<(), String> {
-    let current = RestoreArtifactSnapshot::capture(id).map_err(|error| error.to_string())?;
     let mut initial_snapshot =
         if cleanup_complete { RestoreArtifactSnapshot::default() } else { initial.to_snapshot(id) };
+
+    let current = match RestoreArtifactSnapshot::capture(id) {
+        Ok(current) => current,
+        Err(error) => {
+            let mut keychain_failures = Vec::new();
+            rollback_keychain(id.as_wallet_id(), &initial_snapshot, &mut keychain_failures);
+            if !keychain_failures.is_empty() {
+                return Err(format!(
+                    "failed to capture restore artifacts: {error}; {}",
+                    keychain_failures.join("; ")
+                ));
+            }
+
+            RestoreArtifactSnapshot::capture(id).map_err(|retry_error| {
+                format!(
+                    "failed to capture restore artifacts after keychain rollback: {retry_error}"
+                )
+            })?
+        }
+    };
+
     if !cleanup_complete {
         let directory = crate::database::wallet_data::wallet_data_directory_path(id.as_wallet_id());
         for path in &current.wallet_data_paths {
@@ -1363,17 +1570,36 @@ fn resume_interrupted_cleanup(
     id: &ValidatedRestoreWalletId,
     initial: &PersistedArtifactSnapshot,
 ) -> Result<(), String> {
-    let current = RestoreArtifactSnapshot::capture(id).map_err(|error| error.to_string())?;
     let expected = initial.to_snapshot(id);
+    let current = match RestoreArtifactSnapshot::capture(id) {
+        Ok(current) => current,
+        Err(error) => {
+            let mut keychain_failures = Vec::new();
+            rollback_keychain(id.as_wallet_id(), &expected, &mut keychain_failures);
+            if !keychain_failures.is_empty() {
+                return Err(format!(
+                    "failed to capture interrupted cleanup artifacts: {error}; {}",
+                    keychain_failures.join("; ")
+                ));
+            }
+
+            RestoreArtifactSnapshot::capture(id).map_err(|retry_error| {
+                format!(
+                    "failed to capture interrupted cleanup artifacts after keychain rollback: {retry_error}"
+                )
+            })?
+        }
+    };
+
     let mut paths_to_remove = Vec::new();
 
     if current.keychain_items && !expected.keychain_items {
         return Err("new keychain entries appeared while cleanup was interrupted".to_string());
     }
-    if current.keychain_fingerprints != expected.keychain_fingerprints
-        && !current.keychain_fingerprints.is_empty()
-    {
-        return Err("keychain entries changed while cleanup was interrupted".to_string());
+    for (kind, fingerprint) in &current.keychain_fingerprints {
+        if expected.keychain_fingerprints.get(kind) != Some(fingerprint) {
+            return Err("keychain entries changed while cleanup was interrupted".to_string());
+        }
     }
 
     for (artifact, fingerprint) in &current.bdk_fingerprints {
@@ -1660,6 +1886,19 @@ mod tests {
     }
 
     #[test]
+    fn secret_fingerprint_matches_formatted_value_without_combining_secret_parts() {
+        let mnemonic = bip39::Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+
+        assert_eq!(
+            display_fingerprint("mnemonic:", &mnemonic),
+            value_fingerprint(format!("mnemonic:{mnemonic}").as_bytes())
+        );
+    }
+
+    #[test]
     fn marker_round_trip_uses_the_atomic_file_path() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("operation.json");
@@ -1744,6 +1983,37 @@ mod tests {
     }
 
     #[test]
+    fn rollback_preserves_existing_xpub_and_removes_added_secret() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let metadata = WalletMetadata::preview_new();
+        let xpub = bitcoin::bip32::Xpub::from_str(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+        let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
+        let snapshot = RestoreArtifactSnapshot::capture(&validated).unwrap();
+        let mut journal = RestoreMarkerGuard::test_begin_with_snapshot(&metadata, snapshot);
+        let mnemonic = bip39::Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_key(&metadata.id, mnemonic).unwrap();
+
+        assert!(journal.rollback().is_empty());
+        assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
+        assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
+
+        assert!(Keychain::global().delete_wallet_xpub(&metadata.id));
+    }
+
+    #[test]
     fn approval_lease_rejects_changed_artifact_snapshot() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::delete_database();
@@ -1789,6 +2059,147 @@ mod tests {
         recover_restore_markers().unwrap();
 
         fs::remove_file(preexisting).unwrap();
+    }
+
+    #[test]
+    fn recovery_removes_marker_and_unreadable_restore_created_keychain_entry() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::preview_new_random();
+        let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
+        let initial = RestoreArtifactSnapshot::capture(&validated).unwrap();
+        let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
+        let secret_key = format!("{}::wallet_mnemonic", metadata.id);
+        crate::test_support::shared_mock_keychain()
+            .set_entries(vec![(secret_key.as_str(), "unreadable encrypted secret")]);
+
+        assert!(Keychain::global().get_wallet_secret(&metadata.id).is_err());
+        recover_restore_markers().unwrap();
+
+        assert!(!marker_path.exists());
+        assert!(!Keychain::global().wallet_items_exist(&metadata.id));
+    }
+
+    #[test]
+    fn recovery_removes_unreadable_restore_created_entry_and_preserves_xpub() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::preview_new_random();
+        let xpub = bitcoin::bip32::Xpub::from_str(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+        let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
+        let initial = RestoreArtifactSnapshot::capture(&validated).unwrap();
+        let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
+        let xpub_key = format!("{}::wallet_xpub", metadata.id);
+        let xpub_value = xpub.to_string();
+        let secret_key = format!("{}::wallet_mnemonic", metadata.id);
+        crate::test_support::shared_mock_keychain().set_entries(vec![
+            (xpub_key.as_str(), xpub_value.as_str()),
+            (secret_key.as_str(), "unreadable encrypted secret"),
+        ]);
+
+        recover_restore_markers().unwrap();
+        assert!(!marker_path.exists());
+        assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
+        assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
+
+        assert!(Keychain::global().delete_wallet_xpub(&metadata.id));
+    }
+
+    #[test]
+    fn recovery_does_not_broad_delete_inconsistent_keychain_snapshot() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::preview_new_random();
+        let initial =
+            RestoreArtifactSnapshot { keychain_items: true, ..RestoreArtifactSnapshot::default() };
+        let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
+        let secret_key = format!("{}::wallet_mnemonic", metadata.id);
+        crate::test_support::shared_mock_keychain()
+            .set_entries(vec![(secret_key.as_str(), "unreadable encrypted secret")]);
+
+        assert!(recover_restore_markers().is_err());
+        assert!(marker_path.exists());
+        assert!(Keychain::global().get_wallet_secret(&metadata.id).is_err());
+
+        crate::test_support::shared_mock_keychain().reset();
+        remove_marker(&marker_path).unwrap();
+    }
+
+    #[test]
+    fn recovery_does_not_selectively_delete_without_approved_keychain_fingerprints() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::preview_new_random();
+        let initial =
+            RestoreArtifactSnapshot { keychain_items: true, ..RestoreArtifactSnapshot::default() };
+        let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
+        let xpub = bitcoin::bip32::Xpub::from_str(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+        assert!(recover_restore_markers().is_err());
+        assert!(marker_path.exists());
+        assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
+
+        crate::test_support::shared_mock_keychain().reset();
+        remove_marker(&marker_path).unwrap();
+    }
+
+    #[test]
+    fn rollback_reports_a_changed_keychain_kind_once() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let metadata = WalletMetadata::preview_new();
+        let original = bitcoin::bip32::Xpub::from_str(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+        )
+        .unwrap();
+        let changed = bitcoin::bip32::Xpub::from_str(
+            "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, original).unwrap();
+
+        let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
+        let initial = RestoreArtifactSnapshot::capture(&validated).unwrap();
+        let key = format!("{}::wallet_xpub", metadata.id);
+        let changed_value = changed.to_string();
+        crate::test_support::shared_mock_keychain()
+            .set_entries(vec![(key.as_str(), changed_value.as_str())]);
+
+        let mut failures = Vec::new();
+        rollback_keychain(&metadata.id, &initial, &mut failures);
+
+        assert_eq!(failures.len(), 1);
+        assert!(failures[0].contains("pre-existing keychain xpub changed"));
+
+        crate::test_support::shared_mock_keychain().reset();
     }
 
     #[test]
@@ -1881,6 +2292,42 @@ mod tests {
 
         assert!(!path.exists());
         assert!(!marker_path.exists());
+    }
+
+    #[test]
+    fn interrupted_cleanup_accepts_remaining_keychain_subset() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::preview_new_random();
+        let mnemonic = bip39::Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let xpub = bitcoin::bip32::Xpub::from_str(
+            "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM",
+        )
+        .unwrap();
+        Keychain::global().save_wallet_key(&metadata.id, mnemonic).unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
+
+        let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
+        let initial = RestoreArtifactSnapshot::capture(&validated).unwrap();
+        let marker_path =
+            write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::CleanupInProgress);
+        crate::test_support::shared_mock_keychain().fail_delete_at(3);
+
+        assert!(recover_restore_markers().is_err());
+        assert!(marker_path.exists());
+        assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
+        assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
+
+        recover_restore_markers().unwrap();
+        assert!(!marker_path.exists());
+        assert!(!Keychain::global().wallet_items_exist(&metadata.id));
     }
 
     #[test]
