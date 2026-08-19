@@ -19,6 +19,34 @@ private enum ConfirmationState: Equatable {
     case importSignature
 }
 
+private enum SendFlowHardwarePresentation: TaggedAlertPresentable, TaggedSheetPresentable {
+    case confirmation(ConfirmationState)
+    case sheet(SendFlowHardwareSheetState)
+    case alert(SendFlowHardwareAlertState)
+    case fileImporter
+    case qrScanner
+    case shareTransaction
+    case exportNfc
+    case pasteSignature
+    case scanNfc
+
+    func sheet(context: SendFlowHardwarePresentationContext) -> AnyView {
+        guard case let .sheet(sheet) = self else {
+            preconditionFailure("A non-sheet hardware presentation reached the sheet host")
+        }
+
+        return sheet.sheet(context: context)
+    }
+
+    func alert(context: SendFlowHardwarePresentationContext) -> AnyAlertBuilder {
+        guard case let .alert(alert) = self else {
+            preconditionFailure("A non-alert hardware presentation reached the alert host")
+        }
+
+        return alert.alert(context: context)
+    }
+}
+
 enum SendFlowHardwareAlertState: Equatable {
     case bbqrError(String)
     case fileError(String)
@@ -34,14 +62,10 @@ struct SendFlowHardwareScreen: View {
     let details: ConfirmDetails
     let prices: PriceResponse? = nil
 
-    // sheets, alerts, confirmations
-    @State private var alertState: TaggedItem<SendFlowHardwareAlertState>? = .none
-    @State private var sheetState: TaggedItem<SendFlowHardwareSheetState>? = .none
-    @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
+    /// sheets, alerts, confirmations
+    @State private var presentationCoordinator =
+        PresentationTransitionCoordinator<SendFlowHardwarePresentation>()
     @State private var inputOutputDetailsPresentationSize: PresentationDetent = .height(300)
-
-    /// file import
-    @State private var isPresentingFilePicker = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -61,9 +85,27 @@ struct SendFlowHardwareScreen: View {
         SendFlowHardwarePresentationContext(
             manager: manager,
             details: details,
-            alertState: $alertState,
+            dismissAlert: presentationCoordinator.dismissCurrentPresentation,
             inputOutputDetailsPresentationSize: $inputOutputDetailsPresentationSize
         )
+    }
+
+    private var alertPresentation: Binding<TaggedItem<SendFlowHardwarePresentation>?> {
+        presentationCoordinator.presentedItem { presentation in
+            if case .alert = presentation { true } else { false }
+        }
+    }
+
+    private var sheetPresentation: Binding<TaggedItem<SendFlowHardwarePresentation>?> {
+        presentationCoordinator.presentedItem { presentation in
+            if case .sheet = presentation { true } else { false }
+        }
+    }
+
+    private var fileImporterIsPresented: Binding<Bool> {
+        presentationCoordinator.isPresented { presentation in
+            if case .fileImporter = presentation { true } else { false }
+        }
     }
 
     var body: some View {
@@ -78,6 +120,17 @@ struct SendFlowHardwareScreen: View {
                     showInputOutputDetails: showInputOutputDetails,
                     exportTransaction: exportTransaction,
                     importSignature: importSignature,
+                    exportDialogIsPresented: confirmationBinding(for: .exportTxn),
+                    importDialogIsPresented: confirmationBinding(for: .importSignature),
+                    dialogActions: SendFlowHardwareDialogActions(
+                        exportQr: exportQr,
+                        exportNfc: exportNfc,
+                        shareTransaction: shareTransaction,
+                        scanQr: scanQr,
+                        importFile: importFile,
+                        pasteSignature: queuePastedSignatureImport,
+                        scanNfc: scanNfc
+                    ),
                     showDetails: showDetails
                 )
             }
@@ -85,45 +138,40 @@ struct SendFlowHardwareScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
             .background(Color.background)
-            .presentingSheet($sheetState, context: presentationContext)
-            .confirmationDialog(
-                confirmationDialogTitle,
-                isPresented: confirmationDialogIsPresented,
-                actions: {
-                    SendFlowHardwareConfirmationDialog(
-                        confirmationState: confirmationState?.item,
-                        details: details,
-                        sheetState: $sheetState,
-                        isPresentingFilePicker: $isPresentingFilePicker,
-                        importPastedSignature: importPastedSignature
-                    )
-                }
-            )
-            .presentingAlert($alertState, context: presentationContext, defaultTitle: "Error")
+            .presentingSheet(sheetPresentation, context: presentationContext)
+            .presentingAlert(alertPresentation, context: presentationContext, defaultTitle: "Error")
             .fileImporter(
-                isPresented: $isPresentingFilePicker,
+                isPresented: fileImporterIsPresented,
                 allowedContentTypes: [.plainText, .psbt, .txn],
                 onCompletion: handleFileImport
             )
             .onAppear(perform: updateInputOutputDetailsPresentationSize)
             .toolbar { Toolbar }
         }
+        .presentationTransitionHost(presentationCoordinator)
+        .onChange(of: presentationCoordinator.currentPresentation?.id, initial: true) {
+            _, _ in
+            performCurrentPresentationAction()
+        }
+        .onChange(of: app.sheetState?.id) { _, _ in
+            completeQrScannerIfNeeded()
+        }
     }
 
     private func showInputOutputDetails() {
-        sheetState = .init(.inputOutputDetails)
+        presentationCoordinator.present(.sheet(.inputOutputDetails))
     }
 
     private func exportTransaction() {
-        confirmationState = .init(.exportTxn)
+        presentationCoordinator.present(.confirmation(.exportTxn))
     }
 
     private func importSignature() {
-        confirmationState = .init(.importSignature)
+        presentationCoordinator.present(.confirmation(.importSignature))
     }
 
     private func showDetails() {
-        sheetState = .init(.details)
+        presentationCoordinator.present(.sheet(.details))
     }
 
     private func updateInputOutputDetailsPresentationSize() {
@@ -166,14 +214,16 @@ struct SendFlowHardwareScreen: View {
 
             app.pushRoute(route)
         } catch {
-            alertState = .init(.fileError(error.localizedDescription))
+            presentationCoordinator.present(.alert(.fileError(error.localizedDescription)))
         }
     }
 
     func importPastedSignature() {
         let code = UIPasteboard.general.string ?? ""
         guard !code.isEmpty else {
-            alertState = .init(.pasteError("No text found on the clipboard."))
+            presentationCoordinator.present(
+                .alert(.pasteError("No text found on the clipboard."))
+            )
             return
         }
 
@@ -185,7 +235,7 @@ struct SendFlowHardwareScreen: View {
             )
             app.pushRoute(route)
         } catch {
-            alertState = .init(.pasteError(error.localizedDescription))
+            presentationCoordinator.present(.alert(.pasteError(error.localizedDescription)))
         }
     }
 
@@ -206,7 +256,7 @@ struct SendFlowHardwareScreen: View {
             app.pushRoute(route)
         } catch {
             Log.error("Failed to handle scanned transaction: \(error), txn: \(txn)")
-            alertState = .init(.nfcError(error.localizedDescription))
+            presentationCoordinator.present(.alert(.nfcError(error.localizedDescription)))
         }
     }
 
@@ -219,23 +269,76 @@ struct SendFlowHardwareScreen: View {
         return (record, parsed)
     }
 
-    // MARK: Confirmation Dialog
-
-    var confirmationDialogIsPresented: Binding<Bool> {
-        Binding(
-            get: { confirmationState != .none },
-            set: { presented in
-                if !presented { confirmationState = .none }
+    private func confirmationBinding(for state: ConfirmationState) -> Binding<Bool> {
+        presentationCoordinator.isPresented { presentation in
+            guard case let .confirmation(currentState) = presentation else {
+                return false
             }
-        )
+
+            return currentState == state
+        }
     }
 
-    var confirmationDialogTitle: Text {
-        switch confirmationState?.item {
-        case .exportTxn: Text("Export Transaction")
-        case .importSignature: Text("Import Signature")
-        case .none: Text("")
+    private func exportQr() {
+        presentationCoordinator.transition(to: .sheet(.exportQr))
+    }
+
+    private func exportNfc() {
+        presentationCoordinator.transition(to: .exportNfc)
+    }
+
+    private func shareTransaction() {
+        presentationCoordinator.transition(to: .shareTransaction)
+    }
+
+    private func scanQr() {
+        presentationCoordinator.transition(to: .qrScanner)
+    }
+
+    private func importFile() {
+        presentationCoordinator.transition(to: .fileImporter)
+    }
+
+    private func queuePastedSignatureImport() {
+        presentationCoordinator.transition(to: .pasteSignature)
+    }
+
+    private func scanNfc() {
+        presentationCoordinator.transition(to: .scanNfc)
+    }
+
+    private func performCurrentPresentationAction() {
+        guard let presentation = presentationCoordinator.currentPresentation?.item else { return }
+
+        switch presentation {
+        case .confirmation, .sheet, .alert, .fileImporter:
+            return
+        case .qrScanner:
+            app.sheetState = .init(.qr)
+        case .shareTransaction:
+            ShareSheet.present(
+                data: details.psbtBytes(),
+                filename: "transaction.psbt"
+            ) { _ in
+                presentationCoordinator.dismissCurrentPresentation()
+            }
+        case .exportNfc:
+            app.nfcWriter.writeToTag(data: details.psbtBytes())
+            presentationCoordinator.dismissCurrentPresentation()
+        case .pasteSignature:
+            presentationCoordinator.dismissCurrentPresentation()
+            importPastedSignature()
+        case .scanNfc:
+            app.nfcReader.scan()
+            presentationCoordinator.dismissCurrentPresentation()
         }
+    }
+
+    private func completeQrScannerIfNeeded() {
+        guard case .qrScanner = presentationCoordinator.currentPresentation?.item else { return }
+        guard app.sheetState == nil else { return }
+
+        presentationCoordinator.dismissCurrentPresentation()
     }
 }
 
@@ -247,6 +350,9 @@ private struct SendFlowHardwareTransactionContent: View {
     let showInputOutputDetails: () -> Void
     let exportTransaction: () -> Void
     let importSignature: () -> Void
+    let exportDialogIsPresented: Binding<Bool>
+    let importDialogIsPresented: Binding<Bool>
+    let dialogActions: SendFlowHardwareDialogActions
     let showDetails: () -> Void
 
     private var metadata: WalletMetadata {
@@ -281,7 +387,10 @@ private struct SendFlowHardwareTransactionContent: View {
             } else {
                 SendFlowHardwareSignTransactionSection(
                     exportTransaction: exportTransaction,
-                    importSignature: importSignature
+                    importSignature: importSignature,
+                    exportDialogIsPresented: exportDialogIsPresented,
+                    importDialogIsPresented: importDialogIsPresented,
+                    dialogActions: dialogActions
                 )
             }
 
@@ -480,60 +589,6 @@ private struct SendFlowTapSignerTransactionSection: View {
     private func signTransaction() {
         let route = TapSignerRoute.enterPin(tapSigner: tapSigner, action: .sign(psbt))
         app.sheetState = .init(.tapSigner(route))
-    }
-}
-
-private struct SendFlowHardwareConfirmationDialog: View {
-    @Environment(AppManager.self) private var app
-
-    let confirmationState: ConfirmationState?
-    let details: ConfirmDetails
-    @Binding var sheetState: TaggedItem<SendFlowHardwareSheetState>?
-    @Binding var isPresentingFilePicker: Bool
-    let importPastedSignature: () -> Void
-
-    var body: some View {
-        switch confirmationState {
-        case .exportTxn:
-            SendFlowHardwareExportTransactionDialog(
-                exportQr: exportQr,
-                exportNfc: exportNfc,
-                shareTransaction: shareTransaction
-            )
-        case .importSignature:
-            SendFlowHardwareImportTransactionDialog(
-                scanQr: scanQr,
-                importFile: importFile,
-                pasteSignature: importPastedSignature,
-                scanNfc: scanNfc
-            )
-        case .none:
-            EmptyView()
-        }
-    }
-
-    private func exportQr() {
-        sheetState = .init(.exportQr)
-    }
-
-    private func exportNfc() {
-        app.nfcWriter.writeToTag(data: details.psbtBytes())
-    }
-
-    private func shareTransaction() {
-        ShareSheet.presentFromMenu(data: details.psbtBytes(), filename: "transaction.psbt")
-    }
-
-    private func scanQr() {
-        app.sheetState = .init(.qr)
-    }
-
-    private func importFile() {
-        isPresentingFilePicker = true
-    }
-
-    private func scanNfc() {
-        app.nfcReader.scan()
     }
 }
 

@@ -25,8 +25,8 @@ private extension CloudBackupPasskeyRepairState? {
 
 struct VerificationSection: View {
     let manager: CloudBackupManager
-    let onRecreate: () -> Void
-    let onReinitialize: () -> Void
+    let recreateConfirmationIsPresented: Binding<Bool>
+    let reinitializeConfirmationIsPresented: Binding<Bool>
 
     private var isBusy: Bool {
         manager.verificationState.isVerifying ||
@@ -77,8 +77,8 @@ struct VerificationSection: View {
                 destructiveOperationState: manager.destructiveOperationState,
                 onRetry: retry,
                 onRepairPasskey: repairPasskey,
-                onRecreate: onRecreate,
-                onReinitialize: onReinitialize
+                recreateConfirmationIsPresented: recreateConfirmationIsPresented,
+                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
         }
     }
@@ -247,8 +247,8 @@ private struct CloudBackupVerificationFailureSection: View {
     let destructiveOperationState: CloudBackupDestructiveOperationState
     let onRetry: (CloudBackupRetryAction?) -> Void
     let onRepairPasskey: () -> Void
-    let onRecreate: () -> Void
-    let onReinitialize: () -> Void
+    let recreateConfirmationIsPresented: Binding<Bool>
+    let reinitializeConfirmationIsPresented: Binding<Bool>
 
     private var passkeyRepairError: String? {
         guard case let .failed(error) = passkeyRepairState else { return nil }
@@ -275,7 +275,7 @@ private struct CloudBackupVerificationFailureSection: View {
                     isBusy: isBusy,
                     isDetailInventoryComplete: isDetailInventoryComplete,
                     destructiveOperationState: destructiveOperationState,
-                    onRecreate: onRecreate
+                    confirmationIsPresented: recreateConfirmationIsPresented
                 )
             case let .reinitializeBackup(message, warning, _):
                 CloudBackupReinitializeFailureContent(
@@ -284,7 +284,7 @@ private struct CloudBackupVerificationFailureSection: View {
                     isBusy: isBusy,
                     isDetailInventoryComplete: isDetailInventoryComplete,
                     destructiveOperationState: destructiveOperationState,
-                    onReinitialize: onReinitialize
+                    confirmationIsPresented: reinitializeConfirmationIsPresented
                 )
             case let .unsupportedVersion(message, _):
                 CloudBackupUnsupportedVersionFailureContent(message: message)
@@ -328,7 +328,7 @@ private struct CloudBackupRecreateManifestFailureContent: View {
     let isBusy: Bool
     let isDetailInventoryComplete: Bool
     let destructiveOperationState: CloudBackupDestructiveOperationState
-    let onRecreate: () -> Void
+    let confirmationIsPresented: Binding<Bool>
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -346,7 +346,7 @@ private struct CloudBackupRecreateManifestFailureContent: View {
             currentOperation: destructiveOperationState,
             isBusy: isBusy,
             isDetailInventoryComplete: isDetailInventoryComplete,
-            action: onRecreate
+            action: { confirmationIsPresented.wrappedValue = true }
         )
     }
 }
@@ -357,7 +357,7 @@ private struct CloudBackupReinitializeFailureContent: View {
     let isBusy: Bool
     let isDetailInventoryComplete: Bool
     let destructiveOperationState: CloudBackupDestructiveOperationState
-    let onReinitialize: () -> Void
+    let confirmationIsPresented: Binding<Bool>
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -375,7 +375,7 @@ private struct CloudBackupReinitializeFailureContent: View {
             currentOperation: destructiveOperationState,
             isBusy: isBusy,
             isDetailInventoryComplete: isDetailInventoryComplete,
-            action: onReinitialize
+            action: { confirmationIsPresented.wrappedValue = true }
         )
     }
 }
