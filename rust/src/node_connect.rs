@@ -3,7 +3,14 @@ use url::Url;
 
 use crate::node::client::electrum::transport;
 use crate::node::tls::{self, TlsTrust};
-use crate::{database::Database, network::Network, node::Node};
+use crate::{
+    database::{
+        Database,
+        global_config::{CertificateTrustCache, GlobalConfigTableError},
+    },
+    network::Network,
+    node::Node,
+};
 use cove_macros::impl_default_for;
 use cove_util::ResultExt as _;
 use eyre::{Context, eyre};
@@ -40,9 +47,7 @@ pub const SIGNET_ESPLORA: [(&str, &str); 1] = [("mutinynet", "https://mutinynet.
 pub struct NodeSelector {
     network: Network,
     node_list: Vec<NodeSelection>,
-    /// The node that was selected when this selector was built, so a custom
-    /// node can inherit the certificate settings already saved for its url.
-    saved_node: Node,
+    certificate_trust: CertificateTrustCache,
 }
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash)]
@@ -52,6 +57,21 @@ pub enum NodeSelection {
 }
 
 type Error = NodeSelectorError;
+
+#[derive(Debug, Clone)]
+enum CertificateTrustHydrationError {
+    Store(GlobalConfigTableError),
+}
+
+impl From<CertificateTrustHydrationError> for Error {
+    fn from(error: CertificateTrustHydrationError) -> Self {
+        match error {
+            CertificateTrustHydrationError::Store(error) => {
+                Self::CertificateTrustStoreError(error.to_string())
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum NodeSelectorError {
@@ -73,8 +93,9 @@ pub enum NodeSelectorError {
     #[error("the server's certificate is not trusted")]
     CertificateNotTrusted,
 
-    #[error("saving this node would forget the certificate it trusts")]
-    CertificateWouldBeForgotten,
+    /// Reports an invalid persisted certificate trust store
+    #[error("unable to read the certificate trust store: {0}")]
+    CertificateTrustStoreError(String),
 }
 
 /// What to do about a node whose certificate was rejected.
@@ -101,27 +122,29 @@ pub struct NodeCertificate {
     pub display: String,
 }
 
+/// Certificate trust accepted for one canonical endpoint
+#[derive(Debug, Clone, uniffi::Record, PartialEq, Eq, Hash)]
+pub struct EndpointCertificateTrust {
+    /// The endpoint URL that the user trusted
+    pub endpoint: String,
+
+    /// How the endpoint's certificate is trusted
+    pub tls: TlsTrust,
+}
+
 impl_default_for!(NodeSelector);
 #[uniffi::export(async_runtime = "tokio")]
 impl NodeSelector {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        let network = Database::global().global_config.selected_network();
-        let selected_node = Database::global().global_config.selected_node();
+        let database = Database::global();
+        let network = database.global_config.selected_network();
+        let selected_node = database.global_config.selected_node();
+        let certificate_trust = database.global_config.certificate_trust_cache();
 
-        let node_list = node_list(network);
+        let node_selection_list = node_selection_list(network, selected_node);
 
-        let node_selection_list = if node_list.contains(&selected_node) {
-            node_list.into_iter().map(NodeSelection::Preset).collect()
-        } else {
-            let mut node_selection_list =
-                node_list.into_iter().map(NodeSelection::Preset).collect::<Vec<NodeSelection>>();
-
-            node_selection_list.push(NodeSelection::Custom(selected_node.clone()));
-            node_selection_list
-        };
-
-        Self { network, node_list: node_selection_list, saved_node: selected_node }
+        Self { network, node_list: node_selection_list, certificate_trust }
     }
 
     #[uniffi::method]
@@ -133,16 +156,12 @@ impl NodeSelector {
     pub fn selected_node(&self) -> NodeSelection {
         let selected_node = Database::global().global_config.selected_node();
 
-        if node_list(self.network).contains(&selected_node) {
-            NodeSelection::Preset(selected_node)
-        } else {
-            NodeSelection::Custom(selected_node)
-        }
+        selected_node_selection(self.network, selected_node)
     }
 
     #[uniffi::method]
     pub fn select_preset_node(&self, name: String) -> Result<Node, Error> {
-        let node = node_list(self.network)
+        let requested_node = node_list(self.network)
             .into_iter()
             .find(|node| node.name == name)
             .or_else(|| {
@@ -153,13 +172,50 @@ impl NodeSelector {
                 error!("node with name {name} not found");
                 NodeSelectorError::NodeNotFound(name)
             })?;
+        let database = Database::global();
+        let node = match self.hydrate_certificate_trust(requested_node.clone()) {
+            Ok(node) => {
+                if requested_node.tls.is_none()
+                    && let Some(endpoint) =
+                        database.global_config.conflicted_selected_node_endpoint(self.network)
+                {
+                    return database
+                        .global_config
+                        .recover_selected_node_from_certificate_trust_conflict(
+                            &requested_node,
+                            &endpoint,
+                        )
+                        .map_err_str(NodeSelectorError::SetSelectedNodeError);
+                }
 
-        Database::global()
+                node
+            }
+            Err(CertificateTrustHydrationError::Store(
+                GlobalConfigTableError::CertificateTrustConflict(endpoint),
+            )) if requested_node.tls.is_none() => {
+                return database
+                    .global_config
+                    .recover_selected_node_from_certificate_trust_conflict(
+                        &requested_node,
+                        &endpoint,
+                    )
+                    .map_err_str(NodeSelectorError::SetSelectedNodeError);
+            }
+            Err(error) => return Err(error.into()),
+        };
+
+        database
             .global_config
             .set_selected_node(&node)
             .map_err_str(NodeSelectorError::SetSelectedNodeError)?;
 
         Ok(node)
+    }
+
+    #[uniffi::method]
+    /// Check a node's network connection, including its certificate settings
+    pub async fn check_node(&self, node: Node) -> Result<(), Error> {
+        self.check_node_connection(node).await
     }
 
     #[uniffi::method]
@@ -169,14 +225,14 @@ impl NodeSelector {
         Ok(())
     }
 
-    #[uniffi::method(default(tls = None))]
+    #[uniffi::method(default(certificate_trust = None))]
     /// Use the url and name of the custom node to set it as the selected node
     pub fn parse_custom_node(
         &self,
         url: String,
         name: String,
         entered_name: String,
-        tls: Option<TlsTrust>,
+        certificate_trust: Option<EndpointCertificateTrust>,
     ) -> Result<Node, Error> {
         let node_type = name.to_ascii_lowercase();
 
@@ -186,10 +242,6 @@ impl NodeSelector {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
         }
 
-        // Certificate trust is matched by exact url equality, so the saved url
-        // must be in the same normalized form `certificate_decision` compares
-        // against, or a trailing slash lets a rotated certificate be offered
-        // again instead of reported as changed
         let url_string = strip_trailing_slash(url.to_string());
 
         let name = if entered_name.is_empty() {
@@ -198,32 +250,31 @@ impl NodeSelector {
             entered_name
         };
 
+        let trusted_endpoint = certificate_trust
+            .as_ref()
+            .map(|trust| {
+                normalize_certificate_endpoint(&trust.endpoint).map_err(|error| {
+                    Error::ParseNodeUrlError(format!("invalid certificate trust endpoint: {error}"))
+                })
+            })
+            .transpose()?;
+
         let node = if node_type.contains("electrum") {
-            // Only an ssl:// node can present a certificate, and failing here
-            // says so rather than leaving it to a generic connection error.
-            if tls.is_some() && !url_string.starts_with("ssl://") {
-                return Err(Error::ParseNodeUrlError(
-                    "custom certificates require an ssl:// url".to_string(),
-                ));
-            }
+            let session_tls = if url.scheme() == "ssl" {
+                let endpoint = normalize_certificate_endpoint(&url_string)
+                    .map_err_str(Error::ParseNodeUrlError)?;
+                certificate_trust
+                    .filter(|_| trusted_endpoint.as_deref() == Some(endpoint.as_str()))
+                    .map(|trust| trust.tls)
+            } else {
+                None
+            };
 
-            // Certificate settings belong to the url they were accepted for, so
-            // an unchanged url keeps what is saved and an edited one starts
-            // clean rather than checking a new server against the old
-            // certificate. A `tls` passed in is one the user has just accepted,
-            // so it wins.
-            let tls = tls.or_else(|| trusted_certificate(&self.saved_node, &url_string));
+            let node =
+                Node { tls: session_tls, ..Node::new_electrum(name, url_string, self.network) };
 
-            Node { tls, ..Node::new_electrum(name, url_string, self.network) }
+            self.hydrate_certificate_trust(node)?
         } else if node_type.contains("esplora") {
-            // Silently dropping the setting here would contradict the Esplora
-            // client, which refuses a node it cannot honor.
-            if tls.is_some() {
-                return Err(Error::ParseNodeUrlError(
-                    "esplora nodes do not support custom certificate settings".to_string(),
-                ));
-            }
-
             Node::new_esplora(name, url_string, self.network)
         } else {
             error!("invalid node type: {node_type}");
@@ -239,13 +290,19 @@ impl NodeSelector {
     /// Deciding here rather than in each app keeps one rule: a url that already
     /// trusts a certificate is never offered a different one.
     pub async fn certificate_decision(&self, url: String) -> Result<CertificateDecision, Error> {
-        let url = normalized_url(&url)?;
+        let endpoint =
+            normalize_certificate_endpoint(&url).map_err_str(Error::ParseNodeUrlError)?;
 
-        if self.trusted_certificate(&url).is_some() {
+        if self.trusted_certificate(&endpoint)?.is_some() {
             return Ok(CertificateDecision::Changed);
         }
 
-        let certificate = self.fetch_node_certificate(url).await?;
+        let certificate = self.fetch_node_certificate(endpoint.clone()).await?;
+
+        if self.trusted_certificate(&endpoint)?.is_some() {
+            return Ok(CertificateDecision::Changed);
+        }
+
         Ok(CertificateDecision::Unrecognized { certificate })
     }
 
@@ -268,15 +325,30 @@ impl NodeSelector {
     }
 
     #[uniffi::method]
-    /// Check the node url and set it as selected node if it is valid
-    pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
-        // A caller that forgets to carry the settings forward would otherwise
-        // quietly drop the certificate the user chose to trust.
-        let saved = Database::global().global_config.selected_node();
-        if would_forget_certificate(&saved, &node) {
-            return Err(Error::CertificateWouldBeForgotten);
-        }
+    /// Save a node after its network connection has been checked
+    pub async fn save_node(&self, node: Node) -> Result<(), Error> {
+        cove_tokio::unblock::run_blocking(move || {
+            Database::global().global_config.set_selected_node(&node)
+        })
+        .await
+        .map_err_str(Error::SetSelectedNodeError)
+    }
+}
 
+impl NodeSelector {
+    #[cfg(test)]
+    pub(crate) fn with_certificate_trust_cache(
+        network: Network,
+        certificate_trust: CertificateTrustCache,
+    ) -> Self {
+        Self {
+            network,
+            node_list: node_selection_list(network, Node::default(network)),
+            certificate_trust,
+        }
+    }
+
+    async fn check_node_connection(&self, node: Node) -> Result<(), Error> {
         node.check_url().await.map_err(|error| {
             tracing::warn!("error checking node: {error:?}");
 
@@ -288,11 +360,6 @@ impl NodeSelector {
 
             Error::NodeAccessError(error.to_string())
         })?;
-
-        Database::global()
-            .global_config
-            .set_selected_node(&node)
-            .map_err_str(Error::SetSelectedNodeError)?;
 
         Ok(())
     }
@@ -352,27 +419,118 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
-impl NodeSelector {
-    fn trusted_certificate(&self, url: &str) -> Option<TlsTrust> {
-        trusted_certificate(&Database::global().global_config.selected_node(), url)
+fn node_selection_list(network: Network, selected_node: Node) -> Vec<NodeSelection> {
+    let presets = node_list(network);
+
+    if presets.iter().any(|preset| same_preset_identity(preset, &selected_node)) {
+        return presets.into_iter().map(NodeSelection::Preset).collect();
+    }
+
+    let mut selections = presets.into_iter().map(NodeSelection::Preset).collect::<Vec<_>>();
+    selections.push(NodeSelection::Custom(selected_node));
+    selections
+}
+
+fn selected_node_selection(network: Network, selected_node: Node) -> NodeSelection {
+    if node_list(network).iter().any(|preset| same_preset_identity(preset, &selected_node)) {
+        NodeSelection::Preset(selected_node)
+    } else {
+        NodeSelection::Custom(selected_node)
     }
 }
 
-/// The certificate `saved` trusts for `url`, which is only its own certificate
-/// settings and only when it is the same url.
-fn trusted_certificate(saved: &Node, url: &str) -> Option<TlsTrust> {
-    (saved.url == url).then(|| saved.tls.clone()).flatten()
+fn same_preset_identity(preset: &Node, candidate: &Node) -> bool {
+    preset.name == candidate.name
+        && preset.network == candidate.network
+        && preset.api_type == candidate.api_type
+        && normalized_preset_url(&preset.url) == normalized_preset_url(&candidate.url)
 }
 
-/// Whether saving `node` would drop a certificate `saved` already trusts.
-fn would_forget_certificate(saved: &Node, node: &Node) -> bool {
-    node.tls.is_none() && trusted_certificate(saved, &node.url).is_some()
+fn normalized_preset_url(url: &str) -> Option<String> {
+    normalize_node_url(url).ok()
+}
+
+impl NodeSelector {
+    fn hydrate_certificate_trust(
+        &self,
+        node: Node,
+    ) -> std::result::Result<Node, CertificateTrustHydrationError> {
+        if node.tls.is_some()
+            || node.api_type != crate::node::ApiType::Electrum
+            || !is_ssl_electrum_endpoint(&node.url)
+        {
+            return Ok(node);
+        }
+
+        let endpoint = normalize_certificate_endpoint(&node.url).map_err(|error| {
+            CertificateTrustHydrationError::Store(
+                GlobalConfigTableError::InvalidCertificateTrustStore(error.to_string()),
+            )
+        })?;
+        let trust = {
+            let certificate_trust = self.certificate_trust.read();
+
+            match certificate_trust.as_ref() {
+                Ok(snapshot) => snapshot
+                    .trust_for_endpoint(&endpoint)
+                    .map_err(CertificateTrustHydrationError::Store)?,
+                Err(error) => return Err(CertificateTrustHydrationError::Store(error.clone())),
+            }
+        };
+
+        Ok(match trust {
+            Some(tls) => Node { tls: Some(tls), ..node },
+            None => node,
+        })
+    }
+
+    fn trusted_certificate(&self, url: &str) -> Result<Option<TlsTrust>, Error> {
+        let certificate_trust = self.certificate_trust.read();
+
+        match certificate_trust.as_ref() {
+            Ok(snapshot) => snapshot
+                .trust_for_endpoint(url)
+                .map_err(|error| Error::CertificateTrustStoreError(error.to_string())),
+            Err(error) => Err(Error::CertificateTrustStoreError(error.to_string())),
+        }
+    }
 }
 
 fn normalized_url(url: &str) -> Result<String, Error> {
-    let url = parse_node_url(url).map_err_str(Error::ParseNodeUrlError)?;
+    normalize_node_url(url).map_err_str(Error::ParseNodeUrlError)
+}
+
+/// Returns the normalized URL used in the node configuration
+pub(crate) fn normalize_node_url(url: &str) -> eyre::Result<String> {
+    let url = parse_node_url(url)?;
 
     Ok(strip_trailing_slash(url.to_string()))
+}
+
+/// Returns the canonical SSL Electrum endpoint used as a certificate identity
+pub(crate) fn normalize_certificate_endpoint(url: &str) -> eyre::Result<String> {
+    let url = parse_node_url(url)?;
+
+    if url.scheme() != "ssl" {
+        return Err(eyre!("certificate trust requires an ssl:// url"));
+    }
+
+    if !has_usable_host(&url) {
+        return Err(eyre!("certificate trust requires a usable host"));
+    }
+
+    let host = match url.host().ok_or_else(|| eyre!("certificate trust requires a host"))? {
+        url::Host::Domain(domain) => domain.to_ascii_lowercase(),
+        url::Host::Ipv4(address) => address.to_string(),
+        url::Host::Ipv6(address) => format!("[{address}]"),
+    };
+    let port = url.port().unwrap_or(50002);
+
+    Ok(format!("ssl://{host}:{port}"))
+}
+
+pub(crate) fn is_ssl_electrum_endpoint(url: &str) -> bool {
+    normalize_certificate_endpoint(url).is_ok()
 }
 
 fn strip_trailing_slash(url: String) -> String {
@@ -464,31 +622,187 @@ fn default_node_selection() -> NodeSelection {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use parking_lot::RwLock;
+
+    use crate::database::global_config::CertificateTrustSnapshot;
+
     use super::*;
 
     fn selector() -> NodeSelector {
-        selector_with_saved(Node::default(Network::Bitcoin))
+        selector_with_trust(Ok(CertificateTrustSnapshot::default()))
     }
 
-    fn selector_with_saved(saved_node: Node) -> NodeSelector {
-        NodeSelector { network: Network::Bitcoin, node_list: Vec::new(), saved_node }
-    }
-
-    fn saved_pinned_node(url: &str, trust: &TlsTrust) -> Node {
-        Node {
-            tls: Some(trust.clone()),
-            ..Node::new_electrum("saved".to_string(), url.to_string(), Network::Bitcoin)
+    fn selector_with_trust(
+        certificate_trust: std::result::Result<CertificateTrustSnapshot, GlobalConfigTableError>,
+    ) -> NodeSelector {
+        NodeSelector {
+            network: Network::Bitcoin,
+            node_list: Vec::new(),
+            certificate_trust: Arc::new(RwLock::new(certificate_trust)),
         }
     }
 
-    /// Re-saving the node that is already selected must not fall back to
-    /// default trust and ask about its certificate all over again.
-    #[test]
-    fn an_unchanged_url_inherits_the_certificate_it_already_trusts() {
-        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
-        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
+    fn pinned_store(endpoint: &str) -> CertificateTrustSnapshot {
+        let mut store = crate::database::global_config::CertificateTrustStore::default();
+        store
+            .insert_or_match(
+                endpoint.to_string(),
+                TlsTrust::PinnedFingerprint { sha256: vec![7; 32] },
+            )
+            .unwrap();
+        CertificateTrustSnapshot::from_store(store)
+    }
 
-        let node = selector_with_saved(saved)
+    fn pinned_store_with_conflict(
+        retained_endpoint: &str,
+        conflicted_endpoint: &str,
+    ) -> CertificateTrustSnapshot {
+        let mut store = crate::database::global_config::CertificateTrustStore::default();
+        store
+            .insert_or_match(
+                retained_endpoint.to_string(),
+                TlsTrust::PinnedFingerprint { sha256: vec![8; 32] },
+            )
+            .unwrap();
+
+        CertificateTrustSnapshot::with_store_and_conflicted_endpoint(
+            store,
+            conflicted_endpoint.to_string(),
+        )
+    }
+
+    fn endpoint_trust(endpoint: &str) -> EndpointCertificateTrust {
+        EndpointCertificateTrust {
+            endpoint: endpoint.to_string(),
+            tls: TlsTrust::PinnedFingerprint { sha256: vec![3; 32] },
+        }
+    }
+
+    /// A trailing slash is the same server, so it must use the same canonical
+    /// endpoint in the trust store
+    #[test]
+    fn a_trailing_slash_is_normalized_away() {
+        assert_eq!(
+            normalize_node_url("ssl://node.example.com:50002/").unwrap(),
+            "ssl://node.example.com:50002"
+        );
+    }
+
+    #[test]
+    fn transport_equivalent_urls_share_one_certificate_identity() {
+        let canonical = normalize_certificate_endpoint("ssl://node.example.com:50002").unwrap();
+
+        for equivalent in [
+            "ssl://node.example.com:50002/ignored/path?query=value#fragment",
+            "ssl://user:password@node.example.com:50002",
+            "ssl://NODE.EXAMPLE.COM:50002",
+            "ssl://node.example.com",
+            "https://node.example.com:50002/ignored",
+        ] {
+            assert_eq!(normalize_certificate_endpoint(equivalent).unwrap(), canonical);
+        }
+    }
+
+    #[test]
+    fn certificate_identity_preserves_transport_host_and_effective_port() {
+        assert_eq!(
+            normalize_certificate_endpoint("ssl://[fd00::1]/path").unwrap(),
+            "ssl://[fd00::1]:50002"
+        );
+        assert_ne!(
+            normalize_certificate_endpoint("ssl://node.example.com:50001").unwrap(),
+            normalize_certificate_endpoint("ssl://node.example.com:50002").unwrap()
+        );
+    }
+
+    #[test]
+    fn custom_nodes_keep_their_certificate_settings() {
+        let trust = endpoint_trust("ssl://node.example.com:50002");
+
+        let node = selector()
+            .parse_custom_node(
+                "ssl://node.example.com:50002".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                Some(trust.clone()),
+            )
+            .unwrap();
+
+        assert_eq!(node.tls, Some(trust.tls));
+    }
+
+    #[test]
+    fn session_trust_matches_transport_equivalent_endpoints() {
+        let node = selector()
+            .parse_custom_node(
+                "https://NODE.example.com:50002/path?query=value".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                Some(endpoint_trust("ssl://node.example.com:50002/")),
+            )
+            .unwrap();
+
+        assert_eq!(node.tls, Some(TlsTrust::PinnedFingerprint { sha256: vec![3; 32] }));
+    }
+
+    #[test]
+    fn session_trust_does_not_apply_to_another_endpoint() {
+        let node = selector()
+            .parse_custom_node(
+                "ssl://other.example.com:50002".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                Some(endpoint_trust("ssl://node.example.com:50002")),
+            )
+            .unwrap();
+
+        assert_eq!(node.tls, None);
+    }
+
+    #[test]
+    fn session_trust_does_not_apply_to_tcp_or_esplora() {
+        let tcp = selector()
+            .parse_custom_node(
+                "tcp://node.example.com:50001".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                Some(endpoint_trust("ssl://node.example.com:50002")),
+            )
+            .unwrap();
+        let esplora = selector()
+            .parse_custom_node(
+                "https://node.example.com".to_string(),
+                "Custom Esplora".to_string(),
+                String::new(),
+                Some(endpoint_trust("ssl://node.example.com:50002")),
+            )
+            .unwrap();
+
+        assert_eq!(tcp.tls, None);
+        assert_eq!(esplora.tls, None);
+    }
+
+    #[test]
+    fn invalid_session_trust_endpoint_is_a_parse_error() {
+        let error = selector()
+            .parse_custom_node(
+                "ssl://node.example.com:50002".to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                Some(endpoint_trust("tcp://node.example.com:50001")),
+            )
+            .unwrap_err();
+
+        assert!(
+            matches!(error, Error::ParseNodeUrlError(message) if message.contains("certificate trust endpoint"))
+        );
+    }
+
+    #[test]
+    fn custom_nodes_hydrate_trust_from_the_selector_snapshot() {
+        let node = selector_with_trust(Ok(pinned_store("ssl://node.example.com:50002")))
             .parse_custom_node(
                 "ssl://node.example.com:50002".to_string(),
                 "Custom Electrum".to_string(),
@@ -497,39 +811,12 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(node.tls, Some(trust));
+        assert_eq!(node.tls, Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }));
     }
 
-    /// A trailing slash is the same server, so it must save in the same
-    /// normalized form and keep the trusted certificate, or
-    /// `certificate_decision` would offer a rotated certificate for re-pinning
-    /// instead of reporting it as changed.
     #[test]
-    fn a_trailing_slash_is_normalized_away_and_keeps_the_certificate() {
-        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
-        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
-
-        let node = selector_with_saved(saved)
-            .parse_custom_node(
-                "ssl://node.example.com:50002/".to_string(),
-                "Custom Electrum".to_string(),
-                String::new(),
-                None,
-            )
-            .unwrap();
-
-        assert_eq!(node.url, "ssl://node.example.com:50002");
-        assert_eq!(node.tls, Some(trust));
-    }
-
-    /// Editing the url points at a different server, which the previous
-    /// certificate says nothing about.
-    #[test]
-    fn an_edited_url_does_not_inherit_the_previous_certificate() {
-        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
-        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
-
-        let node = selector_with_saved(saved)
+    fn custom_nodes_do_not_hydrate_trust_for_another_endpoint() {
+        let node = selector_with_trust(Ok(pinned_store("ssl://node.example.com:50002")))
             .parse_custom_node(
                 "ssl://other.example.com:50002".to_string(),
                 "Custom Electrum".to_string(),
@@ -541,127 +828,193 @@ mod tests {
         assert_eq!(node.tls, None);
     }
 
-    /// Esplora refuses certificate settings, so inheriting them would make the
-    /// node impossible to save.
     #[test]
-    fn switching_to_esplora_does_not_inherit_the_certificate() {
-        let trust = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
-        let saved = saved_pinned_node("ssl://node.example.com:50002", &trust);
+    fn custom_nodes_scope_conflicts_to_their_endpoint() {
+        let retained_endpoint = "ssl://retained.example.com:50002";
+        let conflicted_endpoint = "ssl://conflicted.example.com:50002";
+        let selector = selector_with_trust(Ok(pinned_store_with_conflict(
+            retained_endpoint,
+            conflicted_endpoint,
+        )));
 
-        let node = selector_with_saved(saved)
+        let retained = selector
             .parse_custom_node(
-                "https://node.example.com".to_string(),
-                "Custom Esplora".to_string(),
+                retained_endpoint.to_string(),
+                "Custom Electrum".to_string(),
                 String::new(),
                 None,
+            )
+            .unwrap();
+        assert_eq!(retained.tls, Some(TlsTrust::PinnedFingerprint { sha256: vec![8; 32] }));
+
+        let error = selector
+            .parse_custom_node(
+                conflicted_endpoint.to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                None,
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            Error::CertificateTrustStoreError(message)
+                if message.contains("conflicted.example.com:50002")
+        ));
+    }
+
+    #[test]
+    fn corrupt_trust_snapshot_is_reported_when_hydrating_a_custom_node() {
+        let error = selector_with_trust(Err(GlobalConfigTableError::InvalidCertificateTrustStore(
+            "corrupt trust store".to_string(),
+        )))
+        .parse_custom_node(
+            "ssl://node.example.com:50002".to_string(),
+            "Custom Electrum".to_string(),
+            String::new(),
+            None,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(error, Error::CertificateTrustStoreError(message) if message.contains("corrupt trust store"))
+        );
+    }
+
+    #[test]
+    fn only_a_typed_trust_conflict_is_a_recovery_candidate() {
+        let endpoint = "ssl://node.example.com:50002";
+        let selector = selector_with_trust(Ok(CertificateTrustSnapshot::with_conflicted_endpoint(
+            endpoint.to_string(),
+        )));
+        let node = Node::new_electrum("Custom Electrum".into(), endpoint.into(), Network::Bitcoin);
+
+        assert!(matches!(
+            selector.hydrate_certificate_trust(node),
+            Err(CertificateTrustHydrationError::Store(
+                GlobalConfigTableError::CertificateTrustConflict(candidate)
+            )) if candidate == endpoint
+        ));
+        assert_eq!(
+            selector.certificate_trust.read().as_ref().unwrap().first_conflict().as_deref(),
+            Some(endpoint)
+        );
+
+        let corrupt = selector_with_trust(Err(
+            GlobalConfigTableError::InvalidCertificateTrustStore("corrupt trust store".to_string()),
+        ));
+        assert_eq!(corrupt.certificate_trust.read().as_ref().ok(), None);
+    }
+
+    #[test]
+    fn pinned_preset_is_classified_as_a_preset_without_tls_equality() {
+        let preset = node_list(Network::Bitcoin)
+            .into_iter()
+            .find(|node| node.api_type == crate::node::ApiType::Electrum)
+            .unwrap();
+        let selected = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }),
+            ..preset.clone()
+        };
+
+        assert!(matches!(
+            selected_node_selection(Network::Bitcoin, selected),
+            NodeSelection::Preset(_)
+        ));
+
+        let renamed = Node { name: "Custom name".to_string(), ..preset };
+        assert!(matches!(
+            selected_node_selection(Network::Bitcoin, renamed),
+            NodeSelection::Custom(_)
+        ));
+    }
+
+    #[test]
+    fn pinned_preset_hydrates_before_selection() {
+        let preset = node_list(Network::Bitcoin)
+            .into_iter()
+            .find(|node| node.api_type == crate::node::ApiType::Electrum)
+            .unwrap();
+        let expected = TlsTrust::PinnedFingerprint { sha256: vec![7; 32] };
+        let selector = selector_with_trust(Ok(pinned_store(&preset.url)));
+
+        let hydrated = selector.hydrate_certificate_trust(preset).unwrap();
+
+        assert_eq!(hydrated.tls, Some(expected));
+    }
+
+    #[test]
+    fn non_tls_presets_do_not_require_a_trust_snapshot() {
+        let selector = selector_with_trust(Err(
+            GlobalConfigTableError::InvalidCertificateTrustStore("corrupt trust store".to_string()),
+        ));
+        let esplora = node_list(Network::Bitcoin)
+            .into_iter()
+            .find(|node| node.api_type == crate::node::ApiType::Esplora)
+            .unwrap();
+
+        assert_eq!(selector.hydrate_certificate_trust(esplora.clone()).unwrap(), esplora);
+    }
+
+    /// Self hosted servers are commonly reached by address rather than by name.
+    #[test]
+    fn nodes_can_be_reached_by_ip_address() {
+        assert_eq!(
+            selector()
+                .parse_custom_node(
+                    "ssl://192.168.1.50:50002".to_string(),
+                    "Custom Electrum".to_string(),
+                    String::new(),
+                    Some(endpoint_trust("ssl://192.168.1.50:50002")),
+                )
+                .unwrap()
+                .url,
+            "ssl://192.168.1.50:50002"
+        );
+        assert_eq!(
+            selector()
+                .parse_custom_node(
+                    "ssl://[fd00::1]:50002".to_string(),
+                    "Custom Electrum".to_string(),
+                    String::new(),
+                    Some(endpoint_trust("ssl://[fd00::1]:50002")),
+                )
+                .unwrap()
+                .url,
+            "ssl://[fd00::1]:50002"
+        );
+    }
+
+    #[test]
+    fn esplora_nodes_ignore_certificate_settings() {
+        let node = selector()
+            .parse_custom_node(
+                "https://esplora.example.com".to_string(),
+                "Custom Esplora".to_string(),
+                String::new(),
+                Some(endpoint_trust("ssl://esplora.example.com:50002")),
             )
             .unwrap();
 
         assert_eq!(node.tls, None);
     }
 
-    fn parse(url: &str) -> Result<Node, Error> {
-        selector().parse_custom_node(
-            url.to_string(),
-            "Custom Electrum".to_string(),
-            String::new(),
-            None,
-        )
-    }
-
     #[test]
-    fn custom_nodes_keep_their_certificate_settings() {
-        let trust = TlsTrust::PinnedFingerprint { sha256: vec![3; 32] };
-
+    fn tcp_nodes_ignore_certificate_settings() {
         let node = selector()
-            .parse_custom_node(
-                "ssl://node.example.com:50002".to_string(),
-                "Custom Electrum".to_string(),
-                String::new(),
-                Some(trust.clone()),
-            )
-            .unwrap();
-
-        assert_eq!(node.tls, Some(trust));
-    }
-
-    /// Self hosted servers are commonly reached by address rather than by name.
-    #[test]
-    fn nodes_can_be_reached_by_ip_address() {
-        assert_eq!(parse("ssl://192.168.1.50:50002").unwrap().url, "ssl://192.168.1.50:50002");
-        assert_eq!(parse("ssl://[fd00::1]:50002").unwrap().url, "ssl://[fd00::1]:50002");
-    }
-
-    #[test]
-    fn esplora_nodes_reject_certificate_settings() {
-        let error = selector()
-            .parse_custom_node(
-                "https://esplora.example.com".to_string(),
-                "Custom Esplora".to_string(),
-                String::new(),
-                Some(TlsTrust::PinnedFingerprint { sha256: vec![1; 32] }),
-            )
-            .unwrap_err();
-
-        assert!(matches!(error, Error::ParseNodeUrlError(_)), "{error}");
-    }
-
-    #[test]
-    fn certificate_settings_require_an_ssl_url() {
-        let error = selector()
             .parse_custom_node(
                 "tcp://node.example.com:50001".to_string(),
                 "Custom Electrum".to_string(),
                 String::new(),
-                Some(TlsTrust::PinnedFingerprint { sha256: vec![1; 32] }),
+                Some(endpoint_trust("ssl://node.example.com:50002")),
             )
-            .unwrap_err();
+            .unwrap();
 
-        assert!(matches!(error, Error::ParseNodeUrlError(_)), "{error}");
-    }
-
-    fn pinned(url: &str) -> Node {
-        Node {
-            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![4; 32] }),
-            ..Node::new_electrum("saved".to_string(), url.to_string(), Network::Bitcoin)
-        }
-    }
-
-    #[test]
-    fn a_certificate_is_only_trusted_for_the_url_it_was_accepted_for() {
-        let saved = pinned("ssl://node.example.com:50002");
-
-        assert!(trusted_certificate(&saved, "ssl://node.example.com:50002").is_some());
-        assert!(trusted_certificate(&saved, "ssl://other.example.com:50002").is_none());
-    }
-
-    #[test]
-    fn a_node_without_a_certificate_trusts_nothing() {
-        let saved = Node::default(Network::Bitcoin);
-
-        assert!(trusted_certificate(&saved, &saved.url).is_none());
-    }
-
-    /// Dropping the settings on the way in is how the trust prompt turned into a
-    /// question asked on every save.
-    #[test]
-    fn saving_a_node_may_not_forget_the_certificate_it_trusts() {
-        let saved = pinned("ssl://node.example.com:50002");
-
-        let forgetful = Node { tls: None, ..saved.clone() };
-        assert!(would_forget_certificate(&saved, &forgetful));
-
-        assert!(!would_forget_certificate(&saved, &saved));
-        assert!(!would_forget_certificate(&Node::default(Network::Bitcoin), &forgetful));
-
-        // A different url has its own trust, so it is not being forgotten.
-        let elsewhere =
-            Node { tls: None, url: "ssl://other.example.com:50002".to_string(), ..saved.clone() };
-        assert!(!would_forget_certificate(&saved, &elsewhere));
+        assert_eq!(node.tls, None);
     }
 
     #[test]
     fn a_url_without_a_host_is_rejected() {
-        assert!(parse("ssl://nodomain:50002").is_err());
+        let url = parse_node_url("ssl://nodomain:50002").unwrap();
+        assert!(!has_usable_host(&url));
     }
 }
