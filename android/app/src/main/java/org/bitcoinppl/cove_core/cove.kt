@@ -1811,7 +1811,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_certificate_decision(
     ): Short
-    external fun uniffi_cove_checksum_method_nodeselector_check_and_save_node(
+    external fun uniffi_cove_checksum_method_nodeselector_check_node(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
     ): Short
@@ -1820,6 +1820,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_nodeselector_node_list(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
+    ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_save_node(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_select_preset_node(
     ): Short
@@ -3073,7 +3075,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_certificate_decision(`ptr`: Long,`url`: RustBuffer.ByValue,
     ): Long
-    external fun uniffi_cove_fn_method_nodeselector_check_and_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
+    external fun uniffi_cove_fn_method_nodeselector_check_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
@@ -3081,8 +3083,10 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,`tls`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,`certificateTrust`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodeselector_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -5022,7 +5026,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_nodeselector_certificate_decision() != 17478.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 42980.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_check_node() != 1658.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244.toShort()) {
@@ -5034,7 +5038,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_nodeselector_node_list() != 26686.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 15006.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 10904.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodeselector_save_node() != 44659.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812.toShort()) {
@@ -17468,9 +17475,9 @@ public interface NodeSelectorInterface {
     suspend fun `certificateDecision`(`url`: kotlin.String): CertificateDecision
 
     /**
-     * Check the node url and set it as selected node if it is valid
+     * Check a node's network connection, including its certificate settings
      */
-    suspend fun `checkAndSaveNode`(`node`: Node)
+    suspend fun `checkNode`(`node`: Node)
 
     suspend fun `checkSelectedNode`(`node`: Node)
 
@@ -17487,7 +17494,12 @@ public interface NodeSelectorInterface {
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `tls`: TlsTrust? = null): Node
+    fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `certificateTrust`: EndpointCertificateTrust? = null): Node
+
+    /**
+     * Save a node after its network connection has been checked
+     */
+    suspend fun `saveNode`(`node`: Node)
 
     fun `selectPresetNode`(`name`: kotlin.String): Node
 
@@ -17635,14 +17647,14 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
 
     /**
-     * Check the node url and set it as selected node if it is valid
+     * Check a node's network connection, including its certificate settings
      */
     @Throws(NodeSelectorException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `checkAndSaveNode`(`node`: Node) {
+    override suspend fun `checkNode`(`node`: Node) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_nodeselector_check_and_save_node(
+            UniffiLib.uniffi_cove_fn_method_nodeselector_check_node(
                 uniffiHandle,
 
         FfiConverterTypeNode.lower(`node`),
@@ -17727,7 +17739,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    @Throws(NodeSelectorException::class)override fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `tls`: TlsTrust?): Node {
+    @Throws(NodeSelectorException::class)override fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String, `certificateTrust`: EndpointCertificateTrust?): Node {
             return FfiConverterTypeNode.lift(
     callWithHandle {
     uniffiRustCallWithError(NodeSelectorException) { _status ->
@@ -17737,12 +17749,38 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
         FfiConverterString.lower(`url`),
         FfiConverterString.lower(`name`),
         FfiConverterString.lower(`enteredName`),
-        FfiConverterOptionalTypeTlsTrust.lower(`tls`),_status)
+        FfiConverterOptionalTypeEndpointCertificateTrust.lower(`certificateTrust`),_status)
 }
     }
     )
     }
 
+
+
+    /**
+     * Save a node after its network connection has been checked
+     */
+    @Throws(NodeSelectorException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `saveNode`(`node`: Node) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_nodeselector_save_node(
+                uniffiHandle,
+
+        FfiConverterTypeNode.lower(`node`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        NodeSelectorException.ErrorHandler,
+    )
+    }
 
 
     @Throws(NodeSelectorException::class)override fun `selectPresetNode`(`name`: kotlin.String): Node {
@@ -32641,6 +32679,53 @@ public object FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer<Diag
 
 
 
+/**
+ * Certificate trust accepted for one canonical endpoint
+ */
+data class EndpointCertificateTrust (
+    /**
+     * The endpoint URL that the user trusted
+     */
+    var `endpoint`: kotlin.String
+    ,
+    /**
+     * How the endpoint's certificate is trusted
+     */
+    var `tls`: TlsTrust
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeEndpointCertificateTrust: FfiConverterRustBuffer<EndpointCertificateTrust> {
+    override fun read(buf: ByteBuffer): EndpointCertificateTrust {
+        return EndpointCertificateTrust(
+            FfiConverterString.read(buf),
+            FfiConverterTypeTlsTrust.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: EndpointCertificateTrust) = (
+            FfiConverterString.allocationSize(value.`endpoint`) +
+            FfiConverterTypeTlsTrust.allocationSize(value.`tls`)
+    )
+
+    override fun write(value: EndpointCertificateTrust, buf: ByteBuffer) {
+            FfiConverterString.write(value.`endpoint`, buf)
+            FfiConverterTypeTlsTrust.write(value.`tls`, buf)
+    }
+}
+
+
+
 data class FeeResponse (
     var `fastestFee`: kotlin.Float
     ,
@@ -45988,6 +46073,12 @@ sealed class GlobalConfigKey {
         companion object
     }
 
+    /**
+     * Stores certificate trust by normalized Electrum endpoint
+     */
+    object CertificateTrustStore : GlobalConfigKey()
+
+
     object ColorScheme : GlobalConfigKey()
 
 
@@ -46049,17 +46140,18 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             4 -> GlobalConfigKey.SelectedNode(
                 FfiConverterTypeNetwork.read(buf),
                 )
-            5 -> GlobalConfigKey.ColorScheme
-            6 -> GlobalConfigKey.AuthType
-            7 -> GlobalConfigKey.HashedPinCode
-            8 -> GlobalConfigKey.WipeDataPin
-            9 -> GlobalConfigKey.DecoyPin
-            10 -> GlobalConfigKey.InDecoyMode
-            11 -> GlobalConfigKey.MainSelectedWalletId
-            12 -> GlobalConfigKey.DecoySelectedWalletId
-            13 -> GlobalConfigKey.LockedAt
-            14 -> GlobalConfigKey.OnboardingProgress
-            15 -> GlobalConfigKey.CustomBlockExplorer(
+            5 -> GlobalConfigKey.CertificateTrustStore
+            6 -> GlobalConfigKey.ColorScheme
+            7 -> GlobalConfigKey.AuthType
+            8 -> GlobalConfigKey.HashedPinCode
+            9 -> GlobalConfigKey.WipeDataPin
+            10 -> GlobalConfigKey.DecoyPin
+            11 -> GlobalConfigKey.InDecoyMode
+            12 -> GlobalConfigKey.MainSelectedWalletId
+            13 -> GlobalConfigKey.DecoySelectedWalletId
+            14 -> GlobalConfigKey.LockedAt
+            15 -> GlobalConfigKey.OnboardingProgress
+            16 -> GlobalConfigKey.CustomBlockExplorer(
                 FfiConverterTypeNetwork.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -46090,6 +46182,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             (
                 4UL
                 + FfiConverterTypeNetwork.allocationSize(value.v1)
+            )
+        }
+        is GlobalConfigKey.CertificateTrustStore -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
             )
         }
         is GlobalConfigKey.ColorScheme -> {
@@ -46180,48 +46278,52 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 FfiConverterTypeNetwork.write(value.v1, buf)
                 Unit
             }
-            is GlobalConfigKey.ColorScheme -> {
+            is GlobalConfigKey.CertificateTrustStore -> {
                 buf.putInt(5)
                 Unit
             }
-            is GlobalConfigKey.AuthType -> {
+            is GlobalConfigKey.ColorScheme -> {
                 buf.putInt(6)
                 Unit
             }
-            is GlobalConfigKey.HashedPinCode -> {
+            is GlobalConfigKey.AuthType -> {
                 buf.putInt(7)
                 Unit
             }
-            is GlobalConfigKey.WipeDataPin -> {
+            is GlobalConfigKey.HashedPinCode -> {
                 buf.putInt(8)
                 Unit
             }
-            is GlobalConfigKey.DecoyPin -> {
+            is GlobalConfigKey.WipeDataPin -> {
                 buf.putInt(9)
                 Unit
             }
-            is GlobalConfigKey.InDecoyMode -> {
+            is GlobalConfigKey.DecoyPin -> {
                 buf.putInt(10)
                 Unit
             }
-            is GlobalConfigKey.MainSelectedWalletId -> {
+            is GlobalConfigKey.InDecoyMode -> {
                 buf.putInt(11)
                 Unit
             }
-            is GlobalConfigKey.DecoySelectedWalletId -> {
+            is GlobalConfigKey.MainSelectedWalletId -> {
                 buf.putInt(12)
                 Unit
             }
-            is GlobalConfigKey.LockedAt -> {
+            is GlobalConfigKey.DecoySelectedWalletId -> {
                 buf.putInt(13)
                 Unit
             }
-            is GlobalConfigKey.OnboardingProgress -> {
+            is GlobalConfigKey.LockedAt -> {
                 buf.putInt(14)
                 Unit
             }
-            is GlobalConfigKey.CustomBlockExplorer -> {
+            is GlobalConfigKey.OnboardingProgress -> {
                 buf.putInt(15)
+                Unit
+            }
+            is GlobalConfigKey.CustomBlockExplorer -> {
+                buf.putInt(16)
                 FfiConverterTypeNetwork.write(value.v1, buf)
                 Unit
             }
@@ -46267,6 +46369,28 @@ sealed class GlobalConfigTableException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * Reports malformed or invalid persisted certificate trust data
+     */
+    class InvalidCertificateTrustStore(
+
+        val v1: kotlin.String
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * Reports an attempt to replace a remembered certificate with another one
+     */
+    class CertificateTrustConflict(
+
+        val v1: kotlin.String
+        ) : GlobalConfigTableException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
 
 
 
@@ -46305,6 +46429,12 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             4 -> GlobalConfigTableException.InvalidCustomBlockExplorer(
                 FfiConverterString.read(buf),
                 )
+            5 -> GlobalConfigTableException.InvalidCertificateTrustStore(
+                FfiConverterString.read(buf),
+                )
+            6 -> GlobalConfigTableException.CertificateTrustConflict(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -46330,6 +46460,16 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is GlobalConfigTableException.InvalidCertificateTrustStore -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is GlobalConfigTableException.CertificateTrustConflict -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
         }
     }
 
@@ -46351,6 +46491,16 @@ public object FfiConverterTypeGlobalConfigTableError : FfiConverterRustBuffer<Gl
             }
             is GlobalConfigTableException.InvalidCustomBlockExplorer -> {
                 buf.putInt(4)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is GlobalConfigTableException.InvalidCertificateTrustStore -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is GlobalConfigTableException.CertificateTrustConflict -> {
+                buf.putInt(6)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -50689,10 +50839,15 @@ sealed class NodeSelectorException: kotlin.Exception() {
             get() = ""
     }
 
-    class CertificateWouldBeForgotten(
+    /**
+     * Reports an invalid persisted certificate trust store
+     */
+    class CertificateTrustStoreException(
+
+        val v1: kotlin.String
         ) : NodeSelectorException() {
         override val message
-            get() = ""
+            get() = "v1=${ v1 }"
     }
 
 
@@ -50730,7 +50885,9 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 FfiConverterString.read(buf),
                 )
             6 -> NodeSelectorException.CertificateNotTrusted()
-            7 -> NodeSelectorException.CertificateWouldBeForgotten()
+            7 -> NodeSelectorException.CertificateTrustStoreException(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -50766,9 +50923,10 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is NodeSelectorException.CertificateWouldBeForgotten -> (
+            is NodeSelectorException.CertificateTrustStoreException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
         }
     }
@@ -50804,8 +50962,9 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 buf.putInt(6)
                 Unit
             }
-            is NodeSelectorException.CertificateWouldBeForgotten -> {
+            is NodeSelectorException.CertificateTrustStoreException -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -64601,6 +64760,38 @@ public object FfiConverterOptionalTypeDeriveInfo: FfiConverterRustBuffer<DeriveI
         } else {
             buf.put(1)
             FfiConverterTypeDeriveInfo.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeEndpointCertificateTrust: FfiConverterRustBuffer<EndpointCertificateTrust?> {
+    override fun read(buf: ByteBuffer): EndpointCertificateTrust? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeEndpointCertificateTrust.read(buf)
+    }
+
+    override fun allocationSize(value: EndpointCertificateTrust?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeEndpointCertificateTrust.allocationSize(value)
+        }
+    }
+
+    override fun write(value: EndpointCertificateTrust?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeEndpointCertificateTrust.write(value, buf)
         }
     }
 }
