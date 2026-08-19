@@ -72,44 +72,25 @@ struct BackupImportView: View {
     }
 
     var body: some View {
-        Form {
-            if let report = verifyReport {
-                if conflictWalletCount > 0 {
-                    BackupImportConflictSummarySection(walletCount: conflictWalletCount)
-                }
-
-                BackupImportConfirmationContent(
-                    report: report,
-                    isImporting: isImporting,
-                    onConfirmImport: presentImportConfirmation,
-                    onBack: showBackupSelection
-                )
-            } else {
-                BackupFileSelectionSection(
-                    fileName: fileName,
-                    hasFile: fileData != nil,
-                    onSelectFile: presentFilePicker
-                )
-
-                BackupCredentialsSections(
-                    isPresented: fileData != nil,
-                    password: $password,
-                    isPasswordVisible: $isPasswordVisible,
-                    isPasswordValid: isPasswordValid,
-                    actionTitle: "Preview Backup",
-                    isRunning: isVerifying,
-                    onRetrievePassword: retrieveFromPasswords,
-                    action: verifyBackup
-                )
-            }
-        }
+        BackupImportForm(
+            verifyReport: verifyReport,
+            conflictWalletCount: conflictWalletCount,
+            fileName: fileName,
+            hasFile: fileData != nil,
+            password: $password,
+            isPasswordVisible: $isPasswordVisible,
+            isPasswordValid: isPasswordValid,
+            isImporting: isImporting,
+            isVerifying: isVerifying,
+            onSelectFile: presentFilePicker,
+            onRetrievePassword: retrieveFromPasswords,
+            onVerifyBackup: verifyBackup,
+            onConfirmImport: presentImportConfirmation,
+            onBack: showBackupSelection
+        )
         .onDisappear(perform: handleDisappear)
-        .onChange(of: fileData) { _, _ in
-            invalidateImportReview(clearVerifyReport: true, cancelTask: true)
-        }
-        .onChange(of: password) { _, _ in
-            invalidateImportReview(clearVerifyReport: true, cancelTask: true)
-        }
+        .onChange(of: fileData, initial: false, handleFileDataChange)
+        .onChange(of: password, initial: false, handlePasswordChange)
         .alert("Import Backup?", isPresented: $showConfirmation) {
             Button("Continue", action: prepareImport)
             Button("Cancel", role: .cancel, action: cancelImportConfirmation)
@@ -159,6 +140,14 @@ struct BackupImportView: View {
         password = ""
         fileData = nil
         fileName = nil
+    }
+
+    private func handleFileDataChange(_: Data?, _: Data?) {
+        invalidateImportReview(clearVerifyReport: true, cancelTask: true)
+    }
+
+    private func handlePasswordChange(_: String, _: String) {
+        invalidateImportReview(clearVerifyReport: true, cancelTask: true)
     }
 
     private var cleanupWarningMessage: String {
@@ -419,16 +408,69 @@ struct BackupImportView: View {
     }
 }
 
+private struct BackupImportForm: View {
+    let verifyReport: BackupVerifyReport?
+    let conflictWalletCount: Int
+    let fileName: String?
+    let hasFile: Bool
+    @Binding var password: String
+    @Binding var isPasswordVisible: Bool
+    let isPasswordValid: Bool
+    let isImporting: Bool
+    let isVerifying: Bool
+    let onSelectFile: () -> Void
+    let onRetrievePassword: () -> Void
+    let onVerifyBackup: () -> Void
+    let onConfirmImport: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        Form {
+            if let verifyReport {
+                if conflictWalletCount > 0 {
+                    BackupImportConflictSummarySection(walletCount: conflictWalletCount)
+                }
+
+                BackupImportConfirmationContent(
+                    report: verifyReport,
+                    isImporting: isImporting,
+                    onConfirmImport: onConfirmImport,
+                    onBack: onBack
+                )
+            } else {
+                BackupFileSelectionSection(
+                    fileName: fileName,
+                    hasFile: hasFile,
+                    onSelectFile: onSelectFile
+                )
+
+                BackupCredentialsSections(
+                    isPresented: hasFile,
+                    password: $password,
+                    isPasswordVisible: $isPasswordVisible,
+                    isPasswordValid: isPasswordValid,
+                    actionTitle: "Preview Backup",
+                    isRunning: isVerifying,
+                    onRetrievePassword: onRetrievePassword,
+                    action: onVerifyBackup
+                )
+            }
+        }
+    }
+}
+
 private struct BackupImportConflictSummarySection: View {
     let walletCount: Int
 
     var body: some View {
-        Section("Import Review") {
+        Section {
             Label(
                 summaryText,
                 systemImage: "exclamationmark.triangle.fill"
             )
             .foregroundStyle(.orange)
+        } header: {
+            Text("Import Review")
         } footer: {
             Text("The backup has existing wallet data without a matching wallet record.")
         }
