@@ -1899,9 +1899,17 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_headericonpresenter_ring_color(
     ): Short
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_can_retry(
+    ): Short
     external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_error(
     ): Short
     external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_id(
+    ): Short
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_backup(
+    ): Short
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_change(
+    ): Short
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_derive(
     ): Short
     external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_message(
     ): Short
@@ -3245,10 +3253,18 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_tapsigneroperationcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_can_retry(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_error(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_backup(`ptr`: Long,`cvc`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_change(`ptr`: Long,`currentCvc`: Long,`newCvc`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_derive(`ptr`: Long,`cvc`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_message(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -5220,10 +5236,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_headericonpresenter_ring_color() != 13077.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_can_retry() != 25356.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_error() != 35579.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_id() != 10770.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_backup() != 27295.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_change() != 3346.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_derive() != 26723.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_message() != 38050.toShort()) {
@@ -27227,6 +27255,11 @@ public object FfiConverterTypeTapSignerCvc: FfiConverter<TapSignerCvc, Long> {
 public interface TapSignerOperationContinuationInterface {
 
     /**
+     * Return whether this continuation can be passed to another retry attempt
+     */
+    fun `canRetry`(): kotlin.Boolean
+
+    /**
      * Return the typed error that caused this continuation
      */
     fun `error`(): TapSignerReaderException
@@ -27235,6 +27268,21 @@ public interface TapSignerOperationContinuationInterface {
      * Return the stable id of this continuation
      */
     fun `id`(): kotlin.String
+
+    /**
+     * Return whether this continuation stores the supplied CVC for a backup
+     */
+    fun `matchesBackup`(`cvc`: TapSignerCvc): kotlin.Boolean
+
+    /**
+     * Return whether this continuation stores both supplied CVCs for a change
+     */
+    fun `matchesChange`(`currentCvc`: TapSignerCvc, `newCvc`: TapSignerCvc): kotlin.Boolean
+
+    /**
+     * Return whether this continuation stores the supplied CVC for derivation
+     */
+    fun `matchesDerive`(`cvc`: TapSignerCvc): kotlin.Boolean
 
     /**
      * Return a safe user-facing description of the continuation stage
@@ -27350,6 +27398,22 @@ open class TapSignerOperationContinuation: Disposable, AutoCloseable, TapSignerO
 
 
     /**
+     * Return whether this continuation can be passed to another retry attempt
+     */override fun `canRetry`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_can_retry(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
      * Return the typed error that caused this continuation
      */override fun `error`(): TapSignerReaderException {
             return FfiConverterTypeTapSignerReaderError.lift(
@@ -27374,6 +27438,58 @@ open class TapSignerOperationContinuation: Disposable, AutoCloseable, TapSignerO
     UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_id(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return whether this continuation stores the supplied CVC for a backup
+     */override fun `matchesBackup`(`cvc`: TapSignerCvc): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_backup(
+        it,
+
+        FfiConverterTypeTapSignerCvc.lower(`cvc`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return whether this continuation stores both supplied CVCs for a change
+     */override fun `matchesChange`(`currentCvc`: TapSignerCvc, `newCvc`: TapSignerCvc): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_change(
+        it,
+
+        FfiConverterTypeTapSignerCvc.lower(`currentCvc`),
+        FfiConverterTypeTapSignerCvc.lower(`newCvc`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return whether this continuation stores the supplied CVC for derivation
+     */override fun `matchesDerive`(`cvc`: TapSignerCvc): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_derive(
+        it,
+
+        FfiConverterTypeTapSignerCvc.lower(`cvc`),_status)
 }
     }
     )

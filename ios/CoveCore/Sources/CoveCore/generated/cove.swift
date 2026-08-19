@@ -12374,6 +12374,11 @@ public func FfiConverterTypeTapSignerCvc_lower(_ value: TapSignerCvc) -> UInt64 
 public protocol TapSignerOperationContinuationProtocol: AnyObject, Sendable {
 
     /**
+     * Return whether this continuation can be passed to another retry attempt
+     */
+    func canRetry()  -> Bool
+
+    /**
      * Return the typed error that caused this continuation
      */
     func error()  -> TapSignerReaderError
@@ -12382,6 +12387,21 @@ public protocol TapSignerOperationContinuationProtocol: AnyObject, Sendable {
      * Return the stable id of this continuation
      */
     func id()  -> String
+
+    /**
+     * Return whether this continuation stores the supplied CVC for a backup
+     */
+    func matchesBackup(cvc: TapSignerCvc)  -> Bool
+
+    /**
+     * Return whether this continuation stores both supplied CVCs for a change
+     */
+    func matchesChange(currentCvc: TapSignerCvc, newCvc: TapSignerCvc)  -> Bool
+
+    /**
+     * Return whether this continuation stores the supplied CVC for derivation
+     */
+    func matchesDerive(cvc: TapSignerCvc)  -> Bool
 
     /**
      * Return a safe user-facing description of the continuation stage
@@ -12446,6 +12466,18 @@ open class TapSignerOperationContinuation: TapSignerOperationContinuationProtoco
 
 
     /**
+     * Return whether this continuation can be passed to another retry attempt
+     */
+open func canRetry() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_tapsigneroperationcontinuation_can_retry(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
      * Return the typed error that caused this continuation
      */
 open func error() -> TapSignerReaderError  {
@@ -12465,6 +12497,46 @@ open func id() -> String  {
         uniffiCallStatus in
     uniffi_cove_fn_method_tapsigneroperationcontinuation_id(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Return whether this continuation stores the supplied CVC for a backup
+     */
+open func matchesBackup(cvc: TapSignerCvc) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_backup(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTapSignerCvc_lower(cvc),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Return whether this continuation stores both supplied CVCs for a change
+     */
+open func matchesChange(currentCvc: TapSignerCvc, newCvc: TapSignerCvc) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_change(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTapSignerCvc_lower(currentCvc),
+        FfiConverterTypeTapSignerCvc_lower(newCvc),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Return whether this continuation stores the supplied CVC for derivation
+     */
+open func matchesDerive(cvc: TapSignerCvc) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_derive(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTapSignerCvc_lower(cvc),uniffiCallStatus
     )
 })
 }
@@ -47146,10 +47218,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_headericonpresenter_ring_color() != 13077) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_can_retry() != 25356) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_error() != 35579) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_id() != 10770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_backup() != 27295) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_change() != 3346) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_derive() != 26723) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsigneroperationcontinuation_message() != 38050) {

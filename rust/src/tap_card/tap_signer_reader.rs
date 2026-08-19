@@ -695,6 +695,45 @@ impl TapSignerOperationContinuation {
         self.stage.error().clone()
     }
 
+    /// Return whether this continuation can be passed to another retry attempt
+    pub fn can_retry(&self) -> bool {
+        !self.claimed.load(Ordering::Acquire)
+    }
+
+    /// Return whether this continuation stores the supplied CVC for a backup
+    pub fn matches_backup(&self, cvc: Arc<TapSignerCvc>) -> bool {
+        matches!(
+            self.stage(),
+            OperationContinuationStage::Backup { cvc: stored_cvc, .. }
+                if stored_cvc == &cvc
+        )
+    }
+
+    /// Return whether this continuation stores the supplied CVC for derivation
+    pub fn matches_derive(&self, cvc: Arc<TapSignerCvc>) -> bool {
+        matches!(
+            self.stage(),
+            OperationContinuationStage::Derive { cvc: stored_cvc, .. }
+                if stored_cvc == &cvc
+        )
+    }
+
+    /// Return whether this continuation stores both supplied CVCs for a change
+    pub fn matches_change(
+        &self,
+        current_cvc: Arc<TapSignerCvc>,
+        new_cvc: Arc<TapSignerCvc>,
+    ) -> bool {
+        matches!(
+            self.stage(),
+            OperationContinuationStage::Change {
+                current_cvc: stored_current_cvc,
+                new_cvc: stored_new_cvc,
+                ..
+            } if stored_current_cvc == &current_cvc && stored_new_cvc == &new_cvc
+        )
+    }
+
     /// Return a safe user-facing description of the continuation stage
     pub fn message(&self) -> String {
         match self.stage {
@@ -2128,6 +2167,69 @@ mod tests {
         assert_ne!(retried.error(), continuation.error());
         assert!(continuation.claim());
         assert!(!continuation.claim());
+    }
+
+    #[test]
+    fn operation_continuation_retry_state_tracks_shared_claims() {
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let continuation = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Derive { cvc, error: TapSignerReaderError::NoCommand },
+        );
+        let cloned = continuation.clone();
+
+        assert!(continuation.can_retry());
+        assert!(cloned.can_retry());
+        assert!(continuation.claim());
+        assert!(!continuation.can_retry());
+        assert!(!cloned.can_retry());
+        assert!(!cloned.claim());
+
+        let retried = continuation.retry_with_error(TapSignerReaderError::ManualRecoveryRequired);
+        assert!(retried.can_retry());
+    }
+
+    #[test]
+    fn operation_continuation_matches_complete_cvc_arguments() {
+        let backup_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let derive_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
+        let current_cvc = Arc::new(TapSignerCvc::try_new("112233".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("445566".to_string()).unwrap());
+        let other_cvc = Arc::new(TapSignerCvc::try_new("778899".to_string()).unwrap());
+
+        let backup = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Backup {
+                cvc: backup_cvc.clone(),
+                pre_backup_count: Some(1),
+                backup: None,
+                error: TapSignerReaderError::NoCommand,
+            },
+        );
+        assert!(backup.matches_backup(backup_cvc.clone()));
+        assert!(!backup.matches_backup(other_cvc.clone()));
+
+        let derive = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Derive {
+                cvc: derive_cvc.clone(),
+                error: TapSignerReaderError::NoCommand,
+            },
+        );
+        assert!(derive.matches_derive(derive_cvc.clone()));
+        assert!(!derive.matches_derive(other_cvc.clone()));
+
+        let change = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Change {
+                current_cvc: current_cvc.clone(),
+                new_cvc: new_cvc.clone(),
+                error: TapSignerReaderError::NoCommand,
+            },
+        );
+        assert!(change.matches_change(current_cvc.clone(), new_cvc.clone()));
+        assert!(!change.matches_change(other_cvc.clone(), new_cvc.clone()));
+        assert!(!change.matches_change(current_cvc, other_cvc));
     }
 
     #[test]

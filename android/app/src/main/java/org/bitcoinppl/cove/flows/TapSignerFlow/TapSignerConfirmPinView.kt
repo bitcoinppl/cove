@@ -258,6 +258,9 @@ private suspend fun changeTapSignerPin(
     }
 
     when {
+        error is TapSignerOperationRetryException -> {
+            manager.errorMessage = "The CVC change needs another scan of the same card. Please try again"
+        }
         isAuthError(error) -> {
             app.sheetState = null
             app.alertState =
