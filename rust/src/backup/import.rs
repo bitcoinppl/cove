@@ -26,7 +26,9 @@ use crate::wallet_secret::WalletSecretExt as _;
 
 use super::crypto;
 use super::error::BackupError;
-use super::model::{BackupImportReport, BackupPayload, WalletBackup, WalletSecret};
+use super::model::{
+    BackupCertificateTrustStore, BackupImportReport, BackupPayload, WalletBackup, WalletSecret,
+};
 
 pub async fn import_all(
     data: Vec<u8>,
@@ -721,7 +723,13 @@ pub(crate) fn restore_wallet_labels(
 }
 
 fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupError> {
-    let config = &Database::global().global_config;
+    restore_settings_with_config(&Database::global().global_config, settings)
+}
+
+fn restore_settings_with_config(
+    config: &GlobalConfigTable,
+    settings: &super::model::AppSettings,
+) -> Result<(), BackupError> {
     let mut errors = Vec::new();
 
     // skip SelectedNetwork — network is device-specific
@@ -738,18 +746,42 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
         errors.push(format!("color scheme: {e}"));
     }
 
+    match &settings.certificate_trust_store {
+        BackupCertificateTrustStore::Valid(store) => {
+            match config.restore_certificate_trust_store(store) {
+                Ok(report) => {
+                    errors.extend(report.conflicting_endpoints.into_iter().map(|endpoint| {
+                        format!("certificate trust store conflict for endpoint {endpoint}")
+                    }));
+                }
+                Err(error) => errors.push(format!("certificate trust store: {error}")),
+            }
+        }
+        BackupCertificateTrustStore::Invalid { error, .. } => {
+            errors.push(format!("certificate trust store: {error}"));
+        }
+    }
+
     for (network_str, node_json) in &settings.selected_nodes {
         let Ok(network) = Network::try_from(network_str.as_str()) else {
             warn!("skipping unknown network in selected_nodes: {network_str}");
             continue;
         };
 
-        if let Err(e) = serde_json::from_str::<crate::node::Node>(node_json) {
-            warn!("skipping invalid node config for {network_str}: {e}");
+        let Ok(node) = serde_json::from_str::<crate::node::Node>(node_json) else {
+            warn!("skipping invalid node config for {network_str}");
+            continue;
+        };
+
+        if node.network != network {
+            warn!(
+                "skipping node config for {network_str} with mismatched network {}",
+                node.network
+            );
             continue;
         }
 
-        if let Err(e) = config.set(GlobalConfigKey::SelectedNode(network), node_json.clone()) {
+        if let Err(e) = config.set_selected_node(&node) {
             errors.push(format!("node for {network_str}: {e}"));
         }
     }
@@ -908,6 +940,46 @@ mod tests {
             Some("https://existing.example/tx/{txid}")
         );
         assert_eq!(config.custom_block_explorer(Network::Signet), None);
+    }
+
+    #[test]
+    fn invalid_backed_up_trust_is_a_settings_error_after_payload_decode() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        let json = serde_json::json!({
+            "version": super::super::model::PAYLOAD_VERSION,
+            "created_at": 1700000000_u64,
+            "wallets": [{
+                "metadata": { "name": "Wallet survives invalid settings" },
+                "secret": "None",
+                "descriptors": null,
+                "xpub": null,
+                "labels_jsonl": null
+            }],
+            "settings": {
+                "selected_fiat_currency": "USD",
+                "selected_nodes": [],
+                "certificate_trust_store": {
+                    "tcp://node.example.com:50001": {
+                        "PinnedFingerprint": { "sha256": [1, 2, 3] }
+                    }
+                }
+            }
+        });
+        let payload = BackupPayload::decode(serde_json::to_vec(&json).unwrap().as_slice()).unwrap();
+
+        assert_eq!(payload.wallets.len(), 1);
+
+        let error = restore_settings_with_config(&config, &payload.settings).unwrap_err();
+        assert!(matches!(
+            error,
+            BackupError::Database(message)
+                if message.contains("certificate trust store")
+        ));
+        assert_eq!(
+            config.get(GlobalConfigKey::SelectedFiatCurrency).unwrap(),
+            Some("USD".to_string())
+        );
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {

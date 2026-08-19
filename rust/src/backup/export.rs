@@ -17,7 +17,8 @@ use crate::wallet::metadata::{WalletMode, WalletType};
 use super::crypto;
 use super::error::BackupError;
 use super::model::{
-    AppSettings, BackupPayload, BackupResult, DescriptorPair, WalletBackup, WalletSecret,
+    AppSettings, BackupCertificateTrustStore, BackupPayload, BackupResult, DescriptorPair,
+    WalletBackup, WalletSecret,
 };
 
 struct BackupExporter {
@@ -156,6 +157,8 @@ impl BackupExporter {
         let selected_network = self.get_config(GlobalConfigKey::SelectedNetwork);
         let selected_fiat_currency = self.get_config(GlobalConfigKey::SelectedFiatCurrency);
         let color_scheme = self.get_config(GlobalConfigKey::ColorScheme);
+        let certificate_trust_store =
+            gather_certificate_trust_store(&self.db.global_config, &mut self.warnings)?;
 
         let mut selected_nodes = Vec::new();
         for network in Network::iter() {
@@ -172,6 +175,7 @@ impl BackupExporter {
             color_scheme,
             selected_nodes,
             custom_block_explorers,
+            certificate_trust_store,
         })
     }
 
@@ -185,6 +189,24 @@ impl BackupExporter {
             }
         }
     }
+}
+
+fn gather_certificate_trust_store(
+    config: &GlobalConfigTable,
+    warnings: &mut Vec<String>,
+) -> Result<BackupCertificateTrustStore, BackupError> {
+    let raw = config
+        .get(GlobalConfigKey::CertificateTrustStore)
+        .map_err(|error| BackupError::Database(error.to_string()))?;
+    let certificate_trust_store = BackupCertificateTrustStore::from_stored_value(raw);
+
+    if let BackupCertificateTrustStore::Invalid { .. } = &certificate_trust_store {
+        let warning = "Certificate trust settings are invalid; preserved for restore".to_string();
+        warn!("{warning}");
+        warnings.push(warning);
+    }
+
+    Ok(certificate_trust_store)
 }
 
 fn gather_custom_block_explorers(config: &GlobalConfigTable) -> BTreeMap<String, String> {
@@ -276,6 +298,67 @@ mod tests {
             explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+    }
+
+    #[test]
+    fn invalid_local_certificate_trust_is_preserved_with_a_warning_and_payload_continues() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        let raw_values = [
+            (
+                "{not valid json".to_string(),
+                serde_json::Value::String("{not valid json".to_string()),
+            ),
+            (
+                serde_json::json!({
+                    "tcp://node.example.com:50001": {
+                        "PinnedFingerprint": { "sha256": [1, 2, 3] }
+                    }
+                })
+                .to_string(),
+                serde_json::json!({
+                    "tcp://node.example.com:50001": {
+                        "PinnedFingerprint": { "sha256": [1, 2, 3] }
+                    }
+                }),
+            ),
+        ];
+
+        for (raw, expected_raw) in raw_values {
+            config.set(GlobalConfigKey::CertificateTrustStore, raw).unwrap();
+
+            let mut warnings = Vec::new();
+            let certificate_trust_store =
+                gather_certificate_trust_store(&config, &mut warnings).unwrap();
+
+            assert!(matches!(
+                &certificate_trust_store,
+                BackupCertificateTrustStore::Invalid { raw: value, .. } if value == &expected_raw
+            ));
+
+            let payload = BackupPayload::try_new(
+                Vec::new(),
+                AppSettings {
+                    selected_network: None,
+                    selected_fiat_currency: None,
+                    color_scheme: None,
+                    selected_nodes: Vec::new(),
+                    custom_block_explorers: BTreeMap::new(),
+                    certificate_trust_store,
+                },
+            )
+            .unwrap();
+
+            assert!(payload.wallets.is_empty());
+            assert!(matches!(
+                payload.settings.certificate_trust_store,
+                BackupCertificateTrustStore::Invalid { .. }
+            ));
+            assert_eq!(
+                warnings,
+                vec!["Certificate trust settings are invalid; preserved for restore".to_string()]
+            );
+        }
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {

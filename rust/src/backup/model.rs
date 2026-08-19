@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroize;
 
+use crate::database::global_config::CertificateTrustStore;
 use crate::wallet::metadata::WalletType;
 use cove_types::network::Network;
 use cove_util::ResultExt as _;
@@ -138,6 +139,72 @@ impl Drop for WalletBackup {
     }
 }
 
+/// Certificate trust state at the backup boundary
+#[derive(Debug, Clone, PartialEq)]
+pub enum BackupCertificateTrustStore {
+    /// A certificate trust map that passed all endpoint and TLS validation
+    Valid(CertificateTrustStore),
+    /// A trust map that was retained as invalid so other backup data can restore
+    Invalid {
+        /// Validation error from the certificate trust store
+        error: String,
+        /// Original JSON value, retained for payload round trips
+        raw: serde_json::Value,
+    },
+}
+
+impl Default for BackupCertificateTrustStore {
+    fn default() -> Self {
+        Self::Valid(CertificateTrustStore::default())
+    }
+}
+
+impl BackupCertificateTrustStore {
+    /// Converts a raw durable value without discarding invalid settings
+    pub(crate) fn from_stored_value(raw: Option<String>) -> Self {
+        let Some(raw) = raw else {
+            return Self::default();
+        };
+
+        match serde_json::from_str(&raw) {
+            Ok(value) => Self::from_raw_value(value),
+            Err(error) => {
+                Self::Invalid { error: error.to_string(), raw: serde_json::Value::String(raw) }
+            }
+        }
+    }
+
+    fn from_raw_value(raw: serde_json::Value) -> Self {
+        match serde_json::from_value::<CertificateTrustStore>(raw.clone()) {
+            Ok(store) => Self::Valid(store),
+            Err(error) => Self::Invalid { error: error.to_string(), raw },
+        }
+    }
+}
+
+impl Serialize for BackupCertificateTrustStore {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Valid(store) => store.serialize(serializer),
+            Self::Invalid { raw, .. } => raw.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for BackupCertificateTrustStore {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = serde_json::Value::deserialize(deserializer)?;
+
+        Ok(Self::from_raw_value(raw))
+    }
+}
+
 /// App-level settings to back up (excludes security-sensitive items)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppSettings {
@@ -150,6 +217,9 @@ pub struct AppSettings {
     /// Per-network normalized custom transaction explorer templates
     #[serde(default)]
     pub custom_block_explorers: BTreeMap<String, String>,
+    /// Remembered certificate trust for custom SSL Electrum endpoints
+    #[serde(default)]
+    pub certificate_trust_store: BackupCertificateTrustStore,
 }
 
 /// Result of a successful backup export
@@ -283,6 +353,7 @@ mod tests {
                     "Bitcoin".to_string(),
                     "https://example.com/tx/{txid}".to_string(),
                 )]),
+                certificate_trust_store: BackupCertificateTrustStore::default(),
             },
         }
     }
@@ -472,6 +543,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: vec![],
                 custom_block_explorers: BTreeMap::new(),
+                certificate_trust_store: BackupCertificateTrustStore::default(),
             },
         };
 
@@ -514,6 +586,10 @@ mod tests {
         let payload: BackupPayload = serde_json::from_value(json).unwrap();
 
         assert!(payload.settings.custom_block_explorers.is_empty());
+        assert!(matches!(
+            payload.settings.certificate_trust_store,
+            BackupCertificateTrustStore::Valid(store) if store == CertificateTrustStore::default()
+        ));
     }
 
     #[test]
@@ -546,5 +622,157 @@ mod tests {
         let settings: AppSettings = serde_json::from_value(json).unwrap();
 
         assert!(settings.custom_block_explorers.is_empty());
+        assert!(matches!(
+            settings.certificate_trust_store,
+            BackupCertificateTrustStore::Valid(store) if store == CertificateTrustStore::default()
+        ));
+    }
+
+    #[test]
+    fn certificate_trust_store_roundtrips_with_the_existing_map_shape() {
+        let trust = crate::node::tls::TlsTrust::PinnedFingerprint { sha256: vec![4; 32] };
+        let mut certificate_trust_store = CertificateTrustStore::default();
+        certificate_trust_store
+            .insert_or_match("ssl://node.example.com:50002".to_string(), trust)
+            .unwrap();
+
+        let settings = AppSettings {
+            selected_network: None,
+            selected_fiat_currency: None,
+            color_scheme: None,
+            selected_nodes: vec![],
+            custom_block_explorers: BTreeMap::new(),
+            certificate_trust_store: BackupCertificateTrustStore::Valid(
+                certificate_trust_store.clone(),
+            ),
+        };
+        let encoded = serde_json::to_value(&settings).unwrap();
+
+        assert_eq!(
+            encoded["certificate_trust_store"],
+            serde_json::json!({
+                "ssl://node.example.com:50002": {
+                    "PinnedFingerprint": { "sha256": vec![4; 32] }
+                }
+            })
+        );
+
+        let decoded: AppSettings = serde_json::from_value(encoded).unwrap();
+
+        assert_eq!(
+            decoded.certificate_trust_store,
+            BackupCertificateTrustStore::Valid(certificate_trust_store)
+        );
+    }
+
+    #[test]
+    fn invalid_certificate_trust_does_not_fail_payload_decode() {
+        let invalid_fields = [
+            (
+                serde_json::json!({
+                    "tcp://node.example.com:50001": {
+                        "PinnedFingerprint": { "sha256": [1, 2, 3] }
+                    }
+                }),
+                "invalid endpoint",
+            ),
+            (
+                serde_json::json!({
+                    "ssl://node.example.com:50002": {
+                        "PinnedFingerprint": { "sha256": [1, 2, 3] }
+                    }
+                }),
+                "invalid TLS trust",
+            ),
+            (
+                serde_json::json!({
+                    "ssl://node.example.com:50002": {
+                        "PinnedFingerprint": { "sha256": vec![1; 32] }
+                    },
+                    "ssl://NODE.example.com:50002/path": {
+                        "PinnedFingerprint": { "sha256": vec![2; 32] }
+                    }
+                }),
+                "conflicts for endpoint",
+            ),
+        ];
+
+        for (certificate_trust_store, expected_error) in invalid_fields {
+            let expected_raw = certificate_trust_store.clone();
+            let json = serde_json::json!({
+                "version": PAYLOAD_VERSION,
+                "created_at": 1700000000_u64,
+                "wallets": [],
+                "settings": {
+                    "selected_nodes": [],
+                    "certificate_trust_store": certificate_trust_store,
+                }
+            });
+            let payload = BackupPayload::decode(serde_json::to_vec(&json).unwrap().as_slice())
+                .expect("invalid trust must not abort backup decoding");
+
+            assert!(matches!(
+                &payload.settings.certificate_trust_store,
+                BackupCertificateTrustStore::Invalid { error, .. }
+                    if error.contains(expected_error)
+            ));
+            assert_eq!(
+                serde_json::to_value(&payload).unwrap()["settings"]["certificate_trust_store"],
+                expected_raw
+            );
+        }
+    }
+
+    #[test]
+    fn raw_certificate_trust_values_keep_valid_and_invalid_states() {
+        assert!(matches!(
+            BackupCertificateTrustStore::from_stored_value(None),
+            BackupCertificateTrustStore::Valid(store)
+                if store == CertificateTrustStore::default()
+        ));
+
+        let valid = serde_json::json!({
+            "ssl://node.example.com:50002": {
+                "PinnedFingerprint": { "sha256": vec![5; 32] }
+            }
+        });
+        assert!(matches!(
+            BackupCertificateTrustStore::from_stored_value(Some(valid.to_string())),
+            BackupCertificateTrustStore::Valid(_)
+        ));
+
+        let invalid = serde_json::json!({
+            "ssl://node.example.com:50002": {
+                "PinnedFingerprint": { "sha256": [1, 2, 3] }
+            }
+        });
+        assert!(matches!(
+            BackupCertificateTrustStore::from_stored_value(Some(invalid.to_string())),
+            BackupCertificateTrustStore::Invalid { raw, error }
+                if raw == invalid && error.contains("invalid TLS trust")
+        ));
+
+        let malformed = "{not valid json".to_string();
+        assert!(matches!(
+            BackupCertificateTrustStore::from_stored_value(Some(malformed.clone())),
+            BackupCertificateTrustStore::Invalid { raw, error }
+                if raw == serde_json::Value::String(malformed)
+                    && error.contains("key must be a string")
+        ));
+    }
+
+    #[test]
+    fn invalid_local_trust_does_not_block_wallet_payload_construction() {
+        let mut sample = sample_payload();
+        sample.settings.certificate_trust_store =
+            BackupCertificateTrustStore::from_stored_value(Some("{not valid json".to_string()));
+
+        let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
+
+        assert_eq!(payload.wallets.len(), 1);
+        assert!(matches!(
+            payload.settings.certificate_trust_store,
+            BackupCertificateTrustStore::Invalid { .. }
+        ));
     }
 }

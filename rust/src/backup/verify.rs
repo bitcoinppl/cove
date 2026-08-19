@@ -203,6 +203,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: vec![],
                 custom_block_explorers: Default::default(),
+                certificate_trust_store: Default::default(),
             },
         }
     }
