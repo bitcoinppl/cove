@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-enum NextScreenDialog {
+enum NextScreenDialog: Equatable {
     case import_
     case create
 }
@@ -144,39 +144,22 @@ private struct HotWalletChoiceActions: View {
     var body: some View {
         VStack(spacing: 24) {
             HotWalletChoiceButtons(
-                createWallet: selectCreateWallet,
-                importWallet: selectImportWallet
+                isSheetShown: $isSheetShown,
+                nextScreen: $nextScreen,
+                route: route
             )
         }
-        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
-            HotWalletWordCountOptions(
-                includesImportOptions: nextScreen == .import_,
-                qrRoute: route(.twentyFour, .qr),
-                nfcRoute: route(.twentyFour, .nfc),
-                twelveWordRoute: route(.twelve, .manual),
-                twentyFourWordRoute: route(.twentyFour, .manual)
-            )
-        }
-    }
-
-    private func selectCreateWallet() {
-        isSheetShown = true
-        nextScreen = .create
-    }
-
-    private func selectImportWallet() {
-        isSheetShown = true
-        nextScreen = .import_
     }
 }
 
 private struct HotWalletChoiceButtons: View {
-    let createWallet: () -> Void
-    let importWallet: () -> Void
+    @Binding var isSheetShown: Bool
+    @Binding var nextScreen: NextScreenDialog
+    let route: (NumberOfBip39Words, ImportType) -> Route
 
     var body: some View {
         VStack(spacing: 24) {
-            Button(action: createWallet) {
+            Button(action: selectCreateWallet) {
                 Text("Create new wallet")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -187,15 +170,58 @@ private struct HotWalletChoiceButtons: View {
                     .foregroundColor(.midnightBlue)
                     .cornerRadius(10)
             }
+            .confirmationDialog(
+                "Select Number of Words",
+                isPresented: isPresenting(.create)
+            ) {
+                HotWalletWordCountOptions(
+                    includesImportOptions: false,
+                    qrRoute: route(.twentyFour, .qr),
+                    nfcRoute: route(.twentyFour, .nfc),
+                    twelveWordRoute: route(.twelve, .manual),
+                    twentyFourWordRoute: route(.twentyFour, .manual)
+                )
+            }
 
-            Button(action: importWallet) {
+            Button(action: selectImportWallet) {
                 Text("Import existing wallet")
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .frame(maxWidth: .infinity)
                     .foregroundColor(.white)
             }
+            .confirmationDialog(
+                "Select Number of Words",
+                isPresented: isPresenting(.import_)
+            ) {
+                HotWalletWordCountOptions(
+                    includesImportOptions: true,
+                    qrRoute: route(.twentyFour, .qr),
+                    nfcRoute: route(.twentyFour, .nfc),
+                    twelveWordRoute: route(.twelve, .manual),
+                    twentyFourWordRoute: route(.twentyFour, .manual)
+                )
+            }
         }
+    }
+
+    private func isPresenting(_ choice: NextScreenDialog) -> Binding<Bool> {
+        Binding(
+            get: { isSheetShown && nextScreen == choice },
+            set: { isPresented in
+                if !isPresented, nextScreen == choice { isSheetShown = false }
+            }
+        )
+    }
+
+    private func selectCreateWallet() {
+        nextScreen = .create
+        isSheetShown = true
+    }
+
+    private func selectImportWallet() {
+        nextScreen = .import_
+        isSheetShown = true
     }
 }
 

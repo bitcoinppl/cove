@@ -34,6 +34,8 @@
 		C0D000052F20000000000001 /* SwiftUIIntrospect in Frameworks */ = {isa = PBXBuildFile; productRef = AC85E3B42EE343C300BCEE4B /* SwiftUIIntrospect */; };
 		C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
 		C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */; };
+		C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */; };
+		C0F000032F40000000000001 /* WalletSettingsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -95,6 +97,8 @@
 		C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoveCloudBackupUITestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveCloudBackupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupInventoryFullAppUITests.swift; sourceTree = "<group>"; };
+		C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationTransitionCoordinatorTests.swift; sourceTree = "<group>"; };
+		C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSettingsPresentationTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -193,7 +197,9 @@
 				C0B000212F30000000000001 /* QrExportLayoutTests.swift */,
 				C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */,
 				C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */,
+				C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
+				C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */,
 				C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */,
 			);
 			path = CoveTests;
@@ -459,7 +465,9 @@
 				C0B000202F30000000000001 /* QrExportLayoutTests.swift in Sources */,
 				C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */,
 				C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */,
+				C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
+				C0F000032F40000000000001 /* WalletSettingsPresentationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -514,7 +522,7 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
@@ -538,7 +546,7 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
@@ -563,7 +571,7 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
@@ -588,7 +596,7 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
@@ -616,7 +624,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 105;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_APP_SANDBOX = YES;
@@ -662,7 +670,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 105;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_APP_SANDBOX = YES;
@@ -704,7 +712,7 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 105;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
@@ -728,7 +736,7 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 105;
+				CURRENT_PROJECT_VERSION = 114;
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.4;

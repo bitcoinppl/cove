@@ -4,6 +4,7 @@ struct DetailFormContent: View {
     let detail: CloudBackupDetail
     let syncHealth: CloudSyncHealth
     let manager: CloudBackupManager
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     private var showCloudOnlySection: Bool {
         switch manager.cloudOnly {
@@ -20,12 +21,19 @@ struct DetailFormContent: View {
             WalletSections(wallets: wallets)
         }
         if showCloudOnlySection {
-            CloudOnlySection(manager: manager)
+            CloudOnlySection(
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
         }
         switch detail.otherBackups {
         case let .loaded(summary):
             if summary.namespaceCount > 0 {
-                OtherBackupsSection(summary: summary, manager: manager)
+                OtherBackupsSection(
+                    summary: summary,
+                    manager: manager,
+                    presentationCoordinator: presentationCoordinator
+                )
             }
         case let .loadFailed(error):
             OtherBackupsLoadFailedSection(error: error)
@@ -108,9 +116,7 @@ struct MissingPasskeyContent: View {
 struct DisableCloudBackupSection: View {
     let manager: CloudBackupManager
     let detail: CloudBackupDetail?
-    @State private var showingUnavailableAlert = false
-    @State private var showingFirstConfirmation = false
-    @State private var showingFinalConfirmation = false
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     private var unavailableMessage: String? {
         if manager.isDisablingCloudBackup {
@@ -146,24 +152,10 @@ struct DisableCloudBackupSection: View {
     }
 
     var body: some View {
-        DisableCloudBackupFinalAlert(
+        DisableCloudBackupControls(
             manager: manager,
-            isPresented: $showingFinalConfirmation,
-            content: DisableCloudBackupConfirmationDialog(
-                manager: manager,
-                isPresented: $showingFirstConfirmation,
-                showFinalConfirmation: $showingFinalConfirmation,
-                content: DisableCloudBackupUnavailableAlert(
-                    unavailableMessage: unavailableMessage,
-                    isPresented: $showingUnavailableAlert,
-                    content: DisableCloudBackupControls(
-                        manager: manager,
-                        unavailableMessage: unavailableMessage,
-                        showingUnavailableAlert: $showingUnavailableAlert,
-                        showingFirstConfirmation: $showingFirstConfirmation
-                    )
-                )
-            )
+            unavailableMessage: unavailableMessage,
+            presentationCoordinator: presentationCoordinator
         )
     }
 }
@@ -171,8 +163,7 @@ struct DisableCloudBackupSection: View {
 private struct DisableCloudBackupControls: View {
     let manager: CloudBackupManager
     let unavailableMessage: String?
-    @Binding var showingUnavailableAlert: Bool
-    @Binding var showingFirstConfirmation: Bool
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         Section {
@@ -188,22 +179,36 @@ private struct DisableCloudBackupControls: View {
                 )
             }
 
-            Button(role: .destructive, action: requestDisable) {
-                Text("Disable Cloud Backup")
-                    .font(.footnote)
-            }
-            .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
-            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+            DisableCloudBackupRequestButton(
+                manager: manager,
+                unavailableMessage: unavailableMessage,
+                presentationCoordinator: presentationCoordinator
+            )
         }
+    }
+}
+
+private struct DisableCloudBackupRequestButton: View {
+    let manager: CloudBackupManager
+    let unavailableMessage: String?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    var body: some View {
+        Button(role: .destructive, action: requestDisable) {
+            Text("Disable Cloud Backup")
+                .font(.footnote)
+        }
+        .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 
     private func requestDisable() {
         guard manager.isDetailInventoryComplete else { return }
 
-        if unavailableMessage != nil {
-            showingUnavailableAlert = true
+        if let unavailableMessage {
+            presentationCoordinator.present(.alert(.disableUnavailable(unavailableMessage)))
         } else {
-            showingFirstConfirmation = true
+            presentationCoordinator.present(.dialog(.disableCloudBackup))
         }
     }
 }
@@ -249,66 +254,5 @@ private struct DisableCloudBackupFailureControls: View {
 
     private func keepEnabled() {
         manager.dispatch(action: .keepCloudBackupEnabled)
-    }
-}
-
-private struct DisableCloudBackupUnavailableAlert<Content: View>: View {
-    let unavailableMessage: String?
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.alert("Cloud Backup Can't Be Disabled Yet", isPresented: $isPresented) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(unavailableMessage ?? "Cove is waiting for Cloud Backup to finish another operation.")
-        }
-    }
-}
-
-private struct DisableCloudBackupConfirmationDialog<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    @Binding var showFinalConfirmation: Bool
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Disable Cloud Backup?",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Continue", role: .destructive) {
-                guard manager.isDetailInventoryComplete else { return }
-
-                showFinalConfirmation = true
-            }
-            .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage.")
-        }
-    }
-}
-
-private struct DisableCloudBackupFinalAlert<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.alert("Delete Cloud Backups?", isPresented: $isPresented) {
-            Button("Delete Cloud Backups and Disable", role: .destructive) {
-                guard manager.isDetailInventoryComplete else { return }
-
-                manager.dispatch(action: .disableCloudBackup)
-            }
-            .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.")
-        }
     }
 }
