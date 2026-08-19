@@ -3,7 +3,7 @@ pub mod client_builder;
 pub mod tls;
 
 use crate::node_connect::{
-    BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA, TESTNET4_ESPLORA,
+    BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ELECTRUM, TESTNET4_ESPLORA,
 };
 
 use client::NodeClient;
@@ -89,7 +89,7 @@ impl Node {
                 }
             }
             Network::Testnet => {
-                let (name, url) = TESTNET_ESPLORA[0];
+                let (name, url) = TESTNET_ELECTRUM[0];
                 Self {
                     name: name.to_string(),
                     network,
@@ -211,5 +211,14 @@ mod tests {
 
         let encoded = serde_json::to_string(&node).unwrap();
         assert_eq!(serde_json::from_str::<Node>(&encoded).unwrap(), node);
+    }
+
+    #[test]
+    fn testnet_default_uses_a_working_electrum_preset() {
+        let node = Node::default(Network::Testnet);
+
+        assert_eq!(node.api_type, ApiType::Electrum);
+        assert_eq!(node.url, TESTNET_ELECTRUM[0].1);
+        assert!(node.url.starts_with("ssl://"));
     }
 }
