@@ -56,13 +56,59 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.CertificateDecision
+import org.bitcoinppl.cove_core.EndpointCertificateTrust
 import org.bitcoinppl.cove_core.InternalException
+import org.bitcoinppl.cove_core.Node
 import org.bitcoinppl.cove_core.NodeCertificate
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
 import org.bitcoinppl.cove_core.TlsTrust
 
+private data class CustomNodeInput(
+    val selectedName: String,
+    val url: String,
+    val enteredName: String,
+    val certificateTrust: EndpointCertificateTrust?,
+)
+
+private data class CustomNodeRequest(
+    val requestedSelectionName: String,
+    val node: Node,
+)
+
+private data class PendingCertificate(
+    val request: CustomNodeRequest,
+    val certificate: NodeCertificate,
+)
+
+private fun sameTlsTrust(left: TlsTrust?, right: TlsTrust?): Boolean = when {
+    left is TlsTrust.CustomCa && right is TlsTrust.CustomCa -> left.cert.contentEquals(right.cert)
+    left is TlsTrust.PinnedFingerprint && right is TlsTrust.PinnedFingerprint ->
+        left.sha256.contentEquals(right.sha256)
+    else -> left == right
+}
+
+private fun sameEndpointCertificateTrust(
+    left: EndpointCertificateTrust?,
+    right: EndpointCertificateTrust?,
+): Boolean = when {
+    left == null || right == null -> left == right
+    else -> left.endpoint == right.endpoint && sameTlsTrust(left.tls, right.tls)
+}
+
+private fun sameCustomNodeInput(left: CustomNodeInput, right: CustomNodeInput): Boolean =
+        left.selectedName == right.selectedName &&
+        left.url == right.url &&
+        left.enteredName == right.enteredName &&
+        sameEndpointCertificateTrust(left.certificateTrust, right.certificateTrust)
+
+private fun sameNodeIdentity(left: Node, right: Node): Boolean =
+    left.name == right.name &&
+        left.network == right.network &&
+        left.apiType == right.apiType &&
+        left.url == right.url &&
+        sameTlsTrust(left.tls, right.tls)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,12 +131,10 @@ fun NodeSettingsScreen(
 
     var isLoading by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
-    var pendingCertificate by remember { mutableStateOf<NodeCertificate?>(null) }
-    // A certificate accepted in this session, with the url it was accepted for
-    // so editing the url does not check a different server against it. A saved
-    // node's settings are not held here: parseCustomNode carries those forward.
-    var customTls by remember { mutableStateOf<TlsTrust?>(null) }
-    var customTlsUrl by remember { mutableStateOf<String?>(null) }
+    var pendingCertificate by remember { mutableStateOf<PendingCertificate?>(null) }
+    // a certificate accepted in this session, paired with its endpoint. Rust
+    // decides whether the endpoint matches the current request
+    var customCertificateTrust by remember { mutableStateOf<EndpointCertificateTrust?>(null) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
 
@@ -128,6 +172,25 @@ fun NodeSettingsScreen(
         selectedNodeName = selectedNodeSelection.toNode().name
     }
 
+    fun restoreStoredNodeForm() {
+        val storedSelection = nodeSelector.selectedNode()
+        val storedNode = storedSelection.toNode()
+
+        selectedNodeSelection = storedSelection
+        selectedNodeName = storedNode.name
+        customCertificateTrust = storedNode.tls?.let { tls ->
+            EndpointCertificateTrust(storedNode.url, tls)
+        }
+
+        if (storedSelection is NodeSelection.Custom) {
+            customUrl = storedNode.url
+            customNodeName = storedNode.name
+        } else {
+            customUrl = ""
+            customNodeName = ""
+        }
+    }
+
     // pre-fill custom fields if a custom node was previously saved
     LaunchedEffect(showCustomFields, selectedNodeSelection) {
         if (showCustomFields && customUrl.isEmpty()) {
@@ -143,12 +206,17 @@ fun NodeSettingsScreen(
                 if (matchesType) {
                     customUrl = node.url
                     customNodeName = node.name
+                    customCertificateTrust = node.tls?.let { tls ->
+                        EndpointCertificateTrust(node.url, tls)
+                    }
                 }
             }
         }
     }
 
     fun selectPresetNode(nodeName: String) {
+        if (isLoading) return
+
         if (selectedNodeSelection is NodeSelection.Preset && selectedNodeName == nodeName) {
             return
         }
@@ -156,9 +224,10 @@ fun NodeSettingsScreen(
         selectedNodeName = nodeName
         customUrl = ""
         customNodeName = ""
+        customCertificateTrust = null
 
+        isLoading = true
         scope.launch {
-            isLoading = true
             try {
                 val node =
                     withContext(Dispatchers.IO) {
@@ -176,17 +245,24 @@ fun NodeSettingsScreen(
                         successConnected.format(node.url),
                     )
                 }
-            } catch (e: NodeSelectorException.NodeNotFound) {
-                errorTitle = errorTitleDefault
-                errorMessage = errorNotFound.format(e.v1)
-                showErrorDialog = true
-            } catch (e: NodeSelectorException.NodeAccessException) {
-                errorTitle = errorConnectionFailed
-                errorMessage = errorConnectionMessage.format(e.v1)
-                showErrorDialog = true
             } catch (e: Exception) {
-                errorTitle = errorTitleDefault
-                errorMessage = errorUnknown.format(e.message ?: "")
+                restoreStoredNodeForm()
+
+                when (e) {
+                    is NodeSelectorException.NodeNotFound -> {
+                        errorTitle = errorTitleDefault
+                        errorMessage = errorNotFound.format(e.v1)
+                    }
+                    is NodeSelectorException.NodeAccessException -> {
+                        errorTitle = errorConnectionFailed
+                        errorMessage = errorConnectionMessage.format(e.v1)
+                    }
+                    else -> {
+                        errorTitle = errorTitleDefault
+                        errorMessage = errorUnknown.format(e.message ?: "")
+                    }
+                }
+
                 showErrorDialog = true
             } finally {
                 isLoading = false
@@ -200,12 +276,53 @@ fun NodeSettingsScreen(
         showErrorDialog = true
     }
 
+    fun currentCustomNodeInput(): CustomNodeInput {
+        return CustomNodeInput(
+            selectedName = selectedNodeName,
+            url = customUrl,
+            enteredName = customNodeName,
+            certificateTrust = customCertificateTrust,
+        )
+    }
+
+    fun isCurrentCustomInput(input: CustomNodeInput): Boolean =
+        sameCustomNodeInput(currentCustomNodeInput(), input)
+
     // Whether the certificate can be offered for confirmation is decided in the
     // core, so both apps apply the same rule.
-    suspend fun offerCertificate() {
+    fun isCurrentCustomRequest(request: CustomNodeRequest): Boolean {
+        if (selectedNodeName != request.requestedSelectionName) return false
+
+        return try {
+            val currentNode =
+                nodeSelector.parseCustomNode(
+                    customUrl,
+                    selectedNodeName,
+                    customNodeName,
+                    customCertificateTrust,
+                )
+
+            sameNodeIdentity(currentNode, request.node)
+        } catch (_: NodeSelectorException) {
+            false
+        } catch (_: InternalException) {
+            false
+        }
+    }
+
+    suspend fun offerCertificate(request: CustomNodeRequest) {
         try {
-            when (val decision = withContext(Dispatchers.IO) { nodeSelector.certificateDecision(customUrl) }) {
-                is CertificateDecision.Unrecognized -> pendingCertificate = decision.certificate
+            val decision =
+                withContext(Dispatchers.IO) {
+                    nodeSelector.certificateDecision(request.node.url)
+                }
+
+            if (!isCurrentCustomRequest(request)) return
+
+            when (decision) {
+                is CertificateDecision.Unrecognized -> {
+                    pendingCertificate = PendingCertificate(request, decision.certificate)
+                }
                 is CertificateDecision.Changed -> {
                     errorTitle = certificateChangedTitle
                     errorMessage = certificateChangedMessage
@@ -213,13 +330,58 @@ fun NodeSettingsScreen(
                 }
             }
         } catch (readError: NodeSelectorException) {
-            showCertificateReadError(readError.message)
+            if (isCurrentCustomRequest(request)) {
+                showCertificateReadError(readError.message)
+            }
         } catch (readError: InternalException) {
-            showCertificateReadError(readError.message)
+            if (isCurrentCustomRequest(request)) {
+                showCertificateReadError(readError.message)
+            }
+        }
+    }
+
+    suspend fun handleCustomNodeError(
+        error: Exception,
+        input: CustomNodeInput,
+        request: CustomNodeRequest?,
+    ) {
+        when (error) {
+            is NodeSelectorException.ParseNodeUrlException -> {
+                if (isCurrentCustomInput(input)) {
+                    errorTitle = errorParseTitle
+                    errorMessage = error.v1
+                    showErrorDialog = true
+                }
+            }
+            is NodeSelectorException.NodeAccessException -> {
+                if (request != null && isCurrentCustomRequest(request)) {
+                    errorTitle = errorConnectionFailed
+                    errorMessage = errorConnectionMessage.format(error.v1)
+                    showErrorDialog = true
+                }
+            }
+            is NodeSelectorException.CertificateNotTrusted -> {
+                android.util.Log.d("NodeSettings", "certificate not trusted, offering it", error)
+                val currentRequest = request ?: return
+                if (isCurrentCustomRequest(currentRequest)) {
+                    offerCertificate(currentRequest)
+                }
+            }
+            else -> {
+                val isCurrent =
+                    request?.let(::isCurrentCustomRequest) ?: isCurrentCustomInput(input)
+                if (isCurrent) {
+                    errorTitle = errorTitleDefault
+                    errorMessage = String.format(Locale.US, errorUnknown, error.message.orEmpty())
+                    showErrorDialog = true
+                }
+            }
         }
     }
 
     fun checkAndSaveCustomNode() {
+        if (isLoading) return
+
         if (customUrl.isEmpty()) {
             errorTitle = errorTitleDefault
             errorMessage = errorUrlEmpty
@@ -227,59 +389,64 @@ fun NodeSettingsScreen(
             return
         }
 
+        val requestedSelectionName = selectedNodeName
+        val requestedCustomUrl = customUrl
+        val requestedCustomNodeName = customNodeName
+        val requestedCertificateTrust = customCertificateTrust
+        val input =
+            CustomNodeInput(
+                selectedName = requestedSelectionName,
+                url = requestedCustomUrl,
+                enteredName = requestedCustomNodeName,
+                certificateTrust = requestedCertificateTrust,
+            )
+
+        isLoading = true
         scope.launch {
-            isLoading = true
+            var request: CustomNodeRequest? = null
+
             try {
                 val node =
                     withContext(Dispatchers.IO) {
                         nodeSelector.parseCustomNode(
-                            customUrl,
-                            selectedNodeName,
-                            customNodeName,
-                            if (customTlsUrl == customUrl) customTls else null,
+                            input.url,
+                            input.selectedName,
+                            input.enteredName,
+                            input.certificateTrust,
                         )
                     }
+
+                if (!isCurrentCustomInput(input)) return@launch
+
+                request = CustomNodeRequest(requestedSelectionName, node)
 
                 // update fields with parsed values
                 customUrl = node.url
                 customNodeName = node.name
 
-                // The url has just been normalized, so follow it, otherwise a
-                // retry after a failed save would ask about the same
-                // certificate again.
-                if (node.tls != null) customTlsUrl = node.url
-
                 withContext(Dispatchers.IO) {
-                    nodeSelector.checkAndSaveNode(node)
+                    nodeSelector.checkNode(node)
                 }
+
+                val currentRequest = request
+                if (!isCurrentCustomRequest(currentRequest)) return@launch
+
+                nodeSelector.saveNode(node)
                 refreshNodeState()
 
                 // launch snackbar in separate coroutine so it doesn't block finally
                 scope.launch {
                     snackbarHostState.showSnackbar(successSaved)
                 }
-            } catch (e: NodeSelectorException.ParseNodeUrlException) {
-                errorTitle = errorParseTitle
-                errorMessage = e.v1
-                showErrorDialog = true
-            } catch (e: NodeSelectorException.NodeAccessException) {
-                errorTitle = errorConnectionFailed
-                errorMessage = errorConnectionMessage.format(e.v1)
-                showErrorDialog = true
-            } catch (e: NodeSelectorException.CertificateNotTrusted) {
-                android.util.Log.d("NodeSettings", "certificate not trusted, offering it", e)
-                offerCertificate()
             } catch (e: Exception) {
-                errorTitle = errorTitleDefault
-                errorMessage = errorUnknown.format(e.message ?: "")
-                showErrorDialog = true
+                handleCustomNodeError(e, input, request)
             } finally {
                 isLoading = false
             }
         }
     }
 
-    pendingCertificate?.let { certificate ->
+    pendingCertificate?.let { pending ->
         AlertDialog(
             onDismissRequest = { pendingCertificate = null },
             title = { Text(certificateTitle) },
@@ -287,7 +454,7 @@ fun NodeSettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(MaterialSpacing.small)) {
                     Text(certificateMessage)
                     Text(
-                        text = certificate.display,
+                        text = pending.certificate.display,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -295,10 +462,17 @@ fun NodeSettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    pendingCertificate = null
-                    customTls = TlsTrust.PinnedFingerprint(certificate.sha256)
-                    customTlsUrl = customUrl
-                    checkAndSaveCustomNode()
+                    if (isCurrentCustomRequest(pending.request)) {
+                        pendingCertificate = null
+                        customCertificateTrust = EndpointCertificateTrust(
+                            pending.request.node.url,
+                            TlsTrust.PinnedFingerprint(pending.certificate.sha256),
+                        )
+                        customUrl = pending.request.node.url
+                        checkAndSaveCustomNode()
+                    } else {
+                        pendingCertificate = null
+                    }
                 }) { Text(certificateTrust) }
             },
             dismissButton = {
@@ -350,6 +524,7 @@ fun NodeSettingsScreen(
                                 nodeName = node.name,
                                 isSelected = selectedNodeName == node.name,
                                 onClick = { selectPresetNode(node.name) },
+                                enabled = !isLoading,
                             )
 
                             if (index < nodeList.size - 1) {
@@ -369,6 +544,7 @@ fun NodeSettingsScreen(
                             onClick = {
                                 selectedNodeName = customElectrum
                             },
+                            enabled = !isLoading,
                         )
 
                         MaterialDivider()
@@ -380,6 +556,7 @@ fun NodeSettingsScreen(
                             onClick = {
                                 selectedNodeName = customEsplora
                             },
+                            enabled = !isLoading,
                         )
                     }
                 }
@@ -399,7 +576,8 @@ fun NodeSettingsScreen(
                         ) {
                             OutlinedTextField(
                                 value = customUrl,
-                                onValueChange = { customUrl = it },
+                                onValueChange = { if (!isLoading) customUrl = it },
+                                enabled = !isLoading,
                                 label = { Text(stringResource(R.string.node_url_label)) },
                                 placeholder = { Text(stringResource(R.string.node_url_placeholder)) },
                                 keyboardOptions =
@@ -413,7 +591,8 @@ fun NodeSettingsScreen(
 
                             OutlinedTextField(
                                 value = customNodeName,
-                                onValueChange = { customNodeName = it },
+                                onValueChange = { if (!isLoading) customNodeName = it },
+                                enabled = !isLoading,
                                 label = { Text(stringResource(R.string.node_name_label)) },
                                 placeholder = { Text(stringResource(R.string.node_name_placeholder)) },
                                 keyboardOptions =
@@ -457,12 +636,13 @@ private fun NodeRow(
     nodeName: String,
     isSelected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean,
 ) {
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onClick)
+                .clickable(enabled = enabled, onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
