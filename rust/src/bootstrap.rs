@@ -103,6 +103,11 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
 
         // derive encryption key and run redb migrations (idempotent via OnceLock)
         let bdk_count = ensure_storage_bootstrapped_internal(true)?;
+        crate::database::Database::initialize_for_bootstrap()
+            .map_err(|error| AppInitError::DatabaseVerificationFailed(error.to_string()))?;
+        crate::backup::recovery::recover_restore_markers()
+            .map_err(AppInitError::RecoveryRequired)?;
+
         set_step(BootstrapStep::RedbMigrationComplete);
         info!("Bootstrap: storage bootstrapped, attempting BDK migration");
 
@@ -348,8 +353,6 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
 
     crate::database::encrypted_backend::verify_database_key(&encrypted_db)
         .map_err(map_database_key_verification_error)?;
-
-    crate::backup::recovery::recover_restore_markers().map_err(AppInitError::RecoveryRequired)?;
 
     let known_wallet_ids = crate::database::migration::known_wallet_ids_from_main_database()
         .map_err_display_alt(AppInitError::MainDatabaseMigration)?;

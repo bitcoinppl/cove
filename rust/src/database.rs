@@ -110,14 +110,22 @@ impl Database {
 
 impl Database {
     pub fn global() -> Arc<Self> {
-        let db = DATABASE
-            .get_or_init(|| {
-                let db = Self::init().expect("failed to initialize main database");
-                ArcSwap::new(Arc::new(db))
-            })
-            .load();
+        Self::try_global().expect("failed to initialize main database")
+    }
 
-        Arc::clone(&db)
+    pub(crate) fn initialize_for_bootstrap() -> Result<(), error::DatabaseError> {
+        Self::try_global().map(drop)
+    }
+
+    fn try_global() -> Result<Arc<Self>, error::DatabaseError> {
+        let db = DATABASE.get_or_try_init(|| {
+            let db = Self::init()?;
+
+            Ok::<_, error::DatabaseError>(ArcSwap::new(Arc::new(db)))
+        })?;
+        let db = db.load();
+
+        Ok(Arc::clone(&db))
     }
 
     /// Re-open the database file and swap the global handle
