@@ -101,6 +101,11 @@ class TapSignerNFC {
         nfc.isScanning
     }
 
+    /// An interrupted operation holds a continuation the next attempt resumes
+    var hasPendingRetry: Bool {
+        pendingRetry?.canRetry() == true
+    }
+
     func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data) async
         -> Result<SetupCmdResponse, TapSignerReaderError>
     {
@@ -118,8 +123,8 @@ class TapSignerNFC {
             return await doSetupTapSigner(cmd: setupCmd)
         } catch let error as TapSignerReaderError {
             return .failure(error)
-        } catch let error as TapSignerCvcInputError {
-            return .failure(.Unknown(error.errorDescription ?? "Invalid TAPSIGNER CVC"))
+        } catch let error as TapSignerCvcError {
+            return .failure(.Unknown(error.localizedDescription))
         } catch {
             return .failure(.Unknown("TapSigner setup failed"))
         }
@@ -129,14 +134,11 @@ class TapSignerNFC {
         do {
             let cvc = try makeTapSignerCvc(value: pin)
 
-            return await performTapSignerCmd(
-                cmd: .derive(cvc: cvc),
-                continuationMatches: { $0.matchesDerive(cvc: cvc) }
-            ) {
+            return await performTapSignerCmd(cmd: .derive(cvc: cvc)) {
                 $0.deriveResponse
             }
-        } catch let error as TapSignerCvcInputError {
-            return .failure(.Unknown(error.errorDescription ?? "Invalid TAPSIGNER CVC"))
+        } catch let error as TapSignerCvcError {
+            return .failure(.Unknown(error.localizedDescription))
         } catch {
             return .failure(.Unknown("TapSigner import failed"))
         }
@@ -150,15 +152,12 @@ class TapSignerNFC {
             let newCvc = try makeTapSignerCvc(value: newPin)
 
             return await performTapSignerCmd(
-                cmd: .change(currentCvc: currentCvc, newCvc: newCvc),
-                continuationMatches: {
-                    $0.matchesChange(currentCvc: currentCvc, newCvc: newCvc)
-                }
+                cmd: .change(currentCvc: currentCvc, newCvc: newCvc)
             ) {
                 $0.isChangeResponse ? true : nil
             }.map { _ in () }
-        } catch let error as TapSignerCvcInputError {
-            return .failure(.Unknown(error.errorDescription ?? "Invalid TAPSIGNER CVC"))
+        } catch let error as TapSignerCvcError {
+            return .failure(.Unknown(error.localizedDescription))
         } catch {
             return .failure(.Unknown("TapSigner PIN change failed"))
         }
@@ -168,14 +167,11 @@ class TapSignerNFC {
         do {
             let cvc = try makeTapSignerCvc(value: pin)
 
-            return await performTapSignerCmd(
-                cmd: .backup(cvc: cvc),
-                continuationMatches: { $0.matchesBackup(cvc: cvc) }
-            ) {
+            return await performTapSignerCmd(cmd: .backup(cvc: cvc)) {
                 $0.backupResponse
             }
-        } catch let error as TapSignerCvcInputError {
-            return .failure(.Unknown(error.errorDescription ?? "Invalid TAPSIGNER CVC"))
+        } catch let error as TapSignerCvcError {
+            return .failure(.Unknown(error.localizedDescription))
         } catch {
             return .failure(.Unknown("TapSigner backup failed"))
         }
@@ -189,8 +185,8 @@ class TapSignerNFC {
             return await performTapSignerCmd(cmd: .sign(psbt: psbt, cvc: cvc)) {
                 $0.signResponse
             }
-        } catch let error as TapSignerCvcInputError {
-            return .failure(.Unknown(error.errorDescription ?? "Invalid TAPSIGNER CVC"))
+        } catch let error as TapSignerCvcError {
+            return .failure(.Unknown(error.localizedDescription))
         } catch {
             return .failure(.Unknown("TapSigner signing failed"))
         }
@@ -213,87 +209,66 @@ class TapSignerNFC {
 
     private func performTapSignerCmd<T>(
         cmd: TapSignerCmd,
-        continuationMatches: ((TapSignerOperationContinuation) -> Bool)? = nil,
         _ successResult: @escaping (TapSignerResponse) -> T?
     ) async -> Result<T, TapSignerReaderError> {
-        var command: TapSignerCmd
-        if let continuationMatches,
-           let pendingRetry,
-           pendingRetry.canRetry(),
-           continuationMatches(pendingRetry)
-        {
-            command = .continueOperation(pendingRetry)
+        // Rust owns the routing: a pending continuation either resumes this
+        // exact command or blocks a conflicting one, and is never silently dropped
+        var command = cmd
+        if let pendingRetry {
+            switch resolveTapSignerCommand(cmd: cmd, pending: pendingRetry) {
+            case .fresh:
+                self.pendingRetry = nil
+                clearLastResponse()
+            case .resume:
+                command = .continueOperation(pendingRetry)
+            case .pendingOperationConflict:
+                return .failure(
+                    .Unknown("Finish the interrupted TapSigner operation before starting a new one")
+                )
+            }
         } else {
             clearLastResponse()
-            command = cmd
         }
 
-        var retryCount = 0
-
-        while true {
-            switch await runTapSignerCmd(command) {
-            case let .failure(error):
-                if pendingRetry?.canRetry() == false {
-                    pendingRetry = nil
-                }
-
-                return .failure(error)
-            case let .success(response):
-                if let result = successResult(response) {
-                    pendingRetry = nil
-                    return .success(result)
-                }
-
-                guard case let .retry(continuation) = response else {
-                    Log.error("TapSigner operation returned an unexpected response")
-                    pendingRetry = nil
-                    return .failure(.Unknown("TapSigner operation returned no result"))
-                }
-
-                if continuationMatches != nil {
-                    pendingRetry = continuation
-                }
-
-                guard retryCount < 5 else {
-                    Log.error("TapSigner operation retry limit reached")
-                    return .failure(.ManualRecoveryRequired)
-                }
-
-                retryCount += 1
-                command = .continueOperation(continuation)
+        switch await runTapSignerCmd(command) {
+        case let .failure(error):
+            if pendingRetry?.canRetry() == false {
+                pendingRetry = nil
             }
+
+            return .failure(error)
+        case let .success(response):
+            if let result = successResult(response) {
+                pendingRetry = nil
+                return .success(result)
+            }
+
+            guard case let .retry(continuation) = response else {
+                Log.error("TapSigner operation returned an unexpected response")
+                pendingRetry = nil
+                return .failure(.Unknown("TapSigner operation returned no result"))
+            }
+
+            // the retry screen re-runs the same command and resumes from here
+            pendingRetry = continuation
+            return .failure(continuation.error())
         }
     }
 
     private func doSetupTapSigner(cmd: SetupCmd) async -> Result<
         SetupCmdResponse, TapSignerReaderError
     > {
-        var response = await runTapSignerCmd(.setup(cmd))
-        var retryCount = 0
-
-        while true {
-            switch response {
-            case let .failure(error):
-                return .failure(error)
-            case let .success(.setup(setupResponse)):
-                lastResponse_ = .setup(setupResponse)
-
-                switch setupResponse {
-                case .complete:
-                    return .success(setupResponse)
-                case let .retry(continuation):
-                    guard retryCount < 5 else {
-                        Log.error("TapSigner setup retry limit reached")
-                        return .success(setupResponse)
-                    }
-
-                    retryCount += 1
-                    response = await runTapSignerCmd(.continueSetup(continuation))
-                }
-            case .success:
-                Log.error("TapSigner setup returned an unexpected response")
-                return .failure(.Unknown("TapSigner setup returned no result"))
-            }
+        switch await runTapSignerCmd(.setup(cmd)) {
+        case let .failure(error):
+            return .failure(error)
+        case let .success(.setup(setupResponse)):
+            // a .retry response routes the caller to the setup retry screen,
+            // which resumes through continueSetup with the typed continuation
+            lastResponse_ = .setup(setupResponse)
+            return .success(setupResponse)
+        case .success:
+            Log.error("TapSigner setup returned an unexpected response")
+            return .failure(.Unknown("TapSigner setup returned no result"))
         }
     }
 
@@ -360,7 +335,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         guard !operation.isResolved else { return }
 
         guard activeOperation == nil else {
-            operation.resolve(.failure(.OperationInProgress))
+            operation.resolve(.failure(.Unknown("A TapSigner operation is already in progress")))
             return
         }
 
@@ -730,9 +705,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                 if statusWord != 0x9000 {
                     logger.error("TapSigner APDU operation rejected")
                     continuation.resume(
-                        throwing: TransportError.UnknownStatusWord(
-                            code: UInt16(statusWord),
-                            detail: "TapSigner card rejected the operation"
+                        throwing: TransportError.Transport(
+                            "TapSigner card rejected the operation"
                         )
                     )
                     return

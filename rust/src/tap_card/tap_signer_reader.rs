@@ -12,7 +12,7 @@ use bitcoin::{
     hashes::HashEngine as _,
 };
 use nid::Nanoid;
-use parking_lot::{Mutex as SyncMutex, RwLock};
+use parking_lot::RwLock;
 use rust_cktap::{
     CkTapCard,
     shared::{Certificate as _, Wait as _},
@@ -114,20 +114,14 @@ pub enum TapSignerReaderError {
     #[error("No command")]
     NoCommand,
 
-    /// A setup command was supplied after setup completed
-    #[error("Setup is already complete")]
-    SetupAlreadyComplete,
-
-    /// Another setup or mutating operation is already using this reader
-    #[error("A TAPSIGNER operation is already in progress")]
-    OperationInProgress,
-
     /// The continuation was already claimed by an earlier attempt
     #[error("Setup continuation was already used")]
     SetupContinuationAlreadyUsed,
 
     /// A continuation belongs to another verified card
-    #[error("TAPSIGNER continuation belongs to another card")]
+    #[error(
+        "This is a different TAPSIGNER than the one that started the operation, tap the original card"
+    )]
     ContinuationCardMismatch,
 
     /// The setup chain code is not exactly 32 bytes
@@ -135,7 +129,7 @@ pub enum TapSignerReaderError {
     InvalidChainCodeLength(u32),
 
     /// The card has reached the protocol backup limit
-    #[error("TAPSIGNER backup limit reached ({0})")]
+    #[error("This TAPSIGNER made its maximum number of backups ({0}), it cannot make more")]
     BackupLimitReached(u32),
 
     /// The card state cannot be determined safely
@@ -700,40 +694,6 @@ impl TapSignerOperationContinuation {
         !self.claimed.load(Ordering::Acquire)
     }
 
-    /// Return whether this continuation stores the supplied CVC for a backup
-    pub fn matches_backup(&self, cvc: Arc<TapSignerCvc>) -> bool {
-        matches!(
-            self.stage(),
-            OperationContinuationStage::Backup { cvc: stored_cvc, .. }
-                if stored_cvc == &cvc
-        )
-    }
-
-    /// Return whether this continuation stores the supplied CVC for derivation
-    pub fn matches_derive(&self, cvc: Arc<TapSignerCvc>) -> bool {
-        matches!(
-            self.stage(),
-            OperationContinuationStage::Derive { cvc: stored_cvc, .. }
-                if stored_cvc == &cvc
-        )
-    }
-
-    /// Return whether this continuation stores both supplied CVCs for a change
-    pub fn matches_change(
-        &self,
-        current_cvc: Arc<TapSignerCvc>,
-        new_cvc: Arc<TapSignerCvc>,
-    ) -> bool {
-        matches!(
-            self.stage(),
-            OperationContinuationStage::Change {
-                current_cvc: stored_current_cvc,
-                new_cvc: stored_new_cvc,
-                ..
-            } if stored_current_cvc == &current_cvc && stored_new_cvc == &new_cvc
-        )
-    }
-
     /// Return a safe user-facing description of the continuation stage
     pub fn message(&self) -> String {
         match self.stage {
@@ -747,6 +707,59 @@ impl TapSignerOperationContinuation {
                 "TAPSIGNER CVC change needs card status reconciliation".to_string()
             }
         }
+    }
+}
+
+/// How a requested TAPSIGNER command relates to a pending retry continuation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum TapSignerCommandResolution {
+    /// No usable continuation applies: run the fresh command
+    Fresh,
+    /// The pending continuation resumes this exact command: send ContinueOperation
+    Resume,
+    /// A different interrupted operation must finish or be cancelled first
+    PendingOperationConflict,
+}
+
+/// Decide whether a command starts fresh or resumes the pending continuation
+///
+/// The continuation may guard a mutation the card already applied, so a fresh
+/// command that does not match it is a conflict, never a silent replacement
+#[uniffi::export]
+pub fn resolve_tap_signer_command(
+    cmd: TapSignerCmd,
+    pending: Arc<TapSignerOperationContinuation>,
+) -> TapSignerCommandResolution {
+    if !pending.can_retry() {
+        return TapSignerCommandResolution::Fresh;
+    }
+
+    let matches = match (&cmd, pending.stage()) {
+        (TapSignerCmd::Backup { cvc }, OperationContinuationStage::Backup { cvc: stored, .. }) => {
+            stored == cvc
+        }
+        (TapSignerCmd::Derive { cvc }, OperationContinuationStage::Derive { cvc: stored, .. }) => {
+            stored == cvc
+        }
+        (
+            TapSignerCmd::Change { current_cvc, new_cvc },
+            OperationContinuationStage::Change {
+                current_cvc: stored_current,
+                new_cvc: stored_new,
+                ..
+            },
+        ) => stored_current == current_cvc && stored_new == new_cvc,
+        // continuation commands carry their own routing and never re-resolve
+        (TapSignerCmd::ContinueSetup(_) | TapSignerCmd::ContinueOperation(_), _) => {
+            return TapSignerCommandResolution::Fresh;
+        }
+        _ => false,
+    };
+
+    if matches {
+        TapSignerCommandResolution::Resume
+    } else {
+        TapSignerCommandResolution::PendingOperationConflict
     }
 }
 
@@ -770,6 +783,74 @@ impl fmt::Debug for SetupCmdResponse {
     }
 }
 
+/// Build the completed setup response, falling back to the TAPSIGNER announcement height
+fn setup_complete_response(backup: Vec<u8>, derive_info: DeriveInfo) -> SetupCmdResponse {
+    let birthday = tap_signer_setup_birthday(derive_info.network, derive_info.birth_height)
+        .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
+
+    SetupCmdResponse::Complete(TapSignerSetupComplete { backup, derive_info, birthday })
+}
+
+/// What a fresh status read says about an uncertain `backup` command
+enum BackupReconciliation {
+    /// The stored bytes are the only copy of the backup, do not send `backup` again
+    UseStored(Vec<u8>),
+    /// The card never applied the backup, so `backup` can be sent again
+    Reissue { num_backups: u32 },
+}
+
+/// Decide whether an uncertain `backup` can be re-sent, using the card backup counter
+///
+/// The counter is the only evidence of whether the card applied the command. A backup
+/// re-encrypts the card seed under a new key, so replaying it after the card applied one
+/// destroys the bytes the user needs for recovery.
+fn reconcile_backup_counter(
+    num_backups: Option<u32>,
+    pre_backup_count: Option<u32>,
+    backup: Option<Vec<u8>>,
+) -> Result<BackupReconciliation> {
+    let Some(num_backups) = num_backups else {
+        return Err(TapSignerReaderError::BackupDataUnavailable);
+    };
+
+    let advanced = match pre_backup_count {
+        Some(previous) => num_backups > previous,
+        None => num_backups > 0,
+    };
+
+    // the card applied a backup whose bytes never reached this side, and it cannot repeat them
+    if advanced && backup.is_none() {
+        return Err(TapSignerReaderError::BackupDataUnavailable);
+    }
+
+    // a counter that went backwards means the card is not the one the count came from
+    if pre_backup_count.is_some_and(|previous| num_backups < previous) {
+        return Err(TapSignerReaderError::BackupDataUnavailable);
+    }
+
+    if let Some(backup) = backup {
+        return Ok(BackupReconciliation::UseStored(backup));
+    }
+
+    if num_backups >= MAX_BACKUPS {
+        return Err(TapSignerReaderError::BackupLimitReached(num_backups));
+    }
+
+    Ok(BackupReconciliation::Reissue { num_backups })
+}
+
+/// What a CVC probe says about an uncertain `change` command
+enum ChangeProbe {
+    /// The new CVC authenticates, so the card applied the change
+    NewCvcApplied,
+    /// The old CVC still authenticates, so the change never reached the card
+    ///
+    /// Carries the rejection from the new-CVC probe, which is what made the change uncertain.
+    OldCvcStillValid(TapSignerReaderError),
+    /// The probe itself did not complete, so nothing about the card state is known
+    Uncertain(TapSignerReaderError),
+}
+
 /// A verified TAPSIGNER reader
 #[derive(uniffi::Object)]
 pub struct TapSignerReader {
@@ -778,14 +859,6 @@ pub struct TapSignerReader {
     reader: Mutex<VerifiedTapSigner>,
     cmd: RwLock<Option<TapSignerOperation>>,
     transport: TapcardTransport,
-
-    operation_guard: Mutex<()>,
-
-    setup_done: AtomicBool,
-
-    /// The latest retry or completion response
-    last_response: SyncMutex<Option<Arc<TapSignerResponse>>>,
-
     network: Network,
 }
 
@@ -853,9 +926,6 @@ impl TapSignerReader {
             reader: Mutex::new(card),
             transport,
             cmd: RwLock::new(cmd),
-            operation_guard: Mutex::new(()),
-            setup_done: AtomicBool::new(false),
-            last_response: SyncMutex::new(None),
             network,
         };
 
@@ -870,10 +940,7 @@ impl TapSignerReader {
     /// Execute the command supplied when this reader was created
     #[uniffi::method]
     pub async fn run(&self) -> Result<TapSignerResponse> {
-        let _operation_guard = self
-            .operation_guard
-            .try_lock()
-            .map_err(|_| TapSignerReaderError::OperationInProgress)?;
+        // the reader is single use: taking the command makes a second run() a NoCommand error
         let operation = self.cmd.write().take().ok_or(TapSignerReaderError::NoCommand)?;
 
         debug!(operation = operation.kind(), "running TapSigner operation");
@@ -898,40 +965,10 @@ impl TapSignerReader {
             }
         }
     }
-
-    /// Start the setup process
-    pub async fn setup(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse> {
-        let _operation_guard = self
-            .operation_guard
-            .try_lock()
-            .map_err(|_| TapSignerReaderError::OperationInProgress)?;
-
-        self.setup_inner(cmd).await
-    }
-
-    /// Sign a PSBT with a typed TAPSIGNER CVC
-    pub async fn sign(&self, psbt: Arc<Psbt>, cvc: Arc<TapSignerCvc>) -> Result<Psbt> {
-        let _operation_guard = self
-            .operation_guard
-            .try_lock()
-            .map_err(|_| TapSignerReaderError::OperationInProgress)?;
-
-        self.sign_with_cvc(psbt, &cvc).await
-    }
-
-    /// Get the latest retry or completion response
-    pub fn last_response(&self) -> Option<TapSignerResponse> {
-        let response = self.last_response.lock().clone()?;
-        Some(Arc::unwrap_or_clone(response))
-    }
 }
 
 impl TapSignerReader {
     async fn setup_inner(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse> {
-        if self.setup_complete() {
-            return Err(TapSignerReaderError::SetupAlreadyComplete);
-        }
-
         let initialized = self.reader.lock().await.path.is_some();
         if !initialized {
             match self.init_card(&cmd).await {
@@ -941,48 +978,13 @@ impl TapSignerReader {
                         self.card_identity.clone(),
                         SetupContinuationStage::ReconcileInit { cmd, error },
                     );
-                    return Ok(self.record_retry(continuation));
+                    return Ok(SetupCmdResponse::Retry(continuation));
                 }
                 Err(error) => return Err(error),
             }
         }
 
         self.backup_after_init(cmd).await
-    }
-
-    fn setup_complete(&self) -> bool {
-        self.setup_done.load(Ordering::Acquire)
-    }
-
-    fn record_response(&self, response: TapSignerResponse) -> TapSignerResponse {
-        *self.last_response.lock() = Some(Arc::new(response.clone()));
-        response
-    }
-
-    fn record_setup_response(&self, response: SetupCmdResponse) -> SetupCmdResponse {
-        let _ = self.record_response(TapSignerResponse::Setup(response.clone()));
-        response
-    }
-
-    fn record_retry(&self, continuation: Arc<TapSignerSetupContinuation>) -> SetupCmdResponse {
-        self.record_setup_response(SetupCmdResponse::Retry(continuation))
-    }
-
-    fn record_complete(&self, backup: Vec<u8>, derive_info: DeriveInfo) -> SetupCmdResponse {
-        let birthday = tap_signer_setup_birthday(derive_info.network, derive_info.birth_height)
-            .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
-        let complete =
-            SetupCmdResponse::Complete(TapSignerSetupComplete { backup, derive_info, birthday });
-
-        self.setup_done.store(true, Ordering::Release);
-        self.record_setup_response(complete)
-    }
-
-    fn record_operation_retry(
-        &self,
-        continuation: Arc<TapSignerOperationContinuation>,
-    ) -> TapSignerResponse {
-        self.record_response(TapSignerResponse::Retry(continuation))
     }
 
     fn continuation_matches(&self, card_identity: &str) -> bool {
@@ -1003,13 +1005,13 @@ impl TapSignerReader {
                         error,
                     },
                 );
-                return Ok(self.record_operation_retry(continuation));
+                return Ok(TapSignerResponse::Retry(continuation));
             }
             Err(error) => return Err(error),
         };
 
         match self.refresh_status().await {
-            Ok(_) => Ok(self.record_response(TapSignerResponse::Backup(backup))),
+            Ok(_) => Ok(TapSignerResponse::Backup(backup)),
             Err(error) if error.is_transport_uncertainty() => {
                 let continuation = TapSignerOperationContinuation::new(
                     self.card_identity.clone(),
@@ -1020,7 +1022,7 @@ impl TapSignerReader {
                         error,
                     },
                 );
-                Ok(self.record_operation_retry(continuation))
+                Ok(TapSignerResponse::Retry(continuation))
             }
             Err(error) => Err(error),
         }
@@ -1028,13 +1030,13 @@ impl TapSignerReader {
 
     async fn run_derive(&self, cvc: Arc<TapSignerCvc>) -> Result<TapSignerResponse> {
         match self.derive(&cvc).await {
-            Ok(derive_info) => Ok(self.record_response(TapSignerResponse::Import(derive_info))),
+            Ok(derive_info) => Ok(TapSignerResponse::Import(derive_info)),
             Err(error) if error.is_transport_uncertainty() => {
                 let continuation = TapSignerOperationContinuation::new(
                     self.card_identity.clone(),
                     OperationContinuationStage::Derive { cvc, error },
                 );
-                Ok(self.record_operation_retry(continuation))
+                Ok(TapSignerResponse::Retry(continuation))
             }
             Err(error) => Err(error),
         }
@@ -1052,19 +1054,19 @@ impl TapSignerReader {
                     self.card_identity.clone(),
                     OperationContinuationStage::Change { current_cvc, new_cvc, error },
                 );
-                return Ok(self.record_operation_retry(continuation));
+                return Ok(TapSignerResponse::Retry(continuation));
             }
             Err(error) => return Err(error),
         }
 
         match self.refresh_status().await {
-            Ok(_) => Ok(self.record_response(TapSignerResponse::Change)),
+            Ok(_) => Ok(TapSignerResponse::Change),
             Err(error) if error.is_transport_uncertainty() => {
                 let continuation = TapSignerOperationContinuation::new(
                     self.card_identity.clone(),
                     OperationContinuationStage::Change { current_cvc, new_cvc, error },
                 );
-                Ok(self.record_operation_retry(continuation))
+                Ok(TapSignerResponse::Retry(continuation))
             }
             Err(error) => Err(error),
         }
@@ -1181,7 +1183,7 @@ impl TapSignerReader {
                         error,
                     },
                 );
-                return Ok(self.record_retry(continuation));
+                return Ok(SetupCmdResponse::Retry(continuation));
             }
             Err(error) => return Err(error),
         };
@@ -1197,7 +1199,7 @@ impl TapSignerReader {
                         error,
                     },
                 );
-                return Ok(self.record_retry(continuation));
+                return Ok(SetupCmdResponse::Retry(continuation));
             }
             return Err(error);
         }
@@ -1217,7 +1219,7 @@ impl TapSignerReader {
                     self.card_identity.clone(),
                     SetupContinuationStage::RetryDerive { cmd, backup, error },
                 );
-                return Ok(self.record_retry(continuation));
+                return Ok(SetupCmdResponse::Retry(continuation));
             }
             Err(error) => return Err(error),
         };
@@ -1238,19 +1240,19 @@ impl TapSignerReader {
                     self.card_identity.clone(),
                     SetupContinuationStage::ReconcileChange { cmd, backup, derive_info, error },
                 );
-                return Ok(self.record_retry(continuation));
+                return Ok(SetupCmdResponse::Retry(continuation));
             }
             Err(error) => return Err(error),
         }
 
         match self.refresh_status().await {
-            Ok(_) => Ok(self.record_complete(backup, derive_info)),
+            Ok(_) => Ok(setup_complete_response(backup, derive_info)),
             Err(error) if error.is_transport_uncertainty() => {
                 let continuation = TapSignerSetupContinuation::new(
                     self.card_identity.clone(),
                     SetupContinuationStage::ReconcileChange { cmd, backup, derive_info, error },
                 );
-                Ok(self.record_retry(continuation))
+                Ok(SetupCmdResponse::Retry(continuation))
             }
             Err(error) => Err(error),
         }
@@ -1260,9 +1262,6 @@ impl TapSignerReader {
         &self,
         continuation: Arc<TapSignerSetupContinuation>,
     ) -> Result<SetupCmdResponse> {
-        if self.setup_complete() {
-            return Err(TapSignerReaderError::SetupAlreadyComplete);
-        }
         if !self.continuation_matches(continuation.card_identity()) {
             return Err(TapSignerReaderError::ContinuationCardMismatch);
         }
@@ -1316,23 +1315,23 @@ impl TapSignerReader {
             Ok(status) => status,
             Err(error) if error.is_card_error() => return Err(error),
             Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_retry(continuation.retry_with_error(error)));
+                return Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)));
             }
             Err(_) => return Err(TapSignerReaderError::ManualRecoveryRequired),
         };
 
         if path.is_some() {
             let response = self.backup_after_init(cmd).await?;
-            return Ok(self.record_setup_response(continuation.preserve_id(response)));
+            return Ok(continuation.preserve_id(response));
         }
 
         match self.init_card(&cmd).await {
             Ok(()) => {
                 let response = self.backup_after_init(cmd).await?;
-                Ok(self.record_setup_response(continuation.preserve_id(response)))
+                Ok(continuation.preserve_id(response))
             }
             Err(error) if error.is_transport_uncertainty() => {
-                Ok(self.record_retry(continuation.retry_with_error(error)))
+                Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)))
             }
             Err(error) => Err(error),
         }
@@ -1348,7 +1347,7 @@ impl TapSignerReader {
         let (num_backups, path) = match self.refresh_status().await {
             Ok(status) => status,
             Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_retry(continuation.retry_with_error(error)));
+                return Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)));
             }
             Err(error) => return Err(error),
         };
@@ -1357,44 +1356,25 @@ impl TapSignerReader {
             return Err(TapSignerReaderError::ManualRecoveryRequired);
         }
 
-        let Some(num_backups) = num_backups else {
-            return Err(TapSignerReaderError::BackupDataUnavailable);
-        };
-
-        let backup_advanced = match pre_backup_count {
-            Some(previous) => num_backups > previous,
-            None => num_backups > 0,
-        };
-        if backup_advanced {
-            if let Some(backup) = backup {
+        let num_backups = match reconcile_backup_counter(num_backups, pre_backup_count, backup)? {
+            BackupReconciliation::UseStored(backup) => {
                 let response = self.derive_and_change(cmd, backup).await?;
-                return Ok(self.record_setup_response(continuation.preserve_id(response)));
+                return Ok(continuation.preserve_id(response));
             }
-            return Err(TapSignerReaderError::BackupDataUnavailable);
-        }
-        if pre_backup_count.is_some_and(|previous| num_backups < previous) {
-            return Err(TapSignerReaderError::BackupDataUnavailable);
-        }
-
-        if let Some(backup) = backup {
-            let response = self.derive_and_change(cmd, backup).await?;
-            return Ok(self.record_setup_response(continuation.preserve_id(response)));
-        }
-        if num_backups >= MAX_BACKUPS {
-            return Err(TapSignerReaderError::BackupLimitReached(num_backups));
-        }
+            BackupReconciliation::Reissue { num_backups } => num_backups,
+        };
 
         let backup = match self.backup(&cmd.factory_cvc).await {
             Ok(backup) => backup,
             Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_retry(continuation.retry_with_error(error)));
+                return Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)));
             }
             Err(error) => return Err(error),
         };
 
         if let Err(error) = self.refresh_status().await {
             if error.is_transport_uncertainty() {
-                return Ok(self.record_retry(continuation.with_stage(
+                return Ok(SetupCmdResponse::Retry(continuation.with_stage(
                     SetupContinuationStage::RetryBackup {
                         cmd,
                         pre_backup_count: Some(num_backups),
@@ -1407,7 +1387,7 @@ impl TapSignerReader {
         }
 
         let response = self.derive_and_change(cmd, backup).await?;
-        Ok(self.record_setup_response(continuation.preserve_id(response)))
+        Ok(continuation.preserve_id(response))
     }
 
     async fn retry_derive(
@@ -1419,13 +1399,13 @@ impl TapSignerReader {
         let derive_info = match self.derive(&cmd.factory_cvc).await {
             Ok(derive_info) => derive_info,
             Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_retry(continuation.retry_with_error(error)));
+                return Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)));
             }
             Err(error) => return Err(error),
         };
 
         let response = self.change_after_derive(cmd, backup, derive_info).await?;
-        Ok(self.record_setup_response(continuation.preserve_id(response)))
+        Ok(continuation.preserve_id(response))
     }
 
     async fn retry_change(
@@ -1440,17 +1420,17 @@ impl TapSignerReader {
             Err(error) if error.is_transport_uncertainty() => {
                 let stage =
                     SetupContinuationStage::ReconcileChange { cmd, backup, derive_info, error };
-                return Ok(self.record_retry(continuation.with_stage(stage)));
+                return Ok(SetupCmdResponse::Retry(continuation.with_stage(stage)));
             }
             Err(error) => return Err(error),
         }
 
         match self.refresh_status().await {
-            Ok(_) => Ok(self.record_complete(backup, derive_info)),
+            Ok(_) => Ok(setup_complete_response(backup, derive_info)),
             Err(error) if error.is_transport_uncertainty() => {
                 let stage =
                     SetupContinuationStage::ReconcileChange { cmd, backup, derive_info, error };
-                Ok(self.record_retry(continuation.with_stage(stage)))
+                Ok(SetupCmdResponse::Retry(continuation.with_stage(stage)))
             }
             Err(error) => Err(error),
         }
@@ -1463,29 +1443,43 @@ impl TapSignerReader {
         backup: Vec<u8>,
         derive_info: DeriveInfo,
     ) -> Result<SetupCmdResponse> {
-        let wait_result = self.wait_with_cvc(&cmd.new_cvc).await;
+        match self.probe_change_cvc(&cmd.factory_cvc, &cmd.new_cvc).await? {
+            ChangeProbe::NewCvcApplied => Ok(setup_complete_response(backup, derive_info)),
+            ChangeProbe::OldCvcStillValid(error) => {
+                let stage = SetupContinuationStage::RetryChange { cmd, backup, derive_info, error };
+                Ok(SetupCmdResponse::Retry(continuation.with_stage(stage)))
+            }
+            ChangeProbe::Uncertain(error) => {
+                Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)))
+            }
+        }
+    }
 
-        match wait_result {
-            Ok(()) => Ok(self.record_complete(backup, derive_info)),
-            Err(error) if error.is_auth_error() => {
-                match self.wait_with_cvc(&cmd.factory_cvc).await {
-                    Ok(()) => {
-                        let stage =
-                            SetupContinuationStage::RetryChange { cmd, backup, derive_info, error };
-                        Ok(self.record_retry(continuation.with_stage(stage)))
-                    }
-                    Err(error) if error.is_transport_uncertainty() => {
-                        Ok(self.record_retry(continuation.retry_with_error(error)))
-                    }
-                    Err(error) if error.is_auth_error() => {
-                        Err(TapSignerReaderError::ManualRecoveryRequired)
-                    }
-                    Err(error) => Err(error),
-                }
-            }
+    /// Establish which CVC the card accepts after a `change` whose outcome is unknown
+    ///
+    /// The new CVC is probed first: if it authenticates the card already applied the change and
+    /// re-sending `change` would lock the card out with a stale current CVC.
+    async fn probe_change_cvc(
+        &self,
+        current_cvc: &TapSignerCvc,
+        new_cvc: &TapSignerCvc,
+    ) -> Result<ChangeProbe> {
+        let new_cvc_error = match self.wait_with_cvc(new_cvc).await {
+            Ok(()) => return Ok(ChangeProbe::NewCvcApplied),
+            Err(error) if error.is_auth_error() => error,
             Err(error) if error.is_transport_uncertainty() => {
-                Ok(self.record_retry(continuation.retry_with_error(error)))
+                return Ok(ChangeProbe::Uncertain(error));
             }
+            Err(error) => return Err(error),
+        };
+
+        match self.wait_with_cvc(current_cvc).await {
+            Ok(()) => Ok(ChangeProbe::OldCvcStillValid(new_cvc_error)),
+            // neither CVC authenticates, so no command can establish the card state
+            Err(error) if error.is_auth_error() => {
+                Err(TapSignerReaderError::ManualRecoveryRequired)
+            }
+            Err(error) if error.is_transport_uncertainty() => Ok(ChangeProbe::Uncertain(error)),
             Err(error) => Err(error),
         }
     }
@@ -1512,9 +1506,9 @@ impl TapSignerReader {
                 .await
             }
             OperationContinuationStage::Derive { cvc, .. } => match self.derive(cvc).await {
-                Ok(derive_info) => Ok(self.record_response(TapSignerResponse::Import(derive_info))),
+                Ok(derive_info) => Ok(TapSignerResponse::Import(derive_info)),
                 Err(error) if error.is_transport_uncertainty() => {
-                    Ok(self.record_operation_retry(continuation.retry_with_error(error)))
+                    Ok(TapSignerResponse::Retry(continuation.retry_with_error(error)))
                 }
                 Err(error) => Err(error),
             },
@@ -1539,34 +1533,21 @@ impl TapSignerReader {
         let (num_backups, _) = match self.refresh_status().await {
             Ok(status) => status,
             Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_operation_retry(continuation.retry_with_error(error)));
+                return Ok(TapSignerResponse::Retry(continuation.retry_with_error(error)));
             }
             Err(error) => return Err(error),
         };
-        let Some(num_backups) = num_backups else {
-            return Err(TapSignerReaderError::BackupDataUnavailable);
+        let num_backups = match reconcile_backup_counter(num_backups, pre_backup_count, backup)? {
+            BackupReconciliation::UseStored(backup) => {
+                return Ok(TapSignerResponse::Backup(backup));
+            }
+            BackupReconciliation::Reissue { num_backups } => num_backups,
         };
-        let advanced = match pre_backup_count {
-            Some(previous) => num_backups > previous,
-            None => num_backups > 0,
-        };
-        if advanced && backup.is_none() {
-            return Err(TapSignerReaderError::BackupDataUnavailable);
-        }
-        if pre_backup_count.is_some_and(|previous| num_backups < previous) {
-            return Err(TapSignerReaderError::BackupDataUnavailable);
-        }
-        if let Some(backup) = backup {
-            return Ok(self.record_response(TapSignerResponse::Backup(backup)));
-        }
-        if num_backups >= MAX_BACKUPS {
-            return Err(TapSignerReaderError::BackupLimitReached(num_backups));
-        }
 
         let backup = match self.backup(&cvc).await {
             Ok(backup) => backup,
             Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_operation_retry(continuation.retry_with_error(error)));
+                return Ok(TapSignerResponse::Retry(continuation.retry_with_error(error)));
             }
             Err(error) => return Err(error),
         };
@@ -1579,12 +1560,12 @@ impl TapSignerReader {
                     backup: Some(backup),
                     error,
                 };
-                return Ok(self.record_operation_retry(continuation.with_stage(stage)));
+                return Ok(TapSignerResponse::Retry(continuation.with_stage(stage)));
             }
             return Err(error);
         }
 
-        Ok(self.record_response(TapSignerResponse::Backup(backup)))
+        Ok(TapSignerResponse::Backup(backup))
     }
 
     async fn reconcile_operation_change(
@@ -1593,24 +1574,12 @@ impl TapSignerReader {
         current_cvc: Arc<TapSignerCvc>,
         new_cvc: Arc<TapSignerCvc>,
     ) -> Result<TapSignerResponse> {
-        match self.wait_with_cvc(&new_cvc).await {
-            Ok(()) => return Ok(self.record_response(TapSignerResponse::Change)),
-            Err(error) if error.is_auth_error() => {}
-            Err(error) if error.is_transport_uncertainty() => {
-                return Ok(self.record_operation_retry(continuation.retry_with_error(error)));
+        match self.probe_change_cvc(&current_cvc, &new_cvc).await? {
+            ChangeProbe::NewCvcApplied => Ok(TapSignerResponse::Change),
+            ChangeProbe::OldCvcStillValid(_) => self.run_change(current_cvc, new_cvc).await,
+            ChangeProbe::Uncertain(error) => {
+                Ok(TapSignerResponse::Retry(continuation.retry_with_error(error)))
             }
-            Err(error) => return Err(error),
-        }
-
-        match self.wait_with_cvc(&current_cvc).await {
-            Ok(()) => self.run_change(current_cvc, new_cvc).await,
-            Err(error) if error.is_auth_error() => {
-                Err(TapSignerReaderError::ManualRecoveryRequired)
-            }
-            Err(error) if error.is_transport_uncertainty() => {
-                Ok(self.record_operation_retry(continuation.retry_with_error(error)))
-            }
-            Err(error) => Err(error),
         }
     }
 
@@ -1867,9 +1836,10 @@ impl TapSignerReaderError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{collections::VecDeque, hash::DefaultHasher, sync::Arc};
+    use std::{collections::VecDeque, sync::Arc};
 
     use bitcoin::secp256k1::{Secp256k1, SecretKey};
+    use parking_lot::Mutex as SyncMutex;
     use serde::Serialize;
 
     type MockResponseQueue = Arc<SyncMutex<VecDeque<Result<Vec<u8>, TransportError>>>>;
@@ -2070,9 +2040,6 @@ mod tests {
             reader: Mutex::new(VerifiedTapSigner(card)),
             cmd: RwLock::new(None),
             transport,
-            operation_guard: Mutex::new(()),
-            setup_done: AtomicBool::new(false),
-            last_response: SyncMutex::new(None),
             network: Network::Bitcoin,
         };
 
@@ -2138,115 +2105,6 @@ mod tests {
             SetupCmd::try_new(cvc.clone(), cvc, Some(vec![0; 33])),
             Err(TapSignerReaderError::InvalidChainCodeLength(33))
         ));
-    }
-
-    #[test]
-    fn continuation_has_stable_id_and_redacted_debug() {
-        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).expect("valid CVC"));
-        let setup = Arc::new(
-            SetupCmd::try_new(cvc.clone(), cvc, Some([0u8; 32].to_vec()))
-                .expect("valid setup command"),
-        );
-        let continuation = TapSignerSetupContinuation::new(
-            "TEST-CARD".to_string(),
-            SetupContinuationStage::RetryBackup {
-                cmd: setup,
-                pre_backup_count: Some(0),
-                backup: None,
-                error: TapSignerReaderError::NoCommand,
-            },
-        );
-        let cloned = continuation.clone();
-
-        assert_eq!(continuation.id(), cloned.id());
-        assert_eq!(continuation, cloned);
-        assert!(matches!(continuation.stage(), SetupContinuationStage::RetryBackup { .. }));
-        assert!(!format!("{continuation:?}").contains("123456"));
-        assert_eq!(continuation.message(), "TAPSIGNER backup needs to be retried");
-
-        let retried = continuation.retry_with_error(TapSignerReaderError::ManualRecoveryRequired);
-        assert_eq!(retried.id(), continuation.id());
-        assert_eq!(retried, continuation);
-        assert_ne!(retried.error(), continuation.error());
-        assert!(continuation.claim());
-        assert!(!continuation.claim());
-    }
-
-    #[test]
-    fn operation_continuation_retry_state_tracks_shared_claims() {
-        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
-        let continuation = TapSignerOperationContinuation::new(
-            "TEST-CARD".to_string(),
-            OperationContinuationStage::Derive { cvc, error: TapSignerReaderError::NoCommand },
-        );
-        let cloned = continuation.clone();
-
-        assert!(continuation.can_retry());
-        assert!(cloned.can_retry());
-        assert!(continuation.claim());
-        assert!(!continuation.can_retry());
-        assert!(!cloned.can_retry());
-        assert!(!cloned.claim());
-
-        let retried = continuation.retry_with_error(TapSignerReaderError::ManualRecoveryRequired);
-        assert!(retried.can_retry());
-    }
-
-    #[test]
-    fn operation_continuation_matches_complete_cvc_arguments() {
-        let backup_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
-        let derive_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
-        let current_cvc = Arc::new(TapSignerCvc::try_new("112233".to_string()).unwrap());
-        let new_cvc = Arc::new(TapSignerCvc::try_new("445566".to_string()).unwrap());
-        let other_cvc = Arc::new(TapSignerCvc::try_new("778899".to_string()).unwrap());
-
-        let backup = TapSignerOperationContinuation::new(
-            "TEST-CARD".to_string(),
-            OperationContinuationStage::Backup {
-                cvc: backup_cvc.clone(),
-                pre_backup_count: Some(1),
-                backup: None,
-                error: TapSignerReaderError::NoCommand,
-            },
-        );
-        assert!(backup.matches_backup(backup_cvc.clone()));
-        assert!(!backup.matches_backup(other_cvc.clone()));
-
-        let derive = TapSignerOperationContinuation::new(
-            "TEST-CARD".to_string(),
-            OperationContinuationStage::Derive {
-                cvc: derive_cvc.clone(),
-                error: TapSignerReaderError::NoCommand,
-            },
-        );
-        assert!(derive.matches_derive(derive_cvc.clone()));
-        assert!(!derive.matches_derive(other_cvc.clone()));
-
-        let change = TapSignerOperationContinuation::new(
-            "TEST-CARD".to_string(),
-            OperationContinuationStage::Change {
-                current_cvc: current_cvc.clone(),
-                new_cvc: new_cvc.clone(),
-                error: TapSignerReaderError::NoCommand,
-            },
-        );
-        assert!(change.matches_change(current_cvc.clone(), new_cvc.clone()));
-        assert!(!change.matches_change(other_cvc.clone(), new_cvc.clone()));
-        assert!(!change.matches_change(current_cvc, other_cvc));
-    }
-
-    #[test]
-    fn reader_identity_hash_ignores_mutable_operation_state() {
-        let (reader, _) = reader_for_responses(Vec::new(), Some(vec![84, 0, 0]), Some(0));
-        let (other, _) = reader_for_responses(Vec::new(), None, None);
-
-        assert_eq!(reader, other);
-
-        let mut reader_hash = DefaultHasher::new();
-        let mut other_hash = DefaultHasher::new();
-        reader.hash(&mut reader_hash);
-        other.hash(&mut other_hash);
-        assert_eq!(reader_hash.finish(), other_hash.finish());
     }
 
     #[tokio::test]
@@ -2327,39 +2185,38 @@ mod tests {
         assert!(second_calls.lock().is_empty());
     }
 
-    #[tokio::test]
-    async fn operation_guard_rejects_overlapping_setup() {
-        let (reader, calls) = reader_for_responses(Vec::new(), None, None);
-        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
-        let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
-        let _guard = reader.operation_guard.try_lock().expect("test owns operation guard");
-
-        let result = reader.setup(setup).await;
-
-        assert!(matches!(result, Err(TapSignerReaderError::OperationInProgress)));
-        assert!(calls.lock().is_empty());
-    }
-
-    #[tokio::test]
-    async fn completed_setup_is_cached_and_rejects_new_setup() {
-        let (reader, calls) = reader_for_responses(Vec::new(), Some(vec![84, 0, 0]), Some(1));
-        let derive_info = ffi::derive_info();
-        reader.setup_done.store(true, Ordering::Release);
-        reader.record_response(TapSignerResponse::Setup(SetupCmdResponse::Complete(
-            TapSignerSetupComplete {
-                backup: vec![1, 2, 3],
-                derive_info,
-                birthday: WalletBirthday::BlockHeight(700_553),
+    #[test]
+    fn resolver_routes_matching_command_and_blocks_mismatched_operations() {
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).expect("valid cvc"));
+        let other_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).expect("valid cvc"));
+        let pending = TapSignerOperationContinuation::new(
+            "card".to_string(),
+            OperationContinuationStage::Derive {
+                cvc: cvc.clone(),
+                error: TapSignerReaderError::ManualRecoveryRequired,
             },
-        )));
-        reader.record_response(TapSignerResponse::Change);
-        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
-        let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
+        );
 
-        let result = reader.setup(setup).await;
+        assert_eq!(
+            resolve_tap_signer_command(TapSignerCmd::Derive { cvc: cvc.clone() }, pending.clone()),
+            TapSignerCommandResolution::Resume,
+        );
+        assert_eq!(
+            resolve_tap_signer_command(TapSignerCmd::Backup { cvc: cvc.clone() }, pending.clone()),
+            TapSignerCommandResolution::PendingOperationConflict,
+            "a mismatched operation must not silently discard the continuation",
+        );
+        assert_eq!(
+            resolve_tap_signer_command(TapSignerCmd::Derive { cvc: other_cvc }, pending.clone()),
+            TapSignerCommandResolution::PendingOperationConflict,
+        );
 
-        assert!(matches!(result, Err(TapSignerReaderError::SetupAlreadyComplete)));
-        assert!(calls.lock().is_empty());
+        assert!(pending.claim());
+        assert_eq!(
+            resolve_tap_signer_command(TapSignerCmd::Derive { cvc }, pending),
+            TapSignerCommandResolution::Fresh,
+            "a claimed continuation never routes another attempt",
+        );
     }
 
     #[tokio::test]
@@ -2391,7 +2248,7 @@ mod tests {
         let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
-        let result = reader.setup(setup).await.unwrap();
+        let result = reader.setup_inner(setup).await.unwrap();
         let SetupCmdResponse::Retry(continuation) = result else {
             panic!("backup decode uncertainty must return a continuation")
         };
@@ -2490,17 +2347,12 @@ mod tests {
     }
 
     #[test]
-    fn apdu_status_word_remains_a_transport_failure_at_the_cktap_boundary() {
-        let error = rust_cktap::CkTapError::from(TransportError::UnknownStatusWord {
-            code: 0x6a80,
-            detail: "incorrect parameters".to_string(),
-        });
-
-        assert!(matches!(
-            error,
-            rust_cktap::CkTapError::Transport(message)
-                if message == "unknown APDU status word (0x6a80): incorrect parameters"
+    fn apdu_status_word_failures_are_uncertain_transport_failures() {
+        let error = TapSignerReaderError::from(TransportError::Transport(
+            "unexpected APDU status word (0x6a80)".to_string(),
         ));
+
+        assert!(error.is_transport_uncertainty());
     }
 
     #[tokio::test]
@@ -2566,7 +2418,7 @@ mod tests {
         let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
-        let result = reader.setup(setup).await;
+        let result = reader.setup_inner(setup).await;
 
         assert!(matches!(
             result,
@@ -2588,7 +2440,7 @@ mod tests {
         let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
-        let first = reader.setup(setup).await.unwrap();
+        let first = reader.setup_inner(setup).await.unwrap();
         let continuation = match first {
             SetupCmdResponse::Retry(continuation) => continuation,
             SetupCmdResponse::Complete(_) => panic!("init uncertainty must return a retry"),
@@ -2614,7 +2466,7 @@ mod tests {
         let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
         let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
 
-        let first = reader.setup(setup).await.unwrap();
+        let first = reader.setup_inner(setup).await.unwrap();
         let first_retry = match first {
             SetupCmdResponse::Retry(continuation) => continuation,
             SetupCmdResponse::Complete(_) => panic!("init uncertainty must return a retry"),
@@ -2671,12 +2523,6 @@ mod tests {
             SetupCmdResponse::Complete(_) => panic!("derive uncertainty must return a retry"),
         };
         assert_eq!(retry.message(), "TAPSIGNER derivation needs to be retried");
-        let TapSignerResponse::Setup(SetupCmdResponse::Retry(stored)) =
-            reader.last_response().expect("retry is stored")
-        else {
-            panic!("last response must store the retry")
-        };
-        assert_eq!(stored.id(), retry.id());
 
         let second = reader.continue_setup(retry).await.unwrap();
         let next = match second {

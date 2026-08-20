@@ -58,6 +58,9 @@ struct TapSignerEnterPin: View {
                 if error.isAuthError() {
                     app.sheetState = nil
                     app.alertState = .init(.tapSignerWrongPin(tapSigner: tapSigner, action: .derive))
+                } else if nfc.hasPendingRetry {
+                    // the retry screen resumes the interrupted derive with its continuation
+                    manager.resetRoute(to: .importRetry(tapSigner))
                 } else {
                     app.alertState = .init(
                         .tapSignerDeriveFailed(

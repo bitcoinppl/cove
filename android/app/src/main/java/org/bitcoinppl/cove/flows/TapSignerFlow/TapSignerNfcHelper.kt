@@ -9,11 +9,13 @@ import org.bitcoinppl.cove_core.SetupCmd
 import org.bitcoinppl.cove_core.SetupCmdResponse
 import org.bitcoinppl.cove_core.TapSignerCvc
 import org.bitcoinppl.cove_core.TapSignerCmd
+import org.bitcoinppl.cove_core.TapSignerCommandResolution
 import org.bitcoinppl.cove_core.TapSignerOperationContinuation
 import org.bitcoinppl.cove_core.TapSignerReaderException
 import org.bitcoinppl.cove_core.TapSignerResponse
 import org.bitcoinppl.cove_core.TransportException
 import org.bitcoinppl.cove_core.types.Psbt
+import org.bitcoinppl.cove_core.resolveTapSignerCommand
 import org.bitcoinppl.cove_core.tapSignerResponseBackupResponse
 import org.bitcoinppl.cove_core.tapSignerResponseChangeResponse
 import org.bitcoinppl.cove_core.tapSignerResponseDeriveResponse
@@ -66,12 +68,9 @@ class TapSignerNfcHelper {
 
         return withTapSignerCvc(cvc) { cvcObject ->
             responseOwner.performOperation(
-                TapSignerOperation.DERIVE,
+                "derive",
                 callbacks,
                 initialCommand = { TapSignerCmd.Derive(cvcObject.cloneForTapSignerCommand()) },
-                continuationMatches = { continuation ->
-                    continuation.matchesDerive(cvcObject)
-                },
             ) { response ->
                 response.deriveResponse()
             }
@@ -91,16 +90,13 @@ class TapSignerNfcHelper {
             val newCvcObject = TapSignerCvc.tryNew(newCvc)
             try {
                 responseOwner.performOperation(
-                    TapSignerOperation.CHANGE,
+                    "change",
                     callbacks,
                     initialCommand = {
                         TapSignerCmd.Change(
                             currentCvcObject.cloneForTapSignerCommand(),
                             newCvcObject.cloneForTapSignerCommand(),
                         )
-                    },
-                    continuationMatches = { continuation ->
-                        continuation.matchesChange(currentCvcObject, newCvcObject)
                     },
                 ) { response ->
                     response.changeResponse()
@@ -122,12 +118,9 @@ class TapSignerNfcHelper {
 
         return withTapSignerCvc(cvc) { cvcObject ->
             responseOwner.performOperation(
-                TapSignerOperation.BACKUP,
+                "backup",
                 callbacks,
                 initialCommand = { TapSignerCmd.Backup(cvcObject.cloneForTapSignerCommand()) },
-                continuationMatches = { continuation ->
-                    continuation.matchesBackup(cvcObject)
-                },
             ) { response ->
                 response.backupResponse()
             }
@@ -144,7 +137,7 @@ class TapSignerNfcHelper {
 
         return withTapSignerCvc(cvc) { cvcObject ->
             responseOwner.performOperation(
-                TapSignerOperation.SIGN,
+                "sign",
                 callbacks,
                 // clone because generated commands own and destroy their nested handles
                 initialCommand = {
@@ -184,7 +177,7 @@ class TapSignerNfcHelper {
     ): org.bitcoinppl.cove_core.DeriveInfo {
         currentCoroutineContext().ensureActive()
 
-        return responseOwner.continueOperation(TapSignerOperation.DERIVE, callbacks) { response ->
+        return responseOwner.continueOperation("derive", callbacks) { response ->
             response.deriveResponse()
         }
     }
@@ -213,7 +206,7 @@ private class TapSignerResponseOwner {
         releasePendingSetupResponse()
         val generation = responseStore.prepareFresh()
 
-        return performFresh(cmd, callbacks, operation = null, generation, responseHandler)
+        return performFresh(cmd, callbacks, generation, responseHandler)
     }
 
     suspend fun <T> performSetupContinuation(
@@ -230,75 +223,61 @@ private class TapSignerResponseOwner {
         }
 
         val generation = responseStore.currentGeneration()
-        return performExisting(command, callbacks, generation, responseHandler)
+        return performFresh(command, callbacks, generation, responseHandler)
             .also { releasePendingSetupResponse() }
     }
 
     suspend fun <T> performOperation(
-        operation: TapSignerOperation,
+        label: String,
         callbacks: TapCardNfcManager.OperationCallbacks,
         initialCommand: () -> TapSignerCmd,
-        continuationMatches: (TapSignerOperationContinuation) -> Boolean = { false },
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         releasePendingSetupResponse()
-        val preparation = responseStore.prepareOperation(operation, continuationMatches)
+        val cmd = initialCommand()
+
+        // Rust owns the routing: a pending continuation either resumes this
+        // exact command or blocks a conflicting one, and is never silently dropped
+        var routed = false
+        val preparation =
+            try {
+                responseStore.prepareOperation(cmd, label).also { routed = true }
+            } finally {
+                if (!routed) cmd.destroy()
+            }
 
         return when (preparation) {
             is PreparedTapSignerOperation.Fresh -> {
-                performFresh(
-                    initialCommand(),
-                    callbacks,
-                    operation,
-                    preparation.generation,
-                    responseHandler,
-                )
+                performFresh(cmd, callbacks, preparation.generation, responseHandler)
             }
             is PreparedTapSignerOperation.Continuation -> {
-                performContinuation(preparation.value, callbacks, operation, responseHandler)
-            }
-            PreparedTapSignerOperation.RequiresContinuation -> {
-                error("Complete the pending TAPSIGNER operation before starting ${operation.label}")
+                cmd.destroy()
+                performContinuation(preparation.value, callbacks, responseHandler)
             }
         }
     }
 
     suspend fun <T> continueOperation(
-        operation: TapSignerOperation,
+        label: String,
         callbacks: TapCardNfcManager.OperationCallbacks,
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         currentCoroutineContext().ensureActive()
 
-        val preparation = responseStore.prepareContinuation(operation)
+        val preparation = responseStore.prepareContinuation(label)
 
-        return performContinuation(preparation, callbacks, operation, responseHandler)
+        return performContinuation(preparation, callbacks, responseHandler)
     }
 
     private suspend fun <T> performFresh(
         cmd: TapSignerCmd,
         callbacks: TapCardNfcManager.OperationCallbacks,
-        operation: TapSignerOperation?,
         generation: Long,
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         return try {
             val response = nfcManager.performTapSignerCmd(operationToken, cmd, callbacks)
-            responseStore.acceptResponse(response, operation, generation, responseHandler)
-        } finally {
-            cmd.destroy()
-        }
-    }
-
-    private suspend fun <T> performExisting(
-        cmd: TapSignerCmd,
-        callbacks: TapCardNfcManager.OperationCallbacks,
-        generation: Long,
-        responseHandler: (TapSignerResponse) -> T,
-    ): T {
-        return try {
-            val response = nfcManager.performTapSignerCmd(operationToken, cmd, callbacks)
-            responseStore.acceptResponse(response, operation = null, generation, responseHandler)
+            responseStore.acceptResponse(response, generation, responseHandler)
         } finally {
             cmd.destroy()
         }
@@ -307,14 +286,12 @@ private class TapSignerResponseOwner {
     private suspend fun <T> performContinuation(
         prepared: PreparedContinuation,
         callbacks: TapCardNfcManager.OperationCallbacks,
-        operation: TapSignerOperation,
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         return try {
             val response = nfcManager.performTapSignerCmd(operationToken, prepared.command, callbacks)
             responseStore.acceptResponse(
                 response,
-                operation,
                 prepared.generation,
                 responseHandler,
                 expectedPrevious = prepared.retry,
@@ -357,11 +334,13 @@ private class TapSignerResponseOwner {
     }
 }
 
+private const val NFC_HELPER_CLOSED_MESSAGE = "TAPSIGNER NFC helper is closed"
+
 private class TapSignerResponseStore {
     // keep close from destroying generated handles while state or responses are being inspected
     private val lifecycleLock = Any()
     private var lastResponse: TapSignerResponse? = null
-    private var routingState = TapSignerOperationRoutingState()
+    private var closed = false
     private var nextOperationGeneration = 0L
 
     fun prepareFresh(): Long = synchronized(lifecycleLock) {
@@ -375,47 +354,40 @@ private class TapSignerResponseStore {
     }
 
     fun prepareOperation(
-        operation: TapSignerOperation,
-        continuationMatches: (TapSignerOperationContinuation) -> Boolean,
+        cmd: TapSignerCmd,
+        label: String,
     ): PreparedTapSignerOperation = synchronized(lifecycleLock) {
         ensureOpenLocked()
 
         val retry = lastResponse as? TapSignerResponse.Retry
-        val argumentsMatch = retry?.let { continuationMatches(it.v1) } == true
-        when (routingState.route(operation, retry != null, argumentsMatch)) {
-            TapSignerOperationRoute.FRESH -> {
+            ?: return PreparedTapSignerOperation.Fresh(prepareFreshLocked())
+
+        when (resolveTapSignerCommand(cmd, retry.v1)) {
+            TapSignerCommandResolution.FRESH -> {
                 PreparedTapSignerOperation.Fresh(prepareFreshLocked())
             }
-            TapSignerOperationRoute.CONTINUATION -> {
-                PreparedTapSignerOperation.Continuation(
-                    prepareContinuationLocked(checkNotNull(retry)),
-                )
+            TapSignerCommandResolution.RESUME -> {
+                PreparedTapSignerOperation.Continuation(prepareContinuationLocked(retry))
             }
-            TapSignerOperationRoute.REQUIRES_CONTINUATION -> {
-                PreparedTapSignerOperation.RequiresContinuation
+            TapSignerCommandResolution.PENDING_OPERATION_CONFLICT -> {
+                error("Complete the pending TAPSIGNER operation before starting $label")
             }
         }
     }
 
-    fun prepareContinuation(operation: TapSignerOperation): PreparedContinuation =
+    fun prepareContinuation(label: String): PreparedContinuation =
         synchronized(lifecycleLock) {
             ensureOpenLocked()
 
             val retry = lastResponse as? TapSignerResponse.Retry
-            check(
-                routingState.route(operation, retry != null, argumentsMatch = true) ==
-                    TapSignerOperationRoute.CONTINUATION,
-            ) {
-                "No TAPSIGNER ${operation.label} continuation is available"
-            }
+                ?: error("No TAPSIGNER $label continuation is available")
 
-            prepareContinuationLocked(checkNotNull(retry))
+            prepareContinuationLocked(retry)
         }
 
     private fun prepareFreshLocked(): Long {
         val previousResponse = lastResponse
         lastResponse = null
-        routingState = routingState.clear()
         previousResponse?.destroy()
         return ++nextOperationGeneration
     }
@@ -429,16 +401,14 @@ private class TapSignerResponseStore {
 
     fun <T> acceptResponse(
         response: TapSignerResponse,
-        operation: TapSignerOperation?,
         generation: Long,
         responseHandler: (TapSignerResponse) -> T,
         expectedPrevious: TapSignerResponse.Retry? = null,
     ): T = synchronized(lifecycleLock) {
-        if (routingState.responseDisposition() == TapSignerResponseDisposition.DESTROY_AND_CANCEL) {
+        if (closed) {
             response.destroy()
             lastResponse = null
-            routingState = routingState.clear()
-            throw tapSignerNfcClosedException()
+            throw kotlinx.coroutines.CancellationException(NFC_HELPER_CLOSED_MESSAGE)
         }
 
         if (generation != nextOperationGeneration ||
@@ -450,7 +420,6 @@ private class TapSignerResponseStore {
 
         val previousResponse = lastResponse
         lastResponse = response
-        routingState = routingState.recordResponse(operation, response is TapSignerResponse.Retry)
         previousResponse?.destroy()
 
         responseHandler(response)
@@ -458,9 +427,8 @@ private class TapSignerResponseStore {
 
     fun handleContinuationFailure(prepared: PreparedContinuation) {
         synchronized(lifecycleLock) {
-            if (routingState.responseDisposition() == TapSignerResponseDisposition.DESTROY_AND_CANCEL) {
+            if (closed) {
                 lastResponse = null
-                routingState = routingState.clear()
                 return
             }
 
@@ -470,9 +438,7 @@ private class TapSignerResponseStore {
                 return
             }
 
-            val canRetry = prepared.retry.v1.canRetry()
-            routingState = routingState.afterContinuationFailure(canRetry)
-            if (!canRetry) {
+            if (!prepared.retry.v1.canRetry()) {
                 lastResponse = null
                 prepared.retry.destroy()
             }
@@ -480,9 +446,7 @@ private class TapSignerResponseStore {
     }
 
     private fun ensureOpenLocked() {
-        if (routingState.responseDisposition() != TapSignerResponseDisposition.STORE) {
-            throw tapSignerNfcClosedException()
-        }
+        if (closed) throw kotlinx.coroutines.CancellationException(NFC_HELPER_CLOSED_MESSAGE)
     }
 
     fun lastSetupResponse(): SetupCmdResponse? =
@@ -494,7 +458,7 @@ private class TapSignerResponseStore {
         synchronized(lifecycleLock) {
             val response = lastResponse
             lastResponse = null
-            routingState = routingState.close()
+            closed = true
             ++nextOperationGeneration
             response?.destroy()
         }
@@ -505,8 +469,6 @@ private sealed interface PreparedTapSignerOperation {
     data class Fresh(val generation: Long) : PreparedTapSignerOperation
 
     data class Continuation(val value: PreparedContinuation) : PreparedTapSignerOperation
-
-    data object RequiresContinuation : PreparedTapSignerOperation
 }
 
 private data class PreparedContinuation(
@@ -532,11 +494,7 @@ private suspend fun <T> withTapSignerCvc(
 }
 
 private fun TapSignerResponse.setupResponse(): SetupCmdResponse =
-    tapSignerResponseSetupResponse(this)
-        ?: when (this) {
-            is TapSignerResponse.Retry -> throw TapSignerOperationRetryException(v1.message())
-            else -> throw unexpectedResponse("setup")
-        }
+    tapSignerResponseSetupResponse(this) ?: throw unexpectedResponse("setup")
 
 private fun TapSignerResponse.deriveResponse(): org.bitcoinppl.cove_core.DeriveInfo =
     tapSignerResponseDeriveResponse(this)
@@ -562,11 +520,7 @@ private fun TapSignerResponse.backupResponse(): ByteArray =
         }
 
 private fun TapSignerResponse.signResponse(): Psbt =
-    tapSignerResponseSignResponse(this)
-        ?: when (this) {
-            is TapSignerResponse.Retry -> throw TapSignerOperationRetryException(v1.message())
-            else -> throw unexpectedResponse("sign")
-        }
+    tapSignerResponseSignResponse(this) ?: throw unexpectedResponse("sign")
 
 private fun unexpectedResponse(operation: String): IllegalStateException =
     IllegalStateException("Unexpected response for TAPSIGNER $operation")

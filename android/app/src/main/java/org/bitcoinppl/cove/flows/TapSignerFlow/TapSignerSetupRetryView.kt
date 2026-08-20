@@ -115,9 +115,6 @@ fun TapSignerSetupRetryView(
                         }
                     } catch (error: CancellationException) {
                         throw error
-                    } catch (error: TapSignerOperationRetryException) {
-                        manager.errorMessage =
-                            error.message ?: "Setup still needs another card scan"
                     } catch (_: Exception) {
                         app.sheetState = null
                         app.alertState =

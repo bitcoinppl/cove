@@ -35,10 +35,6 @@ pub enum TransportError {
     #[error("CvcChangeError: {0}")]
     CvcChangeError(String),
 
-    /// The card returned a status word that this version does not know
-    #[error("UnknownStatusWord ({code}): {detail}")]
-    UnknownStatusWord { code: u16, detail: String },
-
     /// The card returned a protocol error code that this version does not know
     #[error("UnknownCardErrorCode ({code}): {detail}")]
     UnknownCardErrorCode { code: u16, detail: String },
@@ -146,11 +142,6 @@ impl From<TransportError> for CkTapTransportError {
             | TransportError::UnknownError(message) => Self::Transport(message),
             TransportError::UnknownCardErrorCode { code, detail } => {
                 Self::UnknownErrorCode { code, message: detail }
-            }
-
-            // rust-cktap has no APDU status-word variant at the pinned revision
-            TransportError::UnknownStatusWord { code, detail } => {
-                Self::Transport(format!("unknown APDU status word ({code:#06x}): {detail}"))
             }
         }
     }
