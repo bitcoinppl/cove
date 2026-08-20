@@ -1,3 +1,4 @@
+use crate::wallet::addressing::AddressTypeSwitch;
 use crate::{
     database::{
         Database,
@@ -665,18 +666,8 @@ impl WalletActor {
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
         let previous_metadata = self.wallet.metadata.clone();
-        let switch_metadata =
-            self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
-        self.apply_metadata_patch(WalletMetadataPatch::AddressType(address_type_patch(
-            address_type,
-            switch_metadata,
-            &previous_metadata,
-        )))?;
-        self.restart_scan_after_address_type_switch()
-            .await
-            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
-
-        Ok(())
+        let switch = self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
+        self.finish_address_type_switch(switch, address_type, previous_metadata).await
     }
 
     pub async fn switch_descriptor_to_new_address_type(
@@ -723,16 +714,133 @@ impl WalletActor {
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
         let previous_metadata = self.wallet.metadata.clone();
-        let switch_metadata =
+        let switch =
             self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
-        self.apply_metadata_patch(WalletMetadataPatch::AddressType(address_type_patch(
+        self.finish_address_type_switch(switch, address_type, previous_metadata).await
+    }
+
+    async fn finish_address_type_switch(
+        &mut self,
+        mut switch: AddressTypeSwitch,
+        address_type: WalletAddressType,
+        previous_metadata: WalletMetadata,
+    ) -> Result<(), Error> {
+        let switch_metadata = switch.metadata();
+        let patch = WalletMetadataPatch::AddressType(address_type_patch(
             address_type,
             switch_metadata,
             &previous_metadata,
-        )))?;
-        self.restart_scan_after_address_type_switch()
-            .await
-            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
+        ));
+
+        if let Err(error) = switch.mark_metadata_committing() {
+            return match switch.rollback(&mut self.wallet) {
+                Ok(()) => Err(Error::UnableToSwitch(address_type, error.to_string())),
+                Err(rollback_error) => Err(Error::UnableToSwitch(
+                    address_type,
+                    format!("{error}; failed to restore wallet store: {rollback_error}"),
+                )),
+            };
+        }
+
+        if let Err(error) = self.apply_metadata_patch(patch) {
+            if let Err(rollback_error) = switch.rollback(&mut self.wallet) {
+                return Err(Error::UnableToSwitch(
+                    address_type,
+                    format!("{error}; failed to restore wallet store: {rollback_error}"),
+                ));
+            }
+
+            return Err(error);
+        }
+
+        if let Err(error) = switch.mark_metadata_committed() {
+            self.reset_scan_lifecycle_for_address_type_switch();
+            if let Err(rollback_error) =
+                self.rollback_address_type_switch(switch, &previous_metadata)
+            {
+                return Err(Error::UnableToSwitch(
+                    address_type,
+                    format!("{error}; {rollback_error}"),
+                ));
+            }
+
+            return Err(Error::UnableToSwitch(address_type, error.to_string()));
+        }
+
+        if let Err(error) = self.restart_scan_after_address_type_switch().await {
+            self.reset_scan_lifecycle_for_address_type_switch();
+            if let Err(rollback_error) =
+                self.rollback_address_type_switch(switch, &previous_metadata)
+            {
+                return Err(Error::UnableToSwitch(
+                    address_type,
+                    format!("{error}; {rollback_error}"),
+                ));
+            }
+
+            return Err(Error::UnableToSwitch(address_type, error.to_string()));
+        }
+
+        switch.commit().map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
+        Ok(())
+    }
+
+    fn rollback_address_type_switch(
+        &mut self,
+        mut switch: AddressTypeSwitch,
+        previous_metadata: &WalletMetadata,
+    ) -> Result<(), String> {
+        let phase_error = switch.begin_rollback().err();
+        let metadata_error = self.restore_address_type_switch_metadata(previous_metadata).err();
+        let store_error = switch.restore_store(&mut self.wallet).err();
+
+        if phase_error.is_some() || metadata_error.is_some() || store_error.is_some() {
+            let mut failures = Vec::new();
+
+            if let Some(error) = phase_error {
+                failures.push(format!("failed to record wallet rollback: {error}"));
+            }
+
+            if let Some(error) = metadata_error {
+                failures.push(format!("failed to restore wallet metadata: {error}"));
+            }
+
+            if let Some(error) = store_error {
+                failures.push(format!("failed to restore wallet store: {error}"));
+            }
+
+            // keep the durable Rollback journal so bootstrap can retry every failed step
+            return Err(failures.join("; "));
+        }
+
+        switch.complete_rollback().map_err(|error| {
+            format!("failed to finalize wallet rollback; bootstrap will retry: {error}")
+        })
+    }
+
+    fn restore_address_type_switch_metadata(
+        &mut self,
+        previous_metadata: &WalletMetadata,
+    ) -> Result<(), Error> {
+        self.apply_metadata_patch(WalletMetadataPatch::AddressType(WalletAddressTypePatch {
+            address_type: previous_metadata.address_type,
+            discovery_state: previous_metadata.discovery_state.clone(),
+            origin: previous_metadata.origin.clone(),
+            master_fingerprint: previous_metadata.master_fingerprint.clone(),
+        }))?;
+        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
+            address_index: Some(previous_metadata.internal.address_index.clone()),
+            last_scan_finished: Some(previous_metadata.internal.last_scan_finished),
+            last_height_fetched: Some(previous_metadata.internal.last_height_fetched),
+            performed_full_scan_at: Some(previous_metadata.internal.performed_full_scan_at),
+        }))?;
+
+        self.last_scan_finished = previous_metadata.internal.last_scan_finished;
+        self.last_height_fetched = previous_metadata
+            .internal
+            .last_height_fetched
+            .as_ref()
+            .map(|height| (height.last_seen, height.block_height as usize));
 
         Ok(())
     }
@@ -1047,26 +1155,18 @@ impl WalletActor {
             }
         }
 
-        if full_scan_updates_initial_metadata(full_scan_type) {
+        let metadata_result = if full_scan_updates_initial_metadata(full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
-
-            if let Err(error) = self.record_full_scan_performed(now) {
-                self.state = ActorState::FailedFullScan(full_scan_type);
-                self.send_scan_idle_status();
-                return Err(error.into());
-            }
-
-            if let Err(error) = self.save_last_scan_finished() {
-                self.state = ActorState::FailedFullScan(full_scan_type);
-                self.send_scan_idle_status();
-                return Err(error.into());
-            }
+            self.record_full_scan_performed(now)
         } else {
-            if let Err(error) = self.save_last_scan_finished() {
-                self.state = ActorState::FailedFullScan(full_scan_type);
-                self.send_scan_idle_status();
-                return Err(error.into());
-            }
+            Ok(())
+        }
+        .and_then(|()| self.save_last_scan_finished());
+
+        if let Err(error) = metadata_result {
+            self.state = ActorState::FailedFullScan(full_scan_type);
+            self.send_scan_idle_status();
+            return Err(error.into());
         }
 
         self.notify_scan_complete().await?;
@@ -1654,11 +1754,11 @@ mod tests {
         task::JoinHandle,
     };
 
-    use crate::wallet::metadata::WalletMetadata;
+    use crate::{database::wallet::WalletMetadataPatch, wallet::metadata::WalletMetadata};
 
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
-        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany, address_type_patch,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
         metadata_deltas, metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
@@ -3433,6 +3533,154 @@ mod tests {
             call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
         assert_eq!(actor_metadata, expected_metadata);
 
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn address_type_switch_metadata_failure_restores_old_wallet_store() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let expected_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        crate::database::Database::global()
+            .wallets
+            .remove_wallet_metadata(metadata.network, metadata.wallet_mode, &metadata.id)
+            .expect("metadata row is removed");
+
+        let result = call!(
+            addr.switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+        )
+        .await
+        .expect("actor responds");
+        assert!(result.is_err());
+
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
+        let actor_address = call!(addr.address_at(0)).await.expect("address loads");
+
+        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(actor_address.to_string(), expected_address.to_string());
+
+        crate::database::Database::global()
+            .wallets
+            .save_new_wallet_metadata(metadata.clone())
+            .expect("metadata row is restored for reload");
+        let mut reloaded_wallet = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads after the failed switch");
+        let reloaded_address = reloaded_wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        assert_eq!(reloaded_address.to_string(), expected_address.to_string());
+
+        reloaded_wallet.bdk.reveal_next_address(KeychainKind::External);
+        reloaded_wallet.persist().expect("restored wallet persists to the restored path");
+        drop(reloaded_wallet);
+
+        let persisted_again = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads after persisting through the restored connection");
+        assert_eq!(
+            persisted_again
+                .bdk
+                .list_unused_addresses(KeychainKind::External)
+                .next()
+                .map(|address| address.index),
+            Some(0)
+        );
+
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn interrupted_address_type_switch_restores_old_store_during_startup_recovery() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let old_metadata = wallet.metadata.clone();
+        let expected_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+
+        let switch = wallet
+            .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+            .expect("address type store is replaced");
+        let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        assert_ne!(replacement_address, expected_address);
+
+        // dropping these values simulates a process stop after store replacement
+        drop(wallet);
+        drop(switch);
+
+        let database = crate::database::Database::global();
+        crate::wallet::addressing::recover_address_type_switches(&database.wallets)
+            .expect("interrupted address switch is recovered");
+
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the restored store");
+        let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
+
+        assert_eq!(reloaded.metadata, old_metadata);
+        assert_eq!(reloaded_address, expected_address);
+
+        drop(reloaded);
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn interrupted_committed_address_type_switch_keeps_new_store_during_startup_recovery() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let old_metadata = wallet.metadata.clone();
+        let original_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+
+        let mut switch = wallet
+            .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+            .expect("address type store is replaced");
+        let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        assert_ne!(replacement_address, original_address);
+
+        let switch_metadata = switch.metadata();
+        let patch = WalletMetadataPatch::AddressType(address_type_patch(
+            WalletAddressType::Legacy,
+            switch_metadata,
+            &old_metadata,
+        ));
+        let mut target_metadata = old_metadata;
+        patch.apply_to(&mut target_metadata);
+
+        switch.mark_metadata_committing().expect("metadata commit is recorded");
+        crate::database::Database::global()
+            .wallets
+            .replace_wallet_metadata(target_metadata.clone())
+            .expect("target metadata is persisted");
+        switch.mark_metadata_committed().expect("metadata completion is recorded");
+
+        // dropping these values simulates a process stop before journal cleanup
+        drop(wallet);
+        drop(switch);
+
+        let database = crate::database::Database::global();
+        crate::wallet::addressing::recover_address_type_switches(&database.wallets)
+            .expect("committed address switch is recovered");
+
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the replacement store");
+        let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
+
+        assert_eq!(reloaded.metadata, target_metadata);
+        assert_eq!(reloaded_address, replacement_address);
+
+        drop(reloaded);
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 

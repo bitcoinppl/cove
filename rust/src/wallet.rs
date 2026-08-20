@@ -248,38 +248,6 @@ impl Wallet {
         WalletBuilder::new(WalletSource::TapSigner { tap_signer, derive, backup, birthday }).build()
     }
 
-    #[cfg(test)]
-    pub(crate) fn try_new_persisted_from_mnemonic_segwit(
-        metadata: WalletMetadata,
-        mnemonic: Mnemonic,
-        passphrase: Option<String>,
-    ) -> Result<Self, WalletError> {
-        Self::try_new_persisted_from_mnemonic(
-            metadata,
-            mnemonic,
-            passphrase,
-            WalletAddressType::NativeSegwit,
-        )
-    }
-
-    fn try_new_persisted_from_mnemonic(
-        metadata: WalletMetadata,
-        mnemonic: Mnemonic,
-        passphrase: Option<String>,
-        address_type: WalletAddressType,
-    ) -> Result<Self, WalletError> {
-        WalletBuilder::new(WalletSource::Mnemonic { metadata, mnemonic, passphrase, address_type })
-            .build()
-    }
-
-    fn try_new_persisted_from_xpriv(
-        metadata: WalletMetadata,
-        xpriv: WalletXprv,
-        address_type: WalletAddressType,
-    ) -> Result<Self, WalletError> {
-        WalletBuilder::new(WalletSource::Xpriv { metadata, xpriv, address_type }).build()
-    }
-
     pub fn balance(&self) -> Balance {
         self.bdk.balance().into()
     }
@@ -380,6 +348,26 @@ impl Wallet {
     ) -> Result<Self, WalletError> {
         let export = Arc::unwrap_or_clone(export);
         Self::try_new_persisted_from_pubport(export.into_format())
+    }
+}
+
+#[cfg(test)]
+mod test_support {
+    use super::*;
+
+    impl Wallet {
+        pub(crate) fn try_new_persisted_from_mnemonic_segwit(
+            metadata: WalletMetadata,
+            mnemonic: Mnemonic,
+            passphrase: Option<String>,
+        ) -> Result<Self, WalletError> {
+            builder::test_support::build_from_mnemonic(
+                metadata,
+                mnemonic,
+                passphrase,
+                WalletAddressType::NativeSegwit,
+            )
+        }
     }
 }
 
