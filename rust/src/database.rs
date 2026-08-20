@@ -89,13 +89,14 @@ impl Database {
         self.diagnostics_reports.clone()
     }
 
-    pub fn dangerous_reset_all_data(&self) {
+    pub fn dangerous_reset_all_data(&self) -> Result<(), error::DatabaseError> {
         match std::fs::remove_file(database_location()) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
-                error!("unable to delete database cove_main error: {error}");
-                return;
+                return Err(error::DatabaseError::DatabaseAccess(format!(
+                    "unable to delete database cove_main: {error}"
+                )));
             }
         }
 
@@ -103,8 +104,10 @@ impl Database {
             error!("unable to clear diagnostics logs during data reset: {error}");
         }
 
-        let db = Self::init().expect("failed to reinitialize database after reset");
+        let db = Self::init()?;
         DATABASE.get().expect("database not initialized").swap(Arc::new(db));
+
+        Ok(())
     }
 }
 

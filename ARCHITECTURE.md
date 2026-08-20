@@ -85,6 +85,8 @@ This pattern is used throughout the codebase for shared resources and is safe to
 
 redb stores typed table metadata for each table and validates the key and value `TypeName` on `open_table`. Treat changes to `TableDefinition`, `Value::type_name()`, persisted database type names, and module paths for persisted types as compatibility-sensitive. `std::any::type_name::<T>()` uses the type's defining module path, not a public re-export path, so moving a persisted type into or out of a nested module can change on-disk expectations even when serialized bytes stay identical. Preserve exact historical type names or add a compatibility/migration path, and test every install path that could have created the table, including short-lived beta/internal builds. See [docs/redb.md](docs/redb.md) for the redb compatibility checklist.
 
+**Destructive operations.** Wallet deletion removes secrets first, artifacts second, and the canonical metadata row last: the row is the durable record that a wallet exists, so a crash or failure leaves the wallet listed and deletion is idempotent on retry. Every step is fallible and propagated — a partial wipe must never look complete. Full wipes and catastrophic resets stop wallet actors before removing data and also remove restore markers and locks, so the next bootstrap cannot replay recovery against data that no longer exists. Address-type switches need no journal: the replacement store is published with one atomic rename, and wallet load heals metadata forward to match the store it finds.
+
 **Database tables:**
 
 - `GlobalFlagTable` - Feature flags and terms acceptance status

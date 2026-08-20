@@ -1088,6 +1088,22 @@ fn operation_id() -> String {
     hex::encode(bytes)
 }
 
+/// Remove every durable restore-recovery artifact during a catastrophic reset
+///
+/// A reset that wipes wallet data must also wipe markers and locks, or the next
+/// bootstrap replays recovery against data that no longer exists
+pub(crate) fn remove_all_restore_recovery_state() -> std::io::Result<()> {
+    for directory in [marker_directory(), lock_directory()] {
+        match fs::remove_dir_all(&directory) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    Ok(())
+}
+
 fn marker_directory() -> PathBuf {
     cove_common::consts::ROOT_DATA_DIR.join(MARKER_DIRECTORY_NAME)
 }

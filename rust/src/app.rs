@@ -556,9 +556,7 @@ impl FfiApp {
     /// Delete a wallet with a corrupted database, cleaning up all associated data
     pub fn delete_corrupted_wallet(&self, id: WalletId) -> Result<(), Error> {
         let database = Database::global();
-        crate::wallet::deletion::WalletDeletion::new()
-            .delete(&id)
-            .map_err_str(AppError::WalletDeletion)?;
+        crate::wallet::deletion::delete_wallet(&id).map_err_str(AppError::WalletDeletion)?;
 
         Updater::send_update(AppMessage::ClearCachedWalletManager(id.clone()));
 
@@ -585,22 +583,30 @@ impl FfiApp {
     pub fn dangerous_wipe_all_data(&self) -> Result<(), Error> {
         let database = Database::global();
         let wallets = Database::global().wallets().all().unwrap_or_default();
-        let wipe = crate::wallet::deletion::WalletDeletion::new()
-            .prepare_full_wipe()
-            .map_err_str(AppError::WalletDeletion)?;
 
+        // keep wiping the remaining wallets after a failure, then report every
+        // failure: a partial wipe must never look complete
+        let mut failures = Vec::new();
         for wallet in wallets {
             let wallet_id = &wallet.id;
-            wipe.delete(wallet_id);
+            if let Err(error) = crate::wallet::deletion::delete_wallet(wallet_id) {
+                failures.push(format!("{wallet_id}: {error}"));
+            }
 
             Updater::send_update(AppMessage::ClearCachedWalletManager(wallet_id.clone()));
         }
 
         if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
-            error!("Unable to clear cloud backup keychain state: {error}");
+            failures.push(format!("cloud backup keychain: {error}"));
         }
 
-        database.dangerous_reset_all_data();
+        if let Err(error) = database.dangerous_reset_all_data() {
+            failures.push(format!("main database: {error}"));
+        }
+
+        if !failures.is_empty() {
+            return Err(AppError::WalletDeletion(failures.join("; ")));
+        }
 
         Ok(())
     }

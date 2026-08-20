@@ -1,4 +1,4 @@
-use std::{fmt::Display, future::Future};
+use std::{fmt::Display, future::Future, time::Duration};
 
 use crate::{
     app::{
@@ -8,17 +8,19 @@ use crate::{
     database::Database,
     router::Route,
     wallet::{
-        deletion::WalletDeletion,
+        deletion,
         metadata::{WalletMetadata, WalletType},
     },
 };
 use act_zero::{Actor, Addr, AddrLike as _, call};
 use cove_util::result_ext::ResultExt as _;
-use futures::FutureExt as _;
 use tap::TapFallible as _;
 use tracing::error;
 
 use super::{Error, RustWalletManager};
+
+/// How long a failed shutdown call waits for the actor to stop on its own
+const SHUTDOWN_TERMINATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl RustWalletManager {
     pub(crate) async fn delete_wallet_internal(&self) -> Result<(), Error> {
@@ -33,7 +35,7 @@ impl RustWalletManager {
         self.shutdown_actors_and_wait().await?;
 
         let database = Database::global();
-        WalletDeletion::new().delete(&wallet_id).map_err_str(Error::DeleteWalletError)?;
+        deletion::delete_wallet(&wallet_id).map_err_str(Error::DeleteWalletError)?;
 
         Updater::send_update(Update::ClearCachedWalletManager(wallet_id.clone()));
 
@@ -110,19 +112,15 @@ where
     F: Future<Output = Result<(), E>>,
     E: Display,
 {
-    match shutdown.await {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            // a canceled actor call is idempotent only when the actor has already stopped
-            tokio::task::yield_now().await;
+    let Err(error) = shutdown.await else { return Ok(()) };
 
-            if actor.termination().now_or_never().is_some() {
-                return Ok(());
-            }
-
-            Err(Error::UnknownError(format!("{actor_name} shutdown failed: {error}")))
-        }
+    // a failed shutdown call still counts as a shutdown when the actor stops anyway, which
+    // covers an actor that terminated before the call and one that stops right after it
+    if tokio::time::timeout(SHUTDOWN_TERMINATION_TIMEOUT, actor.termination()).await.is_ok() {
+        return Ok(());
     }
+
+    Err(Error::UnknownError(format!("{actor_name} shutdown failed: {error}")))
 }
 
 #[cfg(test)]
@@ -154,7 +152,8 @@ mod tests {
             .expect("detached actors are already stopped");
     }
 
-    #[tokio::test]
+    // paused time lets the termination timeout expire without a real wait
+    #[tokio::test(start_paused = true)]
     async fn shutdown_actor_reports_an_active_shutdown_failure() {
         crate::test_support::ensure_tokio_runtime();
 

@@ -141,6 +141,11 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
         .clear_local_state()
         .map_err_str(CatastrophicRecoveryError::Failure)?;
 
+    // restore markers and locks must not survive the wallets they describe, or
+    // the next bootstrap replays recovery against data this reset removed
+    crate::backup::recovery::remove_all_restore_recovery_state()
+        .map_err_str(CatastrophicRecoveryError::Failure)?;
+
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
     log_remove_file(&root.join("cove.encrypted.db"));

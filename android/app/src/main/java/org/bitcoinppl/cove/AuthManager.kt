@@ -233,6 +233,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
         // if so wipe the data
         if (checkWipeDataPin(pin)) {
             App.isLoading = true
+            // close wallet managers first so no live actor recreates wallet data
+            // behind the wipe
+            App.clearWalletManager()
             try {
                 App.dangerousWipeAllData()
 
