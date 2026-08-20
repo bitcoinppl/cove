@@ -34,30 +34,7 @@ impl BdkStore {
             .map_err(|e| eyre::eyre!("storage bootstrap failed: {e}"))?;
 
         let sqlite_data_path = sqlite_data_path(id);
-
-        // detect plaintext before opening so we can skip the encryption key
-        // (plaintext DBs remain when migration fails — they still work unencrypted)
-        let is_existing_plaintext = sqlite_data_path.exists()
-            && crate::database::migration::is_plaintext_sqlite(&sqlite_data_path);
-
-        let conn = bdk_wallet::rusqlite::Connection::open(&sqlite_data_path)
-            .context("unable to open rusqlite connection")?;
-
-        if !is_existing_plaintext {
-            let key = crate::database::encrypted_backend::encryption_key()
-                .expect("encryption key must be set");
-            conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
-        }
-
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "FULL")?;
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            conn.pragma_update(None, "fullfsync", 1)?;
-        }
-
-        // in pages (4096 bytes) 2000 pages = 8MB
-        conn.pragma_update(None, "cache_size", 2000)?;
+        let conn = open_persistent_connection(&sqlite_data_path)?;
 
         let mut me = Self {
             id: id.clone(),
@@ -72,6 +49,29 @@ impl BdkStore {
         }
 
         Ok(me)
+    }
+
+    /// Check a persistent wallet without running legacy-store migration
+    pub(crate) fn persistent_wallet_matches_descriptors(
+        id: &WalletId,
+        external_descriptor: &str,
+        internal_descriptor: &str,
+    ) -> Result<bool> {
+        let sqlite_data_path = sqlite_data_path(id);
+        if !sqlite_data_path.exists() {
+            return Ok(false);
+        }
+
+        let mut conn = open_persistent_connection(&sqlite_data_path)?;
+        let Some(wallet) = Wallet::load()
+            .load_wallet(&mut conn)
+            .context("failed to load wallet while inspecting persistent store")?
+        else {
+            return Ok(false);
+        };
+
+        Ok(wallet.public_descriptor(KeychainKind::External).to_string() == external_descriptor
+            && wallet.public_descriptor(KeychainKind::Internal).to_string() == internal_descriptor)
     }
 
     /// Open an in-memory BDK wallet store for ephemeral wallet views
@@ -193,6 +193,34 @@ impl BdkStore {
             Err(error) => Err(error),
         }
     }
+}
+
+fn open_persistent_connection(sqlite_data_path: &Path) -> Result<bdk_wallet::rusqlite::Connection> {
+    // detect plaintext before opening so we can skip the encryption key
+    // (plaintext DBs remain when migration fails — they still work unencrypted)
+    let is_existing_plaintext = sqlite_data_path.exists()
+        && crate::database::migration::is_plaintext_sqlite(sqlite_data_path);
+
+    let conn = bdk_wallet::rusqlite::Connection::open(sqlite_data_path)
+        .context("unable to open rusqlite connection")?;
+
+    if !is_existing_plaintext {
+        let key = crate::database::encrypted_backend::encryption_key()
+            .expect("encryption key must be set");
+        conn.pragma_update(None, "key", format!("x'{}'", hex::encode(key)))?;
+    }
+
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "FULL")?;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        conn.pragma_update(None, "fullfsync", 1)?;
+    }
+
+    // in pages (4096 bytes) 2000 pages = 8MB
+    conn.pragma_update(None, "cache_size", 2000)?;
+
+    Ok(conn)
 }
 
 fn remove_sqlite_auxiliary_files(db_path: &Path) {

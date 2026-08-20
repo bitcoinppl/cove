@@ -468,6 +468,50 @@ fn switch_directory_root() -> PathBuf {
     ROOT_DATA_DIR.join(ADDRESS_SWITCH_DIRECTORY)
 }
 
+/// Leftover switch journal directories owned by `wallet_id`
+pub(crate) fn wallet_switch_journal_directories(wallet_id: &WalletId) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(switch_directory_root()) else {
+        return Vec::new();
+    };
+
+    entries
+        .flatten()
+        .filter(|entry| matches!(entry.file_type(), Ok(file_type) if file_type.is_dir()))
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| journal_directory_belongs_to_wallet(name, wallet_id.as_str()))
+        })
+        .map(|entry| entry.path())
+        .collect()
+}
+
+/// Remove leftover switch journals of a wallet whose on-disk data is being deleted
+///
+/// A deleted wallet can no longer complete or roll back a switch, so its journals
+/// must not survive to the next bootstrap recovery
+pub(crate) fn remove_address_switch_journals(wallet_id: &WalletId) {
+    for path in wallet_switch_journal_directories(wallet_id) {
+        if let Err(error) = fs::remove_dir_all(&path) {
+            warn!(%error, path = %path.display(), "failed to remove address switch journal of a deleted wallet");
+        }
+    }
+}
+
+fn journal_directory_belongs_to_wallet(directory_name: &str, wallet_id: &str) -> bool {
+    // journal directories are named {wallet_id}-{timestamp}-{nonce} and wallet
+    // ids may themselves contain '-', so the suffix must parse as the two
+    // numeric fields before a prefix match is accepted
+    directory_name
+        .strip_prefix(wallet_id)
+        .and_then(|rest| rest.strip_prefix('-'))
+        .and_then(|rest| rest.split_once('-'))
+        .is_some_and(|(timestamp, nonce)| {
+            timestamp.parse::<u128>().is_ok() && nonce.parse::<u64>().is_ok()
+        })
+}
+
 fn sync_file(path: &Path) -> std::io::Result<()> {
     File::open(path)?.sync_all()
 }
@@ -586,13 +630,25 @@ fn recover_address_switch_journal(
                 .get(&record.wallet_id, record.network, record.wallet_mode)
                 .map_err(|error| error.to_string())?;
             if let Some(current) = current {
-                if metadata_matches_target(&current, &record.target)
-                    && store_matches_target(&record).unwrap_or(false)
-                {
-                    journal
-                        .set_phase(AddressSwitchPhase::Committed)
-                        .map_err(|error| error.to_string())?;
-                    return journal.cleanup().map_err(|error| error.to_string());
+                if metadata_matches_target(&current, &record.target) {
+                    match store_matches_target(&record) {
+                        Ok(true) => {
+                            journal
+                                .set_phase(AddressSwitchPhase::Committed)
+                                .map_err(|error| error.to_string())?;
+                            return journal.cleanup().map_err(|error| error.to_string());
+                        }
+                        // an uninspectable store is not a mismatch: keep the journal
+                        // and retry at the next bootstrap instead of rolling back
+                        // metadata the user may already see
+                        Err(error) => {
+                            return Err(format!(
+                                "failed to inspect wallet store after committed address switch {}: {error}",
+                                record.wallet_id
+                            ));
+                        }
+                        Ok(false) => {}
+                    }
                 }
 
                 if current == record.old_metadata
@@ -622,19 +678,12 @@ fn recover_address_switch_journal(
 }
 
 fn store_matches_target(record: &PersistedAddressSwitch) -> Result<bool, String> {
-    let mut store =
-        BdkStore::try_new(&record.wallet_id, record.network).map_err(|error| error.to_string())?;
-    let Some(wallet) = bdk_wallet::Wallet::load()
-        .load_wallet(&mut store.conn)
-        .map_err(|error| error.to_string())?
-    else {
-        return Ok(false);
-    };
-
-    Ok(wallet.public_descriptor(KeychainKind::External).to_string()
-        == record.target.external_descriptor
-        && wallet.public_descriptor(KeychainKind::Internal).to_string()
-            == record.target.internal_descriptor)
+    BdkStore::persistent_wallet_matches_descriptors(
+        &record.wallet_id,
+        &record.target.external_descriptor,
+        &record.target.internal_descriptor,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn metadata_matches_target(metadata: &WalletMetadata, target: &AddressSwitchTarget) -> bool {

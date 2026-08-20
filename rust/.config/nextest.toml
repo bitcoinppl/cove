@@ -2,5 +2,5 @@
 shared-root-data = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'package(cove)'
+filter = 'package(cove) & (test(manager::cloud_backup_manager::ops::tests::) | test(backup::) | test(address_type_switch))'
 test-group = 'shared-root-data'

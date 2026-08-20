@@ -175,9 +175,6 @@ impl Database {
             diagnostics_reports,
         };
 
-        crate::wallet::addressing::recover_address_type_switches(&database.wallets)
-            .map_err(error::DatabaseError::DatabaseAccess)?;
-
         database.backfill_onboarding_complete_from_legacy_state();
 
         Ok(database)

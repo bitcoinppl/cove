@@ -326,11 +326,13 @@ impl WalletAddressType {
     }
 }
 
-// delete wallet filestore / sqlite store and wallet data database
+// delete wallet filestore / sqlite store, wallet data database, and address
+// switch journals owned by the wallet
 pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
     BdkStore::delete_wallet_stores(wallet_id)?;
     crate::database::wallet_data::delete_database(wallet_id)
         .context("unable to delete wallet data database")?;
+    crate::wallet::addressing::remove_address_switch_journals(wallet_id);
 
     Ok(())
 }

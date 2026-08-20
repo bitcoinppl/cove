@@ -556,7 +556,13 @@ fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std
     DATABASE_CONNECTIONS.write().remove(id);
     DATABASE_OPEN_LOCKS.lock().remove(id);
 
-    std::fs::remove_file(database_location(id, location)?)
+    // a wallet that never opened its wallet-data database has nothing to delete,
+    // and deletion must still converge when the file is already gone
+    match std::fs::remove_file(database_location(id, location)?) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 impl WalletDataKey {
