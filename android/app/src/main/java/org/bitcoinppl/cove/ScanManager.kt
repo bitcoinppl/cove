@@ -144,23 +144,31 @@ class ScanManager private constructor() {
             try {
                 val id = wallet.id()
                 Log.d(tag, "Imported Wallet: $id")
-                app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
 
                 if (app.walletManager?.id != id) {
                     app.selectWalletOrThrow(id)
                 }
 
                 val walletManager = app.walletManager
-                if (walletManager?.id == id && walletManager.walletMetadata?.walletType != WalletType.HOT) {
+                if (walletManager?.id == id && walletManager.walletMetadata?.walletType != WalletType.COLD) {
                     mainScope.launch {
                         try {
                             walletManager.setWalletType(WalletType.COLD)
+                            app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             throw e
                         } catch (e: Exception) {
                             Log.e(tag, "Failed to set wallet type to cold", e)
+                            app.alertState =
+                                TaggedItem(
+                                    AppAlertState.ErrorImportingHardwareWallet(
+                                        e.message ?: "Failed to convert wallet to hardware wallet",
+                                    ),
+                                )
                         }
                     }
+                } else {
+                    app.alertState = TaggedItem(AppAlertState.ImportedSuccessfully)
                 }
             } finally {
                 wallet.close()

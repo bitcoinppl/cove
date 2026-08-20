@@ -209,6 +209,25 @@ class AppManager private constructor() : FfiReconcile {
      */
     fun getWalletManager(id: WalletId): WalletManager = managerCache.getWalletManager(id)
 
+    internal fun convertWalletToCold(walletId: WalletId) {
+        mainScope.launch {
+            try {
+                getWalletManager(walletId).setWalletType(WalletType.COLD)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to set wallet type to cold", e)
+                alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Error",
+                            message = "Cove could not convert this wallet to a hardware wallet. Try again.",
+                        ),
+                    )
+            }
+        }
+    }
+
     suspend fun getWalletManagerLoaded(
         id: WalletId,
         isCurrent: () -> Boolean = { true },
