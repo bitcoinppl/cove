@@ -20,8 +20,8 @@ use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
 use flume::Sender;
 use pubport::formats::Json;
-use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 
 /// Default number of addresses to scan
@@ -62,49 +62,7 @@ pub struct WorkerHandle {
     pub wallet_type: WalletAddressType,
     pub started_at: Instant,
     pub state: WorkerState,
-    scan_task: Option<ScanTask>,
-}
-
-#[derive(Debug)]
-struct ScanTask {
-    start: Option<oneshot::Sender<()>>,
-    join: Option<JoinHandle<()>>,
-}
-
-impl ScanTask {
-    fn new(start: oneshot::Sender<()>, join: JoinHandle<()>) -> Self {
-        Self { start: Some(start), join: Some(join) }
-    }
-
-    fn activate(&mut self) {
-        if let Some(start) = self.start.take() {
-            let _ = start.send(());
-        }
-    }
-
-    fn abort(&self) {
-        if let Some(join) = &self.join {
-            join.abort();
-        }
-    }
-
-    async fn join(mut self) {
-        if let Some(join) = self.join.take() {
-            let _ = join.await;
-        }
-    }
-}
-
-impl Drop for ScanTask {
-    fn drop(&mut self) {
-        self.abort();
-    }
-}
-
-#[derive(Debug)]
-enum WorkerStart {
-    Started(ScanTask),
-    Failed(String),
+    scan_task: Option<JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
@@ -146,7 +104,17 @@ pub(crate) struct WalletDiscoveryScanner {
     pub responder: Sender<SingleOrMany>,
     pub wallet_actor: Addr<WalletActor>,
     failure_reconciled: bool,
-    shutting_down: bool,
+    /// Cancels every scan task, including its in-flight node connection attempt.
+    /// The scanner owns it so cancellation does not depend on worker actor health
+    cancel: CancellationToken,
+}
+
+impl Drop for WalletDiscoveryScanner {
+    fn drop(&mut self) {
+        // a scanner that dies without a shutdown call must not leave scan tasks holding
+        // the wallet database open
+        self.cancel.cancel();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -348,25 +316,19 @@ impl WalletDiscoveryScanner {
             responder: reconciler,
             wallet_actor,
             failure_reconciled: false,
-            shutting_down: false,
+            cancel: CancellationToken::new(),
         })
     }
 
     async fn start_workers(&mut self) -> ActorResult<()> {
         let parent = self.addr.clone();
+        let cancel = self.cancel.clone();
 
         for worker in self.workers.iter_mut().flatten() {
-            match call!(worker.addr.start(parent.clone())).await? {
-                WorkerStart::Started(scan_task) => {
-                    worker.scan_task = Some(scan_task);
-                    worker.scan_task.as_mut().expect("scan task was stored").activate();
-                    worker.state = WorkerState::Started;
-                }
-                WorkerStart::Failed(message) => {
-                    error!(wallet_type = ?worker.wallet_type, %message, "wallet discovery worker failed to start");
-                    worker.state = WorkerState::Failed(message);
-                }
-            }
+            let scan_task = call!(worker.addr.start(parent.clone(), cancel.clone())).await?;
+
+            worker.scan_task = Some(scan_task);
+            worker.state = WorkerState::Started;
         }
 
         self.finish_if_all_workers_stopped().await?;
@@ -377,24 +339,22 @@ impl WalletDiscoveryScanner {
     pub async fn shutdown(&mut self) -> ActorResult<()> {
         debug!("shutting down wallet discovery scanner for {}", self.id);
 
-        self.shutting_down = true;
+        // stop every scan task before waiting on anything, so a task parked on a node
+        // connection or on a callback into this scanner cannot hold shutdown open
+        self.cancel.cancel();
 
         let mut scan_tasks = Vec::new();
         let mut worker_terminations = Vec::new();
         let mut shutdown_error = None;
 
-        // scanner ownership makes cancellation independent of worker actor health
-        for worker in self.workers.iter_mut().flatten() {
-            if let Some(scan_task) = worker.scan_task.take() {
-                scan_task.abort();
-                scan_tasks.push(scan_task);
-            }
-        }
-
         for worker_slot in &mut self.workers.0 {
             let Some(worker) = worker_slot.as_mut() else {
                 continue;
             };
+
+            if let Some(scan_task) = worker.scan_task.take() {
+                scan_tasks.push(scan_task);
+            }
 
             match call!(worker.addr.shutdown()).await {
                 Ok(()) => {}
@@ -409,7 +369,7 @@ impl WalletDiscoveryScanner {
 
         // await only after every worker has received shutdown so callbacks cannot block progress
         for scan_task in scan_tasks {
-            scan_task.join().await;
+            let _ = scan_task.await;
         }
 
         for worker_termination in worker_terminations {
@@ -424,13 +384,12 @@ impl WalletDiscoveryScanner {
     }
 
     pub async fn mark_found_txn(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
-        if self.shutting_down {
+        // shutdown clears the slot, so a late callback has no worker to mark
+        let Some(worker) = self.workers[index(wallet_type)].as_mut() else {
             return Produces::ok(());
-        }
+        };
 
         info!("marked worker {wallet_type:?} as found");
-
-        let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         let address = call!(worker.addr.first_address()).await?;
         worker.state = WorkerState::FoundAddress(address);
@@ -441,13 +400,11 @@ impl WalletDiscoveryScanner {
     }
 
     pub async fn mark_limit_reached(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
-        if self.shutting_down {
+        let Some(worker) = self.workers[index(wallet_type)].as_mut() else {
             return Produces::ok(());
-        }
+        };
 
         info!("marked worker {wallet_type:?} limit reached");
-
-        let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         worker.state = WorkerState::NoneFound;
 
@@ -462,13 +419,11 @@ impl WalletDiscoveryScanner {
         wallet_type: WalletAddressType,
         message: String,
     ) -> ActorResult<()> {
-        if self.shutting_down {
+        let Some(worker) = self.workers[index(wallet_type)].as_mut() else {
             return Produces::ok(());
-        }
+        };
 
         error!("wallet discovery worker {wallet_type:?} failed: {message}");
-
-        let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
         worker.state = WorkerState::Failed(message);
 
         self.finish_if_all_workers_stopped().await?;
@@ -583,7 +538,6 @@ pub struct WalletDiscoveryWorker {
     scan_info: ScanningInfo,
     db: WalletDataDb,
     scan_limit: u32,
-    shutdown_requested: bool,
 }
 
 #[async_trait::async_trait]
@@ -637,20 +591,16 @@ impl WalletDiscoveryWorker {
             scan_info,
             db,
             scan_limit: DEFAULT_SCAN_LIMIT,
-            shutdown_requested: false,
         })
     }
 
+    /// Spawns the scan task and hands its join handle to the scanner, which already owns
+    /// `cancel` and can therefore stop the task even if this call never returns
     async fn start(
         &mut self,
         parent: WeakAddr<WalletDiscoveryScanner>,
-    ) -> ActorResult<WorkerStart> {
-        if self.shutdown_requested {
-            return Produces::ok(WorkerStart::Failed(
-                "wallet discovery worker is shutting down".to_string(),
-            ));
-        }
-
+        cancel: CancellationToken,
+    ) -> ActorResult<JoinHandle<()>> {
         self.parent = parent;
 
         let wallet_type = self.wallet_type;
@@ -661,74 +611,77 @@ impl WalletDiscoveryWorker {
         let failure_parent = parent.clone();
         let db = self.db.clone();
         let addr = self.addr.clone();
-        let (start, wait_for_start) = oneshot::channel();
 
         let join = task::spawn(async move {
-            if wait_for_start.await.is_err() {
-                return;
-            }
+            let scan = async move {
+                let run = async {
+                    let client =
+                        client_builder.build().await.context("build discovery node client")?;
+                    let mut current_address = current_address;
 
-            let run_with_error = || async move {
-                let client = client_builder.build().await.context("build discovery node client")?;
-                let mut current_address = current_address;
+                    loop {
+                        let address = call!(addr.address_at(current_address)).await?;
 
-                loop {
-                    let address = call!(addr.address_at(current_address)).await?;
+                        let found_address = client
+                            .check_address_for_txn(address)
+                            .await
+                            .context("could not check address")?;
 
-                    let found_address = client
-                        .check_address_for_txn(address)
-                        .await
-                        .context("could not check address")?;
+                        if found_address {
+                            db.set_scan_state(wallet_type, ScanState::Completed)
+                                .context("save scan state")?;
 
-                    if found_address {
-                        db.set_scan_state(wallet_type, ScanState::Completed)
-                            .context("save scan state")?;
+                            call!(parent.mark_found_txn(wallet_type)).await?;
+                            break;
+                        }
 
-                        call!(parent.mark_found_txn(wallet_type)).await?;
-                        break;
-                    }
+                        current_address += 1;
+                        trace!("checked {current_address} addresses for {wallet_type}");
 
-                    current_address += 1;
-                    trace!("checked {current_address} addresses for {wallet_type}");
+                        // every 5 addresses, save the scan state
+                        if current_address.is_multiple_of(5) {
+                            let scan_state =
+                                ScanningInfo { address_type: wallet_type, count: current_address };
 
-                    // every 5 addresses, save the scan state
-                    if current_address.is_multiple_of(5) {
-                        let scan_state =
-                            ScanningInfo { address_type: wallet_type, count: current_address };
+                            if let Err(error) = db.set_scan_state(wallet_type, scan_state) {
+                                error!("unable to update scan state: {error}");
+                            }
+                        }
 
-                        if let Err(error) = db.set_scan_state(wallet_type, scan_state) {
-                            error!("unable to update scan state: {error}");
+                        if current_address >= scan_limit {
+                            db.set_scan_state(wallet_type, ScanState::Completed)
+                                .context("save completed scan state")?;
+
+                            call!(parent.mark_limit_reached(wallet_type)).await?;
+                            break;
                         }
                     }
 
-                    if current_address >= scan_limit {
-                        db.set_scan_state(wallet_type, ScanState::Completed)
-                            .context("save completed scan state")?;
+                    Ok::<(), eyre::Error>(())
+                };
 
-                        call!(parent.mark_limit_reached(wallet_type)).await?;
-                        break;
+                if let Err(error) = run.await {
+                    error!("wallet scan failed: {error}");
+
+                    if let Err(report_error) =
+                        call!(failure_parent.mark_failed(wallet_type, error.to_string())).await
+                    {
+                        error!("unable to report wallet discovery scan failure: {report_error}");
                     }
                 }
-
-                Ok::<(), eyre::Error>(())
             };
 
-            if let Err(error) = run_with_error().await {
-                error!("wallet scan failed: {error}");
-
-                if let Err(report_error) =
-                    call!(failure_parent.mark_failed(wallet_type, error.to_string())).await
-                {
-                    error!("unable to report wallet discovery scan failure: {report_error}");
-                }
+            // covers the connection attempt and the failure report, so neither can outlive
+            // a shutdown that is waiting on this task
+            if cancel.run_until_cancelled(scan).await.is_none() {
+                debug!("wallet discovery scan for {wallet_type} was canceled");
             }
         });
 
-        Produces::ok(WorkerStart::Started(ScanTask::new(start, join)))
+        Produces::ok(join)
     }
 
     pub async fn shutdown(&mut self) -> ActorResult<()> {
-        self.shutdown_requested = true;
         self.parent = Default::default();
 
         Produces::ok(())
@@ -1048,82 +1001,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scan_task_aborts_when_its_owner_is_dropped() {
-        crate::test_support::ensure_tokio_runtime();
-
-        let task_finished = Arc::new(AtomicBool::new(false));
-        let (task_started, task_started_seen) = oneshot::channel();
-        let task_finished_for_task = Arc::clone(&task_finished);
-        let join = cove_tokio::task::spawn(async move {
-            let _task_completion = TaskCompletion(task_finished_for_task);
-            task_started.send(()).expect("task observer is waiting");
-            std::future::pending::<()>().await;
-        });
-        let scan_task = ScanTask { start: None, join: Some(join) };
-        task_started_seen.await.expect("scan task starts");
-
-        drop(scan_task);
-
-        tokio::time::timeout(std::time::Duration::from_secs(1), async {
-            while !task_finished.load(Ordering::SeqCst) {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .expect("dropping the owner aborts its scan task");
-    }
-
-    #[tokio::test]
-    async fn worker_start_defers_node_connection_until_the_scan_task_is_owned() {
-        crate::test_support::ensure_tokio_runtime();
-
-        let id = WalletId::preview_new_random();
-        let json = descriptor_json(None, Some(bip49_descriptors()), None);
-        let (wallet_type, wallet) =
-            Wallets::try_from_json(&json, Network::Bitcoin, WalletAddressType::NativeSegwit)
-                .expect("discovery wallet is created")
-                .0
-                .into_iter()
-                .flatten()
-                .next()
-                .expect("discovery worker exists");
-        let db = WalletDataDb::new_in_memory(id).expect("worker database is created");
-        let mut worker = WalletDiscoveryWorker {
-            parent: WeakAddr::default(),
-            addr: WeakAddr::default(),
-            client_builder: NodeClientBuilder {
-                node: crate::node::Node::new_electrum(
-                    "invalid scanner fixture".into(),
-                    "invalid://".into(),
-                    CoveNetwork::Bitcoin,
-                ),
-                options: NodeClientOptions { batch_size: 1 },
-            },
-            wallet_type,
-            wallet,
-            started_at: Instant::now(),
-            scan_info: ScanningInfo::new(wallet_type),
-            db,
-            scan_limit: DEFAULT_SCAN_LIMIT,
-            shutdown_requested: false,
-        };
-
-        let start = worker
-            .start(WeakAddr::default())
-            .await
-            .expect("worker start actor call succeeds")
-            .await
-            .expect("worker start returns a value");
-
-        let WorkerStart::Started(scan_task) = start else {
-            panic!("node connection started before the scanner owned its task");
-        };
-
-        drop(scan_task);
-    }
-
-    #[tokio::test]
-    async fn scanner_shutdown_aborts_and_awaits_worker_task() {
+    async fn scanner_shutdown_cancels_and_awaits_worker_task() {
         crate::test_support::ensure_tokio_runtime();
 
         let id = WalletId::preview_new_random();
@@ -1140,6 +1018,11 @@ mod tests {
         let db_ref = Arc::clone(&db.db);
         let task_finished = Arc::new(AtomicBool::new(false));
         let (task_started, task_started_seen) = tokio::sync::oneshot::channel();
+
+        // stands in for the real scan task: it holds the wallet database open until the
+        // scanner cancels it
+        let cancel = CancellationToken::new();
+        let cancel_for_task = cancel.clone();
         let db_for_task = Arc::clone(&db_ref);
         let task_finished_for_task = Arc::clone(&task_finished);
         let scan_task = cove_tokio::task::spawn(async move {
@@ -1147,7 +1030,7 @@ mod tests {
             let _db = db_for_task;
 
             task_started.send(()).expect("task observer is waiting");
-            std::future::pending::<()>().await;
+            cancel_for_task.run_until_cancelled(std::future::pending::<()>()).await;
         });
         task_started_seen.await.expect("worker task starts");
 
@@ -1168,7 +1051,6 @@ mod tests {
             scan_info: ScanningInfo::new(wallet_type),
             db,
             scan_limit: DEFAULT_SCAN_LIMIT,
-            shutdown_requested: true,
         };
         let worker_addr = spawn_actor(worker);
         let worker_termination = worker_addr.termination();
@@ -1183,7 +1065,7 @@ mod tests {
                     wallet_type,
                     started_at: Instant::now(),
                     state: WorkerState::Started,
-                    scan_task: Some(ScanTask { start: None, join: Some(scan_task) }),
+                    scan_task: Some(scan_task),
                 }),
                 None,
             ]),
@@ -1192,7 +1074,7 @@ mod tests {
             responder,
             wallet_actor: Addr::detached(),
             failure_reconciled: false,
-            shutting_down: false,
+            cancel,
         });
         drop(worker_addr);
 
