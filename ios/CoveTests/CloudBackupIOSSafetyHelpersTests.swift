@@ -321,6 +321,50 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
     }
 
     @MainActor
+    func testBackupReadUsesLocalTargetBeforeMetadata() async throws {
+        let fixture = makeICloudMetadataFixture()
+        defer { fixture.removeContainer() }
+
+        let location = try XCTUnwrap(backupLocations().first)
+        let localURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: location
+        )
+        try writeTestBackup(at: localURL)
+
+        let target = try await fixture.helper.existingBackupFileReadTarget(
+            namespace: testNamespace,
+            recordId: "wallet-record",
+            locations: backupLocations()
+        )
+        let data = try await fixture.helper.downloadFile(
+            target: target,
+            recordId: "wallet-record"
+        )
+
+        XCTAssertEqual(target, .local(localURL))
+        XCTAssertEqual(data, Data("backup".utf8))
+        XCTAssertEqual(fixture.source.startCount, 0)
+    }
+
+    func testICloudReadAttemptDeadlineReturnsWithoutWaitingForSlowRead() async throws {
+        let startedAt = Date()
+
+        do {
+            _ = try await ICloudReadAttemptDeadline.run(timeout: 0.01) {
+                try await Task.sleep(for: .seconds(10))
+                return Data()
+            }
+            XCTFail("expected read timeout")
+        } catch ICloudReadAttemptDeadlineError.timedOut {
+        } catch {
+            XCTFail("expected read timeout, got \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.5)
+    }
+
+    @MainActor
     func testBackupReadWaitsForLateMetadataAcrossAllLocations() async throws {
         let fixture = makeICloudMetadataFixture()
         defer { fixture.removeContainer() }
@@ -331,7 +375,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             location: locations[1]
         )
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: locations,
@@ -348,9 +392,15 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             ),
         ]))
 
-        let resolvedURL = try await request.value
+        let target = try await request.value
 
-        XCTAssertEqual(resolvedURL, legacyURL)
+        XCTAssertEqual(
+            target,
+            .provider(
+                legacyURL,
+                metadataPath: legacyURL.resolvingSymlinksInPath().path
+            )
+        )
         XCTAssertEqual(fixture.source.startCount, 1)
     }
 
@@ -359,7 +409,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let fixture = makeICloudMetadataFixture(defaultTimeout: 60)
         defer { fixture.removeContainer() }
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: self.backupLocations(),
@@ -396,7 +446,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             location: locations[1]
         )
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: locations
@@ -415,9 +465,15 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             ),
         ]))
 
-        let resolvedURL = try await request.value
+        let target = try await request.value
 
-        XCTAssertEqual(resolvedURL, currentURL)
+        XCTAssertEqual(
+            target,
+            .provider(
+                currentURL,
+                metadataPath: currentURL.resolvingSymlinksInPath().path
+            )
+        )
     }
 
     @MainActor
@@ -475,7 +531,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         defer { startupFixture.removeContainer() }
 
         do {
-            _ = try await startupFixture.helper.existingBackupFileReadURL(
+            _ = try await startupFixture.helper.existingBackupFileReadTarget(
                 namespace: testNamespace,
                 recordId: "wallet-record",
                 locations: backupLocations()
@@ -489,7 +545,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let timeoutFixture = makeICloudMetadataFixture(defaultTimeout: 0.01)
         defer { timeoutFixture.removeContainer() }
         let request = Task {
-            try await timeoutFixture.helper.existingBackupFileReadURL(
+            try await timeoutFixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: self.backupLocations()
@@ -570,7 +626,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         defer { fixture.removeContainer() }
 
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: self.backupLocations()
