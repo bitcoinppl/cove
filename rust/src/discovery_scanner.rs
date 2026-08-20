@@ -20,6 +20,7 @@ use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
 use flume::Sender;
 use pubport::formats::Json;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, trace, warn};
 
@@ -50,23 +51,60 @@ use crate::{
 pub struct Wallets([Option<(WalletAddressType, BdkWallet)>; 2]);
 
 #[derive(
-    Debug,
-    Clone,
-    Default,
-    derive_more::From,
-    derive_more::Into,
-    derive_more::Deref,
-    derive_more::DerefMut,
+    Debug, Default, derive_more::From, derive_more::Into, derive_more::Deref, derive_more::DerefMut,
 )]
 pub struct Workers([Option<WorkerHandle>; 2]);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WorkerHandle {
     pub id: WalletId,
     pub addr: Addr<WalletDiscoveryWorker>,
     pub wallet_type: WalletAddressType,
     pub started_at: Instant,
     pub state: WorkerState,
+    scan_task: Option<ScanTask>,
+}
+
+#[derive(Debug)]
+struct ScanTask {
+    start: Option<oneshot::Sender<()>>,
+    join: Option<JoinHandle<()>>,
+}
+
+impl ScanTask {
+    fn new(start: oneshot::Sender<()>, join: JoinHandle<()>) -> Self {
+        Self { start: Some(start), join: Some(join) }
+    }
+
+    fn activate(&mut self) {
+        if let Some(start) = self.start.take() {
+            let _ = start.send(());
+        }
+    }
+
+    fn abort(&self) {
+        if let Some(join) = &self.join {
+            join.abort();
+        }
+    }
+
+    async fn join(mut self) {
+        if let Some(join) = self.join.take() {
+            let _ = join.await;
+        }
+    }
+}
+
+impl Drop for ScanTask {
+    fn drop(&mut self) {
+        self.abort();
+    }
+}
+
+#[derive(Debug)]
+enum WorkerStart {
+    Started(ScanTask),
+    Failed(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
@@ -98,7 +136,7 @@ pub enum ScannerResponse {
     NoneFound,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct WalletDiscoveryScanner {
     pub id: WalletId,
     pub addr: WeakAddr<Self>,
@@ -293,6 +331,7 @@ impl WalletDiscoveryScanner {
                 wallet_type,
                 started_at: Instant::now(),
                 state: WorkerState::Created,
+                scan_task: None,
             });
 
             started_workers += 1;
@@ -317,20 +356,68 @@ impl WalletDiscoveryScanner {
         let parent = self.addr.clone();
 
         for worker in self.workers.iter_mut().flatten() {
-            call!(worker.addr.start(parent.clone())).await?;
-            worker.state = WorkerState::Started;
+            match call!(worker.addr.start(parent.clone())).await? {
+                WorkerStart::Started(scan_task) => {
+                    worker.scan_task = Some(scan_task);
+                    worker.scan_task.as_mut().expect("scan task was stored").activate();
+                    worker.state = WorkerState::Started;
+                }
+                WorkerStart::Failed(message) => {
+                    error!(wallet_type = ?worker.wallet_type, %message, "wallet discovery worker failed to start");
+                    worker.state = WorkerState::Failed(message);
+                }
+            }
         }
+
+        self.finish_if_all_workers_stopped().await?;
 
         Produces::ok(())
     }
 
     pub async fn shutdown(&mut self) -> ActorResult<()> {
         debug!("shutting down wallet discovery scanner for {}", self.id);
+
         self.shutting_down = true;
 
+        let mut scan_tasks = Vec::new();
+        let mut worker_terminations = Vec::new();
+        let mut shutdown_error = None;
+
+        // scanner ownership makes cancellation independent of worker actor health
         for worker in self.workers.iter_mut().flatten() {
-            call!(worker.addr.shutdown()).await?;
-            worker.addr = Default::default();
+            if let Some(scan_task) = worker.scan_task.take() {
+                scan_task.abort();
+                scan_tasks.push(scan_task);
+            }
+        }
+
+        for worker_slot in &mut self.workers.0 {
+            let Some(worker) = worker_slot.as_mut() else {
+                continue;
+            };
+
+            match call!(worker.addr.shutdown()).await {
+                Ok(()) => {}
+                Err(error) => {
+                    shutdown_error.get_or_insert(error);
+                }
+            }
+
+            worker_terminations.push(worker.addr.termination());
+            *worker_slot = None;
+        }
+
+        // await only after every worker has received shutdown so callbacks cannot block progress
+        for scan_task in scan_tasks {
+            scan_task.join().await;
+        }
+
+        for worker_termination in worker_terminations {
+            worker_termination.await;
+        }
+
+        if let Some(error) = shutdown_error {
+            return Err(Box::new(error));
         }
 
         Produces::ok(())
@@ -496,7 +583,6 @@ pub struct WalletDiscoveryWorker {
     scan_info: ScanningInfo,
     db: WalletDataDb,
     scan_limit: u32,
-    scan_task: Option<JoinHandle<()>>,
     shutdown_requested: bool,
 }
 
@@ -551,48 +637,39 @@ impl WalletDiscoveryWorker {
             scan_info,
             db,
             scan_limit: DEFAULT_SCAN_LIMIT,
-            scan_task: None,
             shutdown_requested: false,
         })
     }
 
-    pub(crate) async fn start(&mut self, parent: WeakAddr<WalletDiscoveryScanner>) {
+    async fn start(
+        &mut self,
+        parent: WeakAddr<WalletDiscoveryScanner>,
+    ) -> ActorResult<WorkerStart> {
         if self.shutdown_requested {
-            return;
+            return Produces::ok(WorkerStart::Failed(
+                "wallet discovery worker is shutting down".to_string(),
+            ));
         }
 
         self.parent = parent;
 
-        let addr = self.addr.clone();
-
-        // start the scan and return immediately
-        send!(addr.start_scan());
-    }
-
-    async fn start_scan(&mut self) -> ActorResult<()> {
-        if self.shutdown_requested {
-            return Produces::ok(());
-        }
-
         let wallet_type = self.wallet_type;
-        let client = match self.client_builder.build().await {
-            Ok(client) => client,
-            Err(error) => {
-                call!(self.parent.mark_failed(wallet_type, error.to_string())).await?;
-
-                return Produces::ok(());
-            }
-        };
-
+        let client_builder = self.client_builder.clone();
         let scan_limit = self.scan_limit;
         let current_address = self.scan_info.count;
         let parent = self.parent.clone();
         let failure_parent = parent.clone();
         let db = self.db.clone();
         let addr = self.addr.clone();
+        let (start, wait_for_start) = oneshot::channel();
 
-        self.scan_task = Some(task::spawn(async move {
+        let join = task::spawn(async move {
+            if wait_for_start.await.is_err() {
+                return;
+            }
+
             let run_with_error = || async move {
+                let client = client_builder.build().await.context("build discovery node client")?;
                 let mut current_address = current_address;
 
                 loop {
@@ -645,19 +722,14 @@ impl WalletDiscoveryWorker {
                     error!("unable to report wallet discovery scan failure: {report_error}");
                 }
             }
-        }));
+        });
 
-        Produces::ok(())
+        Produces::ok(WorkerStart::Started(ScanTask::new(start, join)))
     }
 
     pub async fn shutdown(&mut self) -> ActorResult<()> {
         self.shutdown_requested = true;
         self.parent = Default::default();
-
-        if let Some(scan_task) = self.scan_task.take() {
-            scan_task.abort();
-            let _ = scan_task.await;
-        }
 
         Produces::ok(())
     }
@@ -766,10 +838,20 @@ impl From<WalletScannerError> for WalletManagerReconcileMessage {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use bdk_wallet::bitcoin::bip32::Xpriv;
     use cove_device::keychain::WalletXprv;
 
     use super::*;
+
+    struct TaskCompletion(Arc<AtomicBool>);
+
+    impl Drop for TaskCompletion {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
 
     fn pubport_descriptors(descriptor: &str) -> pubport::descriptor::Descriptors {
         pubport::descriptor::Descriptors::try_from_line(descriptor)
@@ -947,6 +1029,7 @@ mod tests {
             wallet_type: WalletAddressType::WrappedSegwit,
             started_at: Instant::now(),
             state: WorkerState::Failed("node unavailable".into()),
+            scan_task: None,
         });
 
         workers[index(WalletAddressType::Legacy)] = Some(WorkerHandle {
@@ -955,11 +1038,175 @@ mod tests {
             wallet_type: WalletAddressType::Legacy,
             started_at: Instant::now(),
             state: WorkerState::Started,
+            scan_task: None,
         });
 
         assert_eq!(
             worker_failure_message(&workers),
             Some("WrappedSegwit: node unavailable".into())
         );
+    }
+
+    #[tokio::test]
+    async fn scan_task_aborts_when_its_owner_is_dropped() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let task_finished = Arc::new(AtomicBool::new(false));
+        let (task_started, task_started_seen) = oneshot::channel();
+        let task_finished_for_task = Arc::clone(&task_finished);
+        let join = cove_tokio::task::spawn(async move {
+            let _task_completion = TaskCompletion(task_finished_for_task);
+            task_started.send(()).expect("task observer is waiting");
+            std::future::pending::<()>().await;
+        });
+        let scan_task = ScanTask { start: None, join: Some(join) };
+        task_started_seen.await.expect("scan task starts");
+
+        drop(scan_task);
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while !task_finished.load(Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("dropping the owner aborts its scan task");
+    }
+
+    #[tokio::test]
+    async fn worker_start_defers_node_connection_until_the_scan_task_is_owned() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let id = WalletId::preview_new_random();
+        let json = descriptor_json(None, Some(bip49_descriptors()), None);
+        let (wallet_type, wallet) =
+            Wallets::try_from_json(&json, Network::Bitcoin, WalletAddressType::NativeSegwit)
+                .expect("discovery wallet is created")
+                .0
+                .into_iter()
+                .flatten()
+                .next()
+                .expect("discovery worker exists");
+        let db = WalletDataDb::new_in_memory(id).expect("worker database is created");
+        let mut worker = WalletDiscoveryWorker {
+            parent: WeakAddr::default(),
+            addr: WeakAddr::default(),
+            client_builder: NodeClientBuilder {
+                node: crate::node::Node::new_electrum(
+                    "invalid scanner fixture".into(),
+                    "invalid://".into(),
+                    CoveNetwork::Bitcoin,
+                ),
+                options: NodeClientOptions { batch_size: 1 },
+            },
+            wallet_type,
+            wallet,
+            started_at: Instant::now(),
+            scan_info: ScanningInfo::new(wallet_type),
+            db,
+            scan_limit: DEFAULT_SCAN_LIMIT,
+            shutdown_requested: false,
+        };
+
+        let start = worker
+            .start(WeakAddr::default())
+            .await
+            .expect("worker start actor call succeeds")
+            .await
+            .expect("worker start returns a value");
+
+        let WorkerStart::Started(scan_task) = start else {
+            panic!("node connection started before the scanner owned its task");
+        };
+
+        drop(scan_task);
+    }
+
+    #[tokio::test]
+    async fn scanner_shutdown_aborts_and_awaits_worker_task() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let id = WalletId::preview_new_random();
+        let json = descriptor_json(None, Some(bip49_descriptors()), None);
+        let (wallet_type, wallet) =
+            Wallets::try_from_json(&json, Network::Bitcoin, WalletAddressType::NativeSegwit)
+                .expect("discovery wallet is created")
+                .0
+                .into_iter()
+                .flatten()
+                .next()
+                .expect("discovery worker exists");
+        let db = WalletDataDb::new_in_memory(id.clone()).expect("worker database is created");
+        let db_ref = Arc::clone(&db.db);
+        let task_finished = Arc::new(AtomicBool::new(false));
+        let (task_started, task_started_seen) = tokio::sync::oneshot::channel();
+        let db_for_task = Arc::clone(&db_ref);
+        let task_finished_for_task = Arc::clone(&task_finished);
+        let scan_task = cove_tokio::task::spawn(async move {
+            let _task_completion = TaskCompletion(task_finished_for_task);
+            let _db = db_for_task;
+
+            task_started.send(()).expect("task observer is waiting");
+            std::future::pending::<()>().await;
+        });
+        task_started_seen.await.expect("worker task starts");
+
+        let worker = WalletDiscoveryWorker {
+            parent: WeakAddr::default(),
+            addr: WeakAddr::default(),
+            client_builder: NodeClientBuilder {
+                node: crate::node::Node::new_esplora(
+                    "scanner fixture".into(),
+                    "http://127.0.0.1".into(),
+                    CoveNetwork::Bitcoin,
+                ),
+                options: NodeClientOptions { batch_size: 1 },
+            },
+            wallet_type,
+            wallet,
+            started_at: Instant::now(),
+            scan_info: ScanningInfo::new(wallet_type),
+            db,
+            scan_limit: DEFAULT_SCAN_LIMIT,
+            shutdown_requested: true,
+        };
+        let worker_addr = spawn_actor(worker);
+        let worker_termination = worker_addr.termination();
+        let (responder, _responses) = flume::bounded(1);
+        let scanner = spawn_actor(WalletDiscoveryScanner {
+            id: id.clone(),
+            addr: WeakAddr::default(),
+            workers: Workers([
+                Some(WorkerHandle {
+                    id,
+                    addr: worker_addr.clone(),
+                    wallet_type,
+                    started_at: Instant::now(),
+                    state: WorkerState::Started,
+                    scan_task: Some(ScanTask { start: None, join: Some(scan_task) }),
+                }),
+                None,
+            ]),
+            started_at: Instant::now(),
+            scan_source: ScanSource::Mnemonic,
+            responder,
+            wallet_actor: Addr::detached(),
+            failure_reconciled: false,
+            shutting_down: false,
+        });
+        drop(worker_addr);
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), call!(scanner.shutdown()))
+            .await
+            .expect("scanner shutdown waits for the worker task")
+            .expect("scanner shutdown responds");
+
+        assert!(task_finished.load(Ordering::SeqCst));
+        assert_eq!(Arc::strong_count(&db_ref), 1);
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), worker_termination)
+            .await
+            .expect("worker actor terminates");
+        assert_eq!(Arc::strong_count(&db_ref), 1);
     }
 }
