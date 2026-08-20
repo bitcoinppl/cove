@@ -144,13 +144,15 @@ impl BdkStore {
 
         if sqlite_data_path.exists() {
             std::fs::remove_file(&sqlite_data_path).context("unable to delete sqlite store")?;
-            remove_sqlite_auxiliary_files(&sqlite_data_path);
         }
+        remove_sqlite_auxiliary_files(&sqlite_data_path)
+            .context("unable to delete sqlite auxiliary files")?;
 
         let replacement_path = replacement_store_path(&sqlite_data_path);
         Self::remove_wallet_artifact(&replacement_path)
             .context("unable to delete replacement store")?;
-        remove_sqlite_auxiliary_files(&replacement_path);
+        remove_sqlite_auxiliary_files(&replacement_path)
+            .context("unable to delete replacement sqlite auxiliary files")?;
 
         Ok(())
     }
@@ -171,7 +173,8 @@ impl BdkStore {
         let temporary_path = replacement_store_path(&final_path);
         Self::remove_wallet_artifact(&temporary_path)
             .context("unable to remove stale replacement store")?;
-        remove_sqlite_auxiliary_files(&temporary_path);
+        remove_sqlite_auxiliary_files(&temporary_path)
+            .context("unable to remove stale replacement sqlite auxiliary files")?;
 
         let prepared = PreparedStoreReplacement {
             temporary_path,
@@ -237,7 +240,8 @@ impl PreparedStoreReplacement {
         BdkStore::remove_wallet_artifact(&self.legacy_store_path)
             .context("unable to remove legacy wallet filestore")?;
         // aux files of the old database must not pair with the replacement
-        remove_sqlite_auxiliary_files(&self.final_path);
+        remove_sqlite_auxiliary_files(&self.final_path)
+            .context("unable to remove old sqlite auxiliary files")?;
 
         std::fs::rename(&self.temporary_path, &self.final_path)
             .context("unable to publish replacement wallet store")?;
@@ -252,7 +256,7 @@ impl PreparedStoreReplacement {
     /// Remove the temporary store after a failed preparation
     fn discard(&self) {
         let _ = BdkStore::remove_wallet_artifact(&self.temporary_path);
-        remove_sqlite_auxiliary_files(&self.temporary_path);
+        let _ = remove_sqlite_auxiliary_files(&self.temporary_path);
     }
 }
 
@@ -294,15 +298,17 @@ fn open_persistent_connection(sqlite_data_path: &Path) -> Result<bdk_wallet::rus
     Ok(conn)
 }
 
-fn remove_sqlite_auxiliary_files(db_path: &Path) {
+fn remove_sqlite_auxiliary_files(db_path: &Path) -> std::io::Result<()> {
     for suffix in ["wal", "shm"] {
         let aux_path = sqlite_auxiliary_path(db_path, suffix);
         match std::fs::remove_file(&aux_path) {
             Ok(()) => {}
             Err(e) if e.kind() == ErrorKind::NotFound => {}
-            Err(e) => warn!("unable to delete sqlite {suffix} file {}: {e}", aux_path.display()),
+            Err(e) => return Err(e),
         }
     }
+
+    Ok(())
 }
 
 pub(crate) fn sqlite_auxiliary_path(db_path: &Path, suffix: &str) -> PathBuf {

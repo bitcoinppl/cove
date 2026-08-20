@@ -582,7 +582,7 @@ impl FfiApp {
     /// DANGER: This will wipe all wallet data on this device
     pub fn dangerous_wipe_all_data(&self) -> Result<(), Error> {
         let database = Database::global();
-        let wallets = Database::global().wallets().all().unwrap_or_default();
+        let wallets = database.wallets().all().map_err_str(AppError::WalletDeletion)?;
 
         // keep wiping the remaining wallets after a failure, then report every
         // failure: a partial wipe must never look complete
@@ -596,17 +596,15 @@ impl FfiApp {
             Updater::send_update(AppMessage::ClearCachedWalletManager(wallet_id.clone()));
         }
 
-        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
-            failures.push(format!("cloud backup keychain: {error}"));
-        }
-
-        if let Err(error) = database.dangerous_reset_all_data() {
-            failures.push(format!("main database: {error}"));
-        }
-
         if !failures.is_empty() {
+            // the database reset removes metadata rows that retries need to find wallets still holding secrets
             return Err(AppError::WalletDeletion(failures.join("; ")));
         }
+
+        CloudBackupKeychain::global().clear_local_state().map_err_str(AppError::WalletDeletion)?;
+        crate::backup::recovery::remove_all_restore_recovery_state()
+            .map_err_str(AppError::WalletDeletion)?;
+        database.dangerous_reset_all_data().map_err_str(AppError::WalletDeletion)?;
 
         Ok(())
     }
@@ -738,6 +736,7 @@ enum SelectLatestWalletError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wallet::metadata::WalletMetadata;
 
     fn load_and_reset_targets(route: Route, expected_after_millis: u32) -> Vec<Route> {
         let Route::LoadAndReset { reset_to, after_millis } = route else {
@@ -768,6 +767,82 @@ mod tests {
         let targets = load_and_reset_targets(route, WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS);
 
         assert_eq!(targets, vec![Route::SelectedWallet(wallet_id), next_route]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn dangerous_wipe_all_data_retains_metadata_until_wallet_secrets_are_deleted() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let keychain = crate::test_support::shared_mock_keychain();
+        keychain.reset();
+
+        let mut first = WalletMetadata::preview_new();
+        first.id = WalletId::preview_new_random();
+        let mut second = WalletMetadata::preview_new();
+        second.id = WalletId::preview_new_random();
+
+        let database = Database::global();
+        for metadata in [&first, &second] {
+            database
+                .wallets
+                .save_restored_wallet_metadata(metadata.clone())
+                .expect("wallet metadata is saved");
+        }
+
+        let first_id = first.id.as_str();
+        let second_id = second.id.as_str();
+        let first_secret = format!("{first_id}::wallet_mnemonic");
+        let first_xpub = format!("{first_id}::wallet_xpub");
+        let first_descriptors = format!("{first_id}::wallet_public_descriptor");
+        let first_tap_signer = format!("{first_id}::tap_signer_backup");
+        let second_secret = format!("{second_id}::wallet_mnemonic");
+        let second_xpub = format!("{second_id}::wallet_xpub");
+        let second_descriptors = format!("{second_id}::wallet_public_descriptor");
+        let second_tap_signer = format!("{second_id}::tap_signer_backup");
+
+        keychain.set_entries(vec![
+            (&first_secret, "first secret"),
+            (&first_xpub, "first xpub"),
+            (&first_descriptors, "first descriptors"),
+            (&first_tap_signer, "first backup"),
+            (&second_secret, "second secret"),
+            (&second_xpub, "second xpub"),
+            (&second_descriptors, "second descriptors"),
+            (&second_tap_signer, "second backup"),
+        ]);
+        keychain.fail_delete_at(5);
+
+        let first_wipe = FfiApp::global().dangerous_wipe_all_data();
+
+        assert!(first_wipe.is_err(), "the failed wallet secret deletion is reported");
+        assert_eq!(
+            database.wallets.all().expect("wallet metadata is read"),
+            vec![second.clone()],
+            "the failed wallet row survives because the database was not reset"
+        );
+        assert_eq!(
+            keychain.get_entry(&second_secret).as_deref(),
+            Some("second secret"),
+            "the injected wallet secret remains for the retry"
+        );
+
+        keychain.fail_delete_at(usize::MAX);
+        FfiApp::global().dangerous_wipe_all_data().expect("the retry succeeds");
+
+        assert_eq!(
+            Database::global()
+                .wallets
+                .get(&second.id, second.network, second.wallet_mode)
+                .expect("wallet metadata is read"),
+            None,
+            "the retry removes the failed wallet row"
+        );
+
+        keychain.reset();
     }
 }
 

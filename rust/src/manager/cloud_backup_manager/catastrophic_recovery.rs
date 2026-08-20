@@ -134,8 +134,6 @@ fn catastrophic_cloud_restore_error(
 }
 
 fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
-    use crate::database::migration::log_remove_file;
-
     wipe_wallet_keychain_items_for_catastrophic_recovery()?;
     CloudBackupKeychain::global()
         .clear_local_state()
@@ -148,23 +146,47 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
 
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
-    log_remove_file(&root.join("cove.encrypted.db"));
-    log_remove_file(&root.join("cove.db"));
+    crate::bdk_store::BdkStore::remove_wallet_artifact(&root.join("cove.encrypted.db"))
+        .map_err_prefix("remove encrypted database", CatastrophicRecoveryError::Failure)?;
+    crate::bdk_store::BdkStore::remove_wallet_artifact(&root.join("cove.db"))
+        .map_err_prefix("remove database", CatastrophicRecoveryError::Failure)?;
 
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => Some(entries),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(error)
+                .map_err_prefix("read local data directory", CatastrophicRecoveryError::Failure);
+        }
+    };
+
+    if let Some(entries) = entries {
+        for entry in entries {
+            let entry = entry.map_err_prefix(
+                "read local data directory entry",
+                CatastrophicRecoveryError::Failure,
+            )?;
             let name = entry.file_name();
             if name.to_string_lossy().starts_with("bdk_wallet") {
-                log_remove_file(&entry.path());
+                let path = entry.path();
+                let context = format!("remove wallet database {}", path.display());
+
+                crate::bdk_store::BdkStore::remove_wallet_artifact(&path)
+                    .map_err_prefix(&context, CatastrophicRecoveryError::Failure)?;
             }
         }
     }
 
     let wallet_dir = &*cove_common::consts::WALLET_DATA_DIR;
-    if wallet_dir.exists()
-        && let Err(error) = std::fs::remove_dir_all(wallet_dir)
-    {
-        error!("Failed to remove wallet data dir: {error}");
+    match std::fs::remove_dir_all(wallet_dir) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).map_err_prefix(
+                "remove wallet data directory",
+                CatastrophicRecoveryError::Failure,
+            );
+        }
     }
 
     Ok(())
