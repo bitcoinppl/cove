@@ -126,11 +126,13 @@ class TapSignerNFC {
     }
 
     func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
-        clearLastResponse()
-
         do {
             let cvc = try makeTapSignerCvc(value: pin)
-            return await performTapSignerCmd(cmd: .derive(cvc: cvc)) {
+
+            return await performTapSignerCmd(
+                cmd: .derive(cvc: cvc),
+                continuationMatches: { $0.matchesDerive(cvc: cvc) }
+            ) {
                 $0.deriveResponse
             }
         } catch let error as TapSignerCvcInputError {
@@ -248,17 +250,17 @@ class TapSignerNFC {
                     return .failure(.Unknown("TapSigner operation returned no result"))
                 }
 
+                if continuationMatches != nil {
+                    pendingRetry = continuation
+                }
+
                 guard retryCount < 5 else {
                     Log.error("TapSigner operation retry limit reached")
-                    pendingRetry = nil
                     return .failure(.ManualRecoveryRequired)
                 }
 
                 retryCount += 1
                 command = .continueOperation(continuation)
-                if continuationMatches != nil {
-                    pendingRetry = continuation
-                }
             }
         }
     }
