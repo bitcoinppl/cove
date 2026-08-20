@@ -61,7 +61,7 @@ impl RustWalletManager {
         Ok(())
     }
 
-    async fn shutdown_actors_and_wait(&self) -> Result<(), Error> {
+    pub(crate) async fn shutdown_actors_and_wait(&self) -> Result<(), Error> {
         if let Some(discovery_scanner) = &self.discovery_scanner {
             shutdown_actor(
                 discovery_scanner,

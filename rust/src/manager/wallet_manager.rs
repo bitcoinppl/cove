@@ -1100,6 +1100,20 @@ impl RustWalletManager {
         self.shutdown_actors();
     }
 
+    #[uniffi::method(name = "shutdownBlocking")]
+    pub fn shutdown_blocking(&self) {
+        if !cove_tokio::is_tokio_initialized() {
+            warn!("Unable to wait for wallet actor shutdown: tokio runtime is not initialized");
+            return;
+        }
+
+        let manager = self.clone();
+        if let Err(error) = task::block_on(async move { manager.shutdown_actors_and_wait().await })
+        {
+            warn!("Unable to wait for wallet actor shutdown: {error}");
+        }
+    }
+
     fn shutdown_actors(&self) {
         send!(self.actor.shutdown());
 

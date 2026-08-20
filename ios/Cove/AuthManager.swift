@@ -116,9 +116,9 @@ enum UnlockMode {
         // check if the entered pin is a wipeDataPin
         // if so wipe the data
         if checkWipeDataPin(pin) {
-            // close wallet managers first so no live actor recreates wallet data
-            // behind the wipe
-            AppManager.shared.clearWalletManager()
+            // close wallet managers with a bounded wait so no live actor recreates
+            // wallet data behind the wipe
+            AppManager.shared.closeWalletManagersBlocking()
 
             do {
                 try AppManager.shared.rust.dangerousWipeAllData()

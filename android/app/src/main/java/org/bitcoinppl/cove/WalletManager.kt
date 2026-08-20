@@ -968,6 +968,12 @@ class WalletManager :
             else -> WalletLoadState.Scanning(transactions)
         }
 
+    fun shutdownBlocking() {
+        withRustOr(Unit) {
+            shutdownBlocking()
+        }
+    }
+
     override fun close() {
         rustGuard.closeOnce {
             logDebug("Closing WalletManager for $id")

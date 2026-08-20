@@ -303,6 +303,11 @@ class AppManager private constructor() : FfiReconcile {
 
     fun clearWalletManager() = managerCache.clearWalletManager()
 
+    fun closeWalletManagersBlocking() {
+        managerCache.walletManager?.shutdownBlocking()
+        managerCache.clearWalletManager()
+    }
+
     private fun clearWalletManager(id: WalletId) = managerCache.clearWalletManager(id)
 
     private fun clearInactiveRouteManagers() = managerCache.clearInactiveRouteManagers(router)

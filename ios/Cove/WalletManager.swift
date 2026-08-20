@@ -170,6 +170,13 @@ enum WalletManagerPreview {
         rust.shutdown()
     }
 
+    func shutdownBlocking() {
+        closeState.withLock { isClosed in
+            guard !isClosed else { return }
+            rust.shutdownBlocking()
+        }
+    }
+
     func setInitialScanLifecycleChanged(_ notify: (() -> Void)?) {
         initialScanLifecycleChanged.withLock { handler in
             handler = notify.map(InitialScanLifecycleChangedHandler.init(notify:))

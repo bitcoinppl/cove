@@ -210,6 +210,11 @@ struct WalletTransitionRecoveryPlan {
         managerCache.clearWalletManager(id: id)
     }
 
+    func closeWalletManagersBlocking() {
+        managerCache.walletManager?.shutdownBlocking()
+        managerCache.clearWalletManager()
+    }
+
     func clearSendFlowManager(id: WalletId? = nil) {
         managerCache.clearSendFlowManager(id: id)
     }
