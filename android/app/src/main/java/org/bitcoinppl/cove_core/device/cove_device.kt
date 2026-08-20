@@ -3317,6 +3317,14 @@ sealed class CloudStorageException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class SyncPending(
+
+        val v1: kotlin.String
+        ) : CloudStorageException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class UploadFailed(
 
         val v1: kotlin.String
@@ -3392,17 +3400,20 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
             3 -> CloudStorageException.Offline(
                 FfiConverterString.read(buf),
                 )
-            4 -> CloudStorageException.UploadFailed(
+            4 -> CloudStorageException.SyncPending(
                 FfiConverterString.read(buf),
                 )
-            5 -> CloudStorageException.DownloadFailed(
+            5 -> CloudStorageException.UploadFailed(
                 FfiConverterString.read(buf),
                 )
-            6 -> CloudStorageException.NotFound(
+            6 -> CloudStorageException.DownloadFailed(
                 FfiConverterString.read(buf),
                 )
-            7 -> CloudStorageException.QuotaExceeded()
-            8 -> CloudStorageException.InvalidNamespace(
+            7 -> CloudStorageException.NotFound(
+                FfiConverterString.read(buf),
+                )
+            8 -> CloudStorageException.QuotaExceeded()
+            9 -> CloudStorageException.InvalidNamespace(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -3422,6 +3433,11 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 + FfiConverterString.allocationSize(value.v1)
             )
             is CloudStorageException.Offline -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is CloudStorageException.SyncPending -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -3470,27 +3486,32 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.UploadFailed -> {
+            is CloudStorageException.SyncPending -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.DownloadFailed -> {
+            is CloudStorageException.UploadFailed -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.NotFound -> {
+            is CloudStorageException.DownloadFailed -> {
                 buf.putInt(6)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.QuotaExceeded -> {
+            is CloudStorageException.NotFound -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudStorageException.QuotaExceeded -> {
+                buf.putInt(8)
                 Unit
             }
             is CloudStorageException.InvalidNamespace -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
