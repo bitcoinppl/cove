@@ -106,31 +106,59 @@ impl BackupManager {
 
     /// Approve cleanup of markerless artifacts after rechecking the preflight snapshots
     #[uniffi::method(name = "approveImport")]
-    pub fn approve_import(
+    pub async fn approve_import(
         &self,
         preparation: Arc<BackupImportPreparation>,
     ) -> Result<Arc<BackupImportApproval>, BackupError> {
-        let guard = preparation.state.lock();
-        let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
-        let mut snapshots = std::collections::HashMap::new();
+        let (payload_digest, requested_snapshots) = {
+            let guard = preparation.state.lock();
+            let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+            let requested_snapshots = state
+                .wallets
+                .iter()
+                .filter(|wallet| wallet.snapshot.has_markerless_conflict())
+                .map(|wallet| (wallet.metadata.id.clone(), wallet.snapshot.clone()))
+                .collect::<Vec<_>>();
 
-        for wallet in &state.wallets {
-            if !wallet.snapshot.has_markerless_conflict() {
-                continue;
+            (state.payload_digest.clone(), requested_snapshots)
+        };
+
+        let snapshots = tokio::task::spawn_blocking(move || {
+            let mut snapshots = std::collections::HashMap::new();
+            for (wallet_id, expected) in requested_snapshots {
+                let validated = recovery::ValidatedRestoreWalletId::validate(&wallet_id)?;
+                let current = recovery::RestoreArtifactSnapshot::capture(&validated)?;
+                if current != expected {
+                    return Err(BackupError::ImportApprovalStale(wallet_id));
+                }
+
+                snapshots.insert(wallet_id.as_str().to_string(), expected);
             }
 
-            let validated = recovery::ValidatedRestoreWalletId::validate(&wallet.metadata.id)?;
-            let current = recovery::RestoreArtifactSnapshot::capture(&validated)?;
-            if current != wallet.snapshot {
-                return Err(BackupError::ImportApprovalStale(wallet.metadata.id.clone()));
-            }
+            Ok::<_, BackupError>(snapshots)
+        })
+        .await
+        .map_err(|error| {
+            BackupError::Restore(format!("approval snapshot task failed: {error}"))
+        })??;
 
-            snapshots.insert(wallet.metadata.id.as_str().to_string(), wallet.snapshot.clone());
+        {
+            let guard = preparation.state.lock();
+            let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+            if state.payload_digest != payload_digest {
+                return Err(BackupError::ImportApprovalStale(
+                    state
+                        .wallets
+                        .first()
+                        .map(|wallet| wallet.metadata.id.clone())
+                        .unwrap_or_default(),
+                ));
+            }
         }
 
         Ok(Arc::new(BackupImportApproval {
             state: Arc::new(Mutex::new(Some(import::ImportApprovalState {
-                payload_digest: state.payload_digest.clone(),
+                payload_digest,
                 snapshots,
             }))),
         }))
@@ -143,10 +171,36 @@ impl BackupManager {
         preparation: Arc<BackupImportPreparation>,
         approval: Option<Arc<BackupImportApproval>>,
     ) -> Result<BackupImportReport, BackupError> {
-        let state = preparation.state.lock().take().ok_or(BackupError::ImportApprovalUsed)?;
-        let approval = approval
-            .map(|approval| approval.state.lock().take().ok_or(BackupError::ImportApprovalUsed))
-            .transpose()?;
+        let (state, approval) = match approval {
+            Some(approval) => {
+                let mut preparation_guard = preparation.state.lock();
+                let mut approval_guard = approval.state.lock();
+                let preparation_state =
+                    preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                let approval_state =
+                    approval_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                import::validate_prepared_import(preparation_state, Some(approval_state))?;
+
+                let state = preparation_guard
+                    .take()
+                    .expect("preparation was checked as present while holding its mutex");
+                let approval = approval_guard
+                    .take()
+                    .expect("approval was checked as present while holding its mutex");
+                (state, Some(approval))
+            }
+            None => {
+                let mut preparation_guard = preparation.state.lock();
+                let preparation_state =
+                    preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                import::validate_prepared_import(preparation_state, None)?;
+
+                let state = preparation_guard
+                    .take()
+                    .expect("preparation was checked as present while holding its mutex");
+                (state, None)
+            }
+        };
 
         import::import_prepared(state, approval).await
     }
@@ -293,6 +347,54 @@ mod tests {
         assert!(matches!(
             manager.import_prepared(second_preparation, Some(approval)).await,
             Err(BackupError::ImportApprovalUsed)
+        ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn invalid_optional_approval_does_not_consume_preparation() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let empty_preparation = || {
+            BackupImportPreparation::new(import::ImportPreparationState {
+                payload: Some(super::model::BackupPayload {
+                    version: super::model::PAYLOAD_VERSION,
+                    created_at: 0,
+                    wallets: Vec::new(),
+                    settings: super::model::AppSettings {
+                        selected_network: None,
+                        selected_fiat_currency: None,
+                        color_scheme: None,
+                        selected_nodes: Vec::new(),
+                        custom_block_explorers: BTreeMap::new(),
+                    },
+                }),
+                payload_digest: "expected-digest".to_string(),
+                wallets: Vec::new(),
+            })
+        };
+        let preparation = empty_preparation();
+        let stale_approval = Arc::new(BackupImportApproval {
+            state: Arc::new(Mutex::new(Some(import::ImportApprovalState {
+                payload_digest: "stale-digest".to_string(),
+                snapshots: std::collections::HashMap::new(),
+            }))),
+        });
+        let manager = BackupManager::new();
+
+        assert!(matches!(
+            manager.import_prepared(preparation.clone(), Some(stale_approval.clone())).await,
+            Err(BackupError::ImportApprovalStale(_))
+        ));
+        assert_eq!(preparation.payload_digest(), "expected-digest");
+        assert!(manager.import_prepared(preparation, None).await.is_ok());
+        let second_preparation = empty_preparation();
+        assert!(matches!(
+            manager.import_prepared(second_preparation, Some(stale_approval)).await,
+            Err(BackupError::ImportApprovalStale(_))
         ));
     }
 }

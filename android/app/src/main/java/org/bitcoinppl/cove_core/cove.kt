@@ -2395,7 +2395,7 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_backupmanager_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_method_backupmanager_approveimport(`ptr`: Long,`preparation`: Long,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_backupmanager_approveimport(`ptr`: Long,`preparation`: Long,
     ): Long
     external fun uniffi_cove_fn_method_backupmanager_backup_account_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4339,7 +4339,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_backupimportpreparation_wallet_ids() != 2696.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_approveimport() != 24954.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_approveimport() != 30902.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_backupmanager_backup_account_name() != 2715.toShort()) {
@@ -7876,7 +7876,7 @@ public interface BackupManagerInterface {
     /**
      * Approve cleanup of markerless artifacts after rechecking the preflight snapshots
      */
-    fun `approveImport`(`preparation`: BackupImportPreparation): BackupImportApproval
+    suspend fun `approveImport`(`preparation`: BackupImportPreparation): BackupImportApproval
 
     /**
      * Account name for saving backup passwords to the system credential store
@@ -8035,19 +8035,26 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
     /**
      * Approve cleanup of markerless artifacts after rechecking the preflight snapshots
      */
-    @Throws(BackupException::class)override fun `approveImport`(`preparation`: BackupImportPreparation): BackupImportApproval {
-            return FfiConverterTypeBackupImportApproval.lift(
-    callWithHandle {
-    uniffiRustCallWithError(BackupException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_backupmanager_approveimport(
-        it,
+    @Throws(BackupException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `approveImport`(`preparation`: BackupImportPreparation) : BackupImportApproval {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_backupmanager_approveimport(
+                uniffiHandle,
 
-        FfiConverterTypeBackupImportPreparation.lower(`preparation`),_status)
-}
-    }
+        FfiConverterTypeBackupImportPreparation.lower(`preparation`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeBackupImportApproval.lift(it) },
+        // Error FFI converter
+        BackupException.ErrorHandler,
     )
     }
-
 
 
     /**

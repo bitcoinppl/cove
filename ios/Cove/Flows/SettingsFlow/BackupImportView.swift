@@ -152,8 +152,7 @@ struct BackupImportView: View {
     }
 
     private var cleanupWarningMessage: String {
-        let walletDescription = conflictWalletCount == 1 ? "1 wallet" : "\(conflictWalletCount) wallets"
-        return "\(walletDescription) has existing wallet data without a matching wallet record. Approving this import will permanently remove that data, including any existing keychain items. Removed keychain items cannot be restored."
+        backupCleanupWarningMessage(walletCount: conflictWalletCount)
     }
 
     private func invalidateImportReview(clearVerifyReport: Bool, cancelTask: Bool = false) {
@@ -326,13 +325,17 @@ struct BackupImportView: View {
             return
         }
 
+        importTask?.cancel()
+        let generation = inputGenerations.advance()
         showCleanupConfirmation = false
         isImporting = true
         importTask = Task {
             do {
                 try Task.checkCancellation()
-                let approval = try backupManager.approveImport(preparation: preparation)
+                let approval = try await backupManager.approveImport(preparation: preparation)
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     importReview = .approved(
                         preparation: preparation,
                         approval: approval,
@@ -346,6 +349,8 @@ struct BackupImportView: View {
                 )
 
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     importReport = report
@@ -353,6 +358,8 @@ struct BackupImportView: View {
             } catch {
                 let isCancelled = Task.isCancelled
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     if !isCancelled {
@@ -425,6 +432,12 @@ struct BackupImportView: View {
         }
         return lines.joined(separator: "\n")
     }
+}
+
+func backupCleanupWarningMessage(walletCount: Int) -> String {
+    let walletDescription = walletCount == 1 ? "1 wallet" : "\(walletCount) wallets"
+    let verb = walletCount == 1 ? "has" : "have"
+    return "\(walletDescription) \(verb) existing wallet data without a matching wallet record. Approving this import will permanently remove that data, including any existing keychain items. Removed keychain items cannot be restored."
 }
 
 private struct BackupImportForm: View {

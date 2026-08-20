@@ -1470,7 +1470,7 @@ public protocol BackupManagerProtocol: AnyObject, Sendable {
     /**
      * Approve cleanup of markerless artifacts after rechecking the preflight snapshots
      */
-    func approveImport(preparation: BackupImportPreparation) throws  -> BackupImportApproval
+    func approveImport(preparation: BackupImportPreparation) async throws  -> BackupImportApproval
 
     /**
      * Account name for saving backup passwords to the system credential store
@@ -1578,14 +1578,21 @@ public convenience init() {
     /**
      * Approve cleanup of markerless artifacts after rechecking the preflight snapshots
      */
-open func approveImport(preparation: BackupImportPreparation)throws  -> BackupImportApproval  {
-    return try  FfiConverterTypeBackupImportApproval_lift(try rustCallWithError(FfiConverterTypeBackupError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_backupmanager_approveimport(
-            self.uniffiCloneHandle(),
-        FfiConverterTypeBackupImportPreparation_lower(preparation),uniffiCallStatus
-    )
-})
+open func approveImport(preparation: BackupImportPreparation)async throws  -> BackupImportApproval  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_backupmanager_approveimport(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypeBackupImportPreparation_lower(preparation)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_u64,
+            completeFunc: ffi_cove_rust_future_complete_u64,
+            freeFunc: ffi_cove_rust_future_free_u64,
+            liftFunc: FfiConverterTypeBackupImportApproval_lift,
+            errorHandler: FfiConverterTypeBackupError_lift
+        )
 }
 
     /**
@@ -46321,7 +46328,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_backupimportpreparation_wallet_ids() != 2696) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_backupmanager_approveimport() != 24954) {
+    if (uniffi_cove_checksum_method_backupmanager_approveimport() != 30902) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_backupmanager_backup_account_name() != 2715) {

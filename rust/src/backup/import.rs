@@ -102,20 +102,18 @@ pub(crate) async fn import_all(
     import_prepared(preparation, None).await
 }
 
-pub(crate) async fn import_prepared(
-    mut preparation: ImportPreparationState,
-    approval: Option<ImportApprovalState>,
-) -> Result<BackupImportReport, BackupError> {
-    let mut payload = preparation.payload.take().ok_or(BackupError::ImportApprovalUsed)?;
-
+pub(crate) fn validate_prepared_import(
+    preparation: &ImportPreparationState,
+    approval: Option<&ImportApprovalState>,
+) -> Result<(), BackupError> {
+    let payload = preparation.payload.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
     if payload.wallets.len() != preparation.wallets.len() {
         return Err(BackupError::Restore(
             "prepared import wallet plans do not match the backup payload".to_string(),
         ));
     }
 
-    let mut approval = approval;
-    validate_approval(&preparation, approval.as_ref())?;
+    validate_approval(preparation, approval)?;
 
     if approval.is_none()
         && let Some(wallet) =
@@ -123,6 +121,18 @@ pub(crate) async fn import_prepared(
     {
         return Err(BackupError::ImportApprovalRequired(wallet.metadata.id.clone()));
     }
+
+    Ok(())
+}
+
+pub(crate) async fn import_prepared(
+    mut preparation: ImportPreparationState,
+    approval: Option<ImportApprovalState>,
+) -> Result<BackupImportReport, BackupError> {
+    validate_prepared_import(&preparation, approval.as_ref())?;
+    let mut payload =
+        preparation.payload.take().expect("prepared import payload was checked as present");
+    let mut approval = approval;
 
     let mut report = BackupImportReport::default();
 
@@ -162,6 +172,7 @@ pub(crate) async fn import_prepared(
                 labels_failure,
                 duplicate_key,
                 degraded,
+                cleanup_warnings,
             }) => {
                 report.imported_wallet_names.push(name.clone());
                 if labels_imported {
@@ -175,6 +186,7 @@ pub(crate) async fn import_prepared(
                 if degraded {
                     report.degraded_wallet_names.push(name);
                 }
+                report.cleanup_warnings.extend(cleanup_warnings);
             }
             Ok(RestoreResult::Skipped { name }) => {
                 report.skipped_wallet_names.push(name);
@@ -478,6 +490,7 @@ enum RestoreResult {
         labels_failure: Option<(String, String)>,
         duplicate_key: WalletIdentityKey,
         degraded: bool,
+        cleanup_warnings: Vec<String>,
     },
     Skipped {
         name: String,
@@ -585,16 +598,14 @@ async fn restore_prepared_wallet(
     let mut labels_failure: Option<(String, String)> = None;
     let degraded = matches!(&kind, PreparedWalletKind::Public(public) if public.degraded);
 
-    match kind {
-        PreparedWalletKind::Hot(prepared_hot) => {
-            restore_hot_wallet_prepared_with_context(
-                &metadata,
-                prepared_hot,
-                payload_digest,
-                approval_snapshot,
-            )
-            .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?;
-        }
+    let cleanup_warnings = match kind {
+        PreparedWalletKind::Hot(prepared_hot) => restore_hot_wallet_prepared_with_context(
+            &metadata,
+            prepared_hot,
+            payload_digest,
+            approval_snapshot,
+        )
+        .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?,
         PreparedWalletKind::Public(prepared_public) => {
             if degraded {
                 warn!(
@@ -607,9 +618,9 @@ async fn restore_prepared_wallet(
                 payload_digest,
                 approval_snapshot,
             )
-            .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?;
+            .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?
         }
-    }
+    };
 
     let labels_outcome = restore_wallet_labels(
         &wallet_id,
@@ -623,7 +634,14 @@ async fn restore_prepared_wallet(
         labels_failure = Some((warning.wallet_name, warning.error));
     }
 
-    Ok(RestoreResult::Imported { name, labels_imported, labels_failure, duplicate_key, degraded })
+    Ok(RestoreResult::Imported {
+        name,
+        labels_imported,
+        labels_failure,
+        duplicate_key,
+        degraded,
+        cleanup_warnings,
+    })
 }
 
 fn with_cleanup_authorized<F>(
@@ -631,7 +649,7 @@ fn with_cleanup_authorized<F>(
     payload_digest: &str,
     approval_snapshot: Option<&RestoreArtifactSnapshot>,
     f: F,
-) -> Result<(), (BackupError, Vec<String>)>
+) -> Result<Vec<String>, (BackupError, Vec<String>)>
 where
     F: FnOnce() -> Result<(), BackupError>,
 {
@@ -664,7 +682,7 @@ fn with_cleanup_preserving<F>(
     payload_digest: &str,
     snapshot: &RestoreArtifactSnapshot,
     f: F,
-) -> Result<(), (BackupError, Vec<String>)>
+) -> Result<Vec<String>, (BackupError, Vec<String>)>
 where
     F: FnOnce() -> Result<(), BackupError>,
 {
@@ -714,7 +732,7 @@ fn restore_hot_wallet_prepared_with_context(
     prepared: PreparedHotWallet,
     payload_digest: &str,
     approval_snapshot: Option<&RestoreArtifactSnapshot>,
-) -> Result<(), (BackupError, Vec<String>)> {
+) -> Result<Vec<String>, (BackupError, Vec<String>)> {
     let result = with_cleanup_authorized(metadata, payload_digest, approval_snapshot, || {
         restore_hot_wallet_inner_prepared(metadata, prepared)
     });
@@ -730,7 +748,7 @@ fn restore_descriptor_wallet_prepared_with_context(
     prepared: PreparedPublicWallet,
     payload_digest: &str,
     approval_snapshot: Option<&RestoreArtifactSnapshot>,
-) -> Result<(), (BackupError, Vec<String>)> {
+) -> Result<Vec<String>, (BackupError, Vec<String>)> {
     let result = with_cleanup_authorized(metadata, payload_digest, approval_snapshot, || {
         restore_descriptor_wallet_inner_prepared(metadata, prepared)
     });
@@ -752,9 +770,15 @@ pub(crate) fn restore_cloud_mnemonic_wallet(
     let snapshot = cloud_restore_snapshot(metadata, Some(prepared.xpub))
         .map_err(|error| (error, Vec::new()))?;
 
-    with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
+    let result = with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
         restore_hot_wallet_inner_prepared(metadata, prepared)
-    })
+    });
+    if let Ok(warnings) = &result {
+        for warning in warnings {
+            warn!("Cloud restore cleanup warning for {}: {warning}", metadata.name);
+        }
+    }
+    result.map(|_| ())
 }
 
 pub(crate) fn restore_cloud_xpriv_wallet(
@@ -768,9 +792,15 @@ pub(crate) fn restore_cloud_xpriv_wallet(
     let snapshot = cloud_restore_snapshot(metadata, Some(prepared.xpub))
         .map_err(|error| (error, Vec::new()))?;
 
-    with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
+    let result = with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
         restore_hot_wallet_inner_prepared(metadata, prepared)
-    })
+    });
+    if let Ok(warnings) = &result {
+        for warning in warnings {
+            warn!("Cloud restore cleanup warning for {}: {warning}", metadata.name);
+        }
+    }
+    result.map(|_| ())
 }
 
 fn restore_hot_wallet_inner_prepared(
@@ -832,9 +862,15 @@ pub(crate) fn restore_cloud_descriptor_wallet(
     let snapshot =
         cloud_restore_snapshot(metadata, prepared.xpub).map_err(|error| (error, Vec::new()))?;
 
-    with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
+    let result = with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
         restore_descriptor_wallet_inner_prepared(metadata, prepared)
-    })
+    });
+    if let Ok(warnings) = &result {
+        for warning in warnings {
+            warn!("Cloud restore cleanup warning for {}: {warning}", metadata.name);
+        }
+    }
+    result.map(|_| ())
 }
 
 fn restore_descriptor_wallet_inner_prepared(
