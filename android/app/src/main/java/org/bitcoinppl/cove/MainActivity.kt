@@ -183,7 +183,7 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             var bootstrapped by remember { mutableStateOf(false) }
-            var bootstrapError by remember { mutableStateOf<String?>(null) }
+            var bootstrapFailure by remember { mutableStateOf<BootstrapFailure?>(null) }
             var needsCatastrophicRecovery by remember { mutableStateOf(false) }
             var bootstrapAttempt by remember { mutableStateOf(0) }
             var catastrophicRecoveryAttemptId by remember { mutableStateOf(0) }
@@ -208,13 +208,56 @@ class MainActivity : FragmentActivity() {
                 try {
                     resetCatastrophicLocalData(clearDriveAccountBinding)
                     resetBootstrapForRestore()
-                    bootstrapError = null
+                    bootstrapFailure = null
                     needsCatastrophicRecovery = false
                     bootstrapAttempt += 1
                 } catch (e: Exception) {
                     Log.e(TAG, "[STARTUP] catastrophic recovery $logContext failed", e)
                     needsCatastrophicRecovery = false
-                    bootstrapError = "Failed to reset local data: ${e.message ?: "Unknown error"}"
+                    bootstrapFailure =
+                        BootstrapFailure.Fatal("Failed to reset local data: ${e.message ?: "Unknown error"}")
+                }
+            }
+
+            fun retryBootstrapRecovery() {
+                try {
+                    // preserve local data and markers so bootstrap can retry recovery
+                    resetBootstrapForRestore()
+                    bootstrapFailure = null
+                    needsCatastrophicRecovery = false
+                    bootstrapAttempt += 1
+                } catch (e: Exception) {
+                    Log.e(TAG, "[STARTUP] retrying wallet restore recovery failed", e)
+                    bootstrapFailure =
+                        BootstrapFailure.Fatal(
+                            "Failed to retry startup recovery. Please force-quit and try again.\n\n" +
+                                "Please contact feedback@covebitcoinwallet.com",
+                        )
+                }
+            }
+
+            fun copyStartupDiagnostics(message: String) {
+                val report = startupDiagnosticsReport(message)
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Cove diagnostics", report))
+                // Android 13+ shows its own clipboard confirmation chip
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                    Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            fun shareStartupDiagnostics(message: String) {
+                val report = startupDiagnosticsReport(message)
+                val intent =
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Cove startup diagnostics")
+                        putExtra(Intent.EXTRA_TEXT, report)
+                    }
+                runCatching {
+                    startActivity(Intent.createChooser(intent, "Share Diagnostics"))
+                }.onFailure { error ->
+                    Log.w(TAG, "[STARTUP] failed to share diagnostics", error)
                 }
             }
 
@@ -297,35 +340,7 @@ class MainActivity : FragmentActivity() {
             }
 
             if (!bootstrapped) {
-                if (bootstrapError != null) {
-                    BootstrapErrorView(
-                        errorMessage = bootstrapError!!,
-                        onCopyDiagnostics = {
-                            val report = startupDiagnosticsReport(bootstrapError!!)
-                            val clipboard =
-                                getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Cove diagnostics", report))
-                            // Android 13+ shows its own clipboard confirmation chip
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                Toast.makeText(this, "Diagnostics copied", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onShareDiagnostics = {
-                            val report = startupDiagnosticsReport(bootstrapError!!)
-                            val intent =
-                                Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Cove startup diagnostics")
-                                    putExtra(Intent.EXTRA_TEXT, report)
-                                }
-                            runCatching {
-                                startActivity(Intent.createChooser(intent, "Share Diagnostics"))
-                            }.onFailure { error ->
-                                Log.w(TAG, "[STARTUP] failed to share diagnostics", error)
-                            }
-                        },
-                    )
-                } else {
+                if (bootstrapFailure == null) {
                     var showSpinner by remember { mutableStateOf(false) }
                     var splashStatus by remember { mutableStateOf<String?>(null) }
                     var encryptionProgress by remember { mutableStateOf<Float?>(null) }
@@ -384,8 +399,11 @@ class MainActivity : FragmentActivity() {
                                 completeBootstrap()
                             } else {
                                 Log.e(TAG, "[STARTUP] bootstrap timed out, last step: $step")
-                                bootstrapError =
-                                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+                                bootstrapFailure =
+                                    BootstrapFailure.Fatal(
+                                        "App startup timed out. Please force-quit and try again.\n\n" +
+                                            "Please contact feedback@covebitcoinwallet.com",
+                                    )
                             }
 
                             return@LaunchedEffect
@@ -407,14 +425,49 @@ class MainActivity : FragmentActivity() {
                             when (val failure = classifyBootstrapFailure(e)) {
                                 BootstrapFailure.CatastrophicRecovery -> {
                                     resetCatastrophicCloudRestoreCheck()
+                                    bootstrapFailure = null
                                     needsCatastrophicRecovery = true
                                 }
-                                is BootstrapFailure.Fatal -> bootstrapError = failure.message
+
+                                BootstrapFailure.RecoveryRequired -> {
+                                    bootstrapFailure = failure
+                                }
+
+                                is BootstrapFailure.Fatal -> {
+                                    bootstrapFailure = failure
+                                }
                             }
                             return@LaunchedEffect
                         }
 
                         completeBootstrap(warning)
+                    }
+                } else {
+                    val failure = bootstrapFailure ?: return@setContent
+                    when (failure) {
+                        BootstrapFailure.CatastrophicRecovery -> {
+                            // catastrophic recovery is rendered above and returns before this branch
+                            SplashLoadingView(showSpinner = false)
+                        }
+
+                        BootstrapFailure.RecoveryRequired -> {
+                            val message = BootstrapFailure.RecoveryRequired.message
+                            BootstrapErrorView(
+                                errorMessage = message,
+                                onCopyDiagnostics = { copyStartupDiagnostics(message) },
+                                onShareDiagnostics = { shareStartupDiagnostics(message) },
+                                errorTitle = "Restore Recovery Required",
+                                onTryAgain = { retryBootstrapRecovery() },
+                            )
+                        }
+
+                        is BootstrapFailure.Fatal -> {
+                            BootstrapErrorView(
+                                errorMessage = failure.message,
+                                onCopyDiagnostics = { copyStartupDiagnostics(failure.message) },
+                                onShareDiagnostics = { shareStartupDiagnostics(failure.message) },
+                            )
+                        }
                     }
                 }
                 return@setContent

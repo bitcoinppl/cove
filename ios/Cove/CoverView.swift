@@ -14,13 +14,14 @@ struct CoverView: View {
     static let spinnerDelayMs = 100
 
     var errorMessage: String? = nil
+    var onTryAgain: (() -> Void)? = nil
 
     var body: some View {
         ZStack {
             Color.black.edgesIgnoringSafeArea(.all)
 
             if let errorMessage {
-                StorageErrorView(errorMessage: errorMessage)
+                StorageErrorView(errorMessage: errorMessage, onTryAgain: onTryAgain)
             } else {
                 SplashLoadingView()
             }
@@ -30,11 +31,12 @@ struct CoverView: View {
 
 private struct StorageErrorView: View {
     let errorMessage: String
+    let onTryAgain: (() -> Void)?
     @State private var copiedDiagnostics = false
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("Storage Error")
+            Text(onTryAgain == nil ? "Storage Error" : "Restore Recovery Required")
                 .font(.headline)
                 .foregroundColor(.white)
 
@@ -48,6 +50,13 @@ private struct StorageErrorView: View {
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.5))
                 .padding(.top, 8)
+
+            if let onTryAgain {
+                Button("Try Again", action: onTryAgain)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white)
+                    .padding(.top, 12)
+            }
 
             HStack(spacing: 12) {
                 Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {

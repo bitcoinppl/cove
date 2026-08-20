@@ -3,6 +3,23 @@ import CoveCore
 import XCTest
 
 final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
+    func testStartupRecoveryClassifiesRecoveryRequiredWithSafeRetryCopy() {
+        let failure = classifyBootstrapFailure(
+            AppInitError.RecoveryRequired(message: "wallet path and cleanup details")
+        )
+
+        XCTAssertEqual(failure, .recoveryRequired)
+        XCTAssertTrue(startupRecoveryRequiredMessage.contains("Try Again"))
+        XCTAssertFalse(startupRecoveryRequiredMessage.contains("wallet path"))
+    }
+
+    func testStartupRecoveryLeavesOtherFatalErrorsWithoutRetryState() {
+        let error = AppInitError.DatabaseVerificationFailed(message: "verification failed")
+        let failure = classifyBootstrapFailure(error)
+
+        XCTAssertEqual(failure, .fatal(error.localizedDescription))
+    }
+
     func testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly() {
         XCTAssertTrue(cloudBackupPendingEnableCleanupIsAvailable(.available))
         XCTAssertFalse(cloudBackupPendingEnableCleanupIsAvailable(.supportOnly))

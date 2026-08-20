@@ -165,6 +165,8 @@ internal fun BootstrapErrorView(
     errorMessage: String,
     onCopyDiagnostics: () -> Unit,
     onShareDiagnostics: () -> Unit,
+    errorTitle: String = "Storage Error",
+    onTryAgain: (() -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
@@ -175,7 +177,7 @@ internal fun BootstrapErrorView(
             modifier = Modifier.padding(16.dp),
         ) {
             Text(
-                "Storage Error",
+                errorTitle,
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
             )
@@ -191,6 +193,15 @@ internal fun BootstrapErrorView(
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
             )
+            if (onTryAgain != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                FilledTonalButton(
+                    onClick = onTryAgain,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Try Again")
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(onClick = onCopyDiagnostics) {
                 Text("Copy Diagnostics", color = Color.White)
