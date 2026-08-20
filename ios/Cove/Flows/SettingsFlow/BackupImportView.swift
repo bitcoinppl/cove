@@ -5,15 +5,12 @@ import UniformTypeIdentifiers
 struct BackupImportView: View {
     private enum ImportReview: Sendable {
         case awaitingApproval(preparation: BackupImportPreparation, conflictWalletCount: Int)
-        case approved(
-            preparation: BackupImportPreparation,
-            approval: BackupImportApproval,
-            conflictWalletCount: Int
-        )
+        /// The preparation and approval are held by the running import task
+        case approved(conflictWalletCount: Int)
 
         var conflictWalletCount: Int {
             switch self {
-            case let .awaitingApproval(_, count), let .approved(_, _, count):
+            case let .awaitingApproval(_, count), let .approved(count):
                 count
             }
         }
@@ -336,11 +333,7 @@ struct BackupImportView: View {
                 await MainActor.run {
                     guard inputGenerations.isCurrent(capturedToken: generation) else { return }
 
-                    importReview = .approved(
-                        preparation: preparation,
-                        approval: approval,
-                        conflictWalletCount: conflictWalletCount
-                    )
+                    importReview = .approved(conflictWalletCount: conflictWalletCount)
                 }
                 try Task.checkCancellation()
                 let report = try await backupManager.importPrepared(

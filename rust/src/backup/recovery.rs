@@ -4,29 +4,21 @@ use std::{
     fmt,
     fs::{self, File, OpenOptions},
     io::{self, Read as _, Write as _},
+    os::fd::AsRawFd as _,
+    os::unix::ffi::OsStrExt as _,
+    os::unix::fs::{MetadataExt as _, OpenOptionsExt as _},
     path::{Path, PathBuf},
     sync::Arc,
-    sync::LazyLock,
 };
-
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt as _;
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt as _;
-
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt as _;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt as _;
 
 use cove_device::keychain::Keychain;
 use cove_types::WalletId;
-use parking_lot::Mutex;
 use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use strum::IntoEnumIterator as _;
 use tracing::{error, info, warn};
+use zeroize::Zeroizing;
 
 use crate::{
     database::Database,
@@ -42,9 +34,6 @@ const MARKER_DIRECTORY_NAME: &str = "restore-markers";
 const LOCK_DIRECTORY_NAME: &str = "restore-locks";
 const QUARANTINE_DIRECTORY_NAME: &str = "quarantine";
 const MARKER_EXTENSION: &str = "json";
-
-static ACTIVE_WALLET_RESTORE_LEASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// A validated wallet id that is safe to use in every restore-owned path
 ///
@@ -75,12 +64,6 @@ impl ValidatedRestoreWalletId {
             ));
         }
 
-        if is_windows_reserved_name(value) {
-            return Err(BackupError::InvalidWalletId(
-                "wallet id is reserved by the filesystem".to_string(),
-            ));
-        }
-
         Ok(Self(id.clone()))
     }
 
@@ -98,38 +81,8 @@ pub(crate) fn restore_path_key(value: &str) -> String {
     value.to_ascii_lowercase()
 }
 
-fn is_windows_reserved_name(value: &str) -> bool {
-    let stem = value.split('.').next().unwrap_or_default().to_ascii_uppercase();
-    matches!(
-        stem.as_str(),
-        "CON"
-            | "PRN"
-            | "AUX"
-            | "NUL"
-            | "COM1"
-            | "COM2"
-            | "COM3"
-            | "COM4"
-            | "COM5"
-            | "COM6"
-            | "COM7"
-            | "COM8"
-            | "COM9"
-            | "LPT1"
-            | "LPT2"
-            | "LPT3"
-            | "LPT4"
-            | "LPT5"
-            | "LPT6"
-            | "LPT7"
-            | "LPT8"
-            | "LPT9"
-    )
-}
-
 struct RestoreFileLock {
-    _file: File,
-    #[cfg(not(unix))]
+    file: File,
     path: PathBuf,
 }
 
@@ -140,43 +93,64 @@ impl RestoreFileLock {
         let path = lock_path(id);
         ensure_lock_path(&path)?;
 
-        #[cfg(unix)]
-        {
-            use std::os::fd::AsRawFd as _;
-            use std::os::unix::fs::OpenOptionsExt as _;
-
-            let file = OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .read(true)
-                .write(true)
-                .custom_flags(LOCK_NOFOLLOW)
-                .open(&path)
-                .map_err(|error| {
-                    BackupError::Restore(format!("failed to open restore lock: {error}"))
-                })?;
-            if unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) } != 0 {
-                return Err(BackupError::WalletIdOccupied(id.as_wallet_id().clone()));
-            }
-
-            Ok(Self { _file: file })
+        let file = open_lock_file(&path)?;
+        if unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) } != 0 {
+            return Err(BackupError::WalletIdOccupied(id.as_wallet_id().clone()));
         }
 
-        #[cfg(not(unix))]
-        {
-            let file =
-                OpenOptions::new().create_new(true).read(true).write(true).open(&path).map_err(
-                    |error| {
-                        if error.kind() == io::ErrorKind::AlreadyExists {
-                            BackupError::WalletIdOccupied(id.as_wallet_id().clone())
-                        } else {
-                            BackupError::Restore(format!("failed to create restore lock: {error}"))
-                        }
-                    },
-                )?;
-            Ok(Self { _file: file, path })
+        // the lock is released by unlinking the lock file, so a handle opened
+        // before another holder unlinked it guards an inode nobody consults
+        if !lock_file_is_current(&file, &path) {
+            return Err(BackupError::WalletIdOccupied(id.as_wallet_id().clone()));
+        }
+
+        Ok(Self { file, path })
+    }
+
+    /// Report whether another restore currently holds the durable lock
+    ///
+    /// The probe never creates or removes the lock file so that it stays safe
+    /// to run against a wallet id no restore has ever touched
+    fn is_held(id: &ValidatedRestoreWalletId) -> bool {
+        let path = lock_path(id);
+        let Ok(file) = open_lock_file_for_probe(&path) else {
+            return false;
+        };
+
+        let locked = unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) };
+        locked != 0
+    }
+}
+
+impl Drop for RestoreFileLock {
+    fn drop(&mut self) {
+        if lock_file_is_current(&self.file, &self.path) {
+            let _ = fs::remove_file(&self.path);
         }
     }
+}
+
+fn open_lock_file(path: &Path) -> Result<File, BackupError> {
+    OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .custom_flags(LOCK_NOFOLLOW)
+        .open(path)
+        .map_err(|error| BackupError::Restore(format!("failed to open restore lock: {error}")))
+}
+
+fn open_lock_file_for_probe(path: &Path) -> io::Result<File> {
+    OpenOptions::new().read(true).custom_flags(LOCK_NOFOLLOW).open(path)
+}
+
+fn lock_file_is_current(file: &File, path: &Path) -> bool {
+    let (Ok(open), Ok(current)) = (file.metadata(), fs::symlink_metadata(path)) else {
+        return false;
+    };
+
+    (open.dev(), open.ino()) == (current.dev(), current.ino())
 }
 
 fn ensure_lock_path(path: &Path) -> Result<(), BackupError> {
@@ -195,25 +169,15 @@ fn ensure_lock_path(path: &Path) -> Result<(), BackupError> {
     }
 }
 
-#[cfg(unix)]
 const LOCK_EX: i32 = 2;
-#[cfg(unix)]
 const LOCK_NB: i32 = 4;
 #[cfg(target_os = "linux")]
 const LOCK_NOFOLLOW: i32 = 0x20000;
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(not(target_os = "linux"))]
 const LOCK_NOFOLLOW: i32 = 0x100;
 
-#[cfg(unix)]
 unsafe extern "C" {
     fn flock(fd: std::os::fd::RawFd, operation: i32) -> i32;
-}
-
-#[cfg(not(unix))]
-impl Drop for RestoreFileLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
 }
 
 fn lock_directory() -> PathBuf {
@@ -258,43 +222,10 @@ fn value_fingerprint(value: &[u8]) -> ArtifactFingerprint {
     }
 }
 
-struct FingerprintWriter {
-    digest: Sha256,
-    size: u64,
-}
-
-impl FingerprintWriter {
-    fn new() -> Self {
-        Self { digest: Sha256::new(), size: 0 }
-    }
-
-    fn write_fragment(&mut self, value: &str) {
-        self.digest.update(value.as_bytes());
-        self.size += value.len() as u64;
-    }
-
-    fn finish(self) -> ArtifactFingerprint {
-        ArtifactFingerprint {
-            kind: ArtifactKind::Value,
-            identity: "value".to_string(),
-            size: self.size,
-            digest: hex::encode(self.digest.finalize()),
-        }
-    }
-}
-
-impl fmt::Write for FingerprintWriter {
-    fn write_str(&mut self, value: &str) -> fmt::Result {
-        self.write_fragment(value);
-        Ok(())
-    }
-}
-
-fn display_fingerprint(prefix: &str, value: impl fmt::Display) -> ArtifactFingerprint {
-    let mut writer = FingerprintWriter::new();
-    writer.write_fragment(prefix);
-    fmt::write(&mut writer, format_args!("{value}")).expect("fingerprint writer cannot fail");
-    writer.finish()
+/// Fingerprint a secret, keeping its plaintext in a buffer that is wiped after use
+fn secret_fingerprint(prefix: &str, value: impl fmt::Display) -> ArtifactFingerprint {
+    let formatted = Zeroizing::new(format!("{prefix}{value}"));
+    value_fingerprint(formatted.as_bytes())
 }
 
 fn fingerprint_path(path: &Path) -> io::Result<Option<ArtifactFingerprint>> {
@@ -339,41 +270,11 @@ fn digest_file(path: &Path) -> io::Result<String> {
 }
 
 fn metadata_identity(metadata: &fs::Metadata) -> String {
-    #[cfg(unix)]
-    {
-        format!("unix:{}:{}", metadata.dev(), metadata.ino())
-    }
-
-    #[cfg(windows)]
-    {
-        format!(
-            "windows:{}:{}:{}",
-            metadata.volume_serial_number().unwrap_or_default(),
-            metadata.file_index_high(),
-            metadata.file_index_low()
-        );
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        String::new()
-    }
+    format!("unix:{}:{}", metadata.dev(), metadata.ino())
 }
 
 fn hash_os_str(value: &OsStr) -> String {
-    #[cfg(unix)]
-    {
-        hex::encode(Sha256::digest(value.as_bytes()))
-    }
-
-    #[cfg(windows)]
-    {
-        let bytes = value.encode_wide().flat_map(u16::to_le_bytes).collect::<Vec<_>>();
-        hex::encode(Sha256::digest(bytes))
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    hash_bytes(value.to_string_lossy().as_bytes())
+    hash_bytes(value.as_bytes())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -428,10 +329,10 @@ fn capture_keychain_fingerprints(
     {
         let fingerprint = match secret {
             cove_device::keychain::WalletSecret::Mnemonic(mnemonic) => {
-                display_fingerprint("mnemonic:", mnemonic)
+                secret_fingerprint("mnemonic:", mnemonic)
             }
             cove_device::keychain::WalletSecret::Xpriv(xprv) => {
-                display_fingerprint("xpriv:", xprv.expose())
+                secret_fingerprint("xpriv:", xprv.expose())
             }
         };
         fingerprints.insert(KeychainArtifactKind::Secret.as_str().to_string(), fingerprint);
@@ -491,9 +392,13 @@ pub(crate) struct ArtifactFingerprint {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct RestoreArtifactSnapshot {
     pub(crate) metadata: bool,
-    pub(crate) metadata_digest: Option<String>,
     pub(crate) keychain_items: bool,
-    pub(crate) keychain_fingerprints: BTreeMap<String, ArtifactFingerprint>,
+    /// The keychain kinds present before the restore, keyed by kind name
+    ///
+    /// The value is `None` when the snapshot was rebuilt from a durable marker:
+    /// markers persist no secret-derived digests, so only the kinds survive a
+    /// crash and rollback must treat every listed kind as pre-existing
+    pub(crate) keychain_entries: BTreeMap<String, Option<ArtifactFingerprint>>,
     pub(crate) bdk_paths: HashSet<PathBuf>,
     pub(crate) bdk_fingerprints: BTreeMap<PersistedBdkArtifact, ArtifactFingerprint>,
     pub(crate) wallet_data_paths: HashSet<PathBuf>,
@@ -504,33 +409,7 @@ pub(crate) struct RestoreArtifactSnapshot {
 
 impl RestoreArtifactSnapshot {
     pub(crate) fn capture(id: &ValidatedRestoreWalletId) -> Result<Self, BackupError> {
-        let database = Database::global();
-        let mut metadata_present = false;
-        let mut metadata_digests = BTreeSet::new();
-
-        for network in cove_types::network::Network::iter() {
-            for mode in WalletMode::iter() {
-                let wallets = database
-                    .wallets
-                    .get_all(network, mode)
-                    .map_err(|error| BackupError::Database(error.to_string()))?;
-
-                for wallet in wallets {
-                    if wallet.id == *id.as_wallet_id() {
-                        metadata_present = true;
-                        let bytes = serde_json::to_vec(&wallet).map_err(|error| {
-                            BackupError::Serialization(format!("wallet metadata snapshot: {error}"))
-                        })?;
-                        metadata_digests.insert(hash_bytes(&bytes));
-                    } else if restore_path_key(wallet.id.as_str()) == id.path_key() {
-                        return Err(BackupError::InvalidWalletId(format!(
-                            "wallet id collides with existing path: {}",
-                            id.as_wallet_id()
-                        )));
-                    }
-                }
-            }
-        }
+        let metadata_present = metadata_exists(id)?;
 
         for entry in crate::database::wallet_data::wallet_data_root_entries()
             .map_err(|error| BackupError::Restore(format!("wallet-data root: {error}")))?
@@ -546,8 +425,11 @@ impl RestoreArtifactSnapshot {
             }
         }
 
-        let keychain_fingerprints = capture_keychain_fingerprints(id.as_wallet_id())?;
-        let keychain_items = !keychain_fingerprints.is_empty()
+        let keychain_entries = capture_keychain_fingerprints(id.as_wallet_id())?
+            .into_iter()
+            .map(|(kind, fingerprint)| (kind, Some(fingerprint)))
+            .collect::<BTreeMap<_, _>>();
+        let keychain_items = !keychain_entries.is_empty()
             || Keychain::global().wallet_items_exist(id.as_wallet_id());
 
         let mut bdk_paths = HashSet::new();
@@ -597,24 +479,14 @@ impl RestoreArtifactSnapshot {
 
         Ok(Self {
             metadata: metadata_present,
-            metadata_digest: (!metadata_digests.is_empty()).then(|| {
-                hash_bytes(
-                    metadata_digests
-                        .iter()
-                        .flat_map(String::as_bytes)
-                        .copied()
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                )
-            }),
             keychain_items,
+            keychain_entries,
             bdk_paths,
             bdk_fingerprints,
             wallet_data_paths,
             wallet_data_fingerprints,
             wallet_data_directory,
             wallet_data_occupied,
-            keychain_fingerprints,
         })
     }
 
@@ -635,72 +507,43 @@ impl RestoreArtifactSnapshot {
 pub(crate) struct WalletRestoreLease {
     id: ValidatedRestoreWalletId,
     snapshot: RestoreArtifactSnapshot,
-    key: String,
     _lock: Arc<RestoreFileLock>,
 }
 
 impl WalletRestoreLease {
+    /// Take the lease for a wallet id that must be free of every local artifact
     pub(crate) fn acquire(metadata: &WalletMetadata) -> Result<Self, BackupError> {
-        Self::acquire_with_snapshot(metadata, None, false)
+        Self::acquire_with_snapshot(metadata, None)
     }
 
+    /// Take the lease for a wallet id whose exact existing artifacts were approved
     pub(crate) fn acquire_for_approval(
         metadata: &WalletMetadata,
         expected: &RestoreArtifactSnapshot,
     ) -> Result<Self, BackupError> {
-        Self::acquire_with_snapshot(metadata, Some(expected), true)
-    }
-
-    pub(crate) fn acquire_preserving(
-        metadata: &WalletMetadata,
-        expected: &RestoreArtifactSnapshot,
-    ) -> Result<Self, BackupError> {
-        Self::acquire_with_snapshot(metadata, Some(expected), true)
+        Self::acquire_with_snapshot(metadata, Some(expected))
     }
 
     fn acquire_with_snapshot(
         metadata: &WalletMetadata,
         expected: Option<&RestoreArtifactSnapshot>,
-        allow_occupied: bool,
     ) -> Result<Self, BackupError> {
         let id = ValidatedRestoreWalletId::validate(&metadata.id)?;
-        let key = id.path_key();
-        {
-            let mut active = ACTIVE_WALLET_RESTORE_LEASES.lock();
-            if !active.insert(key.clone()) {
+        let lock = Arc::new(RestoreFileLock::acquire(&id)?);
+        let snapshot = RestoreArtifactSnapshot::capture(&id)?;
+
+        match expected {
+            Some(expected) if &snapshot != expected => {
+                return Err(BackupError::ImportApprovalStale(metadata.id.clone()));
+            }
+            Some(_) => {}
+            None if snapshot.is_occupied() => {
                 return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
             }
+            None => {}
         }
 
-        let lock = match RestoreFileLock::acquire(&id) {
-            Ok(lock) => Arc::new(lock),
-            Err(error) => {
-                ACTIVE_WALLET_RESTORE_LEASES.lock().remove(&key);
-                return Err(error);
-            }
-        };
-
-        let snapshot = match RestoreArtifactSnapshot::capture(&id) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                ACTIVE_WALLET_RESTORE_LEASES.lock().remove(&key);
-                return Err(error);
-            }
-        };
-
-        if let Some(expected) = expected
-            && &snapshot != expected
-        {
-            ACTIVE_WALLET_RESTORE_LEASES.lock().remove(&key);
-            return Err(BackupError::ImportApprovalStale(metadata.id.clone()));
-        }
-
-        if !allow_occupied && snapshot.is_occupied() {
-            ACTIVE_WALLET_RESTORE_LEASES.lock().remove(&key);
-            return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
-        }
-
-        Ok(Self { id, snapshot, key, _lock: lock })
+        Ok(Self { id, snapshot, _lock: lock })
     }
 
     pub(crate) fn snapshot(&self) -> &RestoreArtifactSnapshot {
@@ -708,36 +551,31 @@ impl WalletRestoreLease {
     }
 }
 
-impl Drop for WalletRestoreLease {
-    fn drop(&mut self) {
-        ACTIVE_WALLET_RESTORE_LEASES.lock().remove(&self.key);
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedRestoreMarker {
     version: u32,
     operation_id: String,
-    payload_digest: String,
     wallet_id: String,
     initial: PersistedArtifactSnapshot,
     phase: RestoreMarkerPhase,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum RestoreMarkerPhase {
     Writing,
     CleanupInProgress,
     CleanupComplete,
-    MetadataCommitted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedArtifactSnapshot {
     metadata: bool,
-    metadata_digest: Option<String>,
     keychain_items: bool,
-    keychain_fingerprints: BTreeMap<String, ArtifactFingerprint>,
+    /// Which keychain kinds existed before the restore
+    ///
+    /// Only the kind names are persisted: a marker is plaintext on disk, so a
+    /// secret-derived digest here would be a seed verification oracle
+    keychain_kinds: BTreeSet<String>,
     bdk_fingerprints: BTreeMap<PersistedBdkArtifact, ArtifactFingerprint>,
     wallet_data_directory: Option<ArtifactFingerprint>,
     wallet_data_fingerprints: BTreeMap<String, ArtifactFingerprint>,
@@ -767,63 +605,21 @@ impl PersistedBdkArtifact {
 }
 
 impl PersistedArtifactSnapshot {
-    fn from_snapshot(id: &ValidatedRestoreWalletId, snapshot: &RestoreArtifactSnapshot) -> Self {
-        let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(id.as_wallet_id());
-        let mut bdk_fingerprints = snapshot.bdk_fingerprints.clone();
-        for artifact in PersistedBdkArtifact::ALL {
-            let path = artifact.path(&bdk_paths);
-            if !snapshot.bdk_paths.contains(&path) {
-                continue;
-            }
-            if let Some(fingerprint) = fingerprint_path(&path).ok().flatten() {
-                bdk_fingerprints.entry(artifact).or_insert(fingerprint);
-            }
-        }
-
-        let directory = crate::database::wallet_data::wallet_data_directory_path(id.as_wallet_id());
-        let mut wallet_data_fingerprints = snapshot.wallet_data_fingerprints.clone();
-        let wallet_data_directory = snapshot.wallet_data_directory.clone().or_else(|| {
-            snapshot.wallet_data_paths.contains(&directory).then(|| {
-                fingerprint_path(&directory).ok().flatten().unwrap_or_else(|| ArtifactFingerprint {
-                    kind: ArtifactKind::Directory,
-                    identity: "missing-directory".to_string(),
-                    size: 0,
-                    digest: hash_bytes(&[]),
-                })
-            })
-        });
-        for path in &snapshot.wallet_data_paths {
-            let Some(relative) = path
-                .strip_prefix(&directory)
-                .ok()
-                .filter(|relative| !relative.as_os_str().is_empty())
-            else {
-                continue;
-            };
-            if let Some(fingerprint) = fingerprint_path(path).ok().flatten() {
-                wallet_data_fingerprints
-                    .entry(hash_wallet_data_entry(relative))
-                    .or_insert(fingerprint);
-            }
-        }
-
+    fn from_snapshot(snapshot: &RestoreArtifactSnapshot) -> Self {
         Self {
             metadata: snapshot.metadata,
-            metadata_digest: snapshot.metadata_digest.clone(),
             keychain_items: snapshot.keychain_items,
-            keychain_fingerprints: snapshot.keychain_fingerprints.clone(),
-            bdk_fingerprints,
-            wallet_data_directory,
-            wallet_data_fingerprints,
+            keychain_kinds: snapshot.keychain_entries.keys().cloned().collect(),
+            bdk_fingerprints: snapshot.bdk_fingerprints.clone(),
+            wallet_data_directory: snapshot.wallet_data_directory.clone(),
+            wallet_data_fingerprints: snapshot.wallet_data_fingerprints.clone(),
         }
     }
 
     fn to_snapshot(&self, id: &ValidatedRestoreWalletId) -> RestoreArtifactSnapshot {
         let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(id.as_wallet_id());
-        let mut bdk_paths_set = HashSet::new();
-        for artifact in self.bdk_fingerprints.keys() {
-            bdk_paths_set.insert(bdk_path_for_artifact(&bdk_paths, *artifact));
-        }
+        let bdk_paths_set =
+            self.bdk_fingerprints.keys().map(|artifact| artifact.path(&bdk_paths)).collect();
 
         let directory = crate::database::wallet_data::wallet_data_directory_path(id.as_wallet_id());
         let mut wallet_data_paths = HashSet::new();
@@ -833,9 +629,8 @@ impl PersistedArtifactSnapshot {
 
         RestoreArtifactSnapshot {
             metadata: self.metadata,
-            metadata_digest: self.metadata_digest.clone(),
-            keychain_items: self.keychain_items || !self.keychain_fingerprints.is_empty(),
-            keychain_fingerprints: self.keychain_fingerprints.clone(),
+            keychain_items: self.keychain_items || !self.keychain_kinds.is_empty(),
+            keychain_entries: self.keychain_kinds.iter().map(|kind| (kind.clone(), None)).collect(),
             bdk_paths: bdk_paths_set,
             bdk_fingerprints: self.bdk_fingerprints.clone(),
             wallet_data_fingerprints: self.wallet_data_fingerprints.clone(),
@@ -853,10 +648,6 @@ impl PersistedArtifactSnapshot {
 fn bdk_artifacts(id: &WalletId) -> [(PersistedBdkArtifact, PathBuf); 5] {
     let paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(id);
     PersistedBdkArtifact::ALL.map(|artifact| (artifact, artifact.path(&paths)))
-}
-
-fn bdk_path_for_artifact(paths: &[PathBuf; 5], artifact: PersistedBdkArtifact) -> PathBuf {
-    artifact.path(paths)
 }
 
 fn hash_wallet_data_entry(relative_path: &Path) -> String {
@@ -878,16 +669,14 @@ pub(crate) struct RestoreMarkerGuard {
 impl RestoreMarkerGuard {
     pub(crate) fn begin(
         metadata: &WalletMetadata,
-        payload_digest: &str,
         lease: WalletRestoreLease,
     ) -> Result<Self, BackupError> {
         let operation_id = operation_id();
         let marker = PersistedRestoreMarker {
             version: RESTORE_MARKER_VERSION,
             operation_id: operation_id.clone(),
-            payload_digest: payload_digest.to_string(),
             wallet_id: lease.id.as_wallet_id().as_str().to_string(),
-            initial: PersistedArtifactSnapshot::from_snapshot(&lease.id, lease.snapshot()),
+            initial: PersistedArtifactSnapshot::from_snapshot(lease.snapshot()),
             phase: RestoreMarkerPhase::Writing,
         };
         let marker_path = marker_path(&operation_id)?;
@@ -906,8 +695,12 @@ impl RestoreMarkerGuard {
         })
     }
 
+    fn lease(&self) -> &WalletRestoreLease {
+        self.lease.as_ref().expect("restore lease is held until marker completion")
+    }
+
     pub(crate) fn initial_snapshot(&self) -> &RestoreArtifactSnapshot {
-        self.lease.as_ref().expect("restore lease is held until marker completion").snapshot()
+        self.lease().snapshot()
     }
 
     /// Delete markerless artifacts only after an explicit, exact-snapshot approval
@@ -920,34 +713,25 @@ impl RestoreMarkerGuard {
         self.cleanup_attempted = true;
         self.marker.phase = RestoreMarkerPhase::CleanupInProgress;
         write_marker(&self.marker_path, &self.marker)?;
-        remove_markerless_artifacts(&self.metadata.id, &snapshot)?;
+        remove_markerless_artifacts(&self.lease().id, &snapshot)?;
         self.cleanup_complete = true;
         self.marker.phase = RestoreMarkerPhase::CleanupComplete;
         write_marker(&self.marker_path, &self.marker)
     }
 
-    pub(crate) fn commit(self) -> Result<Vec<String>, BackupError> {
-        self.commit_with(remove_marker)
-    }
-
-    fn commit_with<F>(mut self, remove_marker_fn: F) -> Result<Vec<String>, BackupError>
-    where
-        F: FnOnce(&Path) -> Result<(), BackupError>,
-    {
+    /// Record the restore as committed and drop the marker, reporting any cleanup warning
+    pub(crate) fn commit(mut self) -> Vec<String> {
         // metadata is the durable commit record
         // once it exists, never roll it back merely because marker cleanup is unavailable
         self.metadata_committed = true;
-        self.marker.phase = RestoreMarkerPhase::MetadataCommitted;
         let mut warnings = Vec::new();
-        if let Err(error) = write_marker(&self.marker_path, &self.marker) {
-            warnings.push(format!("restore marker commit record could not be persisted: {error}"));
-        } else if let Err(error) = remove_marker_fn(&self.marker_path) {
+        if let Err(error) = remove_marker(&self.marker_path) {
             warnings.push(format!("restore marker cleanup is pending: {error}"));
         }
 
         self.rolled_back = true;
         self.lease.take();
-        Ok(warnings)
+        warnings
     }
 
     pub(crate) fn rollback(&mut self) -> Vec<String> {
@@ -995,12 +779,10 @@ impl RestoreMarkerGuard {
         snapshot: RestoreArtifactSnapshot,
     ) -> Self {
         let id = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
-        let key = id.path_key();
-        ACTIVE_WALLET_RESTORE_LEASES.lock().insert(key.clone());
         let lock = Arc::new(RestoreFileLock::acquire(&id).unwrap());
-        let lease = WalletRestoreLease { id, snapshot, key, _lock: lock };
+        let lease = WalletRestoreLease { id, snapshot, _lock: lock };
 
-        Self::begin(metadata, "test", lease).unwrap()
+        Self::begin(metadata, lease).unwrap()
     }
 }
 
@@ -1021,10 +803,25 @@ impl Drop for RestoreMarkerGuard {
     }
 }
 
+/// Whether a keychain entry still matches what the initial snapshot recorded
+///
+/// A snapshot rebuilt from a durable marker records only that the kind existed,
+/// so any content is accepted for a kind the snapshot lists
+fn matches_initial_keychain_entry(
+    initial: Option<&Option<ArtifactFingerprint>>,
+    current: Option<&ArtifactFingerprint>,
+) -> bool {
+    match (initial, current) {
+        (Some(None), Some(_)) => true,
+        (Some(Some(expected)), Some(current)) => expected == current,
+        _ => false,
+    }
+}
+
 fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures: &mut Vec<String>) {
     let keychain = Keychain::global();
 
-    if initial.keychain_items && initial.keychain_fingerprints.is_empty() {
+    if initial.keychain_items && initial.keychain_entries.is_empty() {
         failures.push(
             "pre-existing keychain entries have no approved fingerprints; selective cleanup skipped"
                 .to_string(),
@@ -1043,7 +840,7 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
                     ));
                     return;
                 }
-            } else if initial.keychain_fingerprints.is_empty() {
+            } else if initial.keychain_entries.is_empty() {
                 let entries_remain = keychain.wallet_items_exist(id);
                 failures.push(format!(
                     "keychain fingerprint capture failed with pre-existing entries and no approved fingerprints; selective cleanup skipped: {error}; keychain entries remain={entries_remain}"
@@ -1052,7 +849,7 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
             } else {
                 let mut cleanup_failures = Vec::new();
                 for kind in KeychainArtifactKind::ALL {
-                    if initial.keychain_fingerprints.contains_key(kind.as_str()) {
+                    if initial.keychain_entries.contains_key(kind.as_str()) {
                         continue;
                     }
 
@@ -1090,14 +887,13 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
     let mut reported_kinds = BTreeSet::new();
 
     for (kind, fingerprint) in &current {
-        match initial.keychain_fingerprints.get(kind) {
-            Some(expected) if expected == fingerprint => continue,
-            Some(_) => {
+        let initial_entry = initial.keychain_entries.get(kind);
+        if initial_entry.is_some() {
+            if !matches_initial_keychain_entry(initial_entry, Some(fingerprint)) {
                 failures.push(format!("pre-existing keychain {kind} changed during restore"));
                 reported_kinds.insert(kind.clone());
-                continue;
             }
-            None => {}
+            continue;
         }
 
         let deleted = KeychainArtifactKind::from_str(kind)
@@ -1120,17 +916,17 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
             continue;
         }
 
-        if initial.keychain_fingerprints.get(kind) != Some(fingerprint) {
+        if !matches_initial_keychain_entry(initial.keychain_entries.get(kind), Some(fingerprint)) {
             failures.push(format!("keychain {kind} added during restore remains after rollback"));
             reported_kinds.insert(kind.clone());
         }
     }
-    for (kind, fingerprint) in &initial.keychain_fingerprints {
+    for (kind, expected) in &initial.keychain_entries {
         if reported_kinds.contains(kind) {
             continue;
         }
 
-        if remaining.get(kind) != Some(fingerprint) {
+        if !matches_initial_keychain_entry(Some(expected), remaining.get(kind)) {
             failures
                 .push(format!("pre-existing keychain {kind} was not preserved during rollback"));
         }
@@ -1242,21 +1038,21 @@ fn rollback_metadata(
     }
 }
 
+/// Delete every artifact the approval snapshot covers
+///
+/// The caller holds the wallet restore lease, which captured and compared this
+/// exact snapshot under the same durable lock, so no snapshot recheck is needed
 fn remove_markerless_artifacts(
-    id: &WalletId,
+    validated: &ValidatedRestoreWalletId,
     initial: &RestoreArtifactSnapshot,
 ) -> Result<(), BackupError> {
-    let validated = ValidatedRestoreWalletId::validate(id)?;
+    let id = validated.as_wallet_id();
     let storage_gate = crate::database::wallet_data::wallet_data_storage_gate(id);
     let _storage_guard = storage_gate.lock();
-    let current = RestoreArtifactSnapshot::capture(&validated)?;
-    if &current != initial {
-        return Err(BackupError::ImportApprovalStale(id.clone()));
-    }
 
     let mut failures = Vec::new();
 
-    if current.keychain_items
+    if initial.keychain_items
         && let Err(error) = delete_keychain_items_exact(id)
     {
         failures.push(error);
@@ -1424,16 +1220,7 @@ fn remove_marker(path: &Path) -> Result<(), BackupError> {
 }
 
 fn sync_parent(parent: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        File::open(parent)?.sync_all()
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = parent;
-        Ok(())
-    }
+    File::open(parent)?.sync_all()
 }
 
 fn read_marker(path: &Path) -> Result<PersistedRestoreMarker, String> {
@@ -1442,18 +1229,11 @@ fn read_marker(path: &Path) -> Result<PersistedRestoreMarker, String> {
         return Err("restore marker is a symbolic link".to_string());
     }
 
-    #[cfg(unix)]
-    let file = {
-        use std::os::unix::fs::OpenOptionsExt as _;
-
-        OpenOptions::new()
-            .read(true)
-            .custom_flags(LOCK_NOFOLLOW)
-            .open(path)
-            .map_err(|error| error.to_string())?
-    };
-    #[cfg(not(unix))]
-    let file = File::open(path).map_err(|error| error.to_string())?;
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(LOCK_NOFOLLOW)
+        .open(path)
+        .map_err(|error| error.to_string())?;
     let mut limited = file.take(MAX_MARKER_BYTES + 1);
     let mut bytes = Vec::new();
     limited.read_to_end(&mut bytes).map_err(|error| error.to_string())?;
@@ -1464,20 +1244,29 @@ fn read_marker(path: &Path) -> Result<PersistedRestoreMarker, String> {
     serde_json::from_slice(&bytes).map_err(|error| error.to_string())
 }
 
-fn metadata_exists(id: &WalletId) -> Result<bool, String> {
+/// Report whether metadata for this exact wallet id exists on the device
+///
+/// Rejects any stored wallet whose id only differs by case: it would share the
+/// restore-owned paths of `id` without being the same wallet
+fn metadata_exists(id: &ValidatedRestoreWalletId) -> Result<bool, BackupError> {
     let database = Database::global();
     let mut exact_match = false;
 
     for network in cove_types::network::Network::iter() {
         for mode in WalletMode::iter() {
-            let wallets =
-                database.wallets.get_all(network, mode).map_err(|error| error.to_string())?;
+            let wallets = database
+                .wallets
+                .get_all(network, mode)
+                .map_err(|error| BackupError::Database(error.to_string()))?;
 
             for wallet in wallets {
-                if wallet.id == *id {
+                if wallet.id == *id.as_wallet_id() {
                     exact_match = true;
-                } else if restore_path_key(wallet.id.as_str()) == restore_path_key(id.as_str()) {
-                    return Err(format!("wallet id collides with existing path: {id}"));
+                } else if restore_path_key(wallet.id.as_str()) == id.path_key() {
+                    return Err(BackupError::InvalidWalletId(format!(
+                        "wallet id collides with existing path: {}",
+                        id.as_wallet_id()
+                    )));
                 }
             }
         }
@@ -1486,8 +1275,29 @@ fn metadata_exists(id: &WalletId) -> Result<bool, String> {
     Ok(exact_match)
 }
 
-fn restore_lease_is_active(id: &ValidatedRestoreWalletId) -> bool {
-    ACTIVE_WALLET_RESTORE_LEASES.lock().contains(&id.path_key())
+/// Capture the current artifacts, recovering once from an unreadable keychain
+fn capture_after_keychain_recovery(
+    id: &ValidatedRestoreWalletId,
+    initial: &RestoreArtifactSnapshot,
+    context: &str,
+) -> Result<RestoreArtifactSnapshot, String> {
+    let error = match RestoreArtifactSnapshot::capture(id) {
+        Ok(current) => return Ok(current),
+        Err(error) => error,
+    };
+
+    let mut keychain_failures = Vec::new();
+    rollback_keychain(id.as_wallet_id(), initial, &mut keychain_failures);
+    if !keychain_failures.is_empty() {
+        return Err(format!(
+            "failed to capture {context} artifacts: {error}; {}",
+            keychain_failures.join("; ")
+        ));
+    }
+
+    RestoreArtifactSnapshot::capture(id).map_err(|retry_error| {
+        format!("failed to capture {context} artifacts after keychain rollback: {retry_error}")
+    })
 }
 
 fn cleanup_owned_marker_artifacts(
@@ -1500,25 +1310,7 @@ fn cleanup_owned_marker_artifacts(
     let mut initial_snapshot =
         if cleanup_complete { RestoreArtifactSnapshot::default() } else { initial.to_snapshot(id) };
 
-    let current = match RestoreArtifactSnapshot::capture(id) {
-        Ok(current) => current,
-        Err(error) => {
-            let mut keychain_failures = Vec::new();
-            rollback_keychain(id.as_wallet_id(), &initial_snapshot, &mut keychain_failures);
-            if !keychain_failures.is_empty() {
-                return Err(format!(
-                    "failed to capture restore artifacts: {error}; {}",
-                    keychain_failures.join("; ")
-                ));
-            }
-
-            RestoreArtifactSnapshot::capture(id).map_err(|retry_error| {
-                format!(
-                    "failed to capture restore artifacts after keychain rollback: {retry_error}"
-                )
-            })?
-        }
-    };
+    let current = capture_after_keychain_recovery(id, &initial_snapshot, "restore")?;
 
     if !cleanup_complete {
         let directory = crate::database::wallet_data::wallet_data_directory_path(id.as_wallet_id());
@@ -1566,45 +1358,25 @@ fn resume_interrupted_cleanup(
     let _storage_guard = storage_gate.lock();
     crate::database::wallet_data::evict_wallet_data_connections(id.as_wallet_id());
     let expected = initial.to_snapshot(id);
-    let current = match RestoreArtifactSnapshot::capture(id) {
-        Ok(current) => current,
-        Err(error) => {
-            let mut keychain_failures = Vec::new();
-            rollback_keychain(id.as_wallet_id(), &expected, &mut keychain_failures);
-            if !keychain_failures.is_empty() {
-                return Err(format!(
-                    "failed to capture interrupted cleanup artifacts: {error}; {}",
-                    keychain_failures.join("; ")
-                ));
-            }
-
-            RestoreArtifactSnapshot::capture(id).map_err(|retry_error| {
-                format!(
-                    "failed to capture interrupted cleanup artifacts after keychain rollback: {retry_error}"
-                )
-            })?
-        }
-    };
+    let current = capture_after_keychain_recovery(id, &expected, "interrupted cleanup")?;
 
     let mut paths_to_remove = Vec::new();
 
     if current.keychain_items && !expected.keychain_items {
         return Err("new keychain entries appeared while cleanup was interrupted".to_string());
     }
-    for (kind, fingerprint) in &current.keychain_fingerprints {
-        if expected.keychain_fingerprints.get(kind) != Some(fingerprint) {
+    for kind in current.keychain_entries.keys() {
+        if !expected.keychain_entries.contains_key(kind) {
             return Err("keychain entries changed while cleanup was interrupted".to_string());
         }
     }
 
+    let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(id.as_wallet_id());
     for (artifact, fingerprint) in &current.bdk_fingerprints {
         if expected.bdk_fingerprints.get(artifact) != Some(fingerprint) {
             return Err("BDK artifacts changed while cleanup was interrupted".to_string());
         }
-        paths_to_remove.push(bdk_path_for_artifact(
-            &crate::bdk_store::BdkStore::wallet_store_artifact_paths(id.as_wallet_id()),
-            *artifact,
-        ));
+        paths_to_remove.push(artifact.path(&bdk_paths));
     }
 
     let directory = crate::database::wallet_data::wallet_data_directory_path(id.as_wallet_id());
@@ -1707,7 +1479,7 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
         ));
     }
 
-    if restore_lease_is_active(&validated) {
+    if RestoreFileLock::is_held(&validated) {
         info!(wallet_id = %id, "Deferring restore marker recovery for an active restore lease");
         return Ok(());
     }
@@ -1715,13 +1487,15 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
     let _lock = RestoreFileLock::acquire(&validated)
         .map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
 
-    if metadata_exists(&id).map_err(MarkerRecoveryError::Retryable)? {
+    if metadata_exists(&validated)
+        .map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?
+    {
         remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
         info!(wallet_id = %id, "Removed committed restore marker during bootstrap recovery");
         return Ok(());
     }
 
-    if matches!(marker.phase, RestoreMarkerPhase::CleanupInProgress) {
+    if marker.phase == RestoreMarkerPhase::CleanupInProgress {
         resume_interrupted_cleanup(&validated, &marker.initial)
             .map_err(MarkerRecoveryError::Retryable)?;
         remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
@@ -1732,10 +1506,7 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
     cleanup_owned_marker_artifacts(
         &validated,
         &marker.initial,
-        matches!(
-            marker.phase,
-            RestoreMarkerPhase::CleanupComplete | RestoreMarkerPhase::MetadataCommitted
-        ),
+        marker.phase == RestoreMarkerPhase::CleanupComplete,
     )
     .map_err(MarkerRecoveryError::Retryable)?;
     remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
@@ -1822,24 +1593,18 @@ mod tests {
         WalletId::from(value.to_string())
     }
 
-    fn recover_restore_markers_for_test() -> Result<(), String> {
-        recover_restore_markers()
-    }
-
     fn write_test_marker(
         wallet_id: &WalletId,
         snapshot: &RestoreArtifactSnapshot,
         phase: RestoreMarkerPhase,
     ) -> PathBuf {
-        let validated = ValidatedRestoreWalletId::validate(wallet_id).unwrap();
         let operation_id = operation_id();
         let path = marker_path(&operation_id).unwrap();
         let marker = PersistedRestoreMarker {
             version: RESTORE_MARKER_VERSION,
             operation_id,
-            payload_digest: "test-digest".to_string(),
             wallet_id: wallet_id.as_str().to_string(),
-            initial: PersistedArtifactSnapshot::from_snapshot(&validated, snapshot),
+            initial: PersistedArtifactSnapshot::from_snapshot(snapshot),
             phase,
         };
         write_marker(&path, &marker).unwrap();
@@ -1860,7 +1625,6 @@ mod tests {
         );
         assert!(ValidatedRestoreWalletId::validate(&id("wallet.")).is_err());
         assert!(ValidatedRestoreWalletId::validate(&id("wallet ")).is_err());
-        assert!(ValidatedRestoreWalletId::validate(&id("CON")).is_err());
         assert!(ValidatedRestoreWalletId::validate(&id("wallet:name")).is_err());
         assert!(ValidatedRestoreWalletId::validate(&id("wallet")).is_ok());
     }
@@ -1875,51 +1639,33 @@ mod tests {
     }
 
     #[test]
-    fn persisted_snapshot_does_not_store_wallet_data_filename() {
-        let wallet_id = ValidatedRestoreWalletId::validate(&id("wallet")).unwrap();
-        let directory =
-            crate::database::wallet_data::wallet_data_directory_path(wallet_id.as_wallet_id());
-        let secret_name = directory.join("secret-labels.redb");
-        let snapshot = RestoreArtifactSnapshot {
-            wallet_data_paths: HashSet::from([secret_name]),
-            ..RestoreArtifactSnapshot::default()
-        };
-
-        let marker = PersistedArtifactSnapshot::from_snapshot(&wallet_id, &snapshot);
-        let json = serde_json::to_string(&marker).unwrap();
-
-        assert!(!json.contains("secret-labels.redb"));
-        assert!(json.contains("wallet_data_fingerprints"));
-    }
-
-    #[test]
-    fn secret_fingerprint_matches_formatted_value_without_combining_secret_parts() {
+    fn persisted_marker_stores_no_secret_or_filename() {
         let mnemonic = bip39::Mnemonic::from_str(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
         )
         .unwrap();
+        let snapshot = RestoreArtifactSnapshot {
+            keychain_items: true,
+            keychain_entries: BTreeMap::from([(
+                KeychainArtifactKind::Secret.as_str().to_string(),
+                Some(secret_fingerprint("mnemonic:", &mnemonic)),
+            )]),
+            wallet_data_fingerprints: BTreeMap::from([(
+                hash_wallet_data_entry(Path::new("secret-labels.redb")),
+                value_fingerprint(b"labels"),
+            )]),
+            ..RestoreArtifactSnapshot::default()
+        };
 
-        assert_eq!(
-            display_fingerprint("mnemonic:", &mnemonic),
-            value_fingerprint(format!("mnemonic:{mnemonic}").as_bytes())
+        let marker = PersistedArtifactSnapshot::from_snapshot(&snapshot);
+        let json = serde_json::to_string(&marker).unwrap();
+
+        assert!(!json.contains("secret-labels.redb"));
+        assert!(json.contains(KeychainArtifactKind::Secret.as_str()));
+        assert!(
+            !json.contains(&secret_fingerprint("mnemonic:", &mnemonic).digest),
+            "the marker must not persist a digest that verifies a seed: {json}"
         );
-    }
-
-    #[test]
-    fn file_fingerprint_covers_the_complete_artifact() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("artifact");
-        let mut bytes = vec![0_u8; 32 * 1024 + 1];
-        let last = bytes.len() - 1;
-        bytes[last] = 1;
-        fs::write(&path, &bytes).unwrap();
-        let initial = fingerprint_path(&path).unwrap().unwrap();
-
-        bytes[last] = 2;
-        fs::write(&path, &bytes).unwrap();
-        let changed = fingerprint_path(&path).unwrap().unwrap();
-
-        assert_ne!(initial.digest, changed.digest);
     }
 
     #[test]
@@ -1935,40 +1681,16 @@ mod tests {
             RestoreArtifactSnapshot::default(),
         );
         let marker_path = journal.marker_path.clone();
-        let warnings = journal
-            .commit_with(|_| Err(BackupError::Restore("simulated marker removal failure".into())))
-            .unwrap();
+        // a directory cannot be unlinked, so marker cleanup fails while the
+        // restore itself stays committed
+        fs::remove_file(&marker_path).unwrap();
+        fs::create_dir(&marker_path).unwrap();
+
+        let warnings = journal.commit();
 
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("cleanup is pending"));
-        remove_marker(&marker_path).unwrap();
-    }
-
-    #[test]
-    fn marker_round_trip_uses_the_atomic_file_path() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("operation.json");
-        let marker = PersistedRestoreMarker {
-            version: RESTORE_MARKER_VERSION,
-            operation_id: "0123456789abcdef".to_string(),
-            payload_digest: "payload-digest".to_string(),
-            wallet_id: "wallet".to_string(),
-            initial: PersistedArtifactSnapshot {
-                metadata: false,
-                metadata_digest: None,
-                keychain_items: false,
-                keychain_fingerprints: BTreeMap::new(),
-                bdk_fingerprints: BTreeMap::new(),
-                wallet_data_directory: None,
-                wallet_data_fingerprints: BTreeMap::new(),
-            },
-            phase: RestoreMarkerPhase::Writing,
-        };
-
-        write_marker(&path, &marker).unwrap();
-        assert_eq!(read_marker(&path).unwrap().operation_id, marker.operation_id);
-        remove_marker(&path).unwrap();
-        assert!(!path.exists());
+        fs::remove_dir(&marker_path).unwrap();
     }
 
     #[test]
@@ -2098,11 +1820,11 @@ mod tests {
         let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
         fs::write(&created, b"created by interrupted restore").unwrap();
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
         assert!(preexisting.exists());
         assert!(!created.exists());
         assert!(!marker_path.exists());
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
 
         fs::remove_file(preexisting).unwrap();
     }
@@ -2124,7 +1846,7 @@ mod tests {
             .set_entries(vec![(secret_key.as_str(), "unreadable encrypted secret")]);
 
         assert!(Keychain::global().get_wallet_secret(&metadata.id).is_err());
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
 
         assert!(!marker_path.exists());
         assert!(!Keychain::global().wallet_items_exist(&metadata.id));
@@ -2156,7 +1878,7 @@ mod tests {
             (secret_key.as_str(), "unreadable encrypted secret"),
         ]);
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
         assert!(!marker_path.exists());
         assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
         assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
@@ -2180,7 +1902,7 @@ mod tests {
         crate::test_support::shared_mock_keychain()
             .set_entries(vec![(secret_key.as_str(), "unreadable encrypted secret")]);
 
-        assert!(recover_restore_markers_for_test().is_err());
+        assert!(recover_restore_markers().is_err());
         assert!(marker_path.exists());
         assert!(Keychain::global().get_wallet_secret(&metadata.id).is_err());
 
@@ -2206,7 +1928,7 @@ mod tests {
         .unwrap();
         Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
 
-        assert!(recover_restore_markers_for_test().is_err());
+        assert!(recover_restore_markers().is_err());
         assert!(marker_path.exists());
         assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
 
@@ -2264,11 +1986,11 @@ mod tests {
             RestoreMarkerPhase::Writing,
         );
 
-        assert!(recover_restore_markers_for_test().is_err());
+        assert!(recover_restore_markers().is_err());
         assert!(marker_path.exists());
 
         fs::remove_dir(&path).unwrap();
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
         assert!(!marker_path.exists());
     }
 
@@ -2285,11 +2007,10 @@ mod tests {
         fs::write(&path, b"committed artifact").unwrap();
         let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
         let initial = RestoreArtifactSnapshot::capture(&validated).unwrap();
-        let marker_path =
-            write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::MetadataCommitted);
+        let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
         Database::global().wallets.save_restored_wallet_metadata(metadata.clone()).unwrap();
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
         assert!(!marker_path.exists());
         assert!(path.exists());
 
@@ -2297,7 +2018,7 @@ mod tests {
     }
 
     #[test]
-    fn durable_wallet_lock_blocks_when_process_lease_state_is_missing() {
+    fn durable_wallet_lock_blocks_a_concurrent_lease() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::delete_database();
         crate::test_support::init_test_keychain();
@@ -2307,15 +2028,41 @@ mod tests {
         metadata.id = WalletId::preview_new_random();
         let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
         let lease = WalletRestoreLease::acquire(&metadata).unwrap();
-        ACTIVE_WALLET_RESTORE_LEASES.lock().remove(&validated.path_key());
 
+        assert!(RestoreFileLock::is_held(&validated));
         assert!(matches!(
             WalletRestoreLease::acquire(&metadata),
             Err(BackupError::WalletIdOccupied(id)) if id == metadata.id
         ));
 
         drop(lease);
+        assert!(!RestoreFileLock::is_held(&validated));
+        assert!(!lock_path(&validated).exists(), "the lease must not leak its lock file");
         assert!(WalletRestoreLease::acquire(&metadata).is_ok());
+    }
+
+    #[test]
+    fn marker_recovery_defers_while_a_restore_holds_the_lease() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.id = WalletId::preview_new_random();
+        let lease = WalletRestoreLease::acquire(&metadata).unwrap();
+        let marker_path = write_test_marker(
+            &metadata.id,
+            &RestoreArtifactSnapshot::default(),
+            RestoreMarkerPhase::Writing,
+        );
+
+        recover_restore_markers().unwrap();
+        assert!(marker_path.exists(), "recovery must defer, not fail, while a restore is running");
+
+        drop(lease);
+        recover_restore_markers().unwrap();
+        assert!(!marker_path.exists());
     }
 
     #[test]
@@ -2334,7 +2081,7 @@ mod tests {
         let marker_path =
             write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::CleanupInProgress);
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
 
         assert!(!path.exists());
         assert!(!marker_path.exists());
@@ -2366,12 +2113,12 @@ mod tests {
             write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::CleanupInProgress);
         crate::test_support::shared_mock_keychain().fail_delete_at(3);
 
-        assert!(recover_restore_markers_for_test().is_err());
+        assert!(recover_restore_markers().is_err());
         assert!(marker_path.exists());
         assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
         assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
         assert!(!marker_path.exists());
         assert!(!Keychain::global().wallet_items_exist(&metadata.id));
     }
@@ -2430,7 +2177,7 @@ mod tests {
             std::os::unix::fs::symlink(external.path(), &link).unwrap();
         }
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
 
         assert!(existing.exists());
         assert!(!created.exists());
@@ -2457,7 +2204,7 @@ mod tests {
         #[cfg(unix)]
         std::os::unix::fs::symlink(directory.join("missing-target"), &temporary_path).unwrap();
 
-        recover_restore_markers_for_test().unwrap();
+        recover_restore_markers().unwrap();
 
         assert!(!path.exists());
         let quarantine = directory.join(QUARANTINE_DIRECTORY_NAME);

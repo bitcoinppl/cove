@@ -684,40 +684,15 @@ private fun ImportConflictSummary(count: Int) {
     }
 }
 
-private fun backupErrorMessage(error: Throwable): String =
-    when (error) {
-        is BackupException -> backupExceptionMessage(error)
-        else -> "Backup operation failed"
-    }
+private fun backupErrorMessage(error: Throwable): String {
+    // a non-BackupException carries an arbitrary Throwable.message, which must never reach the user
+    if (error !is BackupException) return "Backup operation failed"
 
-private fun backupExceptionMessage(error: BackupException): String =
-    when (error) {
-        is BackupException.PasswordTooShort,
-        is BackupException.DecryptionFailed,
-        is BackupException.InvalidFormat,
-        is BackupException.FileTooLarge,
-        is BackupException.UnsupportedVersion,
-        is BackupException.UnsupportedPayloadVersion,
-        is BackupException.Truncated,
-        -> backupInputExceptionMessage(error)
-        is BackupException.Encryption,
-        is BackupException.Serialization,
-        is BackupException.Deserialization,
-        is BackupException.Gather,
-        is BackupException.Decompression,
-        -> backupProcessingExceptionMessage(error)
-        is BackupException.Restore,
-        is BackupException.Keychain,
-        is BackupException.Database,
-        is BackupException.WalletIdOccupied,
-        is BackupException.InvalidWalletId,
-        is BackupException.ImportApprovalStale,
-        is BackupException.ImportApprovalRequired,
-        is BackupException.ImportApprovalUsed,
-        -> backupRestoreExceptionMessage(error)
-    }
+    return backupFileErrorMessage(error) ?: backupImportErrorMessage(error)
+}
 
-private fun backupInputExceptionMessage(error: BackupException): String =
+// messages for reading and validating the backup file itself
+private fun backupFileErrorMessage(error: BackupException): String? =
     when (error) {
         is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
         is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
@@ -726,10 +701,11 @@ private fun backupInputExceptionMessage(error: BackupException): String =
         is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
         is BackupException.UnsupportedPayloadVersion -> "Unsupported backup payload, please update the app"
         is BackupException.Truncated -> "Backup file is truncated or corrupted"
-        else -> "Backup operation failed"
+        else -> null
     }
 
-private fun backupProcessingExceptionMessage(error: BackupException): String =
+// messages for applying a validated backup to local wallet data
+private fun backupImportErrorMessage(error: BackupException): String =
     when (error) {
         is BackupException.Encryption,
         is BackupException.Serialization,
@@ -737,11 +713,6 @@ private fun backupProcessingExceptionMessage(error: BackupException): String =
         is BackupException.Gather,
         is BackupException.Decompression,
         -> "Cove could not finish importing this backup. Review it and try again."
-        else -> "Backup operation failed"
-    }
-
-private fun backupRestoreExceptionMessage(error: BackupException): String =
-    when (error) {
         is BackupException.Restore ->
             "Cove could not restore local wallet data. Check available storage and try again."
         is BackupException.Keychain ->

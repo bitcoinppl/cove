@@ -10,7 +10,6 @@ use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, Wall
 use cove_types::network::Network;
 use parking_lot::Mutex;
 use sha2::{Digest as _, Sha256};
-use strum::IntoEnumIterator as _;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
@@ -18,7 +17,7 @@ use crate::database::global_config::{GlobalConfigKey, GlobalConfigTable, GlobalC
 use crate::database::{Database, Error as DatabaseError};
 use crate::keys::Descriptors;
 use crate::label_manager::LabelManager;
-use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
     identity_key_for_backup,
@@ -30,7 +29,6 @@ use super::error::BackupError;
 use super::model::{BackupImportReport, BackupPayload, WalletBackup, WalletSecret};
 use super::recovery::{
     RestoreArtifactSnapshot, RestoreMarkerGuard, ValidatedRestoreWalletId, WalletRestoreLease,
-    restore_path_key,
 };
 
 #[derive(Debug)]
@@ -94,14 +92,6 @@ pub(crate) async fn prepare_import(
     Ok(ImportPreparationState { payload: Some(payload), payload_digest, wallets })
 }
 
-pub(crate) async fn import_all(
-    data: Vec<u8>,
-    password: String,
-) -> Result<BackupImportReport, BackupError> {
-    let preparation = prepare_import(data, password).await?;
-    import_prepared(preparation, None).await
-}
-
 pub(crate) fn validate_prepared_import(
     preparation: &ImportPreparationState,
     approval: Option<&ImportApprovalState>,
@@ -161,7 +151,6 @@ pub(crate) async fn import_prepared(
             wallet_backup,
             prepared_wallet,
             &existing_identities,
-            &preparation.payload_digest,
             approval_snapshot.as_ref(),
         )
         .await
@@ -258,7 +247,6 @@ fn preflight_wallets(payload: &BackupPayload) -> Result<Vec<PreparedImportWallet
         wallets.push(PreparedImportWallet { metadata, snapshot, identity, kind });
     }
 
-    validate_existing_path_collisions(&wallets)?;
     Ok(wallets)
 }
 
@@ -388,40 +376,11 @@ fn prepare_public_wallet(
     Ok(PreparedPublicWallet { xpub, descriptors, tap_signer_backup: None, degraded })
 }
 
-fn validate_existing_path_collisions(wallets: &[PreparedImportWallet]) -> Result<(), BackupError> {
-    let mut existing_ids = HashMap::<String, HashSet<WalletId>>::new();
-
-    for network in Network::iter() {
-        for mode in WalletMode::iter() {
-            for metadata in Database::global()
-                .wallets
-                .get_all(network, mode)
-                .map_err(|error| BackupError::Database(error.to_string()))?
-            {
-                existing_ids
-                    .entry(restore_path_key(metadata.id.as_str()))
-                    .or_default()
-                    .insert(metadata.id);
-            }
-        }
-    }
-
-    for wallet in wallets {
-        let key = restore_path_key(wallet.metadata.id.as_str());
-        let has_case_fold_collision = existing_ids
-            .get(&key)
-            .is_some_and(|ids| ids.iter().any(|existing| existing != &wallet.metadata.id));
-        if has_case_fold_collision {
-            return Err(BackupError::InvalidWalletId(format!(
-                "wallet id collides with existing path: {}",
-                wallet.metadata.id
-            )));
-        }
-    }
-
-    Ok(())
-}
-
+/// Check that an approval belongs to this exact payload and covers exactly the
+/// wallets that need cleanup approval
+///
+/// The snapshots themselves are rechecked when the approval is created and
+/// again while the per-wallet restore lease is held
 fn validate_approval(
     preparation: &ImportPreparationState,
     approval: Option<&ImportApprovalState>,
@@ -456,17 +415,6 @@ fn validate_approval(
                 .map(|wallet| wallet.metadata.id.clone())
                 .unwrap_or_default(),
         ));
-    }
-
-    for wallet in &preparation.wallets {
-        if wallet.snapshot.has_markerless_conflict() {
-            let Some(snapshot) = approval.snapshots.get(wallet.metadata.id.as_str()) else {
-                return Err(BackupError::ImportApprovalRequired(wallet.metadata.id.clone()));
-            };
-            if snapshot != &wallet.snapshot {
-                return Err(BackupError::ImportApprovalStale(wallet.metadata.id.clone()));
-            }
-        }
     }
 
     Ok(())
@@ -581,7 +529,6 @@ async fn restore_prepared_wallet(
     backup: WalletBackup,
     prepared: PreparedImportWallet,
     existing_identities: &ExistingWalletIdentitySet,
-    payload_digest: &str,
     approval_snapshot: Option<&RestoreArtifactSnapshot>,
 ) -> Result<RestoreResult, RestoreError> {
     let PreparedImportWallet { metadata, identity, kind, .. } = prepared;
@@ -598,27 +545,24 @@ async fn restore_prepared_wallet(
     let mut labels_failure: Option<(String, String)> = None;
     let degraded = matches!(&kind, PreparedWalletKind::Public(public) if public.degraded);
 
+    let cleanup = match approval_snapshot {
+        Some(snapshot) => RestoreCleanup::Approved(snapshot),
+        None => RestoreCleanup::RequireEmpty,
+    };
+
     let cleanup_warnings = match kind {
-        PreparedWalletKind::Hot(prepared_hot) => restore_hot_wallet_prepared_with_context(
-            &metadata,
-            prepared_hot,
-            payload_digest,
-            approval_snapshot,
-        )
-        .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?,
+        PreparedWalletKind::Hot(prepared_hot) => {
+            restore_hot_wallet_prepared_with_context(&metadata, prepared_hot, cleanup)
+                .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?
+        }
         PreparedWalletKind::Public(prepared_public) => {
             if degraded {
                 warn!(
                     "wallet {name} has an unrecognized secret type, importing as descriptor-only"
                 );
             }
-            restore_descriptor_wallet_prepared_with_context(
-                &metadata,
-                prepared_public,
-                payload_digest,
-                approval_snapshot,
-            )
-            .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?
+            restore_descriptor_wallet_prepared_with_context(&metadata, prepared_public, cleanup)
+                .map_err(|(e, warnings)| RestoreError { error: e, cleanup_warnings: warnings })?
         }
     };
 
@@ -644,24 +588,36 @@ async fn restore_prepared_wallet(
     })
 }
 
-fn with_cleanup_authorized<F>(
+/// How a restore may treat the local artifacts a wallet id already owns
+#[derive(Clone, Copy)]
+enum RestoreCleanup<'a> {
+    /// Fail unless the wallet id is free of every local artifact
+    RequireEmpty,
+    /// Delete exactly the approved artifacts before restoring over them
+    Approved(&'a RestoreArtifactSnapshot),
+    /// Restore alongside exactly these artifacts, deleting none of them
+    Preserve(&'a RestoreArtifactSnapshot),
+}
+
+fn with_restore_journal<F>(
     metadata: &WalletMetadata,
-    payload_digest: &str,
-    approval_snapshot: Option<&RestoreArtifactSnapshot>,
+    cleanup: RestoreCleanup<'_>,
     f: F,
 ) -> Result<Vec<String>, (BackupError, Vec<String>)>
 where
     F: FnOnce() -> Result<(), BackupError>,
 {
-    let lease = match approval_snapshot {
-        Some(snapshot) => WalletRestoreLease::acquire_for_approval(metadata, snapshot),
-        None => WalletRestoreLease::acquire(metadata),
+    let lease = match cleanup {
+        RestoreCleanup::RequireEmpty => WalletRestoreLease::acquire(metadata),
+        RestoreCleanup::Approved(snapshot) | RestoreCleanup::Preserve(snapshot) => {
+            WalletRestoreLease::acquire_for_approval(metadata, snapshot)
+        }
     }
     .map_err(|error| (error, Vec::new()))?;
-    let mut journal = RestoreMarkerGuard::begin(metadata, payload_digest, lease)
-        .map_err(|error| (error, Vec::new()))?;
+    let mut journal =
+        RestoreMarkerGuard::begin(metadata, lease).map_err(|error| (error, Vec::new()))?;
 
-    if approval_snapshot.is_some()
+    if matches!(cleanup, RestoreCleanup::Approved(_))
         && let Err(error) = journal.remove_approved_conflicts()
     {
         let cleanup_warnings = journal.rollback();
@@ -669,30 +625,7 @@ where
     }
 
     match f() {
-        Ok(()) => journal.commit().map_err(|error| (error, Vec::new())),
-        Err(error) => {
-            let cleanup_warnings = journal.rollback();
-            Err((error, cleanup_warnings))
-        }
-    }
-}
-
-fn with_cleanup_preserving<F>(
-    metadata: &WalletMetadata,
-    payload_digest: &str,
-    snapshot: &RestoreArtifactSnapshot,
-    f: F,
-) -> Result<Vec<String>, (BackupError, Vec<String>)>
-where
-    F: FnOnce() -> Result<(), BackupError>,
-{
-    let lease = WalletRestoreLease::acquire_preserving(metadata, snapshot)
-        .map_err(|error| (error, Vec::new()))?;
-    let mut journal = RestoreMarkerGuard::begin(metadata, payload_digest, lease)
-        .map_err(|error| (error, Vec::new()))?;
-
-    match f() {
-        Ok(()) => journal.commit().map_err(|error| (error, Vec::new())),
+        Ok(()) => Ok(journal.commit()),
         Err(error) => {
             let cleanup_warnings = journal.rollback();
             Err((error, cleanup_warnings))
@@ -711,8 +644,7 @@ fn cloud_restore_snapshot(
         return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
     }
 
-    let has_non_xpub_keychain_item =
-        snapshot.keychain_fingerprints.keys().any(|kind| kind != "xpub");
+    let has_non_xpub_keychain_item = snapshot.keychain_entries.keys().any(|kind| kind != "xpub");
     if has_non_xpub_keychain_item {
         return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
     }
@@ -730,10 +662,9 @@ fn cloud_restore_snapshot(
 fn restore_hot_wallet_prepared_with_context(
     metadata: &WalletMetadata,
     prepared: PreparedHotWallet,
-    payload_digest: &str,
-    approval_snapshot: Option<&RestoreArtifactSnapshot>,
+    cleanup: RestoreCleanup<'_>,
 ) -> Result<Vec<String>, (BackupError, Vec<String>)> {
-    let result = with_cleanup_authorized(metadata, payload_digest, approval_snapshot, || {
+    let result = with_restore_journal(metadata, cleanup, || {
         restore_hot_wallet_inner_prepared(metadata, prepared)
     });
     if result.is_ok() {
@@ -746,10 +677,9 @@ fn restore_hot_wallet_prepared_with_context(
 fn restore_descriptor_wallet_prepared_with_context(
     metadata: &WalletMetadata,
     prepared: PreparedPublicWallet,
-    payload_digest: &str,
-    approval_snapshot: Option<&RestoreArtifactSnapshot>,
+    cleanup: RestoreCleanup<'_>,
 ) -> Result<Vec<String>, (BackupError, Vec<String>)> {
-    let result = with_cleanup_authorized(metadata, payload_digest, approval_snapshot, || {
+    let result = with_restore_journal(metadata, cleanup, || {
         restore_descriptor_wallet_inner_prepared(metadata, prepared)
     });
     if result.is_ok() {
@@ -770,7 +700,7 @@ pub(crate) fn restore_cloud_mnemonic_wallet(
     let snapshot = cloud_restore_snapshot(metadata, Some(prepared.xpub))
         .map_err(|error| (error, Vec::new()))?;
 
-    let result = with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
+    let result = with_restore_journal(metadata, RestoreCleanup::Preserve(&snapshot), || {
         restore_hot_wallet_inner_prepared(metadata, prepared)
     });
     if let Ok(warnings) = &result {
@@ -792,7 +722,7 @@ pub(crate) fn restore_cloud_xpriv_wallet(
     let snapshot = cloud_restore_snapshot(metadata, Some(prepared.xpub))
         .map_err(|error| (error, Vec::new()))?;
 
-    let result = with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
+    let result = with_restore_journal(metadata, RestoreCleanup::Preserve(&snapshot), || {
         restore_hot_wallet_inner_prepared(metadata, prepared)
     });
     if let Ok(warnings) = &result {
@@ -862,7 +792,7 @@ pub(crate) fn restore_cloud_descriptor_wallet(
     let snapshot =
         cloud_restore_snapshot(metadata, prepared.xpub).map_err(|error| (error, Vec::new()))?;
 
-    let result = with_cleanup_preserving(metadata, "cloud-restore", &snapshot, || {
+    let result = with_restore_journal(metadata, RestoreCleanup::Preserve(&snapshot), || {
         restore_descriptor_wallet_inner_prepared(metadata, prepared)
     });
     if let Ok(warnings) = &result {
@@ -1193,7 +1123,7 @@ mod tests {
             kind: prepared_kind,
         };
 
-        match restore_prepared_wallet(backup, prepared, &existing_identities, "test", None).await {
+        match restore_prepared_wallet(backup, prepared, &existing_identities, None).await {
             Ok(RestoreResult::Skipped { name }) => assert_eq!(name, metadata.name),
             Ok(RestoreResult::Imported { .. }) => panic!("expected duplicate skip"),
             Err(error) => panic!("expected duplicate skip, got {}", error.error),
