@@ -213,7 +213,7 @@ internal fun CloudOnlySection(
                         rowsEnabled =
                             operatingRecordId == null &&
                                 !manager.isRestoreAllRunning &&
-                                manager.isDetailInventoryComplete,
+                                manager.isDetailInventoryReady,
                     )
                 }
             }
@@ -240,7 +240,7 @@ internal fun CloudOnlySection(
         CloudOnlyWalletActionSheet(
             wallet = wallet,
             actionsEnabled =
-                manager.isDetailInventoryComplete && !manager.isRestoreAllRunning,
+                manager.isDetailInventoryReady && !manager.isRestoreAllRunning,
             onDismiss = { selectedWallet = null },
             onRestore = {
                 selectedWallet = null
@@ -265,7 +265,7 @@ internal fun CloudOnlySection(
             confirmButton = {
                 TextButton(
                     enabled =
-                        manager.isDetailInventoryComplete && !manager.isRestoreAllRunning,
+                        manager.isDetailInventoryReady && !manager.isRestoreAllRunning,
                     onClick = {
                         walletToDelete = null
                         manager.dispatch(CloudBackupManagerAction.DeleteCloudWallet(wallet.recordId))

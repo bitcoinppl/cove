@@ -222,9 +222,9 @@ pub(crate) enum CloudCheckIssue {
 impl From<CloudStorageError> for CloudCheckIssue {
     fn from(error: CloudStorageError) -> Self {
         match CloudStorageIssue::from(error) {
-            CloudStorageIssue::AuthorizationRequired | CloudStorageIssue::Unavailable => {
-                Self::CloudUnavailable
-            }
+            CloudStorageIssue::AuthorizationRequired
+            | CloudStorageIssue::SyncPending
+            | CloudStorageIssue::Unavailable => Self::CloudUnavailable,
             CloudStorageIssue::Offline => Self::Offline,
             CloudStorageIssue::NotFound
             | CloudStorageIssue::QuotaExceeded

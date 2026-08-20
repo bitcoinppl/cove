@@ -10,7 +10,7 @@ private extension CloudBackupVerificationState? {
 
     var hasResult: Bool {
         switch self {
-        case .verified, .awaitingUploadConfirmation, .cancelled, .failed: true
+        case .verified, .needsAttention, .awaitingUploadConfirmation, .cancelled, .failed: true
         default: false
         }
     }
@@ -59,6 +59,15 @@ struct VerificationSection: View {
                     onVerify: startVerification
                 )
             }
+        case let .needsAttention(report: report, checkedAt: _):
+            CloudBackupNeedsAttentionSection(
+                report: report,
+                isBusy: isBusy,
+                needsSync: manager.detail?.needsSync.isEmpty == false,
+                syncState: manager.syncState,
+                onSync: syncUnsynced,
+                onVerify: startVerification
+            )
         case .awaitingUploadConfirmation:
             CloudBackupUploadConfirmationPendingSection()
         case .cancelled:
@@ -197,24 +206,6 @@ private struct CloudBackupVerifiedSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            if report.walletsFailed > 0 {
-                Label(
-                    "\(report.walletsFailed) wallet backup(s) could not be decrypted",
-                    systemImage: "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(Color.statusError)
-                .font(.caption)
-            }
-
-            if report.walletsUnsupported > 0 {
-                Label(
-                    "\(report.walletsUnsupported) wallet(s) use a newer backup format",
-                    systemImage: "info.circle.fill"
-                )
-                .foregroundStyle(Color.statusWarning)
-                .font(.caption)
-            }
         }
 
         CloudBackupVerificationActionButtons(
@@ -224,6 +215,59 @@ private struct CloudBackupVerifiedSection: View {
             onSync: onSync,
             onVerify: onVerify
         )
+    }
+}
+
+private struct CloudBackupNeedsAttentionSection: View {
+    let report: DeepVerificationReport
+    let isBusy: Bool
+    let needsSync: Bool
+    let syncState: CloudBackupSyncState?
+    let onSync: () -> Void
+    let onVerify: () -> Void
+
+    var body: some View {
+        Section {
+            Label("Backup needs attention", systemImage: "exclamationmark.shield.fill")
+                .foregroundStyle(Color.statusWarning)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+
+            Text("The backup key is valid. \(report.walletsVerified) wallet backup(s) passed verification.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            CloudBackupWalletIssueRows(issues: report.walletIssues)
+        }
+
+        CloudBackupVerificationActionButtons(
+            isBusy: isBusy,
+            needsSync: needsSync,
+            syncState: syncState,
+            onSync: onSync,
+            onVerify: onVerify
+        )
+    }
+}
+
+private struct CloudBackupWalletIssueRows: View {
+    let issues: CloudBackupWalletVerificationIssues
+
+    var body: some View {
+        issue(issues.missing, "wallet backup file(s) are missing from cloud storage")
+        issue(issues.downloadFailed, "wallet backup(s) could not be downloaded")
+        issue(issues.invalid, "wallet backup file(s) contain invalid data")
+        issue(issues.decryptionFailed, "wallet backup(s) could not be decrypted with this backup key")
+        issue(issues.unsupported, "wallet backup(s) use a newer backup format")
+        issue(issues.unreadable, "wallet backup(s) could not be read")
+    }
+
+    @ViewBuilder
+    private func issue(_ count: UInt32, _ message: String) -> some View {
+        if count > 0 {
+            Label("\(count) \(message)", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.statusError)
+                .font(.caption)
+        }
     }
 }
 

@@ -227,6 +227,7 @@ fn sync_health_reader_message(issue: Option<CloudStorageIssue>) -> String {
             CloudStorageError::AuthorizationRequired(String::new())
         }
         Some(CloudStorageIssue::Offline) => CloudStorageError::Offline(String::new()),
+        Some(CloudStorageIssue::SyncPending) => CloudStorageError::SyncPending(String::new()),
         Some(CloudStorageIssue::Unavailable) => CloudStorageError::NotAvailable(String::new()),
         Some(CloudStorageIssue::NotFound) => CloudStorageError::NotFound(String::new()),
         Some(CloudStorageIssue::QuotaExceeded) => CloudStorageError::QuotaExceeded,

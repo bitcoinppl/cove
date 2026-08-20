@@ -200,6 +200,13 @@ impl MockCloudStorage {
         self.state.lock().wallet_backup_download_overrides.insert((namespace, record_id), backup);
     }
 
+    pub(crate) fn clear_wallet_backup_download_override(&self, namespace: &str, record_id: &str) {
+        self.state
+            .lock()
+            .wallet_backup_download_overrides
+            .remove(&(namespace.to_owned(), record_id.to_owned()));
+    }
+
     pub(crate) fn fail_wallet_backup_download_offline(
         &self,
         namespace: String,

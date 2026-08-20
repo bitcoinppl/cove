@@ -198,7 +198,7 @@ private fun disableUnavailableMessage(
             return "Restore or delete wallets that are only in Cloud Backup before disabling."
         }
 
-        val otherBackups = detail.otherBackups
+        val otherBackups = manager.otherBackupsState
         if (
             otherBackups is CloudBackupOtherBackupsState.Loaded &&
                 otherBackups.summary.namespaceCount.toInt() > 0

@@ -149,7 +149,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
             return [
                 .notConnectedToInternet,
                 .networkConnectionLost,
-                .timedOut,
                 .cannotFindHost,
                 .cannotConnectToHost,
                 .dnsLookupFailed,
@@ -163,7 +162,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
             return [
                 NSURLErrorNotConnectedToInternet,
                 NSURLErrorNetworkConnectionLost,
-                NSURLErrorTimedOut,
                 NSURLErrorCannotFindHost,
                 NSURLErrorCannotConnectToHost,
                 NSURLErrorDNSLookupFailed,
@@ -683,8 +681,8 @@ extension ICloudDriveHelper {
         } catch is CancellationError {
             throw CancellationError()
         } catch ICloudReadAttemptDeadlineError.timedOut {
-            throw CloudStorageError.Offline(
-                "iCloud direct read timed out for \(filename)"
+            throw CloudStorageError.SyncPending(
+                "iCloud is still downloading \(filename)"
             )
         } catch let error as CloudStorageError {
             throw error
@@ -707,8 +705,8 @@ extension ICloudDriveHelper {
         } catch is CancellationError {
             throw CancellationError()
         } catch ICloudReadAttemptDeadlineError.timedOut {
-            throw CloudStorageError.Offline(
-                "iCloud coordinated read timed out for \(filename)"
+            throw CloudStorageError.SyncPending(
+                "iCloud is still downloading \(filename)"
             )
         } catch let error as CloudStorageError {
             throw error
@@ -720,7 +718,7 @@ extension ICloudDriveHelper {
     private func readAttemptDuration(filename: String, deadline: Date) throws -> TimeInterval {
         let remaining = deadline.timeIntervalSinceNow
         guard remaining > 0 else {
-            throw CloudStorageError.Offline("iCloud download timed out for \(filename)")
+            throw CloudStorageError.SyncPending("iCloud is still downloading \(filename)")
         }
 
         return min(readAttemptTimeout, remaining)
@@ -832,8 +830,8 @@ extension ICloudDriveHelper {
         }
 
         let diagnosticError = readState.lastError?.localizedDescription ?? "none"
-        throw CloudStorageError.Offline(
-            "iCloud download timed out after \(defaultTimeout)s (last read error: \(diagnosticError))"
+        throw CloudStorageError.SyncPending(
+            "iCloud is still downloading the requested file (last read error: \(diagnosticError))"
         )
     }
 

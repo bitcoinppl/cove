@@ -29,27 +29,40 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
+import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OtherBackupsOperation
 
 @Composable
-internal fun OtherBackupsLoadFailedSection(error: String) {
+internal fun OtherBackupsLoadFailedSection(
+    reason: CloudBackupInventoryIncompleteReason,
+    onRetry: () -> Unit,
+) {
+    val message =
+        when (reason) {
+            CloudBackupInventoryIncompleteReason.PROVIDER_SYNC_PENDING ->
+                "Other Google Drive backups were not checked because Google Drive is still loading. Your current backup is available."
+            CloudBackupInventoryIncompleteReason.OFFLINE ->
+                "Other Google Drive backups were not checked because this device is offline. Connect to the internet, then check again."
+            CloudBackupInventoryIncompleteReason.AUTHORIZATION_REQUIRED ->
+                "Cove cannot access Google Drive. Reconnect Google Drive, then check again."
+            CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE ->
+                "Google Drive is not available now. Your current backup is available."
+            CloudBackupInventoryIncompleteReason.UNKNOWN ->
+                "Cove could not check for other Google Drive backups. Your current backup is available."
+        }
+
     SectionHeader("Other Cloud Backups", modifier = Modifier.padding(horizontal = 16.dp))
     MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
         Column {
             Text(
-                text = "Could not load other cloud backups.",
+                text = message,
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
             MaterialDivider()
-            Text(
-                text = error,
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
+            TextButton(onClick = onRetry) { Text("Check Again") }
         }
     }
 }
@@ -69,7 +82,7 @@ internal fun OtherBackupsSection(
     val isRecovering = operation is OtherBackupsOperation.Recovering
     val isDeleting = operation is OtherBackupsOperation.Deleting
     val isOperating = isRecovering || isDeleting
-    val actionsEnabled = !isOperating && manager.isDetailInventoryComplete
+    val actionsEnabled = !isOperating && manager.isOtherBackupsInventoryReady
     val blocker = LocalCloudBackupPresentationCoordinator.current
 
     LaunchedEffect(operation) {
@@ -164,7 +177,7 @@ internal fun OtherBackupsSection(
             },
             confirmButton = {
                 TextButton(
-                    enabled = manager.isDetailInventoryComplete,
+                    enabled = manager.isOtherBackupsInventoryReady,
                     onClick = {
                         showRecoverConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.RecoverOtherBackups)
@@ -207,7 +220,7 @@ internal fun OtherBackupsSection(
             text = { Text("This will permanently remove these other backups from Google Drive.") },
             confirmButton = {
                 TextButton(
-                    enabled = manager.isDetailInventoryComplete,
+                    enabled = manager.isOtherBackupsInventoryReady,
                     onClick = {
                         showDeleteConfirmation = false
                         showFinalDeleteConfirmation = true
@@ -227,7 +240,7 @@ internal fun OtherBackupsSection(
             text = { Text("These backups cannot be recovered later, even if you find the passkey that currently protects them.") },
             confirmButton = {
                 TextButton(
-                    enabled = manager.isDetailInventoryComplete,
+                    enabled = manager.isOtherBackupsInventoryReady,
                     onClick = {
                         showFinalDeleteConfirmation = false
                         manager.dispatch(CloudBackupManagerAction.DeleteOtherBackups)

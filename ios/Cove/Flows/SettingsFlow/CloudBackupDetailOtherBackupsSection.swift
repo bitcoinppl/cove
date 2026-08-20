@@ -68,7 +68,7 @@ struct OtherBackupsSection: View {
                             isRecovering: isRecovering,
                             isDeleting: isDeleting,
                             isOperating: isOperating,
-                            isInventoryComplete: manager.isDetailInventoryComplete,
+                            isInventoryComplete: manager.isOtherBackupsInventoryReady,
                             failure: failure,
                             onRequestRecovery: requestRecovery,
                             onRequestDeletion: requestDeletion
@@ -83,13 +83,13 @@ struct OtherBackupsSection: View {
     }
 
     private func requestRecovery() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         showingRecoverConfirmation = true
     }
 
     private func requestDeletion() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         showingDeleteConfirmation = true
     }
@@ -178,7 +178,7 @@ private struct OtherBackupsRecoverConfirmationDialog<Content: View>: View {
             titleVisibility: .visible
         ) {
             Button("Try Passkey", action: recoverOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isOtherBackupsInventoryReady)
 
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -189,7 +189,7 @@ private struct OtherBackupsRecoverConfirmationDialog<Content: View>: View {
     }
 
     private func recoverOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         manager.dispatch(action: .recoverOtherBackups)
     }
@@ -233,7 +233,7 @@ private struct OtherBackupsDeleteConfirmationAlert<Content: View>: View {
     var body: some View {
         content.alert("Delete Other Cloud Backups?", isPresented: $isPresented) {
             Button("Continue", role: .destructive, action: continueDeletion)
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isOtherBackupsInventoryReady)
 
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -242,7 +242,7 @@ private struct OtherBackupsDeleteConfirmationAlert<Content: View>: View {
     }
 
     private func continueDeletion() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         showFinalConfirmation = true
     }
@@ -256,7 +256,7 @@ private struct OtherBackupsFinalDeleteAlert<Content: View>: View {
     var body: some View {
         content.alert("This Cannot Be Undone", isPresented: $isPresented) {
             Button("Delete", role: .destructive, action: deleteOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isOtherBackupsInventoryReady)
 
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -267,24 +267,40 @@ private struct OtherBackupsFinalDeleteAlert<Content: View>: View {
     }
 
     private func deleteOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         manager.dispatch(action: .deleteOtherBackups)
     }
 }
 
 struct OtherBackupsLoadFailedSection: View {
-    let error: String
+    let reason: CloudBackupInventoryIncompleteReason
+    let manager: CloudBackupManager
+
+    private var message: String {
+        switch reason {
+        case .providerSyncPending:
+            "Other iCloud backups were not checked because iCloud Drive is still loading. Your current backup is available."
+        case .offline:
+            "Other iCloud backups were not checked because this device is offline. Connect to the internet, then check again."
+        case .authorizationRequired:
+            "Cove cannot access iCloud Drive. Turn on iCloud Drive for Cove, then check again."
+        case .providerUnavailable:
+            "iCloud Drive is not available now. Your current backup is available."
+        case .unknown:
+            "Cove could not check for other iCloud backups. Your current backup is available."
+        }
+    }
 
     var body: some View {
         Section(header: Text("Other Cloud Backups")) {
-            Text("Could not load other cloud backups.")
+            Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(Color.statusError)
+            Button("Check Again") {
+                manager.dispatch(action: .refreshOtherBackups)
+            }
         }
     }
 }

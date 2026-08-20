@@ -149,8 +149,8 @@ internal fun CloudBackupDetailContent(
             CloudBackupDetailProgressPresentation.NONE -> Unit
             CloudBackupDetailProgressPresentation.INVENTORY_INLINE -> {
                 CloudBackupProgressCard(
-                    title = "Checking for more cloud backups",
-                    message = "Keeping the backups already found visible while the provider finishes checking",
+                    title = "Refreshing the wallet backup list",
+                    message = "The backups already found remain available while cloud storage finishes checking",
                 )
             }
             CloudBackupDetailProgressPresentation.VERIFICATION_CARD -> {
@@ -416,7 +416,10 @@ private fun DetailFormContent(
             CloudOnlySection(manager = manager)
         }
 
-        when (val otherBackups = detail.otherBackups) {
+        when (val otherBackups = manager.otherBackupsState) {
+            is CloudBackupOtherBackupsState.NotChecked,
+            is CloudBackupOtherBackupsState.Checking,
+            -> Unit
             is CloudBackupOtherBackupsState.Loaded -> {
                 val summary = otherBackups.summary
                 if (summary.namespaceCount.toInt() > 0) {
@@ -429,7 +432,12 @@ private fun DetailFormContent(
                 }
             }
             is CloudBackupOtherBackupsState.LoadFailed -> {
-                OtherBackupsLoadFailedSection(error = otherBackups.error)
+                OtherBackupsLoadFailedSection(
+                    reason = otherBackups.reason,
+                    onRetry = {
+                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
+                    },
+                )
             }
         }
     }

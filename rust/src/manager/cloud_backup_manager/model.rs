@@ -6,11 +6,12 @@
 
 use super::{
     CloudBackupDetail, CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupError,
-    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-    CloudBackupVerificationReason, CloudBackupWalletStatus, CloudOnlyOperation, CloudOnlyState,
-    OtherBackupsOperation, PendingUploadVerificationState, RecoveryAction, RecoveryState,
-    SyncState, VerificationState, is_connectivity_related_issue,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
+    CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
+    CloudBackupVerificationPresentation, CloudBackupVerificationReason, CloudBackupWalletStatus,
+    CloudOnlyOperation, CloudOnlyState, DeepVerificationReport, OtherBackupsOperation,
+    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
+    is_connectivity_related_issue,
 };
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
@@ -28,11 +29,11 @@ pub(crate) use self::events::{
 };
 pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
-    CloudBackupEnableFlow, CloudBackupFailure, CloudBackupInventoryIncompleteReason,
-    CloudBackupLifecycle, CloudBackupPasskeyRepairState, CloudBackupPasskeyState,
-    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
-    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupSyncState,
-    CloudBackupVerificationState, LoadedCloudBackupDetail,
+    CloudBackupEnableFlow, CloudBackupFailure, CloudBackupInventoryAuthority,
+    CloudBackupInventoryIncompleteReason, CloudBackupLifecycle, CloudBackupPasskeyRepairState,
+    CloudBackupPasskeyState, CloudBackupPendingEnableCleanupState,
+    CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
+    CloudBackupSyncState, CloudBackupVerificationState, LoadedCloudBackupDetail,
 };
 
 const PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE: &str = "cloud authorization required";
@@ -73,7 +74,7 @@ pub(crate) enum CloudBackupDisableOutcome {
 /// Remote detail fetch result that keeps access errors distinguishable from failed detail state
 #[derive(Debug)]
 pub(crate) enum CloudBackupDetailResult {
-    Success(CloudBackupDetail),
+    SuccessWithAuthority { detail: CloudBackupDetail, authority: CloudBackupInventoryAuthority },
     AccessError(CloudBackupError),
 }
 
@@ -87,7 +88,7 @@ impl CloudBackupDetailResult {
 pub(crate) struct CloudBackupDetailInventorySnapshot {
     pub(crate) namespace: String,
     pub(crate) wallet_record_ids: Vec<String>,
-    pub(crate) is_complete: bool,
+    pub(crate) authority: Option<CloudBackupInventoryAuthority>,
     pub(crate) provisional_detail: Option<CloudBackupDetail>,
 }
 
@@ -135,6 +136,7 @@ struct CloudBackupConfiguredReducerState {
     destructive_operation: CloudBackupDestructiveOperationState,
     pending_upload_verification: PendingUploadVerificationState,
     detail: CloudBackupDetailState,
+    other_backups: CloudBackupOtherBackupsState,
     detail_refresh: DetailRefreshActivity,
     prompt: CloudBackupConfiguredPrompt,
 }
@@ -178,6 +180,7 @@ impl Default for CloudBackupConfiguredReducerState {
             destructive_operation: CloudBackupDestructiveOperationState::Idle,
             pending_upload_verification: PendingUploadVerificationState::Idle,
             detail: CloudBackupDetailState::NotLoaded,
+            other_backups: CloudBackupOtherBackupsState::NotChecked,
             detail_refresh: DetailRefreshActivity::Idle,
             prompt: CloudBackupConfiguredPrompt::None,
         }
@@ -220,6 +223,7 @@ impl CloudBackupReducerState {
             sync: self.configured.sync.clone(),
             destructive_operation: self.public_destructive_operation(),
             detail: self.configured.detail.clone(),
+            other_backups: self.configured.other_backups.clone(),
             restore_all: self.public_restore_all_state(),
             root_prompt: self.root_prompt(),
             sync_health: self.sync_health.clone(),
@@ -327,6 +331,7 @@ impl CloudBackupReducerState {
             CloudBackupVerificationMetadata::Verified(timestamp) => Some(*timestamp),
             CloudBackupVerificationMetadata::NotConfigured
             | CloudBackupVerificationMetadata::ConfiguredNeverVerified
+            | CloudBackupVerificationMetadata::NeedsAttention { .. }
             | CloudBackupVerificationMetadata::NeedsVerification => None,
         }
     }
@@ -598,6 +603,9 @@ impl CloudBackupReducerState {
             CloudBackupVerificationState::Verified { report: None, .. } => {
                 VerificationState::PasskeyConfirmed
             }
+            CloudBackupVerificationState::NeedsAttention { report, .. } => {
+                VerificationState::NeedsAttention(report.clone())
+            }
             CloudBackupVerificationState::Running => VerificationState::Verifying,
             CloudBackupVerificationState::Cancelled => VerificationState::Cancelled,
             CloudBackupVerificationState::Failed(failure) => {
@@ -624,6 +632,10 @@ impl CloudBackupReducerState {
             .unwrap_or(OtherBackupsOperation::Idle)
     }
 
+    fn other_backups_state(&self) -> CloudBackupOtherBackupsState {
+        self.configured.other_backups.clone()
+    }
+
     fn loaded_detail(&self) -> Option<&LoadedCloudBackupDetail> {
         match &self.configured.detail {
             CloudBackupDetailState::Complete { state } => Some(state),
@@ -643,7 +655,27 @@ impl CloudBackupReducerState {
     }
 
     fn detail_inventory_is_complete(&self) -> bool {
-        matches!(self.configured.detail, CloudBackupDetailState::Complete { .. })
+        matches!(
+            &self.configured.detail,
+            CloudBackupDetailState::Complete { state }
+                if state.inventory_authority == CloudBackupInventoryAuthority::ProviderConfirmed
+        )
+    }
+
+    fn detail_inventory_is_ready(&self) -> bool {
+        let loaded = match &self.configured.detail {
+            CloudBackupDetailState::Complete { state } => Some(state),
+            CloudBackupDetailState::Failed { retained, .. } => retained.as_ref(),
+            CloudBackupDetailState::NotLoaded | CloudBackupDetailState::Checking { .. } => None,
+        };
+
+        loaded.is_some_and(|detail| {
+            matches!(
+                detail.inventory_authority,
+                CloudBackupInventoryAuthority::ProviderConfirmed
+                    | CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount
+            )
+        })
     }
 
     fn project_exclusive_operation_start(&mut self, claim: CloudBackupExclusiveOperationClaim) {
@@ -920,10 +952,38 @@ impl CloudBackupReducerState {
         metadata: CloudBackupVerificationMetadata,
         should_prompt: bool,
     ) {
+        let persisted_needs_attention = match &metadata {
+            CloudBackupVerificationMetadata::NeedsAttention {
+                checked_at,
+                wallets_verified,
+                wallet_issues,
+            } => Some(CloudBackupVerificationState::NeedsAttention {
+                report: DeepVerificationReport {
+                    master_key_wrapper_repaired: false,
+                    local_master_key_repaired: false,
+                    credential_recovered: false,
+                    wallets_verified: *wallets_verified,
+                    wallet_issues: wallet_issues.clone(),
+                    detail: None,
+                },
+                checked_at: Some(*checked_at),
+            }),
+            _ => None,
+        };
+
         self.verification_metadata = metadata;
         self.should_prompt_verification = should_prompt;
 
-        if matches!(
+        if let Some(needs_attention) = persisted_needs_attention
+            && matches!(
+                self.configured.verification,
+                CloudBackupVerificationState::NotVerified
+                    | CloudBackupVerificationState::Required
+                    | CloudBackupVerificationState::NeedsAttention { .. }
+            )
+        {
+            self.configured.verification = needs_attention;
+        } else if matches!(
             self.configured.verification,
             CloudBackupVerificationState::NotVerified | CloudBackupVerificationState::Required
         ) {
@@ -967,6 +1027,12 @@ impl CloudBackupReducerState {
                 report: Some(report),
                 last_verified_at: Self::last_verified_at(&self.verification_metadata),
             },
+            VerificationState::NeedsAttention(report) => {
+                CloudBackupVerificationState::NeedsAttention {
+                    report,
+                    checked_at: Some(crate::manager::cloud_backup_manager::current_timestamp()),
+                }
+            }
             VerificationState::PasskeyConfirmed => CloudBackupVerificationState::Verified {
                 report: None,
                 last_verified_at: Self::last_verified_at(&self.verification_metadata),
@@ -1055,11 +1121,15 @@ impl CloudBackupReducerState {
         }
     }
 
-    fn apply_detail_refresh(&mut self, detail: Option<CloudBackupDetail>, reset_cloud_only: bool) {
+    fn apply_detail_refresh(
+        &mut self,
+        detail: Option<(CloudBackupDetail, CloudBackupInventoryAuthority)>,
+        reset_cloud_only: bool,
+    ) {
         let previous_loaded = self.loaded_detail().cloned();
         self.configured.detail_refresh = DetailRefreshActivity::Idle;
         self.configured.detail = match detail {
-            Some(detail) => {
+            Some((detail, inventory_authority)) => {
                 let cloud_only = if reset_cloud_only {
                     CloudOnlyState::NotFetched
                 } else {
@@ -1072,6 +1142,7 @@ impl CloudBackupReducerState {
                 CloudBackupDetailState::Complete {
                     state: LoadedCloudBackupDetail {
                         detail,
+                        inventory_authority,
                         cloud_only,
                         cloud_only_operation: previous_loaded
                             .as_ref()
@@ -1089,8 +1160,12 @@ impl CloudBackupReducerState {
     }
 
     fn apply_detail_refresh_started(&mut self) {
-        let retained = self.loaded_detail().cloned();
         self.configured.detail_refresh = DetailRefreshActivity::InFlight;
+        if matches!(self.configured.detail, CloudBackupDetailState::Complete { .. }) {
+            return;
+        }
+
+        let retained = self.loaded_detail().cloned();
         self.configured.detail = CloudBackupDetailState::Checking { retained };
     }
 
@@ -1106,6 +1181,7 @@ impl CloudBackupReducerState {
         self.configured.detail = CloudBackupDetailState::Checking {
             retained: Some(LoadedCloudBackupDetail {
                 detail,
+                inventory_authority: CloudBackupInventoryAuthority::Provisional,
                 cloud_only: CloudOnlyState::NotFetched,
                 cloud_only_operation: CloudOnlyOperation::Idle,
                 other_backups_operation: OtherBackupsOperation::Idle,
@@ -1214,6 +1290,10 @@ impl CloudBackupReducerState {
         }
     }
 
+    fn resolve_other_backups_state(&mut self, other_backups: CloudBackupOtherBackupsState) {
+        self.configured.other_backups = other_backups;
+    }
+
     fn clear_prompt_state(&mut self) {
         self.configured.prompt = CloudBackupConfiguredPrompt::None;
         self.missing_passkey_dismissed = false;
@@ -1281,6 +1361,14 @@ impl CloudBackupStateReducer {
 
     pub(crate) fn detail_inventory_is_complete(&self) -> bool {
         self.state.detail_inventory_is_complete()
+    }
+
+    pub(crate) fn detail_inventory_is_ready(&self) -> bool {
+        self.state.detail_inventory_is_ready()
+    }
+
+    pub(crate) fn other_backups_state(&self) -> CloudBackupOtherBackupsState {
+        self.state.other_backups_state()
     }
 
     pub(crate) fn cloud_only(&self) -> CloudOnlyState {
@@ -1505,6 +1593,9 @@ impl CloudBackupStateReducer {
             ) => {
                 self.state.resolve_other_backups_operation(other_backups_operation);
             }
+            CloudBackupStateReducerEvent::OtherBackupsStateResolved(other_backups) => {
+                self.state.resolve_other_backups_state(other_backups);
+            }
         }
 
         self.resolve_effects(
@@ -1703,7 +1794,6 @@ mod tests {
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
             cloud_only_count,
-            other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
         }
     }
 
@@ -1736,7 +1826,10 @@ mod tests {
         };
         model
             .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some(test_detail(wallets.len() as u32)),
+                detail: Some((
+                    test_detail(wallets.len() as u32),
+                    CloudBackupInventoryAuthority::ProviderConfirmed,
+                )),
                 reset_cloud_only: false,
             })
             .unwrap();
@@ -1777,7 +1870,7 @@ mod tests {
     }
 
     #[test]
-    fn retained_restore_all_count_is_disabled_while_inventory_is_incomplete() {
+    fn retained_restore_all_count_stays_enabled_until_inventory_becomes_incomplete() {
         let wallets = vec![
             cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
@@ -1787,7 +1880,7 @@ mod tests {
         checking.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
         assert_eq!(
             restore_all_state(&checking),
-            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+            CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
 
         let mut failed = configured_model_with_cloud_only(wallets);
@@ -1865,14 +1958,13 @@ mod tests {
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
         };
-        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
-        else {
-            panic!("expected authoritative detail refresh to remain checking");
+        let CloudBackupDetailState::Complete { state: retained } = configured.detail else {
+            panic!("expected authoritative detail to remain available during refresh");
         };
         assert_eq!(retained.cloud_only, CloudOnlyState::Loaded { wallets: loaded_wallets });
         assert_eq!(
             configured.restore_all,
-            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+            CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
     }
 
@@ -1911,9 +2003,8 @@ mod tests {
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
         };
-        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
-        else {
-            panic!("expected checking detail with retained operation states");
+        let CloudBackupDetailState::Complete { state: retained } = configured.detail else {
+            panic!("expected available detail with retained operation states");
         };
         assert_eq!(retained.cloud_only_operation, cloud_only_failure);
         assert_eq!(retained.other_backups_operation, other_backups_failure);
@@ -1980,12 +2071,12 @@ mod tests {
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
         assert_eq!(
             restore_all_state(&model),
-            CloudBackupRestoreAllState::RetryDisabled { wallet_count: 1 },
+            CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
         );
 
         model
             .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some(detail),
+                detail: Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed)),
                 reset_cloud_only: false,
             })
             .unwrap();
@@ -2076,7 +2167,7 @@ mod tests {
 
         model
             .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some(detail.clone()),
+                detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
                 reset_cloud_only: false,
             })
             .unwrap();
@@ -2103,7 +2194,7 @@ mod tests {
     }
 
     #[test]
-    fn checking_retains_rows_but_disables_completeness_dependent_actions() {
+    fn refresh_keeps_confirmed_inventory_ready() {
         let mut model = CloudBackupStateReducer {
             state: configured_state(
                 CloudBackupVerificationState::NotVerified,
@@ -2114,7 +2205,7 @@ mod tests {
 
         model
             .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some(detail.clone()),
+                detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
                 reset_cloud_only: false,
             })
             .unwrap();
@@ -2125,14 +2216,14 @@ mod tests {
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
         };
-        let CloudBackupDetailState::Checking { retained: Some(retained) } = configured.detail
-        else {
-            panic!("expected checking detail with retained rows");
+        let CloudBackupDetailState::Complete { state: retained } = configured.detail else {
+            panic!("expected complete detail with retained rows");
         };
 
         assert_eq!(retained.detail, detail);
         assert_eq!(model.state.detail(), Some(detail));
-        assert!(!model.detail_inventory_is_complete());
+        assert!(model.detail_inventory_is_complete());
+        assert!(model.detail_inventory_is_ready());
     }
 
     #[test]
@@ -2161,6 +2252,30 @@ mod tests {
 
         assert_eq!(retained.detail, provisional);
         assert!(!model.detail_inventory_is_complete());
+        assert!(!model.detail_inventory_is_ready());
+    }
+
+    #[test]
+    fn trusted_local_snapshot_allows_individual_wallet_actions() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                detail: Some((
+                    test_detail(1),
+                    CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+                )),
+                reset_cloud_only: false,
+            })
+            .unwrap();
+
+        assert!(!model.detail_inventory_is_complete());
+        assert!(model.detail_inventory_is_ready());
     }
 
     #[test]
@@ -2175,7 +2290,7 @@ mod tests {
 
         model
             .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some(retained.clone()),
+                detail: Some((retained.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
                 reset_cloud_only: false,
             })
             .unwrap();
@@ -2548,6 +2663,7 @@ mod tests {
                 ),
                 destructive_operation: CloudBackupDestructiveOperationState::Idle,
                 detail: CloudBackupDetailState::NotLoaded,
+                other_backups: CloudBackupOtherBackupsState::NotChecked,
                 restore_all: CloudBackupRestoreAllState::NotShown,
                 root_prompt: CloudBackupRootPrompt::None,
                 sync_health: CloudSyncHealth::Unknown,
@@ -2708,8 +2824,7 @@ mod tests {
             local_master_key_repaired: false,
             credential_recovered: false,
             wallets_verified: 1,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
+            wallet_issues: Default::default(),
             detail: None,
         };
         let mut model = CloudBackupStateReducer::default();
@@ -2776,8 +2891,7 @@ mod tests {
             local_master_key_repaired: false,
             credential_recovered: false,
             wallets_verified: 1,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
+            wallet_issues: Default::default(),
             detail: None,
         };
         let mut model = CloudBackupStateReducer::default();

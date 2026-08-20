@@ -40,6 +40,7 @@ import org.bitcoinppl.cove_core.CloudBackupRetryAction
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudBackupWalletVerificationIssues
 import org.bitcoinppl.cove_core.DeepVerificationFailure
 import org.bitcoinppl.cove_core.DeepVerificationReport
 
@@ -125,6 +126,10 @@ internal fun VerificationSection(
                 }
             }
 
+            is CloudBackupVerificationState.NeedsAttention -> {
+                NeedsAttentionSectionContent(report = verification.report)
+            }
+
             CloudBackupVerificationState.AwaitingUploadConfirmation -> {
                 UploadConfirmationPendingContent()
             }
@@ -172,7 +177,10 @@ internal fun VerificationSection(
             )
         }
 
-        if (manager.verificationState is CloudBackupVerificationState.Verified) {
+        if (
+            manager.verificationState is CloudBackupVerificationState.Verified ||
+                manager.verificationState is CloudBackupVerificationState.NeedsAttention
+        ) {
             VerifyAgainButton(
                 onClick = {
                     manager.dispatch(
@@ -283,14 +291,72 @@ private fun VerifiedSectionContent(
                 color = colors.secondaryText,
             )
 
-            if (report.walletsFailed > 0u) {
-                ErrorInlineMessage("${report.walletsFailed} wallet backup(s) could not be decrypted")
+        }
+    }
+}
+
+@Composable
+private fun NeedsAttentionSectionContent(report: DeepVerificationReport) {
+    val colors = cloudBackupVisualColors()
+
+    CloudBackupGlassCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, top = 10.dp, end = 14.dp),
+        fill = colors.verifiedFill,
+        border = colors.verifiedBorder,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = CoveColor.WarningOrange,
+                    modifier = Modifier.size(32.dp),
+                )
+                Text(
+                    "Backup needs attention",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.primaryText,
+                )
             }
 
-            if (report.walletsUnsupported > 0u) {
-                ErrorInlineMessage("${report.walletsUnsupported} wallet(s) use a newer backup format")
-            }
+            Text(
+                "The backup key is valid. ${report.walletsVerified} wallet backup(s) passed verification.",
+                style = MaterialTheme.typography.caption,
+                color = colors.secondaryText,
+            )
+
+            WalletVerificationIssueMessages(report.walletIssues)
         }
+    }
+}
+
+@Composable
+private fun WalletVerificationIssueMessages(issues: CloudBackupWalletVerificationIssues) {
+    VerificationIssueMessage(issues.missing, "wallet backup file(s) are missing from cloud storage")
+    VerificationIssueMessage(issues.downloadFailed, "wallet backup(s) could not be downloaded")
+    VerificationIssueMessage(issues.invalid, "wallet backup file(s) contain invalid data")
+    VerificationIssueMessage(
+        issues.decryptionFailed,
+        "wallet backup(s) could not be decrypted with this backup key",
+    )
+    VerificationIssueMessage(issues.unsupported, "wallet backup(s) use a newer backup format")
+    VerificationIssueMessage(issues.unreadable, "wallet backup(s) could not be read")
+}
+
+@Composable
+private fun VerificationIssueMessage(count: UInt, message: String) {
+    if (count > 0u) {
+        ErrorInlineMessage("$count $message")
     }
 }
 

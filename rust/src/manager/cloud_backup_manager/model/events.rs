@@ -150,7 +150,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     DetailRefreshStarted,
     DetailRefreshProvisional(CloudBackupDetail),
     DetailRefreshApplied {
-        detail: Option<CloudBackupDetail>,
+        detail: Option<(CloudBackupDetail, super::CloudBackupInventoryAuthority)>,
         reset_cloud_only: bool,
     },
     DetailRefreshFailed {
@@ -160,6 +160,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     CloudOnlyStateResolved(CloudOnlyState),
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
+    OtherBackupsStateResolved(crate::manager::cloud_backup_manager::CloudBackupOtherBackupsState),
 }
 
 /// Intentionally uninhabited marker because reducer events are currently total

@@ -20,7 +20,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey, WalletRestoreOutcome,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupLifecycle, CloudBackupOtherBackupsState,
+    CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
     CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
     PendingEnableNamespaceOwnership, PendingEnableJournalPhase, PendingEnablePasskeyMetadata,
@@ -158,7 +158,6 @@ fn prepare_restore_all_queue_fixture(
         up_to_date: Vec::new(),
         needs_sync: Vec::new(),
         cloud_only_count: items.len().try_into().unwrap(),
-        other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
     }));
     manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(items.clone()));
     assert!(matches!(
@@ -283,8 +282,7 @@ fn test_pending_completion(
             local_master_key_repaired: false,
             credential_recovered: false,
             wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
+            wallet_issues: Default::default(),
             detail: None,
         },
         namespace_id,
@@ -1086,15 +1084,15 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
 
     supervisor
         .complete_refresh_detail(
-            Some(CloudBackupDetailResult::Success(CloudBackupDetail {
-                last_sync: None,
-                up_to_date: Vec::new(),
-                needs_sync: Vec::new(),
-                cloud_only_count: 0,
-                other_backups: CloudBackupOtherBackupsState::Loaded {
-                    summary: Default::default(),
+            Some(CloudBackupDetailResult::SuccessWithAuthority {
+                detail: CloudBackupDetail {
+                    last_sync: None,
+                    up_to_date: Vec::new(),
+                    needs_sync: Vec::new(),
+                    cloud_only_count: 0,
                 },
-            })),
+                authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            }),
             DetailRefreshAttempt::Initial,
             superseded_refresh,
         )

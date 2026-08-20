@@ -106,6 +106,12 @@ fn catastrophic_cloud_restore_error(
         CloudStorageError::Offline(message) => CatastrophicCloudRestoreResult::Offline {
             message: format!("Cannot check {} while offline: {message}", provider.storage_name()),
         },
+        CloudStorageError::SyncPending(_) => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!(
+                "{} is still loading Cove backup files. Keep Cove open, then try again.",
+                provider.storage_name()
+            ),
+        },
         CloudStorageError::NotFound(_) => CatastrophicCloudRestoreResult::NoBackupFound {
             message: format!(
                 "No Cloud Backup was found for the selected {}.",

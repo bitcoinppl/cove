@@ -14,8 +14,20 @@ extension CloudBackupDetailState {
     }
 
     var inventoryError: String? {
-        guard case let .failed(_, error, _) = self else { return nil }
-        return error
+        guard case let .failed(reason, _, _) = self else { return nil }
+
+        switch reason {
+        case .providerSyncPending:
+            return "iCloud Drive is still loading Cove backup files. Keep Cove open, then check again."
+        case .offline:
+            return "This device is offline. Connect to the internet, then check iCloud Drive again."
+        case .authorizationRequired:
+            return "Cove cannot access iCloud Drive. Turn on iCloud Drive for Cove, then check again."
+        case .providerUnavailable:
+            return "iCloud Drive is not available now. Try again later."
+        case .unknown:
+            return "Cove could not load Cloud Backup details. Try again."
+        }
     }
 
     var isChecking: Bool {
@@ -242,7 +254,23 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
     }
 
     var isDetailInventoryComplete: Bool {
-        configuredState?.detail.isComplete == true
+        guard case let .complete(state: loaded) = configuredState?.detail else { return false }
+        return loaded.inventoryAuthority == .providerConfirmed
+    }
+
+    var isDetailInventoryReady: Bool {
+        let loaded: LoadedCloudBackupDetail? = switch configuredState?.detail {
+        case let .complete(state):
+            state
+        case let .failed(_, _, retained):
+            retained
+        case nil, .notLoaded, .checking:
+            nil
+        }
+
+        guard let loaded else { return false }
+        return loaded.inventoryAuthority == .providerConfirmed ||
+            loaded.inventoryAuthority == .localSnapshotMatchesKnownCount
     }
 
     var verificationPresentation: CloudBackupVerificationPresentation {
@@ -257,8 +285,8 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
             retained?.cloudOnly ?? .loading
         case let .complete(state: loaded):
             loaded.cloudOnly
-        case let .failed(_, error, retained):
-            retained?.cloudOnly ?? .failed(error: error)
+        case let .failed(_, _, retained):
+            retained?.cloudOnly ?? .failed(error: detailError ?? "Cove could not load Cloud Backup details.")
         }
     }
 
@@ -272,6 +300,15 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
 
     var otherBackupsOperation: OtherBackupsOperation {
         configuredState?.detail.retainedDetailState?.otherBackupsOperation ?? .idle
+    }
+
+    var otherBackupsState: CloudBackupOtherBackupsState {
+        configuredState?.otherBackups ?? .notChecked
+    }
+
+    var isOtherBackupsInventoryReady: Bool {
+        guard case .loaded = otherBackupsState else { return false }
+        return true
     }
 
     func dispatch(action: Action) {

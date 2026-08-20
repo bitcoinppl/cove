@@ -55,7 +55,7 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
     CloudBackupEnableState, CloudBackupError, CloudBackupInventoryIncompleteReason,
     CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
-    CloudBackupOtherBackupsOutcome, CloudBackupPasskeyChoiceIntent,
+    CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
     CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState,
@@ -85,7 +85,9 @@ mod verification;
 
 pub(crate) use verification::DeepVerificationContinuation;
 
-use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
+use detail_workflow::{
+    DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow, OtherBackupsScanClaim,
+};
 use restore_all::restore_all_marker_matches_active_namespace;
 
 mod tests {
@@ -154,8 +156,11 @@ fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
 
 fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
     match result {
-        CloudBackupDetailResult::Success(detail) => {
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail.clone()));
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
+                detail: detail.clone(),
+                authority: *authority,
+            });
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
@@ -172,9 +177,12 @@ fn apply_cloud_only_operation_refresh_detail_result(
     result: &CloudBackupDetailResult,
 ) {
     match result {
-        CloudBackupDetailResult::Success(detail) => {
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
             manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-                CloudBackupDetailOutcome::Refreshed(detail.clone()),
+                CloudBackupDetailOutcome::RefreshedWithAuthority {
+                    detail: detail.clone(),
+                    authority: *authority,
+                },
             );
         }
         CloudBackupDetailResult::AccessError(error) => {
@@ -742,11 +750,11 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else {
             return Produces::ok(());
         };
+        if manager.detail_inventory_is_ready() {
+            return Produces::ok(());
+        }
 
         let plan = self.detail_workflow.request_refresh();
-        if !matches!(plan, DetailRefreshPlan::Ignored) {
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
-        }
         self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
@@ -936,6 +944,9 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.detail_workflow.open();
+        if let Some(claim) = self.detail_workflow.request_other_backups_scan() {
+            self.schedule_other_backups_scan(manager.clone(), claim);
+        }
 
         let plan = self.detail_workflow.entry_plan(&manager);
         match plan {
@@ -960,6 +971,43 @@ impl CloudBackupSupervisor {
 
         let plan = self.detail_workflow.request_refresh();
         self.handle_detail_refresh_plan(manager, plan);
+
+        Produces::ok(())
+    }
+
+    pub async fn refresh_other_backups(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        let claim = self.detail_workflow.restart_other_backups_scan();
+        self.schedule_other_backups_scan(manager, claim);
+        Produces::ok(())
+    }
+
+    fn schedule_other_backups_scan(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: OtherBackupsScanClaim,
+    ) {
+        let Some(addr) = self.addr() else { return };
+
+        manager.apply_other_backups_state(CloudBackupOtherBackupsState::Checking);
+        let scan_manager = manager.clone();
+        addr.send_fut_with(move |addr| async move {
+            let cloud = CloudStorage::global_explicit_client();
+            let state = scan_manager.other_backup_state(&cloud).await;
+            send!(addr.complete_other_backups_scan(claim, state));
+        });
+    }
+
+    async fn complete_other_backups_scan(
+        &mut self,
+        claim: OtherBackupsScanClaim,
+        state: CloudBackupOtherBackupsState,
+    ) -> ActorResult<()> {
+        if self.detail_workflow.is_other_backups_scan_active(claim)
+            && let Some(manager) = self.manager()
+        {
+            manager.apply_other_backups_state(state);
+        }
 
         Produces::ok(())
     }

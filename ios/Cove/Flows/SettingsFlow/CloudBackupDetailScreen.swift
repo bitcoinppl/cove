@@ -309,7 +309,7 @@ private struct CloudBackupInventoryCheckingSection: View {
                 ProgressView()
                     .padding(.trailing, 8)
 
-                Text("Checking for more cloud backups...")
+                Text("Refreshing the wallet backup list...")
             }
             .foregroundStyle(.secondary)
             .accessibilityIdentifier("cloudBackup.inventory.checking")

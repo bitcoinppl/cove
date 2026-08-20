@@ -150,7 +150,7 @@ private struct CloudOnlySectionContent: View {
                 wallets: wallets,
                 operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
                 isOperating: isOperating || manager.restoreAllState.isRunning
-                    || !manager.isDetailInventoryComplete,
+                    || !manager.isDetailInventoryReady,
                 onSelectWallet: onSelectWallet,
                 onRetryWallet: { item in
                     manager.dispatch(action: .restoreCloudWallet(item.recordId))
@@ -382,19 +382,19 @@ private struct CloudOnlyWalletActionDialog<Content: View>: View {
                 Button("Restore to This Device") {
                     restore(item)
                 }
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isDetailInventoryReady)
 
                 Button("Delete from iCloud", role: .destructive) {
                     requestDeletion(item)
                 }
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isDetailInventoryReady)
             }
             Button("Cancel", role: .cancel) {}
         }
     }
 
     private func restore(_ item: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isDetailInventoryReady else { return }
 
         if item.syncStatus == .unsupportedVersion {
             unsupportedRestoreWallet = item
@@ -405,7 +405,7 @@ private struct CloudOnlyWalletActionDialog<Content: View>: View {
     }
 
     private func requestDeletion(_ item: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isDetailInventoryReady else { return }
 
         walletToDelete = item
     }
@@ -432,7 +432,7 @@ private struct CloudOnlyDeleteWalletAlert<Content: View>: View {
                 Button("Delete Forever", role: .destructive) {
                     delete(item)
                 }
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isDetailInventoryReady)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -441,7 +441,7 @@ private struct CloudOnlyDeleteWalletAlert<Content: View>: View {
     }
 
     private func delete(_ item: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isDetailInventoryReady else { return }
 
         manager.dispatch(action: .deleteCloudWallet(item.recordId))
     }

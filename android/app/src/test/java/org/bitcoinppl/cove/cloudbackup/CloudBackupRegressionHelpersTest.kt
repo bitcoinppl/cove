@@ -9,11 +9,11 @@ import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
+import org.bitcoinppl.cove_core.CloudBackupInventoryAuthority
 import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupProgress
@@ -219,14 +219,6 @@ class CloudBackupRegressionHelpersTest {
                 upToDate = emptyList(),
                 needsSync = emptyList(),
                 cloudOnlyCount = 1u,
-                otherBackups =
-                    CloudBackupOtherBackupsState.Loaded(
-                        CloudBackupOtherBackupsSummary(
-                            namespaceCount = 0u,
-                            walletCount = 0u,
-                            passkeyHints = emptyList(),
-                        ),
-                    ),
             )
         val wallet =
             CloudBackupWalletItem(
@@ -303,30 +295,26 @@ class CloudBackupRegressionHelpersTest {
                 progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
-        assertEquals("Drive inventory is unavailable", manager.detailError)
+        assertEquals(
+            "This device is offline. Connect to the internet, then check Google Drive again.",
+            manager.detailError,
+        )
         assertFalse(manager.isDetailInventoryComplete)
     }
 
     @Test
-    fun scP04EveryInventoryStateRetainsRowsButOnlyCompleteEnablesActions() {
+    fun scP04TrustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
         val detail =
             CloudBackupDetail(
                 lastSync = null,
                 upToDate = emptyList(),
                 needsSync = emptyList(),
                 cloudOnlyCount = 1u,
-                otherBackups =
-                    CloudBackupOtherBackupsState.Loaded(
-                        CloudBackupOtherBackupsSummary(
-                            namespaceCount = 0u,
-                            walletCount = 0u,
-                            passkeyHints = emptyList(),
-                        ),
-                    ),
             )
         val loaded =
             LoadedCloudBackupDetail(
                 detail = detail,
+                inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
                 cloudOnly = CloudOnlyState.NotFetched,
                 cloudOnlyOperation = CloudOnlyOperation.Idle,
                 otherBackupsOperation = OtherBackupsOperation.Idle,
@@ -336,11 +324,13 @@ class CloudBackupRegressionHelpersTest {
         assertNull(notLoaded.detail)
         assertFalse(notLoaded.isDetailInventoryChecking)
         assertFalse(notLoaded.isDetailInventoryComplete)
+        assertFalse(notLoaded.isDetailInventoryReady)
 
         val checking = cloudBackupManager(detail = CloudBackupDetailState.Checking(retained = loaded))
         assertEquals(detail, checking.detail)
         assertTrue(checking.isDetailInventoryChecking)
         assertFalse(checking.isDetailInventoryComplete)
+        assertFalse(checking.isDetailInventoryReady)
 
         val failed =
             cloudBackupManager(
@@ -352,14 +342,19 @@ class CloudBackupRegressionHelpersTest {
                     ),
             )
         assertEquals(detail, failed.detail)
-        assertEquals("Drive inventory is unavailable", failed.detailError)
+        assertEquals(
+            "This device is offline. Connect to the internet, then check Google Drive again.",
+            failed.detailError,
+        )
         assertFalse(failed.isDetailInventoryChecking)
         assertFalse(failed.isDetailInventoryComplete)
+        assertTrue(failed.isDetailInventoryReady)
 
         val complete = cloudBackupManager(detail = CloudBackupDetailState.Complete(state = loaded))
         assertEquals(detail, complete.detail)
         assertFalse(complete.isDetailInventoryChecking)
         assertTrue(complete.isDetailInventoryComplete)
+        assertTrue(complete.isDetailInventoryReady)
     }
 
     @Test
@@ -649,6 +644,7 @@ class CloudBackupRegressionHelpersTest {
                             sync = sync,
                             destructiveOperation = CloudBackupDestructiveOperationState.Idle,
                             detail = detail,
+                            otherBackups = CloudBackupOtherBackupsState.NotChecked,
                             restoreAll = CloudBackupRestoreAllState.NotShown,
                             rootPrompt = CloudBackupRootPrompt.None,
                             syncHealth = CloudSyncHealth.Unknown,

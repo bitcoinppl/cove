@@ -22,9 +22,12 @@ import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupEnableFlow
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupInventoryAuthority
+import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
@@ -248,13 +251,41 @@ class CloudBackupManager private constructor(
             }
 
     val detailError: String?
-        get() = (configuredState?.detail as? CloudBackupDetailState.Failed)?.error
+        get() =
+            when ((configuredState?.detail as? CloudBackupDetailState.Failed)?.reason) {
+                CloudBackupInventoryIncompleteReason.PROVIDER_SYNC_PENDING ->
+                    "Google Drive is still loading Cove backup files. Keep Cove open, then check again."
+                CloudBackupInventoryIncompleteReason.OFFLINE ->
+                    "This device is offline. Connect to the internet, then check Google Drive again."
+                CloudBackupInventoryIncompleteReason.AUTHORIZATION_REQUIRED ->
+                    "Cove cannot access Google Drive. Reconnect Google Drive, then check again."
+                CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE ->
+                    "Google Drive is not available now. Try again later."
+                CloudBackupInventoryIncompleteReason.UNKNOWN ->
+                    "Cove could not load Cloud Backup details. Try again."
+                null -> null
+            }
 
     val isDetailInventoryChecking: Boolean
         get() = configuredState?.detail is CloudBackupDetailState.Checking
 
     val isDetailInventoryComplete: Boolean
-        get() = configuredState?.detail is CloudBackupDetailState.Complete
+        get() =
+            (configuredState?.detail as? CloudBackupDetailState.Complete)
+                ?.state
+                ?.inventoryAuthority == CloudBackupInventoryAuthority.PROVIDER_CONFIRMED
+
+    val isDetailInventoryReady: Boolean
+        get() =
+            when (val detail = configuredState?.detail) {
+                is CloudBackupDetailState.Complete -> detail.state
+                is CloudBackupDetailState.Failed -> detail.retained
+                else -> null
+            }?.inventoryAuthority in
+                setOf(
+                    CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
+                    CloudBackupInventoryAuthority.LOCAL_SNAPSHOT_MATCHES_KNOWN_COUNT,
+                )
 
     val verificationPresentation: CloudBackupVerificationPresentation
         get() = configuredState?.verificationPresentation ?: CloudBackupVerificationPresentation.Hidden(null)
@@ -268,7 +299,10 @@ class CloudBackupManager private constructor(
                         is CloudBackupDetailState.Checking -> detail.retained?.cloudOnly ?: CloudOnlyState.Loading
                         is CloudBackupDetailState.Complete -> detail.state.cloudOnly
                         is CloudBackupDetailState.Failed ->
-                            detail.retained?.cloudOnly ?: CloudOnlyState.Failed(detail.error)
+                            detail.retained?.cloudOnly
+                                ?: CloudOnlyState.Failed(
+                                    detailError ?: "Cove could not load Cloud Backup details.",
+                                )
                     }
                 else -> CloudOnlyState.NotFetched
             }
@@ -290,6 +324,12 @@ class CloudBackupManager private constructor(
                         ?.otherBackupsOperation ?: OtherBackupsOperation.Idle
                 else -> OtherBackupsOperation.Idle
             }
+
+    val otherBackupsState: CloudBackupOtherBackupsState
+        get() = configuredState?.otherBackups ?: CloudBackupOtherBackupsState.NotChecked
+
+    val isOtherBackupsInventoryReady: Boolean
+        get() = otherBackupsState is CloudBackupOtherBackupsState.Loaded
 
     private fun loadedDetailState(detail: CloudBackupDetailState): LoadedCloudBackupDetail? =
         when (detail) {

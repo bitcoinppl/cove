@@ -47,7 +47,8 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome, CloudBackupDetailResult,
     CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
-    CloudBackupEnableState, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
+    CloudBackupEnableState, CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
+    CloudBackupKeychain, CloudBackupLifecycle, CloudBackupManagerAction,
     CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreEvent,
     CloudBackupRootPrompt, CloudBackupVerificationPresentation, CloudBackupVerificationReason,
     CloudBackupVerificationSource, CloudBackupWalletStatus, DeepVerificationFailure,
@@ -124,6 +125,7 @@ async fn deep_verify_for_test(
             || matches!(
                 snapshot.verification,
                 VerificationState::Verified(_)
+                    | VerificationState::NeedsAttention(_)
                     | VerificationState::PasskeyConfirmed
                     | VerificationState::Failed(_)
                     | VerificationState::Cancelled
@@ -142,6 +144,7 @@ async fn deep_verify_for_test(
 
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => DeepVerificationResult::Verified(report),
+        VerificationState::NeedsAttention(report) => DeepVerificationResult::NeedsAttention(report),
         VerificationState::PasskeyConfirmed => {
             DeepVerificationResult::PasskeyConfirmed(manager.model_snapshot().detail)
         }
@@ -153,6 +156,19 @@ async fn deep_verify_for_test(
             panic!("expected supervisor-owned deep verification result")
         }
     }
+}
+
+async fn hold_wallet_upload_confirmation(globals: &TestGlobals, metadata: &WalletMetadata) {
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    let stale_backup =
+        encrypted_wallet_backup_bytes(metadata, &master_key, "stale-revision", 1).await;
+
+    globals.cloud.set_wallet_backup_download_override(namespace, record_id, stale_backup);
 }
 
 async fn enable_cloud_backup_create_new(

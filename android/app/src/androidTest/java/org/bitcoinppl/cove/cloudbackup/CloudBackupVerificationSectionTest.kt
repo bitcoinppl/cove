@@ -8,6 +8,7 @@ import org.bitcoinppl.cove_core.CloudBackupConfiguredState
 import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
@@ -69,6 +70,7 @@ class CloudBackupVerificationSectionTest {
                             sync = CloudBackupSyncState.Idle,
                             destructiveOperation = CloudBackupDestructiveOperationState.Idle,
                             detail = CloudBackupDetailState.NotLoaded,
+                            otherBackups = CloudBackupOtherBackupsState.NotChecked,
                             restoreAll = CloudBackupRestoreAllState.NotShown,
                             rootPrompt = CloudBackupRootPrompt.None,
                             syncHealth = CloudSyncHealth.Unknown,

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::wallet::metadata::{WalletMode as LocalWalletMode, WalletType};
 
-use super::CloudBackupVerificationSource;
+use super::{CloudBackupInventoryIncompleteReason, CloudBackupVerificationSource};
 
 /// Shared settings row state projected for Swift and Kotlin presentation
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -116,6 +116,7 @@ pub enum CloudBackupManagerAction {
     DisableCloudBackup,
     KeepCloudBackupEnabled,
     RefreshDetail,
+    RefreshOtherBackups,
     EnterDetail,
     CloseDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
@@ -188,14 +189,15 @@ pub struct CloudBackupDetail {
     pub needs_sync: Vec<CloudBackupWalletItem>,
     /// Number of wallets in the cloud that aren't on this device
     pub cloud_only_count: u32,
-    pub other_backups: CloudBackupOtherBackupsState,
 }
 
 /// Summary state for backup namespaces that do not match the active device
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupOtherBackupsState {
+    NotChecked,
+    Checking,
     Loaded { summary: CloudBackupOtherBackupsSummary },
-    LoadFailed { error: String },
+    LoadFailed { reason: CloudBackupInventoryIncompleteReason },
 }
 
 /// Aggregate count of recoverable backup data in other namespaces
@@ -239,6 +241,7 @@ pub enum OtherBackupsOperation {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DeepVerificationResult {
     Verified(DeepVerificationReport),
+    NeedsAttention(DeepVerificationReport),
     AwaitingUploadConfirmation(DeepVerificationReport),
     PasskeyConfirmed(Option<CloudBackupDetail>),
     PasskeyMissing(Option<CloudBackupDetail>),
@@ -257,11 +260,31 @@ pub struct DeepVerificationReport {
     /// credential_id was recovered via discoverable auth
     pub credential_recovered: bool,
     pub wallets_verified: u32,
-    pub wallets_failed: u32,
-    /// Wallet backups with unsupported version (newer format, skipped)
-    pub wallets_unsupported: u32,
+    pub wallet_issues: CloudBackupWalletVerificationIssues,
     /// May be None if wallet list was missing but master key verified
     pub detail: Option<CloudBackupDetail>,
+}
+
+/// Wallet-file issues found during deep verification
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupWalletVerificationIssues {
+    pub missing: u32,
+    pub download_failed: u32,
+    pub invalid: u32,
+    pub decryption_failed: u32,
+    pub unsupported: u32,
+    pub unreadable: u32,
+}
+
+impl CloudBackupWalletVerificationIssues {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.missing == 0
+            && self.download_failed == 0
+            && self.invalid == 0
+            && self.decryption_failed == 0
+            && self.unsupported == 0
+            && self.unreadable == 0
+    }
 }
 
 /// Persisted verification metadata projected into prompts and detail state
@@ -270,6 +293,11 @@ pub enum CloudBackupVerificationMetadata {
     NotConfigured,
     ConfiguredNeverVerified,
     Verified(u64),
+    NeedsAttention {
+        checked_at: u64,
+        wallets_verified: u32,
+        wallet_issues: CloudBackupWalletVerificationIssues,
+    },
     NeedsVerification,
 }
 
@@ -281,6 +309,23 @@ impl From<&PersistedCloudBackupState> for CloudBackupVerificationMetadata {
 
         if !db_state.is_configured() {
             return Self::NotConfigured;
+        }
+
+        if let Some((checked_at, wallets_verified, issues)) =
+            db_state.verification_needs_attention()
+        {
+            return Self::NeedsAttention {
+                checked_at,
+                wallets_verified,
+                wallet_issues: CloudBackupWalletVerificationIssues {
+                    missing: issues.missing,
+                    download_failed: issues.download_failed,
+                    invalid: issues.invalid,
+                    decryption_failed: issues.decryption_failed,
+                    unsupported: issues.unsupported,
+                    unreadable: issues.unreadable,
+                },
+            };
         }
 
         match db_state.last_verified_at() {

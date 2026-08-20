@@ -7,11 +7,11 @@ use tracing::error;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupExclusiveOperationClaim,
-    CloudBackupInventoryIncompleteReason, CloudBackupManagerAction, CloudBackupPasskeyChoiceIntent,
-    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
-    CloudBackupWalletItem, CloudBackupWalletRestoreFailure, CloudBackupWalletStatus,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
-    RustCloudBackupManager,
+    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupManagerAction,
+    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreAllState,
+    CloudBackupRestoreFlow, CloudBackupStateReducerEvent, CloudBackupWalletItem,
+    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
@@ -28,6 +28,7 @@ pub(crate) enum VerificationState {
     Idle,
     Verifying,
     Verified(DeepVerificationReport),
+    NeedsAttention(DeepVerificationReport),
     PasskeyConfirmed,
     Failed(DeepVerificationFailure),
     Cancelled,
@@ -156,6 +157,7 @@ pub(crate) enum CloudBackupDetailOutcome {
     Checking,
     Provisional(CloudBackupDetail),
     Refreshed(CloudBackupDetail),
+    RefreshedWithAuthority { detail: CloudBackupDetail, authority: CloudBackupInventoryAuthority },
     Failed { reason: CloudBackupInventoryIncompleteReason, error: String },
 }
 
@@ -213,7 +215,7 @@ impl RustCloudBackupManager {
             A::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
             A::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
             A::RestoreCloudWallet(record_id) => {
-                if self.detail_inventory_is_complete() {
+                if self.detail_inventory_is_ready() {
                     CLOUD_BACKUP_MANAGER.clone().spawn_restore_cloud_wallet(record_id);
                 }
             }
@@ -242,17 +244,17 @@ impl RustCloudBackupManager {
                 }
             }
             A::DeleteCloudWallet(record_id) => {
-                if self.detail_inventory_is_complete() {
+                if self.detail_inventory_is_ready() {
                     CLOUD_BACKUP_MANAGER.clone().spawn_delete_cloud_wallet(record_id);
                 }
             }
             A::RecoverOtherBackups => {
-                if self.detail_inventory_is_complete() {
+                if self.other_backups_inventory_is_ready() {
                     CLOUD_BACKUP_MANAGER.clone().spawn_recover_other_backups();
                 }
             }
             A::DeleteOtherBackups => {
-                if self.detail_inventory_is_complete() {
+                if self.other_backups_inventory_is_ready() {
                     CLOUD_BACKUP_MANAGER.clone().spawn_delete_other_backups();
                 }
             }
@@ -263,6 +265,7 @@ impl RustCloudBackupManager {
             }
             A::KeepCloudBackupEnabled => CLOUD_BACKUP_MANAGER.keep_cloud_backup_enabled(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
+            A::RefreshOtherBackups => send!(self.supervisor.refresh_other_backups()),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
             A::CloseDetail => CLOUD_BACKUP_MANAGER.clone().close_detail(),
             A::PromptEnablePasskeyChoice(context) => {
@@ -278,6 +281,17 @@ impl RustCloudBackupManager {
 impl RustCloudBackupManager {
     fn detail_inventory_is_complete(&self) -> bool {
         self.state.read().detail_inventory_is_complete()
+    }
+
+    pub(crate) fn detail_inventory_is_ready(&self) -> bool {
+        self.state.read().detail_inventory_is_ready()
+    }
+
+    fn other_backups_inventory_is_ready(&self) -> bool {
+        matches!(
+            self.state.read().other_backups_state(),
+            CloudBackupOtherBackupsState::Loaded { .. }
+        )
     }
 
     fn start_verification(&self, source: CloudBackupVerificationSource) {
@@ -403,6 +417,9 @@ impl RustCloudBackupManager {
             DeepVerificationResult::Verified(report) => {
                 self.apply_verified_report(report);
             }
+            DeepVerificationResult::NeedsAttention(report) => {
+                self.apply_needs_attention_report(report);
+            }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
                 if let Some(detail) = report.detail.clone() {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
@@ -484,12 +501,19 @@ impl RustCloudBackupManager {
                 });
                 return;
             }
-            CloudBackupDetailOutcome::Cleared | CloudBackupDetailOutcome::Refreshed(_) => {}
+            CloudBackupDetailOutcome::Cleared
+            | CloudBackupDetailOutcome::Refreshed(_)
+            | CloudBackupDetailOutcome::RefreshedWithAuthority { .. } => {}
         }
 
         let detail = match outcome {
             CloudBackupDetailOutcome::Cleared => None,
-            CloudBackupDetailOutcome::Refreshed(detail) => Some(detail),
+            CloudBackupDetailOutcome::Refreshed(detail) => {
+                Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed))
+            }
+            CloudBackupDetailOutcome::RefreshedWithAuthority { detail, authority } => {
+                Some((detail, authority))
+            }
             CloudBackupDetailOutcome::Checking
             | CloudBackupDetailOutcome::Provisional(_)
             | CloudBackupDetailOutcome::Failed { .. } => {
@@ -498,11 +522,11 @@ impl RustCloudBackupManager {
         };
         let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
         let cloud_only = self.state.read().cloud_only();
-        let preserve_cloud_only = detail.as_ref().is_some_and(|detail| {
+        let preserve_cloud_only = detail.as_ref().is_some_and(|(detail, _)| {
             cloud_only_policy == CloudOnlyRefreshPolicy::PreserveLoadedIfConsistent
                 && loaded_cloud_only_matches_detail(&cloud_only, detail)
         });
-        let reset_cloud_only = detail.as_ref().is_some_and(|detail| {
+        let reset_cloud_only = detail.as_ref().is_some_and(|(detail, _)| {
             !preserve_cloud_only
                 && cloud_only_cache_is_stale(&cloud_only, detail, detail_snapshot.as_ref())
         });
@@ -510,7 +534,7 @@ impl RustCloudBackupManager {
         if reset_cloud_only {
             *self.cloud_only_detail_snapshot.write() = None;
         }
-        if preserve_cloud_only && let Some(detail) = detail.as_ref() {
+        if preserve_cloud_only && let Some((detail, _)) = detail.as_ref() {
             *self.cloud_only_detail_snapshot.write() = Some(detail.clone());
         }
 
@@ -771,9 +795,7 @@ mod tests {
     use super::super::ops::test_support::{
         ensure_cloud_backup_test_tokio_runtime, test_globals, test_lock,
     };
-    use super::super::{
-        CloudBackupOtherBackupsState, CloudBackupWalletStatus, PersistedCloudBackupState,
-    };
+    use super::super::{CloudBackupWalletStatus, PersistedCloudBackupState};
     use super::*;
     use crate::database::Database;
 
@@ -805,7 +827,6 @@ mod tests {
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
             cloud_only_count,
-            other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
         }
     }
 

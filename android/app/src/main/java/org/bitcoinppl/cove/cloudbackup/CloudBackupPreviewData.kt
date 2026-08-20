@@ -11,6 +11,7 @@ import org.bitcoinppl.cove_core.CloudBackupDestructiveOperationState
 import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
+import org.bitcoinppl.cove_core.CloudBackupInventoryAuthority
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
@@ -23,6 +24,7 @@ import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
+import org.bitcoinppl.cove_core.CloudBackupWalletVerificationIssues
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.DeepVerificationReport
@@ -102,14 +104,6 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                 ),
             needsSync = emptyList(),
             cloudOnlyCount = 1u,
-            otherBackups =
-                CloudBackupOtherBackupsState.Loaded(
-                    CloudBackupOtherBackupsSummary(
-                        namespaceCount = 0u,
-                        walletCount = 0u,
-                        passkeyHints = emptyList(),
-                    ),
-                ),
         )
     val loadedDetail =
         LoadedCloudBackupDetail(
@@ -127,6 +121,7 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                 ),
             cloudOnlyOperation = CloudOnlyOperation.Idle,
             otherBackupsOperation = OtherBackupsOperation.Idle,
+            inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
         )
 
     return CloudBackupState(
@@ -142,8 +137,15 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                                     localMasterKeyRepaired = false,
                                     credentialRecovered = false,
                                     walletsVerified = 4u,
-                                    walletsFailed = 0u,
-                                    walletsUnsupported = 0u,
+                                    walletIssues =
+                                        CloudBackupWalletVerificationIssues(
+                                            missing = 0u,
+                                            downloadFailed = 0u,
+                                            invalid = 0u,
+                                            decryptionFailed = 0u,
+                                            unsupported = 0u,
+                                            unreadable = 0u,
+                                        ),
                                     detail = detail,
                                 ),
                             lastVerifiedAt = 1_779_930_000UL,
@@ -151,6 +153,14 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                     sync = CloudBackupSyncState.Syncing,
                     destructiveOperation = CloudBackupDestructiveOperationState.Idle,
                     detail = CloudBackupDetailState.Complete(loadedDetail),
+                    otherBackups =
+                        CloudBackupOtherBackupsState.Loaded(
+                            CloudBackupOtherBackupsSummary(
+                                namespaceCount = 0u,
+                                walletCount = 0u,
+                                passkeyHints = emptyList(),
+                            ),
+                        ),
                     restoreAll = CloudBackupRestoreAllState.StartAvailable(walletCount = 2u),
                     rootPrompt = CloudBackupRootPrompt.None,
                     syncHealth = CloudSyncHealth.Uploading,

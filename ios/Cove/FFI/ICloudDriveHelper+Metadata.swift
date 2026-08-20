@@ -527,7 +527,7 @@ extension ICloudDriveHelper {
                 "failed to start iCloud metadata query for \(name)"
             )
         } catch ICloudMetadataIndexError.timedOut {
-            throw CloudStorageError.Offline("iCloud metadata query timed out for \(name)")
+            throw CloudStorageError.SyncPending("iCloud metadata is still loading for \(name)")
         }
     }
 
@@ -550,7 +550,7 @@ extension ICloudDriveHelper {
                 "failed to start iCloud metadata query for \(name)"
             )
         } catch ICloudMetadataIndexError.timedOut {
-            throw CloudStorageError.Offline("iCloud metadata query timed out for \(name)")
+            throw CloudStorageError.SyncPending("iCloud metadata is still loading for \(name)")
         }
     }
 
@@ -568,7 +568,7 @@ extension ICloudDriveHelper {
         } catch ICloudMetadataIndexError.startFailed {
             throw CloudStorageError.NotAvailable("failed to start iCloud metadata query")
         } catch ICloudMetadataIndexError.timedOut {
-            throw CloudStorageError.Offline("iCloud metadata query timed out")
+            throw CloudStorageError.SyncPending("iCloud metadata is still loading")
         }
     }
 
@@ -597,7 +597,9 @@ extension ICloudDriveHelper {
                 "failed to start iCloud metadata query to \(operation)"
             )
         } catch ICloudMetadataIndexError.timedOut {
-            throw CloudStorageError.Offline("iCloud metadata query timed out while trying to \(operation)")
+            throw CloudStorageError.SyncPending(
+                "iCloud metadata is still loading while trying to \(operation)"
+            )
         }
     }
 
@@ -632,7 +634,7 @@ extension ICloudDriveHelper {
         } catch ICloudMetadataIndexError.startFailed {
             throw CloudStorageError.NotAvailable("failed to start iCloud metadata query")
         } catch ICloudMetadataIndexError.timedOut {
-            throw CloudStorageError.Offline("iCloud metadata query timed out")
+            throw CloudStorageError.SyncPending("iCloud metadata is still loading")
         }
     }
 

@@ -63,9 +63,9 @@ pub use self::dto::{
     CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
     CloudBackupProgress, CloudBackupRestoreReport, CloudBackupRetryAction, CloudBackupRootPrompt,
     CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata, CloudBackupWalletItem,
-    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RecordId,
-    SavedPasskeyConfirmationMode,
+    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, CloudBackupWalletVerificationIssues,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
+    RecordId, SavedPasskeyConfirmationMode,
 };
 
 pub type CloudBackupManagerAction = self::dto::CloudBackupManagerAction;
@@ -88,7 +88,7 @@ pub(crate) use self::model::{
     CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus,
 };
 pub use self::model::{
-    CloudBackupInventoryIncompleteReason, CloudBackupLifecycle,
+    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupLifecycle,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow,
 };
@@ -172,6 +172,7 @@ pub enum CloudBackupManagerAction {
     DisableCloudBackup,
     KeepCloudBackupEnabled,
     RefreshDetail,
+    RefreshOtherBackups,
     EnterDetail,
     CloseDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
@@ -1245,8 +1246,7 @@ mod tests {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             "namespace".into(),
@@ -1267,8 +1267,7 @@ mod tests {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             "namespace".into(),
@@ -1700,7 +1699,6 @@ mod tests {
             up_to_date: Vec::new(),
             needs_sync: Vec::new(),
             cloud_only_count: 1,
-            other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
         }));
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
             CloudBackupWalletItem {

@@ -18,6 +18,9 @@ pub(crate) struct DetailRefreshClaim {
 pub(crate) struct DetailResultClaim(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct OtherBackupsScanClaim(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DetailRefreshPlan {
     Start(DetailRefreshClaim),
     Wait { owner: u64, delay: Duration },
@@ -148,6 +151,8 @@ pub(super) struct DetailWorkflow {
     runtime_passkey_authorization: Option<RuntimePasskeyAuthorization>,
     next_result_generation: u64,
     newest_result_generation: Option<u64>,
+    other_backups_owner: u64,
+    other_backups_requested: bool,
 }
 
 impl Default for DetailWorkflow {
@@ -159,17 +164,44 @@ impl Default for DetailWorkflow {
             runtime_passkey_authorization: None,
             next_result_generation: 0,
             newest_result_generation: None,
+            other_backups_owner: 0,
+            other_backups_requested: false,
         }
     }
 }
 
 impl DetailWorkflow {
     pub(super) fn open(&mut self) {
+        if !self.refresh.is_open {
+            self.other_backups_owner = self.other_backups_owner.wrapping_add(1);
+            self.other_backups_requested = false;
+        }
         self.refresh.open();
     }
 
     pub(super) fn close(&mut self) {
         self.refresh.close();
+        self.other_backups_owner = self.other_backups_owner.wrapping_add(1);
+        self.other_backups_requested = false;
+    }
+
+    pub(super) fn request_other_backups_scan(&mut self) -> Option<OtherBackupsScanClaim> {
+        if self.other_backups_requested {
+            return None;
+        }
+
+        self.other_backups_requested = true;
+        Some(OtherBackupsScanClaim(self.other_backups_owner))
+    }
+
+    pub(super) fn restart_other_backups_scan(&mut self) -> OtherBackupsScanClaim {
+        self.other_backups_owner = self.other_backups_owner.wrapping_add(1);
+        self.other_backups_requested = false;
+        self.request_other_backups_scan().expect("reset other-backups scan must admit one request")
+    }
+
+    pub(super) fn is_other_backups_scan_active(&self, claim: OtherBackupsScanClaim) -> bool {
+        self.refresh.is_open && claim.0 == self.other_backups_owner
     }
 
     pub(super) fn request_refresh(&mut self) -> DetailRefreshPlan {
