@@ -656,15 +656,16 @@ enum WalletManagerPreview {
     }
 
     private func applyWalletMetadataDelta(_ delta: WalletMetadataDelta) {
-        guard applyUserMetadataDelta(delta)
-            || applyInternalMetadataDelta(delta)
-            || applyLedgerMetadataDelta(delta)
-        else {
-            preconditionFailure("Unhandled wallet metadata delta")
-        }
+        let didApply = tryApplyUserMetadataDelta(delta)
+            || tryApplyInternalMetadataDelta(delta)
+            || tryApplyLedgerMetadataDelta(delta)
+
+        guard !didApply else { return }
+
+        logger.error("Unhandled wallet metadata delta: \(delta)")
     }
 
-    private func applyUserMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
+    private func tryApplyUserMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
         switch delta {
         case let .name(name):
             walletMetadata.name = name
@@ -700,7 +701,7 @@ enum WalletManagerPreview {
         return true
     }
 
-    private func applyInternalMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
+    private func tryApplyInternalMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
         switch delta {
         case let .origin(origin):
             walletMetadata.origin = origin
@@ -724,7 +725,7 @@ enum WalletManagerPreview {
         return true
     }
 
-    private func applyLedgerMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
+    private func tryApplyLedgerMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
         switch delta {
         case let .addressType(addressType):
             walletMetadata.addressType = addressType

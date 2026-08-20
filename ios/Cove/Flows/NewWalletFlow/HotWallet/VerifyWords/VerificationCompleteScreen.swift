@@ -46,8 +46,16 @@ struct VerificationCompleteScreen: View {
                 } else {
                     app.resetRoute(to: Route.selectedWallet(manager.id))
                 }
+            } catch is CancellationError {
+                return
             } catch {
                 Log.error("Error marking wallet as verified: \(error)")
+                app.alertState = .init(
+                    .general(
+                        title: "Verification Failed",
+                        message: "Cove could not complete wallet verification. Try again."
+                    )
+                )
             }
         }
     }

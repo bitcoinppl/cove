@@ -76,6 +76,7 @@ fun VerificationCompleteScreen(
                 throw e
             } catch (e: Exception) {
                 Log.e("VerificationComplete", "error marking wallet as verified", e)
+                snackbarHostState.showSnackbar("Cove could not complete wallet verification. Try again.")
             }
         }
     }

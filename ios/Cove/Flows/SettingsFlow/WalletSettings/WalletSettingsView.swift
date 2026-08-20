@@ -109,6 +109,12 @@ struct WalletSettingsView: View {
                 return
             } catch {
                 Log.error("Unable to delete wallet: \(error)")
+                app.alertState = .init(
+                    .general(
+                        title: "Unable to Delete Wallet",
+                        message: "Cove could not delete this wallet. Try again."
+                    )
+                )
             }
         }
     }

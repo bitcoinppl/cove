@@ -72,9 +72,10 @@ fun WalletSettingsScreen(
     val finalDeleteButtonTitle = if (app.cloudBackupManager.isCloudBackupEnabled) "Delete" else "Delete Forever"
 
     fun deleteWallet() {
+        val deletion = manager.deleteWalletInOwnerScope()
         scope.launch {
             try {
-                manager.deleteWallet()
+                deletion.await().getOrThrow()
                 app.popRoute()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
