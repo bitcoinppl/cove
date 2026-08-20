@@ -2,6 +2,7 @@ pub(crate) mod addressing;
 pub mod amount_display;
 pub mod balance;
 pub(crate) mod builder;
+pub(crate) mod deletion;
 pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
@@ -329,10 +330,15 @@ impl WalletAddressType {
 // delete wallet filestore / sqlite store, wallet data database, and address
 // switch journals owned by the wallet
 pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
+    crate::wallet::addressing::remove_address_switch_journals(wallet_id)
+        .context("unable to delete address switch recovery data")?;
+    remove_wallet_specific_artifacts(wallet_id)
+}
+
+fn remove_wallet_specific_artifacts(wallet_id: &WalletId) -> eyre::Result<()> {
     BdkStore::delete_wallet_stores(wallet_id)?;
     crate::database::wallet_data::delete_database(wallet_id)
         .context("unable to delete wallet data database")?;
-    crate::wallet::addressing::remove_address_switch_journals(wallet_id);
 
     Ok(())
 }

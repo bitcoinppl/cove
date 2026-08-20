@@ -101,6 +101,8 @@ pub enum AppError {
     FeesError(String),
     #[error("wallet selection error: {0}")]
     WalletSelection(String),
+    #[error("wallet deletion error: {0}")]
+    WalletDeletion(String),
 }
 
 type Error = AppError;
@@ -552,19 +554,11 @@ impl FfiApp {
     }
 
     /// Delete a wallet with a corrupted database, cleaning up all associated data
-    pub fn delete_corrupted_wallet(&self, id: WalletId) {
+    pub fn delete_corrupted_wallet(&self, id: WalletId) -> Result<(), Error> {
         let database = Database::global();
-        let keychain = Keychain::global();
-
-        if let Err(error) = database.wallets.delete(&id) {
-            error!("Unable to delete corrupted wallet from database: {error}");
-        }
-
-        keychain.delete_wallet_items(&id);
-
-        if let Err(error) = crate::wallet::delete_wallet_specific_data(&id) {
-            error!("Unable to delete wallet persisted data: {error}");
-        }
+        crate::wallet::deletion::WalletDeletion::new()
+            .delete(&id)
+            .map_err_str(AppError::WalletDeletion)?;
 
         Updater::send_update(AppMessage::ClearCachedWalletManager(id.clone()));
 
@@ -583,30 +577,21 @@ impl FfiApp {
         } else {
             self.load_and_reset_default_route(Route::NewWallet(Default::default()));
         }
+
+        Ok(())
     }
 
     /// DANGER: This will wipe all wallet data on this device
-    pub fn dangerous_wipe_all_data(&self) {
+    pub fn dangerous_wipe_all_data(&self) -> Result<(), Error> {
         let database = Database::global();
-        let keychain = Keychain::global();
-
         let wallets = Database::global().wallets().all().unwrap_or_default();
+        let wipe = crate::wallet::deletion::WalletDeletion::new()
+            .prepare_full_wipe()
+            .map_err_str(AppError::WalletDeletion)?;
 
         for wallet in wallets {
             let wallet_id = &wallet.id;
-
-            // delete the wallet from the database
-            if let Err(error) = database.wallets.delete(wallet_id) {
-                error!("Unable to delete wallet from database: {error}");
-            }
-
-            // delete the secret key, xpub and public descriptor from the keychain
-            keychain.delete_wallet_items(wallet_id);
-
-            // delete the wallet persisted bdk data
-            if let Err(error) = crate::wallet::delete_wallet_specific_data(wallet_id) {
-                error!("Unable to delete wallet persisted bdk data: {error}");
-            }
+            wipe.delete(wallet_id);
 
             Updater::send_update(AppMessage::ClearCachedWalletManager(wallet_id.clone()));
         }
@@ -616,6 +601,8 @@ impl FfiApp {
         }
 
         database.dangerous_reset_all_data();
+
+        Ok(())
     }
 
     /// Frontend calls this method to send events to the rust application logic

@@ -3750,7 +3750,10 @@ mod tests {
 
         // the journal stays with its backup so the next bootstrap can retry
         let journal_directories =
-            crate::wallet::addressing::wallet_switch_journal_directories(&metadata.id);
+            crate::wallet::addressing::test_support::wallet_switch_journal_directories(
+                &metadata.id,
+            )
+            .expect("address switch journal directories are read");
         assert_eq!(journal_directories.len(), 1, "the address switch journal remains");
         let journal_path = journal_directories[0].join("journal.json");
         let journal = std::fs::read_to_string(&journal_path).expect("journal is readable");
@@ -3789,7 +3792,11 @@ mod tests {
             .expect("database reinitializes without address switch recovery");
 
         assert_eq!(
-            crate::wallet::addressing::wallet_switch_journal_directories(&metadata.id).len(),
+            crate::wallet::addressing::test_support::wallet_switch_journal_directories(
+                &metadata.id
+            )
+            .expect("address switch journal directories are read")
+            .len(),
             1,
             "database reinit leaves the journal for bootstrap-owned recovery"
         );

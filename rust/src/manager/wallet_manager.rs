@@ -320,6 +320,9 @@ pub enum WalletManagerError {
     #[error("operation is unavailable for a preview wallet")]
     PreviewOperationUnavailable,
 
+    #[error("unable to delete wallet: {0}")]
+    DeleteWalletError(String),
+
     #[error("unable to retrieve the secret words for the wallet {0}")]
     SecretRetrievalError(#[from] KeychainError),
 

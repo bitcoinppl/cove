@@ -6,9 +6,11 @@ use crate::{
         reconcile::{Update, Updater},
     },
     database::Database,
-    keychain::Keychain,
     router::Route,
-    wallet::metadata::{WalletMetadata, WalletType},
+    wallet::{
+        deletion::WalletDeletion,
+        metadata::{WalletMetadata, WalletType},
+    },
 };
 use act_zero::{Actor, Addr, AddrLike as _, call};
 use cove_util::result_ext::ResultExt as _;
@@ -31,18 +33,7 @@ impl RustWalletManager {
         self.shutdown_actors_and_wait().await?;
 
         let database = Database::global();
-        let keychain = Keychain::global();
-
-        // delete the wallet from the database
-        database.wallets.delete(&wallet_id)?;
-
-        // delete the secret key, xpub and public descriptor from the keychain
-        keychain.delete_wallet_items(&wallet_id);
-
-        // delete the wallet persisted bdk data
-        if let Err(error) = crate::wallet::delete_wallet_specific_data(&wallet_id) {
-            error!("Unable to delete wallet persisted bdk data and wallet data database: {error}");
-        }
+        WalletDeletion::new().delete(&wallet_id).map_err_str(Error::DeleteWalletError)?;
 
         Updater::send_update(Update::ClearCachedWalletManager(wallet_id.clone()));
 

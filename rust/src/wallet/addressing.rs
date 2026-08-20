@@ -464,39 +464,87 @@ fn new_switch_directory(wallet_id: &WalletId) -> Result<PathBuf, WalletError> {
     Ok(directory)
 }
 
-fn switch_directory_root() -> PathBuf {
+/// Root directory for durable address-switch journals
+pub(crate) fn switch_directory_root() -> PathBuf {
     ROOT_DATA_DIR.join(ADDRESS_SWITCH_DIRECTORY)
-}
-
-/// Leftover switch journal directories owned by `wallet_id`
-pub(crate) fn wallet_switch_journal_directories(wallet_id: &WalletId) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(switch_directory_root()) else {
-        return Vec::new();
-    };
-
-    entries
-        .flatten()
-        .filter(|entry| matches!(entry.file_type(), Ok(file_type) if file_type.is_dir()))
-        .filter(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| journal_directory_belongs_to_wallet(name, wallet_id.as_str()))
-        })
-        .map(|entry| entry.path())
-        .collect()
 }
 
 /// Remove leftover switch journals of a wallet whose on-disk data is being deleted
 ///
 /// A deleted wallet can no longer complete or roll back a switch, so its journals
 /// must not survive to the next bootstrap recovery
-pub(crate) fn remove_address_switch_journals(wallet_id: &WalletId) {
-    for path in wallet_switch_journal_directories(wallet_id) {
-        if let Err(error) = fs::remove_dir_all(&path) {
-            warn!(%error, path = %path.display(), "failed to remove address switch journal of a deleted wallet");
+pub(crate) fn remove_address_switch_journals(wallet_id: &WalletId) -> std::io::Result<()> {
+    remove_address_switch_journals_in(&switch_directory_root(), wallet_id)
+}
+
+/// Remove and durably invalidate every address-switch journal under `root`
+pub(crate) fn remove_all_address_switch_journals_in(root: &Path) -> std::io::Result<()> {
+    match fs::remove_dir_all(root) {
+        Ok(()) => sync_directory(root.parent().expect("switch directory has a parent")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = root.parent().expect("switch directory has a parent");
+            match sync_directory(parent) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error),
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Remove and durably invalidate journals owned by `wallet_id` under `root`
+pub(crate) fn remove_address_switch_journals_in(
+    root: &Path,
+    wallet_id: &WalletId,
+) -> std::io::Result<()> {
+    let directories = wallet_switch_journal_directories_in(root, wallet_id)?;
+    if directories.is_empty() {
+        return match sync_directory(root) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        };
+    }
+
+    for path in directories {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
         }
     }
+
+    sync_directory(root)
+}
+
+fn wallet_switch_journal_directories_in(
+    root: &Path,
+    wallet_id: &WalletId,
+) -> std::io::Result<Vec<PathBuf>> {
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    let mut directories = Vec::new();
+
+    for entry in entries {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let belongs_to_wallet = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| journal_directory_belongs_to_wallet(name, wallet_id.as_str()));
+        if belongs_to_wallet {
+            directories.push(entry.path());
+        }
+    }
+
+    Ok(directories)
 }
 
 fn journal_directory_belongs_to_wallet(directory_name: &str, wallet_id: &str) -> bool {
@@ -996,6 +1044,17 @@ fn address_type_switch_metadata_from_descriptors(
             .fingerprint()
             .map(|fingerprint| Arc::new(fingerprint.into())),
         origin: descriptors.origin().ok(),
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn wallet_switch_journal_directories(
+        wallet_id: &WalletId,
+    ) -> std::io::Result<Vec<PathBuf>> {
+        wallet_switch_journal_directories_in(&switch_directory_root(), wallet_id)
     }
 }
 
