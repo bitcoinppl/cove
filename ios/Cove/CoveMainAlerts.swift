@@ -207,7 +207,16 @@ private struct CorruptedWalletActions: View {
     var body: some View {
         Button("Delete Wallet", role: .destructive) {
             app.alertState = .none
-            app.rust.deleteCorruptedWallet(id: walletId)
+            do {
+                try app.rust.deleteCorruptedWallet(id: walletId)
+            } catch {
+                app.alertState = .init(
+                    .general(
+                        title: "Unable to Delete Wallet",
+                        message: "Cove could not delete this wallet. Try again."
+                    )
+                )
+            }
         }
 
         Button("Cancel", role: .cancel) {

@@ -717,8 +717,19 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun deleteCorruptedWallet(id: WalletId) {
-        withRust {
-            deleteCorruptedWallet(id)
+        try {
+            withRust {
+                deleteCorruptedWallet(id)
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Unable to delete corrupted wallet", e)
+            alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Unable to Delete Wallet",
+                        message = "Cove could not delete this wallet. Try again.",
+                    ),
+                )
         }
     }
 

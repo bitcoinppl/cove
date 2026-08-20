@@ -116,7 +116,12 @@ enum UnlockMode {
         // check if the entered pin is a wipeDataPin
         // if so wipe the data
         if checkWipeDataPin(pin) {
-            AppManager.shared.rust.dangerousWipeAllData()
+            do {
+                try AppManager.shared.rust.dangerousWipeAllData()
+            } catch {
+                logger.error("Failed to wipe all data: \(error)")
+                return .locked
+            }
 
             // reset auth maanger
             rust = RustAuthManager()
