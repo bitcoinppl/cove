@@ -17,9 +17,12 @@ struct TapSignerConfirmPinView: View {
     // private
     @State private var confirmPin = ""
     @State private var errorMessage: String?
+    @State private var isSubmitting = false
     @FocusState private var isFocused
 
     private func checkPin() {
+        guard !isSubmitting else { return }
+
         if let inputError = tapSignerCvcInputError(value: confirmPin) {
             errorMessage = inputError.errorDescription
             return
@@ -55,12 +58,15 @@ struct TapSignerConfirmPinView: View {
         }
 
         let nfc = manager.getOrCreateNfc(args.tapSigner)
+        isSubmitting = true
 
         Task {
             let response = await nfc.setupTapSigner(
                 factoryPin: args.startingPin, newPin: args.newPin, chainCode: chainCodeBytes
             )
             await MainActor.run {
+                isSubmitting = false
+
                 switch response {
                 case let .success(.complete(c)):
                     manager.resetRoute(to: .setupSuccess(args.tapSigner, c))
@@ -87,11 +93,15 @@ struct TapSignerConfirmPinView: View {
 
     private func changeTapSignerPin() {
         let nfc = manager.getOrCreateNfc(args.tapSigner)
+        isSubmitting = true
+
         Task {
             let response = await nfc.changePin(
                 currentPin: args.startingPin, newPin: args.newPin
             )
             await MainActor.run {
+                isSubmitting = false
+
                 switch response {
                 case .success:
                     clearSensitiveState()
@@ -131,7 +141,8 @@ struct TapSignerConfirmPinView: View {
             ),
             submitTitle: "Continue",
             errorMessage: errorMessage,
-            submitAction: checkPin
+            submitAction: checkPin,
+            isSubmitting: isSubmitting
         )
         .onAppear(perform: resetPin)
         .onDisappear(perform: clearSensitiveState)
@@ -145,12 +156,14 @@ struct TapSignerConfirmPinView: View {
     private func resetPin() {
         confirmPin = ""
         errorMessage = nil
+        isSubmitting = false
         isFocused = true
     }
 
     private func clearSensitiveState() {
         confirmPin = ""
         errorMessage = nil
+        isSubmitting = false
         isFocused = false
     }
 }
