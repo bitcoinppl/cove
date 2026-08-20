@@ -1151,9 +1151,13 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_create_transport_error_from_code(
     ): Short
-    external fun uniffi_cove_checksum_func_is_valid_chain_code(
+    external fun uniffi_cove_checksum_func_tap_signer_chain_code_from_hex(
+    ): Short
+    external fun uniffi_cove_checksum_func_tap_signer_chain_code_validation_message(
     ): Short
     external fun uniffi_cove_checksum_func_create_tap_signer_reader(
+    ): Short
+    external fun uniffi_cove_checksum_func_resolve_tap_signer_command(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignerresponsebackupresponse(
     ): Short
@@ -1170,6 +1174,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_func_tapsignersetupcompletenew(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignersetupretrycontinuecmd(
+    ): Short
+    external fun uniffi_cove_checksum_func_tap_signer_cvc_validation_message(
     ): Short
     external fun uniffi_cove_checksum_func_transaction_preview_confirmed_new(
     ): Short
@@ -1308,8 +1314,6 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_backupmanager_export(
     ): Short
     external fun uniffi_cove_checksum_method_backupmanager_generate_password(
-    ): Short
-    external fun uniffi_cove_checksum_method_backupmanager_importbackup(
     ): Short
     external fun uniffi_cove_checksum_method_backupmanager_importprepared(
     ): Short
@@ -1905,21 +1909,9 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_id(
     ): Short
-    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_backup(
-    ): Short
-    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_change(
-    ): Short
-    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_derive(
-    ): Short
     external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_message(
     ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_last_response(
-    ): Short
     external fun uniffi_cove_checksum_method_tapsignerreader_run(
-    ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_setup(
-    ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_sign(
     ): Short
     external fun uniffi_cove_checksum_method_tapsignersetupcontinuation_error(
     ): Short
@@ -2403,8 +2395,6 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_backupmanager_generate_password(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_backupmanager_importbackup(`ptr`: Long,`data`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
-    ): Long
     external fun uniffi_cove_fn_method_backupmanager_importprepared(`ptr`: Long,`preparation`: Long,`approval`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_backupmanager_is_password_valid(`ptr`: Long,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3259,25 +3249,13 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_backup(`ptr`: Long,`cvc`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
-    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_change(`ptr`: Long,`currentCvc`: Long,`newCvc`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
-    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_derive(`ptr`: Long,`cvc`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
     external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_message(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_tapsignerreader_last_response(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignerreader_run(`ptr`: Long,
-    ): Long
-    external fun uniffi_cove_fn_method_tapsignerreader_setup(`ptr`: Long,`cmd`: Long,
-    ): Long
-    external fun uniffi_cove_fn_method_tapsignerreader_sign(`ptr`: Long,`psbt`: Long,`cvc`: Long,
     ): Long
     external fun uniffi_cove_fn_clone_tapsignersetupcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -3823,10 +3801,14 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_is_valid_chain_code(`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
+    external fun uniffi_cove_fn_func_tap_signer_chain_code_from_hex(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_tap_signer_chain_code_validation_message(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_create_tap_signer_reader(`transport`: Long,`cmd`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_cove_fn_func_resolve_tap_signer_command(`cmd`: RustBuffer.ByValue,`pending`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignerresponsebackupresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignerresponsechangeresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3842,6 +3824,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_func_tapsignersetupcompletenew(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignersetupretrycontinuecmd(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_tap_signer_cvc_validation_message(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_transaction_preview_confirmed_new(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4114,10 +4098,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 20311.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_is_valid_chain_code() != 39056.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tap_signer_chain_code_from_hex() != 5668.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_tap_signer_chain_code_validation_message() != 61474.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_create_tap_signer_reader() != 3262.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_resolve_tap_signer_command() != 2385.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tapsignerresponsebackupresponse() != 35822.toShort()) {
@@ -4142,6 +4132,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tapsignersetupretrycontinuecmd() != 41835.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_tap_signer_cvc_validation_message() != 60434.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 46336.toShort()) {
@@ -4351,9 +4344,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_backupmanager_generate_password() != 46391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_importbackup() != 60835.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_backupmanager_importprepared() != 53980.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4381,7 +4371,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_converter_remove_fiat_suffix() != 8821.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 25988.toShort()) {
+    if (lib.uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 1221.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_database_diagnostics_reports() != 32801.toShort()) {
@@ -5245,28 +5235,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_id() != 10770.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_backup() != 27295.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_change() != 3346.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_matches_derive() != 26723.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_message() != 38050.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_last_response() != 23593.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_tapsignerreader_run() != 44034.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_setup() != 31009.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_sign() != 55383.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_tapsignersetupcontinuation_error() != 24487.toShort()) {
@@ -7895,8 +7867,6 @@ public interface BackupManagerInterface {
      */
     fun `generatePassword`(): kotlin.String
 
-    suspend fun `importBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String): BackupImportReport
-
     /**
      * Consume a preparation and optional one-use approval to import the backup
      */
@@ -8114,29 +8084,6 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
     )
     }
 
-
-
-    @Throws(BackupException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `importBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String) : BackupImportReport {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_backupmanager_importbackup(
-                uniffiHandle,
-
-        FfiConverterByteArray.lower(`data`),
-        FfiConverterString.lower(`password`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeBackupImportReport.lift(it) },
-        // Error FFI converter
-        BackupException.ErrorHandler,
-    )
-    }
 
 
     /**
@@ -11181,10 +11128,11 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
         }
     }
 
-    override fun `dangerousResetAllData`()
+
+    @Throws(DatabaseException::class)override fun `dangerousResetAllData`()
         =
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_database_dangerous_reset_all_data(
         it,
         _status)
@@ -27279,21 +27227,6 @@ public interface TapSignerOperationContinuationInterface {
     fun `id`(): kotlin.String
 
     /**
-     * Return whether this continuation stores the supplied CVC for a backup
-     */
-    fun `matchesBackup`(`cvc`: TapSignerCvc): kotlin.Boolean
-
-    /**
-     * Return whether this continuation stores both supplied CVCs for a change
-     */
-    fun `matchesChange`(`currentCvc`: TapSignerCvc, `newCvc`: TapSignerCvc): kotlin.Boolean
-
-    /**
-     * Return whether this continuation stores the supplied CVC for derivation
-     */
-    fun `matchesDerive`(`cvc`: TapSignerCvc): kotlin.Boolean
-
-    /**
      * Return a safe user-facing description of the continuation stage
      */
     fun `message`(): kotlin.String
@@ -27447,58 +27380,6 @@ open class TapSignerOperationContinuation: Disposable, AutoCloseable, TapSignerO
     UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_id(
         it,
         _status)
-}
-    }
-    )
-    }
-
-
-
-    /**
-     * Return whether this continuation stores the supplied CVC for a backup
-     */override fun `matchesBackup`(`cvc`: TapSignerCvc): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_backup(
-        it,
-
-        FfiConverterTypeTapSignerCvc.lower(`cvc`),_status)
-}
-    }
-    )
-    }
-
-
-
-    /**
-     * Return whether this continuation stores both supplied CVCs for a change
-     */override fun `matchesChange`(`currentCvc`: TapSignerCvc, `newCvc`: TapSignerCvc): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_change(
-        it,
-
-        FfiConverterTypeTapSignerCvc.lower(`currentCvc`),
-        FfiConverterTypeTapSignerCvc.lower(`newCvc`),_status)
-}
-    }
-    )
-    }
-
-
-
-    /**
-     * Return whether this continuation stores the supplied CVC for derivation
-     */override fun `matchesDerive`(`cvc`: TapSignerCvc): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_matches_derive(
-        it,
-
-        FfiConverterTypeTapSignerCvc.lower(`cvc`),_status)
 }
     }
     )
@@ -27661,24 +27542,9 @@ public object FfiConverterTypeTapSignerOperationContinuation: FfiConverter<TapSi
 public interface TapSignerReaderInterface {
 
     /**
-     * Get the latest retry or completion response
-     */
-    fun `lastResponse`(): TapSignerResponse?
-
-    /**
      * Execute the command supplied when this reader was created
      */
     suspend fun `run`(): TapSignerResponse
-
-    /**
-     * Start the setup process
-     */
-    suspend fun `setup`(`cmd`: SetupCmd): SetupCmdResponse
-
-    /**
-     * Sign a PSBT with a typed TAPSIGNER CVC
-     */
-    suspend fun `sign`(`psbt`: Psbt, `cvc`: TapSignerCvc): Psbt
 
     companion object
 }
@@ -27789,22 +27655,6 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
 
 
     /**
-     * Get the latest retry or completion response
-     */override fun `lastResponse`(): TapSignerResponse? {
-            return FfiConverterOptionalTypeTapSignerResponse.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_tapsignerreader_last_response(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
-
-    /**
      * Execute the command supplied when this reader was created
      */
     @Throws(TapSignerReaderException::class)
@@ -27822,57 +27672,6 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
         { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeTapSignerResponse.lift(it) },
-        // Error FFI converter
-        TapSignerReaderException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Start the setup process
-     */
-    @Throws(TapSignerReaderException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `setup`(`cmd`: SetupCmd) : SetupCmdResponse {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_tapsignerreader_setup(
-                uniffiHandle,
-
-        FfiConverterTypeSetupCmd.lower(`cmd`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeSetupCmdResponse.lift(it) },
-        // Error FFI converter
-        TapSignerReaderException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Sign a PSBT with a typed TAPSIGNER CVC
-     */
-    @Throws(TapSignerReaderException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `sign`(`psbt`: Psbt, `cvc`: TapSignerCvc) : Psbt {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_tapsignerreader_sign(
-                uniffiHandle,
-
-        FfiConverterTypePsbt.lower(`psbt`),
-        FfiConverterTypeTapSignerCvc.lower(`cvc`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
-        // lift function
-        { FfiConverterTypePsbt.lift(it) },
         // Error FFI converter
         TapSignerReaderException.ErrorHandler,
     )
@@ -38028,8 +37827,7 @@ sealed class AppInitException(message: String): kotlin.Exception(message) {
         class DatabaseVerificationFailed(message: String) : AppInitException(message)
 
     /**
-     * Bootstrap found interrupted work (restore or address-type switch) that
-     * needs recovery
+     * Bootstrap found an interrupted backup restore that needs recovery
      */
         class RecoveryRequired(message: String) : AppInitException(message)
 
@@ -58758,6 +58556,53 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
 
 
 
+/**
+ * How a requested TAPSIGNER command relates to a pending retry continuation
+ */
+
+enum class TapSignerCommandResolution {
+
+    /**
+     * No usable continuation applies: run the fresh command
+     */
+    FRESH,
+    /**
+     * The pending continuation resumes this exact command: send ContinueOperation
+     */
+    RESUME,
+    /**
+     * A different interrupted operation must finish or be cancelled first
+     */
+    PENDING_OPERATION_CONFLICT;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTapSignerCommandResolution: FfiConverterRustBuffer<TapSignerCommandResolution> {
+    override fun read(buf: ByteBuffer) = try {
+        TapSignerCommandResolution.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TapSignerCommandResolution) = 4UL
+
+    override fun write(value: TapSignerCommandResolution, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 
 
 /**
@@ -58952,24 +58797,6 @@ sealed class TapSignerReaderException: kotlin.Exception() {
     }
 
     /**
-     * A setup command was supplied after setup completed
-     */
-    class SetupAlreadyComplete(
-        ) : TapSignerReaderException() {
-        override val message
-            get() = ""
-    }
-
-    /**
-     * Another setup or mutating operation is already using this reader
-     */
-    class OperationInProgress(
-        ) : TapSignerReaderException() {
-        override val message
-            get() = ""
-    }
-
-    /**
      * The continuation was already claimed by an earlier attempt
      */
     class SetupContinuationAlreadyUsed(
@@ -59105,19 +58932,17 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 FfiConverterString.read(buf),
                 )
             5 -> TapSignerReaderException.NoCommand()
-            6 -> TapSignerReaderException.SetupAlreadyComplete()
-            7 -> TapSignerReaderException.OperationInProgress()
-            8 -> TapSignerReaderException.SetupContinuationAlreadyUsed()
-            9 -> TapSignerReaderException.ContinuationCardMismatch()
-            10 -> TapSignerReaderException.InvalidChainCodeLength(
+            6 -> TapSignerReaderException.SetupContinuationAlreadyUsed()
+            7 -> TapSignerReaderException.ContinuationCardMismatch()
+            8 -> TapSignerReaderException.InvalidChainCodeLength(
                 FfiConverterUInt.read(buf),
                 )
-            11 -> TapSignerReaderException.BackupLimitReached(
+            9 -> TapSignerReaderException.BackupLimitReached(
                 FfiConverterUInt.read(buf),
                 )
-            12 -> TapSignerReaderException.ManualRecoveryRequired()
-            13 -> TapSignerReaderException.BackupDataUnavailable()
-            14 -> TapSignerReaderException.Unknown(
+            10 -> TapSignerReaderException.ManualRecoveryRequired()
+            11 -> TapSignerReaderException.BackupDataUnavailable()
+            12 -> TapSignerReaderException.Unknown(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -59147,14 +58972,6 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 + FfiConverterString.allocationSize(value.v1)
             )
             is TapSignerReaderException.NoCommand -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
-            is TapSignerReaderException.SetupAlreadyComplete -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-            )
-            is TapSignerReaderException.OperationInProgress -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -59218,42 +59035,34 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 buf.putInt(5)
                 Unit
             }
-            is TapSignerReaderException.SetupAlreadyComplete -> {
+            is TapSignerReaderException.SetupContinuationAlreadyUsed -> {
                 buf.putInt(6)
                 Unit
             }
-            is TapSignerReaderException.OperationInProgress -> {
+            is TapSignerReaderException.ContinuationCardMismatch -> {
                 buf.putInt(7)
                 Unit
             }
-            is TapSignerReaderException.SetupContinuationAlreadyUsed -> {
-                buf.putInt(8)
-                Unit
-            }
-            is TapSignerReaderException.ContinuationCardMismatch -> {
-                buf.putInt(9)
-                Unit
-            }
             is TapSignerReaderException.InvalidChainCodeLength -> {
-                buf.putInt(10)
+                buf.putInt(8)
                 FfiConverterUInt.write(value.v1, buf)
                 Unit
             }
             is TapSignerReaderException.BackupLimitReached -> {
-                buf.putInt(11)
+                buf.putInt(9)
                 FfiConverterUInt.write(value.v1, buf)
                 Unit
             }
             is TapSignerReaderException.ManualRecoveryRequired -> {
-                buf.putInt(12)
+                buf.putInt(10)
                 Unit
             }
             is TapSignerReaderException.BackupDataUnavailable -> {
-                buf.putInt(13)
+                buf.putInt(11)
                 Unit
             }
             is TapSignerReaderException.Unknown -> {
-                buf.putInt(14)
+                buf.putInt(12)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -60333,19 +60142,6 @@ sealed class TransportException: kotlin.Exception() {
     }
 
     /**
-     * The card returned a status word that this version does not know
-     */
-    class UnknownStatusWord(
-
-        val `code`: kotlin.UShort,
-
-        val `detail`: kotlin.String
-        ) : TransportException() {
-        override val message
-            get() = "code=${ `code` }, detail=${ `detail` }"
-    }
-
-    /**
      * The card returned a protocol error code that this version does not know
      */
     class UnknownCardErrorCode(
@@ -60418,15 +60214,11 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
             7 -> TransportException.CvcChangeException(
                 FfiConverterString.read(buf),
                 )
-            8 -> TransportException.UnknownStatusWord(
+            8 -> TransportException.UnknownCardErrorCode(
                 FfiConverterUShort.read(buf),
                 FfiConverterString.read(buf),
                 )
-            9 -> TransportException.UnknownCardErrorCode(
-                FfiConverterUShort.read(buf),
-                FfiConverterString.read(buf),
-                )
-            10 -> TransportException.UnknownException(
+            9 -> TransportException.UnknownException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -60469,12 +60261,6 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
-            )
-            is TransportException.UnknownStatusWord -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterUShort.allocationSize(value.`code`)
-                + FfiConverterString.allocationSize(value.`detail`)
             )
             is TransportException.UnknownCardErrorCode -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -60527,20 +60313,14 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is TransportException.UnknownStatusWord -> {
+            is TransportException.UnknownCardErrorCode -> {
                 buf.putInt(8)
                 FfiConverterUShort.write(value.`code`, buf)
                 FfiConverterString.write(value.`detail`, buf)
                 Unit
             }
-            is TransportException.UnknownCardErrorCode -> {
-                buf.putInt(9)
-                FfiConverterUShort.write(value.`code`, buf)
-                FfiConverterString.write(value.`detail`, buf)
-                Unit
-            }
             is TransportException.UnknownException -> {
-                buf.putInt(10)
+                buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -63604,15 +63384,6 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
 
-    data class WalletMetadataDelta(
-        val v1: org.bitcoinppl.cove_core.WalletMetadataDelta) : WalletManagerReconcileMessage()
-
-    {
-
-
-        companion object
-    }
-
     data class WalletBalanceChanged(
         val v1: org.bitcoinppl.cove_core.Balance) : WalletManagerReconcileMessage()
 
@@ -63786,13 +63557,6 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
 
             }
-            is WalletManagerReconcileMessage.WalletMetadataDelta -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
 
     Disposable.destroy(
@@ -63918,44 +63682,41 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             9 -> WalletManagerReconcileMessage.WalletMetadataChanged(
                 FfiConverterTypeWalletMetadata.read(buf),
                 )
-            10 -> WalletManagerReconcileMessage.WalletMetadataDelta(
-                FfiConverterTypeWalletMetadataDelta.read(buf),
-                )
-            11 -> WalletManagerReconcileMessage.WalletBalanceChanged(
+            10 -> WalletManagerReconcileMessage.WalletBalanceChanged(
                 FfiConverterTypeBalance.read(buf),
                 )
-            12 -> WalletManagerReconcileMessage.WalletException(
+            11 -> WalletManagerReconcileMessage.WalletException(
                 FfiConverterTypeWalletManagerError.read(buf),
                 )
-            13 -> WalletManagerReconcileMessage.UnknownError(
+            12 -> WalletManagerReconcileMessage.UnknownError(
                 FfiConverterString.read(buf),
                 )
-            14 -> WalletManagerReconcileMessage.WalletScannerResponse(
+            13 -> WalletManagerReconcileMessage.WalletScannerResponse(
                 FfiConverterTypeScannerResponse.read(buf),
                 )
-            15 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
-            16 -> WalletManagerReconcileMessage.SendFlowException(
+            14 -> WalletManagerReconcileMessage.UnsignedTransactionsChanged
+            15 -> WalletManagerReconcileMessage.SendFlowException(
                 FfiConverterTypeSendFlowErrorAlert.read(buf),
                 )
-            17 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
+            16 -> WalletManagerReconcileMessage.HotWalletKeyMissing(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            18 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
+            17 -> WalletManagerReconcileMessage.ReceiveAddressUpdated(
                 FfiConverterTypeReceiveAddressState.read(buf),
                 )
-            19 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
+            18 -> WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated(
                 FfiConverterTypeReceiveAddressPresentation.read(buf),
                 )
-            20 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
+            19 -> WalletManagerReconcileMessage.ReceiveAddressLoadingChanged(
                 FfiConverterBoolean.read(buf),
                 )
-            21 -> WalletManagerReconcileMessage.ReceiveAddressError(
+            20 -> WalletManagerReconcileMessage.ReceiveAddressError(
                 FfiConverterString.read(buf),
                 )
-            22 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
+            21 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
-            23 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
+            22 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -64022,13 +63783,6 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             (
                 4UL
                 + FfiConverterTypeWalletMetadata.allocationSize(value.v1)
-            )
-        }
-        is WalletManagerReconcileMessage.WalletMetadataDelta -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeWalletMetadataDelta.allocationSize(value.v1)
             )
         }
         is WalletManagerReconcileMessage.WalletBalanceChanged -> {
@@ -64169,646 +63923,67 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 FfiConverterTypeWalletMetadata.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerReconcileMessage.WalletMetadataDelta -> {
-                buf.putInt(10)
-                FfiConverterTypeWalletMetadataDelta.write(value.v1, buf)
-                Unit
-            }
             is WalletManagerReconcileMessage.WalletBalanceChanged -> {
-                buf.putInt(11)
+                buf.putInt(10)
                 FfiConverterTypeBalance.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletException -> {
-                buf.putInt(12)
+                buf.putInt(11)
                 FfiConverterTypeWalletManagerError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UnknownError -> {
-                buf.putInt(13)
+                buf.putInt(12)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 FfiConverterTypeScannerResponse.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.UnsignedTransactionsChanged -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 Unit
             }
             is WalletManagerReconcileMessage.SendFlowException -> {
-                buf.putInt(16)
+                buf.putInt(15)
                 FfiConverterTypeSendFlowErrorAlert.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.HotWalletKeyMissing -> {
-                buf.putInt(17)
+                buf.putInt(16)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressUpdated -> {
-                buf.putInt(18)
+                buf.putInt(17)
                 FfiConverterTypeReceiveAddressState.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressPresentationUpdated -> {
-                buf.putInt(19)
+                buf.putInt(18)
                 FfiConverterTypeReceiveAddressPresentation.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressLoadingChanged -> {
-                buf.putInt(20)
+                buf.putInt(19)
                 FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressError -> {
-                buf.putInt(21)
+                buf.putInt(20)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.ReceiveAddressClosed -> {
-                buf.putInt(22)
+                buf.putInt(21)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
             is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
-                buf.putInt(23)
-                Unit
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-}
-
-
-
-
-
-/**
- * A targeted update for ongoing wallet metadata reconciliation
- *
- * The full metadata record is reserved for bootstrap and repair snapshots. Ongoing changes use
- * these deltas so a platform manager cannot overwrite a field changed by another actor message
- */
-sealed class WalletMetadataDelta: Disposable  {
-
-    data class Name(
-        val v1: kotlin.String) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class Color(
-        val v1: org.bitcoinppl.cove_core.WalletColor) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class Verified(
-        val v1: kotlin.Boolean) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class WalletType(
-        val v1: org.bitcoinppl.cove_core.WalletType) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class AddressType(
-        val v1: org.bitcoinppl.cove_core.WalletAddressType) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class SelectedUnit(
-        val v1: org.bitcoinppl.cove_core.types.BitcoinUnit) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class FiatOrBtc(
-        val v1: org.bitcoinppl.cove_core.FiatOrBtc) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class SensitiveVisible(
-        val v1: kotlin.Boolean) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class DetailsExpanded(
-        val v1: kotlin.Boolean) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class ShowLabels(
-        val v1: kotlin.Boolean) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class DiscoveryState(
-        val v1: org.bitcoinppl.cove_core.DiscoveryState) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class Origin(
-        val v1: kotlin.String?) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class MasterFingerprint(
-        val v1: org.bitcoinppl.cove_core.Fingerprint?) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class AddressIndex(
-        val v1: org.bitcoinppl.cove_core.types.AddressIndex?) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class LastScanFinished(
-        val v1: java.time.Duration?) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class LastHeightFetched(
-        val v1: org.bitcoinppl.cove_core.types.BlockSizeLast?) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-    data class PerformedFullScanAt(
-        val v1: kotlin.ULong?) : WalletMetadataDelta()
-
-    {
-
-
-        companion object
-    }
-
-
-
-    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
-    override fun destroy() {
-        when(this) {
-            is WalletMetadataDelta.Name -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.Color -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.Verified -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.WalletType -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.AddressType -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.SelectedUnit -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.FiatOrBtc -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.SensitiveVisible -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.DetailsExpanded -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.ShowLabels -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.DiscoveryState -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.Origin -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.MasterFingerprint -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.AddressIndex -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.LastScanFinished -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.LastHeightFetched -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is WalletMetadataDelta.PerformedFullScanAt -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
-    }
-
-
-
-
-
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeWalletMetadataDelta : FfiConverterRustBuffer<WalletMetadataDelta>{
-    override fun read(buf: ByteBuffer): WalletMetadataDelta {
-        return when(buf.getInt()) {
-            1 -> WalletMetadataDelta.Name(
-                FfiConverterString.read(buf),
-                )
-            2 -> WalletMetadataDelta.Color(
-                FfiConverterTypeWalletColor.read(buf),
-                )
-            3 -> WalletMetadataDelta.Verified(
-                FfiConverterBoolean.read(buf),
-                )
-            4 -> WalletMetadataDelta.WalletType(
-                FfiConverterTypeWalletType.read(buf),
-                )
-            5 -> WalletMetadataDelta.AddressType(
-                FfiConverterTypeWalletAddressType.read(buf),
-                )
-            6 -> WalletMetadataDelta.SelectedUnit(
-                FfiConverterTypeBitcoinUnit.read(buf),
-                )
-            7 -> WalletMetadataDelta.FiatOrBtc(
-                FfiConverterTypeFiatOrBtc.read(buf),
-                )
-            8 -> WalletMetadataDelta.SensitiveVisible(
-                FfiConverterBoolean.read(buf),
-                )
-            9 -> WalletMetadataDelta.DetailsExpanded(
-                FfiConverterBoolean.read(buf),
-                )
-            10 -> WalletMetadataDelta.ShowLabels(
-                FfiConverterBoolean.read(buf),
-                )
-            11 -> WalletMetadataDelta.DiscoveryState(
-                FfiConverterTypeDiscoveryState.read(buf),
-                )
-            12 -> WalletMetadataDelta.Origin(
-                FfiConverterOptionalString.read(buf),
-                )
-            13 -> WalletMetadataDelta.MasterFingerprint(
-                FfiConverterOptionalTypeFingerprint.read(buf),
-                )
-            14 -> WalletMetadataDelta.AddressIndex(
-                FfiConverterOptionalTypeAddressIndex.read(buf),
-                )
-            15 -> WalletMetadataDelta.LastScanFinished(
-                FfiConverterOptionalDuration.read(buf),
-                )
-            16 -> WalletMetadataDelta.LastHeightFetched(
-                FfiConverterOptionalTypeBlockSizeLast.read(buf),
-                )
-            17 -> WalletMetadataDelta.PerformedFullScanAt(
-                FfiConverterOptionalULong.read(buf),
-                )
-            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
-        }
-    }
-
-    override fun allocationSize(value: WalletMetadataDelta): ULong = when(value) {
-        is WalletMetadataDelta.Name -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.Color -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeWalletColor.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.Verified -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterBoolean.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.WalletType -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeWalletType.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.AddressType -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeWalletAddressType.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.SelectedUnit -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeBitcoinUnit.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.FiatOrBtc -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeFiatOrBtc.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.SensitiveVisible -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterBoolean.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.DetailsExpanded -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterBoolean.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.ShowLabels -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterBoolean.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.DiscoveryState -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeDiscoveryState.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.Origin -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalString.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.MasterFingerprint -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalTypeFingerprint.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.AddressIndex -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalTypeAddressIndex.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.LastScanFinished -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalDuration.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.LastHeightFetched -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalTypeBlockSizeLast.allocationSize(value.v1)
-            )
-        }
-        is WalletMetadataDelta.PerformedFullScanAt -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterOptionalULong.allocationSize(value.v1)
-            )
-        }
-    }
-
-    override fun write(value: WalletMetadataDelta, buf: ByteBuffer) {
-        when(value) {
-            is WalletMetadataDelta.Name -> {
-                buf.putInt(1)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.Color -> {
-                buf.putInt(2)
-                FfiConverterTypeWalletColor.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.Verified -> {
-                buf.putInt(3)
-                FfiConverterBoolean.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.WalletType -> {
-                buf.putInt(4)
-                FfiConverterTypeWalletType.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.AddressType -> {
-                buf.putInt(5)
-                FfiConverterTypeWalletAddressType.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.SelectedUnit -> {
-                buf.putInt(6)
-                FfiConverterTypeBitcoinUnit.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.FiatOrBtc -> {
-                buf.putInt(7)
-                FfiConverterTypeFiatOrBtc.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.SensitiveVisible -> {
-                buf.putInt(8)
-                FfiConverterBoolean.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.DetailsExpanded -> {
-                buf.putInt(9)
-                FfiConverterBoolean.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.ShowLabels -> {
-                buf.putInt(10)
-                FfiConverterBoolean.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.DiscoveryState -> {
-                buf.putInt(11)
-                FfiConverterTypeDiscoveryState.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.Origin -> {
-                buf.putInt(12)
-                FfiConverterOptionalString.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.MasterFingerprint -> {
-                buf.putInt(13)
-                FfiConverterOptionalTypeFingerprint.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.AddressIndex -> {
-                buf.putInt(14)
-                FfiConverterOptionalTypeAddressIndex.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.LastScanFinished -> {
-                buf.putInt(15)
-                FfiConverterOptionalDuration.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.LastHeightFetched -> {
-                buf.putInt(16)
-                FfiConverterOptionalTypeBlockSizeLast.write(value.v1, buf)
-                Unit
-            }
-            is WalletMetadataDelta.PerformedFullScanAt -> {
-                buf.putInt(17)
-                FfiConverterOptionalULong.write(value.v1, buf)
+                buf.putInt(22)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -67624,38 +66799,6 @@ public object FfiConverterOptionalTypeTapSignerCmd: FfiConverterRustBuffer<TapSi
 /**
  * @suppress
  */
-public object FfiConverterOptionalTypeTapSignerResponse: FfiConverterRustBuffer<TapSignerResponse?> {
-    override fun read(buf: ByteBuffer): TapSignerResponse? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeTapSignerResponse.read(buf)
-    }
-
-    override fun allocationSize(value: TapSignerResponse?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeTapSignerResponse.allocationSize(value)
-        }
-    }
-
-    override fun write(value: TapSignerResponse?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeTapSignerResponse.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeWalletBirthday: FfiConverterRustBuffer<WalletBirthday?> {
     override fun read(buf: ByteBuffer): WalletBirthday? {
         if (buf.get().toInt() == 0) {
@@ -69255,14 +68398,28 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
 
         /**
-         * Check whether a hexadecimal chain code decodes to exactly 32 bytes
-         */ fun `isValidChainCode`(`chainCode`: kotlin.String): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
+         * Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data
+         */ fun `tapSignerChainCodeFromHex`(`hex`: kotlin.String): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_is_valid_chain_code(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_chain_code_from_hex(
 
 
-        FfiConverterString.lower(`chainCode`),_status)
+        FfiConverterString.lower(`hex`),_status)
+}
+    )
+    }
+
+
+        /**
+         * User-facing validation message for a chain-code input, or None when it is valid
+         */ fun `tapSignerChainCodeValidationMessage`(`hex`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_tap_signer_chain_code_validation_message(
+
+
+        FfiConverterString.lower(`hex`),_status)
 }
     )
     }
@@ -69288,6 +68445,24 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         TapSignerReaderException.ErrorHandler,
     )
     }
+
+        /**
+         * Decide whether a command starts fresh or resumes the pending continuation
+         *
+         * The continuation may guard a mutation the card already applied, so a fresh
+         * command that does not match it is a conflict, never a silent replacement
+         */ fun `resolveTapSignerCommand`(`cmd`: TapSignerCmd, `pending`: TapSignerOperationContinuation): TapSignerCommandResolution {
+            return FfiConverterTypeTapSignerCommandResolution.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_resolve_tap_signer_command(
+
+
+        FfiConverterTypeTapSignerCmd.lower(`cmd`),
+        FfiConverterTypeTapSignerOperationContinuation.lower(`pending`),_status)
+}
+    )
+    }
+
  fun `tapSignerResponseBackupResponse`(`response`: TapSignerResponse): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
@@ -69372,6 +68547,20 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
 
         FfiConverterBoolean.lower(`preview`),_status)
+}
+    )
+    }
+
+
+        /**
+         * User-facing validation message for a CVC input, or None when it is valid
+         */ fun `tapSignerCvcValidationMessage`(`value`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_tap_signer_cvc_validation_message(
+
+
+        FfiConverterString.lower(`value`),_status)
 }
     )
     }
