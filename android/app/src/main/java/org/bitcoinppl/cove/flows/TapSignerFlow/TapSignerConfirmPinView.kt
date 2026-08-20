@@ -79,7 +79,6 @@ fun TapSignerConfirmPinView(
                 }
             } finally {
                 manager.endScan()
-                manager.clearSensitiveState()
                 confirmCvc = ""
                 isSubmitting = false
             }
@@ -142,17 +141,12 @@ fun TapSignerConfirmPinView(
                     if (validationError != null) validationError = null
                 },
                 label = "Confirm CVC",
-                testTag = "tapSignerConfirm.newCvc",
+                options =
+                    TapSignerCvcInputOptions(
+                        testTag = "tapSignerConfirm.newCvc",
+                        validationError = validationError,
+                    ),
             )
-
-            validationError?.let { message ->
-                Text(
-                    text = message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-            }
         }
 
         Button(

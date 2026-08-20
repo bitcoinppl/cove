@@ -30,8 +30,6 @@ class TapSignerManager(
     var initialRoute by mutableStateOf(initialRoute)
         private set
 
-    var enteredCvc: String? by mutableStateOf(null)
-
     // NFC scanning state
     var isScanning by mutableStateOf(false)
     var isTagDetected by mutableStateOf(false)
@@ -103,15 +101,12 @@ class TapSignerManager(
         if (path.isNotEmpty()) {
             path.removeAt(path.size - 1)
         }
-
-        clearSensitiveState()
     }
 
     fun resetRoute(to: org.bitcoinppl.cove_core.TapSignerRoute) {
         path.clear()
         initialRoute = to
         id = UUID.randomUUID()
-        clearSensitiveState()
     }
 
     fun operationCallbacks(): TapCardNfcManager.OperationCallbacks =
@@ -134,14 +129,9 @@ class TapSignerManager(
         }
     }
 
-    fun clearSensitiveState() {
-        enteredCvc = null
-    }
-
     fun close() {
         nfc?.close()
         nfc = null
         nfcFor = null
-        clearSensitiveState()
     }
 }

@@ -717,7 +717,7 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                 if error != nil {
                     logger.error("TapSigner APDU transmission failed")
                     continuation.resume(
-                        throwing: TransportError.UnknownError(
+                        throwing: TransportError.Transport(
                             "Unable to communicate with TapSigner, please try again"
                         )
                     )

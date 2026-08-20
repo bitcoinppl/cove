@@ -17,7 +17,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +47,7 @@ fun TapSignerSetupRetryView(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    var isSubmitting by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -89,11 +94,13 @@ fun TapSignerSetupRetryView(
 
         Button(
             onClick = {
+                if (isSubmitting) return@Button
+                isSubmitting = true
                 scope.launch {
-                    val nfc = manager.getOrCreateNfc(tapSigner)
-                    manager.beginScan("Hold your phone near the TapSigner to continue setup")
-
                     try {
+                        val nfc = manager.getOrCreateNfc(tapSigner)
+                        manager.beginScan("Hold your phone near the TapSigner to continue setup")
+
                         val nextResponse =
                             nfc.continueSetup(response, manager.operationCallbacks())
                         when (nextResponse) {
@@ -108,6 +115,9 @@ fun TapSignerSetupRetryView(
                         }
                     } catch (error: CancellationException) {
                         throw error
+                    } catch (error: TapSignerOperationRetryException) {
+                        manager.errorMessage =
+                            error.message ?: "Setup still needs another card scan"
                     } catch (_: Exception) {
                         app.sheetState = null
                         app.alertState =
@@ -118,12 +128,14 @@ fun TapSignerSetupRetryView(
                             )
                     } finally {
                         manager.endScan()
+                        isSubmitting = false
                     }
                 }
             },
+            enabled = !isSubmitting,
             modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupRetry.retry"),
         ) {
-            Text("Continue Setup")
+            Text(if (isSubmitting) "Working…" else "Continue Setup")
         }
     }
 }

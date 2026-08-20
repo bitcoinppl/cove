@@ -126,7 +126,7 @@ fun TapSignerStartingPinView(
                 value = factoryCvc,
                 onValueChange = { factoryCvc = it },
                 label = "Factory CVC",
-                testTag = "tapSignerStarting.factoryCvc",
+                options = TapSignerCvcInputOptions(testTag = "tapSignerStarting.factoryCvc"),
             )
 
             Button(

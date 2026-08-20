@@ -168,6 +168,29 @@ struct TapSignerCvcScreen<Header: View>: View {
     let submitTitle: String
     let errorMessage: String?
     let submitAction: () -> Void
+    let isSubmitting: Bool
+
+    init(
+        cvc: Binding<String>,
+        focus: FocusState<Bool>.Binding,
+        spacing: CGFloat,
+        header: Header,
+        description: TapSignerPinDescription,
+        submitTitle: String,
+        errorMessage: String?,
+        submitAction: @escaping () -> Void,
+        isSubmitting: Bool = false
+    ) {
+        _cvc = cvc
+        self.focus = focus
+        self.spacing = spacing
+        self.header = header
+        self.description = description
+        self.submitTitle = submitTitle
+        self.errorMessage = errorMessage
+        self.submitAction = submitAction
+        self.isSubmitting = isSubmitting
+    }
 
     var body: some View {
         ScrollView {
@@ -181,7 +204,10 @@ struct TapSignerCvcScreen<Header: View>: View {
                     .autocorrectionDisabled()
                     .keyboardType(.numberPad)
                     .submitLabel(.continue)
-                    .onSubmit(submitAction)
+                    .onSubmit {
+                        guard !isSubmitting else { return }
+                        submitAction()
+                    }
                     .padding()
                     .background(Color(.systemGray6))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -198,6 +224,7 @@ struct TapSignerCvcScreen<Header: View>: View {
                 Button(submitTitle, action: submitAction)
                     .buttonStyle(DarkButtonStyle())
                     .padding(.horizontal)
+                    .disabled(isSubmitting)
 
                 Spacer()
             }

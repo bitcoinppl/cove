@@ -105,7 +105,7 @@ fun TapSignerNewPinView(
                 value = newCvc,
                 onValueChange = { newCvc = it },
                 label = "New CVC",
-                testTag = "tapSignerNew.newCvc",
+                options = TapSignerCvcInputOptions(testTag = "tapSignerNew.newCvc"),
             )
         }
 

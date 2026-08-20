@@ -21,8 +21,8 @@ struct TapSignerImportSuccess: View {
 
     func saveWallet() {
         do {
-            let manager = try WalletManager(tapSigner: tapSigner, deriveInfo: deriveInfo)
-            walletId = manager.id
+            let walletManager = try WalletManager(tapSigner: tapSigner, deriveInfo: deriveInfo)
+            walletId = walletManager.id
         } catch {
             Log.error("Failed to save TapSigner wallet")
         }

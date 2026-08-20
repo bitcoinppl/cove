@@ -94,6 +94,9 @@ struct TapSignerConfirmPinView: View {
             await MainActor.run {
                 switch response {
                 case .success:
+                    clearSensitiveState()
+                    manager.cancel()
+                    app.sheetState = .none
                     app.alertState = .init(
                         .general(
                             title: "PIN Changed",

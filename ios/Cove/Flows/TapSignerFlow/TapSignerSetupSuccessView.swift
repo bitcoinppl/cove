@@ -20,14 +20,14 @@ struct TapSignerSetupSuccess: View {
 
     func saveWallet() {
         do {
-            let manager = try WalletManager(
+            let walletManager = try WalletManager(
                 tapSigner: tapSigner,
                 deriveInfo: setup.deriveInfo,
                 backup: setup.backup,
                 birthday: setup.birthday
             )
 
-            walletId = manager.id
+            walletId = walletManager.id
         } catch {
             Log.error("Failed to save TapSigner wallet")
         }

@@ -67,7 +67,6 @@ fun TapSignerEnterPinView(
     DisposableEffect(Unit) {
         onDispose {
             cvc = ""
-            manager.clearSensitiveState()
         }
     }
 
@@ -75,7 +74,6 @@ fun TapSignerEnterPinView(
         if (isSubmitting || !isValidCvc(cvc)) return
 
         isSubmitting = true
-        manager.enteredCvc = cvc
         scope.launch {
             try {
                 runAction(
@@ -88,7 +86,6 @@ fun TapSignerEnterPinView(
                 )
             } finally {
                 cvc = ""
-                manager.clearSensitiveState()
                 isSubmitting = false
             }
         }
@@ -142,7 +139,7 @@ fun TapSignerEnterPinView(
                 value = cvc,
                 onValueChange = { cvc = it },
                 label = "CVC",
-                testTag = "tapSignerEnter.cvc",
+                options = TapSignerCvcInputOptions(testTag = "tapSignerEnter.cvc"),
             )
         }
 
@@ -296,16 +293,30 @@ private suspend fun signAction(
     val error = result.exceptionOrNull()
 
     if (signedPsbt != null) {
-        val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
-        val record = db.getTxThrow(psbt.txId())
         val route =
-            org.bitcoinppl.cove_core.RouteFactory().sendConfirmSignedPsbt(
-                id = record.walletId(),
-                details = record.confirmDetails(),
-                psbt = signedPsbt,
-            )
-        app.sheetState = null
-        app.pushRoute(route)
+            try {
+                runCatchingCancellable("TapSignerEnterPin", "Failed to open signed PSBT") {
+                    val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
+                    val record = db.getTxThrow(psbt.txId())
+                    org.bitcoinppl.cove_core.RouteFactory().use { factory ->
+                        factory.sendConfirmSignedPsbt(
+                            id = record.walletId(),
+                            details = record.confirmDetails(),
+                            psbt = signedPsbt,
+                        )
+                    }
+                }.getOrNull()
+            } finally {
+                signedPsbt.destroy()
+            }
+
+        if (route != null) {
+            app.sheetState = null
+            app.pushRoute(route)
+        } else {
+            manager.errorMessage = "Signing completed, but the transaction could not be opened"
+        }
+
         return
     }
 

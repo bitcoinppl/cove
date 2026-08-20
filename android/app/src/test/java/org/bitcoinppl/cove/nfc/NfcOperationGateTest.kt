@@ -21,13 +21,15 @@ class NfcOperationGateTest {
     }
 
     @Test
-    fun staleDelayedDisableOwnerCannotMatchTheNextScan() {
+    fun beginTwiceMakesOnlyTheNewestTokenCurrent() {
         val gate = NfcOperationGate()
-        val oldToken = gate.begin()
-        gate.end(oldToken)
-        val newToken = gate.begin()
+        val first = gate.begin()
+        val second = gate.begin()
 
-        assertFalse(gate.isCurrent(oldToken))
-        assertTrue(gate.isCurrent(newToken))
+        assertFalse(gate.isCurrent(first))
+        assertTrue(gate.isCurrent(second))
+
+        gate.end(first)
+        assertTrue(gate.isCurrent(second))
     }
 }

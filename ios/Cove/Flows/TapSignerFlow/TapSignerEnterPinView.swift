@@ -22,6 +22,7 @@ struct TapSignerEnterPin: View {
     // private
     @State private var pin = ""
     @State private var errorMessage: String?
+    @State private var isSubmitting = false
     @FocusState private var isFocused
 
     /// confirmed pin is correct, now run the action
@@ -66,7 +67,10 @@ struct TapSignerEnterPin: View {
                 }
             }
 
-            await MainActor.run { self.pin = "" }
+            await MainActor.run {
+                self.pin = ""
+                self.isSubmitting = false
+            }
         }
     }
 
@@ -78,6 +82,7 @@ struct TapSignerEnterPin: View {
                 manager.enteredPin = nil
                 await MainActor.run {
                     self.pin = ""
+                    self.isSubmitting = false
                     app.sheetState = .none
 
                     // use imperative ShareSheet for automatic share after NFC read
@@ -100,7 +105,10 @@ struct TapSignerEnterPin: View {
                     )
                 }
 
-                await MainActor.run { self.pin = "" }
+                await MainActor.run {
+                    self.pin = ""
+                    self.isSubmitting = false
+                }
             }
         }
     }
@@ -123,6 +131,7 @@ struct TapSignerEnterPin: View {
                     await MainActor.run {
                         manager.enteredPin = nil
                         self.pin = ""
+                        self.isSubmitting = false
                         app.sheetState = .none
                         app.pushRoute(route)
                     }
@@ -136,6 +145,7 @@ struct TapSignerEnterPin: View {
                         )
 
                         self.pin = ""
+                        self.isSubmitting = false
                         app.sheetState = .none
                     }
                 }
@@ -153,7 +163,10 @@ struct TapSignerEnterPin: View {
                     app.sheetState = .none
                 }
 
-                await MainActor.run { self.pin = "" }
+                await MainActor.run {
+                    self.pin = ""
+                    self.isSubmitting = false
+                }
             }
         }
     }
@@ -170,7 +183,8 @@ struct TapSignerEnterPin: View {
             ),
             submitTitle: "Continue",
             errorMessage: errorMessage,
-            submitAction: submitPin
+            submitAction: submitPin,
+            isSubmitting: isSubmitting
         )
         .onAppear(perform: resetPin)
         .onDisappear(perform: clearSensitiveState)
@@ -185,13 +199,17 @@ struct TapSignerEnterPin: View {
     private func resetPin() {
         pin = ""
         errorMessage = nil
+        isSubmitting = false
         isFocused = true
     }
 
     private func submitPin() {
+        guard !isSubmitting else { return }
+
         guard let inputError = tapSignerCvcInputError(value: pin) else {
             let nfc = manager.getOrCreateNfc(tapSigner)
             manager.enteredPin = pin
+            isSubmitting = true
 
             isFocused = false
             runAction(nfc, pin)
@@ -204,6 +222,7 @@ struct TapSignerEnterPin: View {
     private func clearSensitiveState() {
         pin = ""
         errorMessage = nil
+        isSubmitting = false
         isFocused = false
     }
 }

@@ -2,10 +2,7 @@
 
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
 
 internal const val MIN_CVC_LENGTH = 6
 internal const val MAX_CVC_LENGTH = 32
@@ -55,47 +51,39 @@ internal fun cvcValidationMessage(value: String): String? =
         else -> null
     }
 
+internal data class TapSignerCvcInputOptions(
+    val modifier: Modifier = Modifier,
+    val testTag: String? = null,
+    val validationError: String? = null,
+)
+
 @Composable
 internal fun TapSignerCvcInput(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier,
-    testTag: String? = null,
+    options: TapSignerCvcInputOptions = TapSignerCvcInputOptions(),
 ) {
-    val errorMessage = cvcValidationMessage(value)
+    val cvcErrorMessage = cvcValidationMessage(value)
+    val errorMessage = options.validationError ?: cvcErrorMessage
     val inputModifier =
-        modifier
+        options.modifier
             .fillMaxWidth()
-            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
+            .then(if (options.testTag == null) Modifier else Modifier.testTag(options.testTag))
 
-    Column(modifier = inputModifier) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { onValueChange(it.take(MAX_CVC_LENGTH)) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(label) },
-            singleLine = true,
-            isError = value.isNotEmpty() && errorMessage != null,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        )
-
-        Text(
-            text =
-                if (errorMessage != null) {
-                    errorMessage
-                } else {
-                    "Digits: ${value.length}"
-                },
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color =
-                if (errorMessage != null) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-        )
-    }
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onValueChange(it.take(MAX_CVC_LENGTH)) },
+        modifier = inputModifier,
+        label = { Text(label) },
+        singleLine = true,
+        isError = errorMessage != null && (value.isNotEmpty() || options.validationError != null),
+        supportingText = {
+            Text(
+                text = errorMessage ?: "Digits: ${value.length}",
+            )
+        },
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+    )
 }
