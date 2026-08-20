@@ -1315,6 +1315,9 @@ impl TapSignerReader {
         let (_, path) = match self.refresh_status().await {
             Ok(status) => status,
             Err(error) if error.is_card_error() => return Err(error),
+            Err(error) if error.is_transport_uncertainty() => {
+                return Ok(self.record_retry(continuation.retry_with_error(error)));
+            }
             Err(_) => return Err(TapSignerReaderError::ManualRecoveryRequired),
         };
 
@@ -2273,6 +2276,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn operation_continuation_card_mismatch_remains_retryable() {
+        let (reader, calls) = reader_for_responses_with_identity(
+            Vec::new(),
+            Some(vec![84, 0, 0]),
+            Some(0),
+            "OTHER-CARD".to_string(),
+        );
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let continuation = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Backup {
+                cvc,
+                pre_backup_count: Some(0),
+                backup: None,
+                error: TapSignerReaderError::ManualRecoveryRequired,
+            },
+        );
+
+        let result = reader.continue_operation(continuation.clone()).await;
+
+        assert!(matches!(result, Err(TapSignerReaderError::ContinuationCardMismatch)));
+        assert!(continuation.can_retry());
+        assert!(calls.lock().is_empty());
+    }
+
+    #[tokio::test]
     async fn continuation_claim_is_shared_across_readers() {
         let (first, first_calls) = reader_for_status(status_response(MAX_BACKUPS));
         let (second, second_calls) =
@@ -2571,6 +2600,42 @@ mod tests {
         );
         assert_eq!(calls.lock().len(), 3);
         assert_eq!(command_names(&calls), vec!["new", "status", "backup"]);
+    }
+
+    #[tokio::test]
+    async fn init_reconciliation_transport_loss_returns_replacement_continuation() {
+        let responses = vec![
+            Err(TransportError::Transport("init response was lost".to_string())),
+            Err(TransportError::Transport("status response was lost".to_string())),
+            Ok(status_response(0)),
+            Err(TransportError::Transport("backup response was lost".to_string())),
+        ];
+        let (reader, calls) = reader_for_responses(responses, None, None);
+        let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let setup = Arc::new(SetupCmd::try_new(cvc.clone(), cvc, Some([0; 32].to_vec())).unwrap());
+
+        let first = reader.setup(setup).await.unwrap();
+        let first_retry = match first {
+            SetupCmdResponse::Retry(continuation) => continuation,
+            SetupCmdResponse::Complete(_) => panic!("init uncertainty must return a retry"),
+        };
+        let first_id = first_retry.id();
+        let second = reader.continue_setup(first_retry).await.unwrap();
+        let second_retry = match second {
+            SetupCmdResponse::Retry(continuation) => continuation,
+            SetupCmdResponse::Complete(_) => panic!("status uncertainty must return a retry"),
+        };
+
+        assert_eq!(second_retry.id(), first_id);
+        assert!(second_retry.error().is_transport_uncertainty());
+
+        let third = reader.continue_setup(second_retry).await.unwrap();
+        assert!(matches!(
+            third,
+            SetupCmdResponse::Retry(continuation)
+                if continuation.message() == "TAPSIGNER backup needs to be retried"
+        ));
+        assert_eq!(command_names(&calls), vec!["new", "status", "status", "backup"]);
     }
 
     #[tokio::test]

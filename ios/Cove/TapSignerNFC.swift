@@ -23,12 +23,30 @@ private final class TapSignerOperationToken: @unchecked Sendable {
     private var continuation: Continuation?
     private var pendingResult: TapSignerOperationResult?
     private var resolved = false
+    private var commandStarted = false
+
+    deinit {
+        resolve(.failure(.Unknown("TapSigner operation cancelled")))
+    }
 
     var isResolved: Bool {
         lock.lock()
         defer { lock.unlock() }
 
         return resolved
+    }
+
+    var didStartCommand: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return commandStarted
+    }
+
+    func markCommandStarted() {
+        lock.lock()
+        commandStarted = true
+        lock.unlock()
     }
 
     func install(_ continuation: Continuation) {
@@ -68,17 +86,15 @@ private final class TapSignerOperationToken: @unchecked Sendable {
     }
 }
 
+@MainActor
 class TapSignerNFC {
     private let nfc: TapCardNFC
     private var lastResponse_: TapSignerResponse?
+    private var pendingRetry: TapSignerOperationContinuation?
 
     init(_ card: TapSigner) {
         Log.debug("Initializing TapSignerNFC")
         nfc = TapCardNFC(tapcard: .tapSigner(card))
-    }
-
-    deinit {
-        nfc.cancelActiveOperation()
     }
 
     var isScanning: Bool {
@@ -127,14 +143,15 @@ class TapSignerNFC {
     func changePin(currentPin: String, newPin: String) async -> Result<
         Void, TapSignerReaderError
     > {
-        clearLastResponse()
-
         do {
             let currentCvc = try makeTapSignerCvc(value: currentPin)
             let newCvc = try makeTapSignerCvc(value: newPin)
 
             return await performTapSignerCmd(
-                cmd: .change(currentCvc: currentCvc, newCvc: newCvc)
+                cmd: .change(currentCvc: currentCvc, newCvc: newCvc),
+                continuationMatches: {
+                    $0.matchesChange(currentCvc: currentCvc, newCvc: newCvc)
+                }
             ) {
                 $0.isChangeResponse ? true : nil
             }.map { _ in () }
@@ -146,11 +163,13 @@ class TapSignerNFC {
     }
 
     func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
-        clearLastResponse()
-
         do {
             let cvc = try makeTapSignerCvc(value: pin)
-            return await performTapSignerCmd(cmd: .backup(cvc: cvc)) {
+
+            return await performTapSignerCmd(
+                cmd: .backup(cvc: cvc),
+                continuationMatches: { $0.matchesBackup(cvc: cvc) }
+            ) {
                 $0.backupResponse
             }
         } catch let error as TapSignerCvcInputError {
@@ -181,6 +200,7 @@ class TapSignerNFC {
     }
 
     private func clearLastResponse() {
+        pendingRetry = nil
         lastResponse_ = nil
         nfc.clearLastResponse()
     }
@@ -191,32 +211,54 @@ class TapSignerNFC {
 
     private func performTapSignerCmd<T>(
         cmd: TapSignerCmd,
+        continuationMatches: ((TapSignerOperationContinuation) -> Bool)? = nil,
         _ successResult: @escaping (TapSignerResponse) -> T?
     ) async -> Result<T, TapSignerReaderError> {
-        var command = cmd
+        var command: TapSignerCmd
+        if let continuationMatches,
+           let pendingRetry,
+           pendingRetry.canRetry(),
+           continuationMatches(pendingRetry)
+        {
+            command = .continueOperation(pendingRetry)
+        } else {
+            clearLastResponse()
+            command = cmd
+        }
+
         var retryCount = 0
 
         while true {
             switch await runTapSignerCmd(command) {
             case let .failure(error):
+                if pendingRetry?.canRetry() == false {
+                    pendingRetry = nil
+                }
+
                 return .failure(error)
             case let .success(response):
                 if let result = successResult(response) {
+                    pendingRetry = nil
                     return .success(result)
                 }
 
                 guard case let .retry(continuation) = response else {
                     Log.error("TapSigner operation returned an unexpected response")
+                    pendingRetry = nil
                     return .failure(.Unknown("TapSigner operation returned no result"))
                 }
 
                 guard retryCount < 5 else {
                     Log.error("TapSigner operation retry limit reached")
+                    pendingRetry = nil
                     return .failure(.ManualRecoveryRequired)
                 }
 
                 retryCount += 1
                 command = .continueOperation(continuation)
+                if continuationMatches != nil {
+                    pendingRetry = continuation
+                }
             }
         }
     }
@@ -294,6 +336,7 @@ class TapSignerNFC {
     }
 }
 
+@MainActor
 @Observable
 private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     private var tag: NFCISO7816Tag?
@@ -309,10 +352,6 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
     init(tapcard: TapCard) {
         self.tapcard = tapcard
-    }
-
-    deinit {
-        cancelActiveOperation()
     }
 
     func start(command: TapSignerCmd, operation: TapSignerOperationToken) {
@@ -423,19 +462,26 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         }
     }
 
-    func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
+    nonisolated func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
+        let tag = tags.first
+
+        Task { @MainActor [weak self, session, tag] in
+            self?.handleDetectedTag(session: session, tag: tag)
+        }
+    }
+
+    private func handleDetectedTag(session: NFCTagReaderSession, tag: NFCTag?) {
         guard self.session === session else {
             session.invalidate()
             return
         }
 
-        self.session = session
         guard let operation = activeOperation else {
             session.invalidate()
             return
         }
 
-        guard let tag = tags.first else {
+        guard let tag else {
             finish(
                 operation,
                 result: .failure(.Unknown("No tag detected")),
@@ -445,23 +491,40 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             return
         }
 
-        session.connect(to: tag) { [weak self] error in
-            guard let self else { return }
-            guard let operation = self.activeOperation else { return }
+        session.connect(to: tag) { error in
+            let didConnect = error == nil
 
-            if error != nil {
-                self.finish(
-                    operation,
-                    result: .failure(.Unknown("Unable to connect to TapSigner")),
-                    invalidateSession: true,
-                    errorMessage: "Unable to connect to TapSigner. Please try again.",
-                    session: session
+            Task { @MainActor [weak self, session, tag, operation, didConnect] in
+                self?.handleConnectionResult(
+                    didConnect: didConnect,
+                    tag: tag,
+                    session: session,
+                    operation: operation
                 )
-                return
             }
-
-            self.handleConnectedTag(tag, session: session, operation: operation)
         }
+    }
+
+    private func handleConnectionResult(
+        didConnect: Bool,
+        tag: NFCTag,
+        session: NFCTagReaderSession,
+        operation: TapSignerOperationToken
+    ) {
+        guard self.session === session, activeOperation === operation else { return }
+
+        guard didConnect else {
+            finish(
+                operation,
+                result: .failure(.Unknown("Unable to connect to TapSigner")),
+                invalidateSession: true,
+                errorMessage: "Unable to connect to TapSigner. Please try again.",
+                session: session
+            )
+            return
+        }
+
+        handleConnectedTag(tag, session: session, operation: operation)
     }
 
     private func handleConnectedTag(
@@ -477,8 +540,12 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             session.alertMessage = "Reading tag, please hold still"
             self.tag = iso7816Tag
 
-            Task {
-                await createReader(from: iso7816Tag, session: session, operation: operation)
+            Task { @MainActor [weak self, iso7816Tag, session, operation] in
+                await self?.createReader(
+                    from: iso7816Tag,
+                    session: session,
+                    operation: operation
+                )
             }
         case .miFare:
             rejectUnsupportedTag("found tag miFare", session: session, operation: operation)
@@ -535,6 +602,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
                 guard activeOperation === operation else { return }
                 tapSignerReader = reader
+                operation.markCommandStarted()
                 let response = try await reader.run()
                 finish(operation, result: .success(response), invalidateSession: true)
             }
@@ -569,28 +637,47 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         }
     }
 
-    func tagReaderSessionDidBecomeActive(_: NFCTagReaderSession) {
+    nonisolated func tagReaderSessionDidBecomeActive(_: NFCTagReaderSession) {
         logger.debug("tapcard reader session did become active")
     }
 
-    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: any Error) {
-        guard self.session === session, let operation = activeOperation else { return }
-
-        let result: TapSignerOperationResult
-        if let nfcError = error as? NFCReaderError {
+    nonisolated func tagReaderSession(
+        _ session: NFCTagReaderSession,
+        didInvalidateWithError error: any Error
+    ) {
+        let result: TapSignerOperationResult = if let nfcError = error as? NFCReaderError {
             switch nfcError.code {
             case .readerSessionInvalidationErrorUserCanceled:
-                logger.debug("tapcard reader session ended normally")
-                result = .failure(.Unknown("TapSigner operation cancelled"))
+                .failure(.Unknown("TapSigner operation cancelled"))
             case .readerSessionInvalidationErrorSessionTimeout:
-                result = .failure(.Unknown("TapSigner scan timed out"))
+                .failure(.Unknown("TapSigner scan timed out"))
             case .readerTransceiveErrorTagConnectionLost:
-                result = .failure(.Unknown("Tag connection lost, please hold your phone still"))
+                .failure(.Unknown("Tag connection lost, please hold your phone still"))
             default:
-                result = .failure(.Unknown("Unable to read NFC tag, try again"))
+                .failure(.Unknown("Unable to read NFC tag, try again"))
             }
         } else {
-            result = .failure(.Unknown("Unable to read NFC tag, try again"))
+            .failure(.Unknown("Unable to read NFC tag, try again"))
+        }
+
+        Task { @MainActor [weak self, session, result] in
+            self?.handleInvalidation(session: session, result: result)
+        }
+    }
+
+    private func handleInvalidation(
+        session: NFCTagReaderSession,
+        result: TapSignerOperationResult
+    ) {
+        guard self.session === session, let operation = activeOperation else { return }
+
+        if operation.didStartCommand {
+            logger.debug("tapcard reader session invalidated during an active command")
+            return
+        }
+
+        if case .failure(.Unknown("TapSigner operation cancelled")) = result {
+            logger.debug("tapcard reader session ended normally")
         }
 
         finish(operation, result: result, invalidateSession: false, session: session)
