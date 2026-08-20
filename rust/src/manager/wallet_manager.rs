@@ -79,7 +79,6 @@ pub enum WalletManagerReconcileMessage {
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(Box<WalletMetadata>),
-    WalletMetadataDelta(WalletMetadataDelta),
     WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
@@ -97,31 +96,6 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressClosed(u64),
 
     PayjoinTxBroadcast,
-}
-
-/// A targeted update for ongoing wallet metadata reconciliation
-///
-/// The full metadata record is reserved for bootstrap and repair snapshots. Ongoing changes use
-/// these deltas so a platform manager cannot overwrite a field changed by another actor message
-#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletMetadataDelta {
-    Name(String),
-    Color(WalletColor),
-    Verified(bool),
-    WalletType(WalletType),
-    AddressType(WalletAddressType),
-    SelectedUnit(Unit),
-    FiatOrBtc(FiatOrBtc),
-    SensitiveVisible(bool),
-    DetailsExpanded(bool),
-    ShowLabels(bool),
-    DiscoveryState(DiscoveryState),
-    Origin(Option<String>),
-    MasterFingerprint(Option<Arc<Fingerprint>>),
-    AddressIndex(Option<cove_types::AddressIndex>),
-    LastScanFinished(Option<std::time::Duration>),
-    LastHeightFetched(Option<cove_types::BlockSizeLast>),
-    PerformedFullScanAt(Option<u64>),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

@@ -12,8 +12,7 @@ use crate::{
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletManagerAction,
-        WalletMetadataDelta, WalletScanPhase, WalletScanStatus, WalletSnapshot,
-        receive_address::ReceiveAddressSession,
+        WalletScanPhase, WalletScanStatus, WalletSnapshot, receive_address::ReceiveAddressSession,
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
@@ -351,7 +350,7 @@ impl WalletActor {
 
         self.wallet.metadata = after.clone();
         *self.metadata.write() = after.clone();
-        self.send_metadata_deltas(&before, &after);
+        self.send_metadata_changed(&before, &after);
 
         if self.wallet.uses_persistent_storage() {
             CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before, &after);
@@ -360,20 +359,18 @@ impl WalletActor {
         Ok(())
     }
 
-    fn send_metadata_deltas(&self, before: &WalletMetadata, after: &WalletMetadata) {
-        let deltas = metadata_deltas(before, after);
-        for delta in deltas.iter().cloned() {
-            self.send(WalletManagerReconcileMessage::WalletMetadataDelta(delta));
+    fn send_metadata_changed(&self, before: &WalletMetadata, after: &WalletMetadata) {
+        if before == after {
+            return;
         }
 
-        let ledger_state_changed = deltas.iter().any(|delta| {
-            matches!(
-                delta,
-                WalletMetadataDelta::AddressType(_)
-                    | WalletMetadataDelta::DiscoveryState(_)
-                    | WalletMetadataDelta::PerformedFullScanAt(_)
-            )
-        });
+        // the actor is the sole metadata writer, so a full snapshot over the ordered
+        // reconcile channel cannot clobber a concurrent update and self-corrects the UI
+        self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(after.clone())));
+
+        let ledger_state_changed = before.address_type != after.address_type
+            || before.discovery_state != after.discovery_state
+            || before.internal.performed_full_scan_at != after.internal.performed_full_scan_at;
         if ledger_state_changed {
             self.send_ledger_state(self.scan_status.read().clone());
         }
@@ -1289,81 +1286,6 @@ impl WalletActor {
     }
 }
 
-fn metadata_deltas(before: &WalletMetadata, after: &WalletMetadata) -> Vec<WalletMetadataDelta> {
-    let mut deltas = Vec::new();
-
-    if before.name != after.name {
-        deltas.push(WalletMetadataDelta::Name(after.name.clone()));
-    }
-
-    if before.color != after.color {
-        deltas.push(WalletMetadataDelta::Color(after.color));
-    }
-
-    if before.verified != after.verified {
-        deltas.push(WalletMetadataDelta::Verified(after.verified));
-    }
-
-    if before.wallet_type != after.wallet_type {
-        deltas.push(WalletMetadataDelta::WalletType(after.wallet_type));
-    }
-
-    if before.address_type != after.address_type {
-        deltas.push(WalletMetadataDelta::AddressType(after.address_type));
-    }
-
-    if before.selected_unit != after.selected_unit {
-        deltas.push(WalletMetadataDelta::SelectedUnit(after.selected_unit));
-    }
-
-    if before.fiat_or_btc != after.fiat_or_btc {
-        deltas.push(WalletMetadataDelta::FiatOrBtc(after.fiat_or_btc));
-    }
-
-    if before.sensitive_visible != after.sensitive_visible {
-        deltas.push(WalletMetadataDelta::SensitiveVisible(after.sensitive_visible));
-    }
-
-    if before.details_expanded != after.details_expanded {
-        deltas.push(WalletMetadataDelta::DetailsExpanded(after.details_expanded));
-    }
-
-    if before.show_labels != after.show_labels {
-        deltas.push(WalletMetadataDelta::ShowLabels(after.show_labels));
-    }
-
-    if before.discovery_state != after.discovery_state {
-        deltas.push(WalletMetadataDelta::DiscoveryState(after.discovery_state.clone()));
-    }
-
-    if before.origin != after.origin {
-        deltas.push(WalletMetadataDelta::Origin(after.origin.clone()));
-    }
-
-    if before.master_fingerprint != after.master_fingerprint {
-        deltas.push(WalletMetadataDelta::MasterFingerprint(after.master_fingerprint.clone()));
-    }
-
-    if before.internal.address_index != after.internal.address_index {
-        deltas.push(WalletMetadataDelta::AddressIndex(after.internal.address_index.clone()));
-    }
-
-    if before.internal.last_scan_finished != after.internal.last_scan_finished {
-        deltas.push(WalletMetadataDelta::LastScanFinished(after.internal.last_scan_finished));
-    }
-
-    if before.internal.last_height_fetched != after.internal.last_height_fetched {
-        deltas.push(WalletMetadataDelta::LastHeightFetched(after.internal.last_height_fetched));
-    }
-
-    if before.internal.performed_full_scan_at != after.internal.performed_full_scan_at {
-        deltas
-            .push(WalletMetadataDelta::PerformedFullScanAt(after.internal.performed_full_scan_at));
-    }
-
-    deltas
-}
-
 fn address_type_patch(
     address_type: WalletAddressType,
     switch_metadata: AddressTypeSwitchMetadata,
@@ -1760,19 +1682,17 @@ mod tests {
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
         RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany, address_type_patch,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
-        metadata_deltas, metadata_with_full_scan_performed, progressive_scan_update_response,
+        metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
         should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
     };
     use crate::{
-        bdk_store::BdkStore,
         database::wallet_data::{
             WalletDataDb, label::test_support::wallet_data_db_with_mismatched_output_table,
             test_support::new_test_wallet_data_db,
         },
         manager::wallet_manager::{
-            TransactionLockState, WalletManagerReconcileMessage, WalletMetadataDelta,
-            WalletScanStatus, WalletSnapshot,
+            TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot,
         },
         node::Node,
         transaction_watcher::TransactionWatcherEvent,
@@ -3835,21 +3755,21 @@ mod tests {
         );
         assert!(actor_metadata.internal.address_index.is_some());
 
-        let emitted_address_index_delta = receiver.try_iter().any(|batch| match batch {
-            SingleOrMany::Single(WalletManagerReconcileMessage::WalletMetadataDelta(
-                WalletMetadataDelta::AddressIndex(Some(_)),
-            )) => true,
-            SingleOrMany::Many(messages) => messages.iter().any(|message| {
+        let emitted_address_index_update = receiver.try_iter().any(|batch| {
+            let has_update = |message: &WalletManagerReconcileMessage| {
                 matches!(
                     message,
-                    WalletManagerReconcileMessage::WalletMetadataDelta(
-                        WalletMetadataDelta::AddressIndex(Some(_))
-                    )
+                    WalletManagerReconcileMessage::WalletMetadataChanged(metadata)
+                        if metadata.internal.address_index.is_some()
                 )
-            }),
-            _ => false,
+            };
+
+            match batch {
+                SingleOrMany::Single(message) => has_update(&message),
+                SingleOrMany::Many(messages) => messages.iter().any(has_update),
+            }
         });
-        assert!(emitted_address_index_delta);
+        assert!(emitted_address_index_update);
 
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
@@ -3928,34 +3848,6 @@ mod tests {
         assert_eq!(updated.name, metadata.name);
         assert_eq!(updated.selected_unit, metadata.selected_unit);
         assert_eq!(updated.internal.performed_full_scan_at, Some(123));
-    }
-
-    #[test]
-    fn address_type_switch_metadata_deltas_are_field_scoped() {
-        let before = WalletMetadata::preview_new();
-        let mut after = before.clone();
-        after.name = "renamed".to_string();
-        after.address_type = WalletAddressType::Legacy;
-        after.discovery_state = crate::wallet::metadata::DiscoveryState::ChoseAdressType;
-        after.origin = Some("pkh([deadbeef/44'/0'/0'])".to_string());
-        after.master_fingerprint = Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(
-            "deadbeef".parse::<bdk_wallet::bitcoin::bip32::Fingerprint>().unwrap(),
-        )));
-        after.internal.last_scan_finished = Some(Duration::from_secs(1));
-
-        assert_eq!(
-            metadata_deltas(&before, &after),
-            vec![
-                WalletMetadataDelta::Name("renamed".to_string()),
-                WalletMetadataDelta::AddressType(WalletAddressType::Legacy),
-                WalletMetadataDelta::DiscoveryState(
-                    crate::wallet::metadata::DiscoveryState::ChoseAdressType,
-                ),
-                WalletMetadataDelta::Origin(Some("pkh([deadbeef/44'/0'/0'])".to_string())),
-                WalletMetadataDelta::MasterFingerprint(after.master_fingerprint.clone()),
-                WalletMetadataDelta::LastScanFinished(Some(Duration::from_secs(1))),
-            ]
-        );
     }
 
     #[test]

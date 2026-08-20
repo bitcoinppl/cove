@@ -844,10 +844,6 @@ class WalletManager :
                 walletMetadata = message.v1
             }
 
-            is WalletManagerReconcileMessage.WalletMetadataDelta -> {
-                applyMetadataDelta(message.v1)
-            }
-
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
                 logDebug("walletScannerResponse: ${message.v1}")
                 when (val response = message.v1) {
@@ -951,72 +947,6 @@ class WalletManager :
             is Transaction.Unconfirmed -> v1.id()
         }
 
-    private fun applyMetadataDelta(delta: WalletMetadataDelta) {
-        val metadata = walletMetadata
-        if (metadata == null) {
-            logError("Unable to apply wallet metadata delta before metadata initialized: ${delta::class.simpleName}")
-            return
-        }
-
-        metadataDeltaUpdate(metadata, delta)?.let { walletMetadata = it }
-    }
-
-    private fun metadataDeltaUpdate(
-        metadata: WalletMetadata,
-        delta: WalletMetadataDelta,
-    ): WalletMetadata? =
-        updateIdentityMetadata(metadata, delta)
-            ?: updateDisplayMetadata(metadata, delta)
-            ?: updateInternalMetadata(metadata, delta)
-            ?: run {
-                logError("Unhandled wallet metadata delta: ${delta::class.simpleName}")
-                null
-            }
-
-    private fun updateIdentityMetadata(
-        metadata: WalletMetadata,
-        delta: WalletMetadataDelta,
-    ): WalletMetadata? =
-        when (delta) {
-            is WalletMetadataDelta.Name -> metadata.copy(name = delta.v1)
-            is WalletMetadataDelta.Color -> metadata.copy(color = delta.v1)
-            is WalletMetadataDelta.Verified -> metadata.copy(verified = delta.v1)
-            is WalletMetadataDelta.WalletType -> metadata.copy(walletType = delta.v1)
-            is WalletMetadataDelta.AddressType -> metadata.copy(addressType = delta.v1)
-            is WalletMetadataDelta.Origin -> metadata.copy(origin = delta.v1)
-            is WalletMetadataDelta.MasterFingerprint -> metadata.copy(masterFingerprint = delta.v1)
-            else -> null
-        }
-
-    private fun updateDisplayMetadata(
-        metadata: WalletMetadata,
-        delta: WalletMetadataDelta,
-    ): WalletMetadata? =
-        when (delta) {
-            is WalletMetadataDelta.SelectedUnit -> metadata.copy(selectedUnit = delta.v1)
-            is WalletMetadataDelta.FiatOrBtc -> metadata.copy(fiatOrBtc = delta.v1)
-            is WalletMetadataDelta.SensitiveVisible -> metadata.copy(sensitiveVisible = delta.v1)
-            is WalletMetadataDelta.DetailsExpanded -> metadata.copy(detailsExpanded = delta.v1)
-            is WalletMetadataDelta.ShowLabels -> metadata.copy(showLabels = delta.v1)
-            is WalletMetadataDelta.DiscoveryState -> metadata.copy(discoveryState = delta.v1)
-            else -> null
-        }
-
-    private fun updateInternalMetadata(
-        metadata: WalletMetadata,
-        delta: WalletMetadataDelta,
-    ): WalletMetadata? =
-        when (delta) {
-            is WalletMetadataDelta.AddressIndex ->
-                metadata.copy(internal = metadata.internal.copy(addressIndex = delta.v1))
-            is WalletMetadataDelta.LastScanFinished ->
-                metadata.copy(internal = metadata.internal.copy(lastScanFinished = delta.v1))
-            is WalletMetadataDelta.LastHeightFetched ->
-                metadata.copy(internal = metadata.internal.copy(lastHeightFetched = delta.v1))
-            is WalletMetadataDelta.PerformedFullScanAt ->
-                metadata.copy(internal = metadata.internal.copy(performedFullScanAt = delta.v1))
-            else -> null
-        }
 
     private fun reconcileLoadStateWithLedgerState() {
         when (val current = loadState) {

@@ -465,7 +465,6 @@ enum WalletManagerPreview {
              .transactionDetailsUpdated:
             applyTransactionMessage(message)
         case .walletBalanceChanged, .unsignedTransactionsChanged, .walletMetadataChanged,
-             .walletMetadataDelta,
              .walletScannerResponse, .nodeConnectionFailed, .walletError, .unknownError,
              .sendFlowError, .hotWalletKeyMissing, .payjoinTxBroadcast:
             applyWalletStateMessage(message)
@@ -561,9 +560,6 @@ enum WalletManagerPreview {
             withAnimation { walletMetadata = metadata }
             recomputeLedgerStateForMetadataChange()
 
-        case let .walletMetadataDelta(delta):
-            withAnimation { applyWalletMetadataDelta(delta) }
-
         case let .walletScannerResponse(scannerResponse):
             logger.debug("walletScannerResponse: \(scannerResponse)")
             if case let .foundAddresses(addressTypes) = scannerResponse {
@@ -653,95 +649,6 @@ enum WalletManagerPreview {
         }
 
         return .scanning(transactions)
-    }
-
-    private func applyWalletMetadataDelta(_ delta: WalletMetadataDelta) {
-        let didApply = tryApplyUserMetadataDelta(delta)
-            || tryApplyInternalMetadataDelta(delta)
-            || tryApplyLedgerMetadataDelta(delta)
-
-        guard !didApply else { return }
-
-        logger.error("Unhandled wallet metadata delta: \(delta)")
-    }
-
-    private func tryApplyUserMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
-        switch delta {
-        case let .name(name):
-            walletMetadata.name = name
-
-        case let .color(color):
-            walletMetadata.color = color
-
-        case let .verified(verified):
-            walletMetadata.verified = verified
-
-        case let .walletType(walletType):
-            walletMetadata.walletType = walletType
-
-        case let .selectedUnit(selectedUnit):
-            walletMetadata.selectedUnit = selectedUnit
-
-        case let .fiatOrBtc(fiatOrBtc):
-            walletMetadata.fiatOrBtc = fiatOrBtc
-
-        case let .sensitiveVisible(sensitiveVisible):
-            walletMetadata.sensitiveVisible = sensitiveVisible
-
-        case let .detailsExpanded(detailsExpanded):
-            walletMetadata.detailsExpanded = detailsExpanded
-
-        case let .showLabels(showLabels):
-            walletMetadata.showLabels = showLabels
-
-        default:
-            return false
-        }
-
-        return true
-    }
-
-    private func tryApplyInternalMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
-        switch delta {
-        case let .origin(origin):
-            walletMetadata.origin = origin
-
-        case let .masterFingerprint(masterFingerprint):
-            walletMetadata.masterFingerprint = masterFingerprint
-
-        case let .addressIndex(addressIndex):
-            walletMetadata.internal.addressIndex = addressIndex
-
-        case let .lastScanFinished(lastScanFinished):
-            walletMetadata.internal.lastScanFinished = lastScanFinished
-
-        case let .lastHeightFetched(lastHeightFetched):
-            walletMetadata.internal.lastHeightFetched = lastHeightFetched
-
-        default:
-            return false
-        }
-
-        return true
-    }
-
-    private func tryApplyLedgerMetadataDelta(_ delta: WalletMetadataDelta) -> Bool {
-        switch delta {
-        case let .addressType(addressType):
-            walletMetadata.addressType = addressType
-
-        case let .discoveryState(discoveryState):
-            walletMetadata.discoveryState = discoveryState
-
-        case let .performedFullScanAt(performedFullScanAt):
-            walletMetadata.internal.performedFullScanAt = performedFullScanAt
-
-        default:
-            return false
-        }
-
-        recomputeLedgerStateForMetadataChange()
-        return true
     }
 
     private func recomputeLedgerStateForMetadataChange() {
