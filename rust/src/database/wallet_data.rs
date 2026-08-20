@@ -28,6 +28,10 @@ pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Databas
 static DATABASE_OPEN_LOCKS: Lazy<Mutex<HashMap<WalletId, Arc<Mutex<()>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
+/// Per-wallet gates held while restore cleanup evicts and removes wallet data
+static DATABASE_STORAGE_GATES: Lazy<Mutex<HashMap<WalletId, Arc<Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
 fn database_location(id: &WalletId, location: &Path) -> Result<PathBuf, std::io::Error> {
     let dir = location.join(id.as_str());
 
@@ -175,7 +179,9 @@ impl WalletDataDb {
     }
 
     fn new_with_db_location(id: WalletId, db_location: &Path) -> Result<Self> {
-        let db = get_or_create_database(&id, db_location)?;
+        let storage_gate = wallet_data_storage_gate(&id);
+        let _storage_guard = storage_gate.lock();
+        let db = get_or_create_database_locked(&id, db_location)?;
         Self::new_with_db(id, db, WalletDataStorage::Persistent)
     }
 
@@ -341,8 +347,7 @@ impl WalletDataDb {
     }
 }
 
-/// Get an existing database or create a new one
-pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb::Database>> {
+fn get_or_create_database_locked(id: &WalletId, location: &Path) -> Result<Arc<redb::Database>> {
     let path = database_location(id, location)
         .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
@@ -533,6 +538,12 @@ pub fn clear_database_connections() {
     DATABASE_OPEN_LOCKS.lock().clear();
 }
 
+/// Return the shared per-wallet gate used by database opens and restore cleanup
+pub(crate) fn wallet_data_storage_gate(id: &WalletId) -> Arc<Mutex<()>> {
+    let mut gates = DATABASE_STORAGE_GATES.lock();
+    gates.entry(id.clone()).or_insert_with(|| Arc::new(Mutex::new(()))).clone()
+}
+
 /// Evict cached wallet-data connections before restore cleanup
 pub(crate) fn evict_wallet_data_connections(id: &WalletId) {
     DATABASE_CONNECTIONS.write().remove(id);
@@ -540,6 +551,8 @@ pub(crate) fn evict_wallet_data_connections(id: &WalletId) {
 }
 
 fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std::io::Error> {
+    let storage_gate = wallet_data_storage_gate(id);
+    let _storage_guard = storage_gate.lock();
     DATABASE_CONNECTIONS.write().remove(id);
     DATABASE_OPEN_LOCKS.lock().remove(id);
 
@@ -591,7 +604,10 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Barrier;
+    use std::{
+        sync::{Barrier, mpsc},
+        time::Duration,
+    };
 
     use super::*;
 
@@ -678,6 +694,35 @@ mod tests {
         for wallet_id in &wallet_ids {
             test_support::clear_wallet_registry_entry(wallet_id);
         }
+    }
+
+    #[test]
+    fn storage_gate_blocks_database_open_until_cleanup_releases_it() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        let wallet_id = WalletId::preview_new_random();
+        test_support::clear_wallet_registry_entry(&wallet_id);
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let gate = wallet_data_storage_gate(&wallet_id);
+        let gate_guard = gate.lock();
+        let barrier = Arc::new(Barrier::new(2));
+        let (sender, receiver) = mpsc::channel();
+        let location = tmp.path().to_path_buf();
+        let thread_wallet_id = wallet_id.clone();
+        let thread_barrier = Arc::clone(&barrier);
+
+        let handle = std::thread::spawn(move || {
+            thread_barrier.wait();
+            let result = WalletDataDb::new_with_db_location(thread_wallet_id, &location);
+            sender.send(result.is_ok()).expect("open result receiver should exist");
+        });
+
+        barrier.wait();
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(gate_guard);
+
+        assert!(receiver.recv_timeout(Duration::from_secs(2)).unwrap());
+        handle.join().expect("wallet data open thread should not panic");
+        test_support::clear_wallet_registry_entry(&wallet_id);
     }
 
     #[test]

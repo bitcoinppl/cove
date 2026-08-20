@@ -752,16 +752,30 @@ pub(crate) enum PersistedBdkArtifact {
     Journal,
 }
 
+impl PersistedBdkArtifact {
+    const ALL: [Self; 5] = [Self::FileStore, Self::Sqlite, Self::Wal, Self::Shm, Self::Journal];
+
+    fn path(self, paths: &[PathBuf; 5]) -> PathBuf {
+        match self {
+            Self::FileStore => paths[0].clone(),
+            Self::Sqlite => paths[1].clone(),
+            Self::Wal => paths[2].clone(),
+            Self::Shm => paths[3].clone(),
+            Self::Journal => paths[4].clone(),
+        }
+    }
+}
+
 impl PersistedArtifactSnapshot {
     fn from_snapshot(id: &ValidatedRestoreWalletId, snapshot: &RestoreArtifactSnapshot) -> Self {
         let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(id.as_wallet_id());
         let mut bdk_fingerprints = snapshot.bdk_fingerprints.clone();
-        for (index, path) in bdk_paths.iter().enumerate() {
-            if !snapshot.bdk_paths.contains(path) {
+        for artifact in PersistedBdkArtifact::ALL {
+            let path = artifact.path(&bdk_paths);
+            if !snapshot.bdk_paths.contains(&path) {
                 continue;
             }
-            let artifact = persisted_bdk_artifact(index);
-            if let Some(fingerprint) = fingerprint_path(path).ok().flatten() {
+            if let Some(fingerprint) = fingerprint_path(&path).ok().flatten() {
                 bdk_fingerprints.entry(artifact).or_insert(fingerprint);
             }
         }
@@ -836,35 +850,13 @@ impl PersistedArtifactSnapshot {
     }
 }
 
-fn persisted_bdk_artifact(index: usize) -> PersistedBdkArtifact {
-    match index {
-        0 => PersistedBdkArtifact::FileStore,
-        1 => PersistedBdkArtifact::Sqlite,
-        2 => PersistedBdkArtifact::Wal,
-        3 => PersistedBdkArtifact::Shm,
-        _ => PersistedBdkArtifact::Journal,
-    }
-}
-
 fn bdk_artifacts(id: &WalletId) -> [(PersistedBdkArtifact, PathBuf); 5] {
     let paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(id);
-    [
-        (PersistedBdkArtifact::FileStore, paths[0].clone()),
-        (PersistedBdkArtifact::Sqlite, paths[1].clone()),
-        (PersistedBdkArtifact::Wal, paths[2].clone()),
-        (PersistedBdkArtifact::Shm, paths[3].clone()),
-        (PersistedBdkArtifact::Journal, paths[4].clone()),
-    ]
+    PersistedBdkArtifact::ALL.map(|artifact| (artifact, artifact.path(&paths)))
 }
 
 fn bdk_path_for_artifact(paths: &[PathBuf; 5], artifact: PersistedBdkArtifact) -> PathBuf {
-    match artifact {
-        PersistedBdkArtifact::FileStore => paths[0].clone(),
-        PersistedBdkArtifact::Sqlite => paths[1].clone(),
-        PersistedBdkArtifact::Wal => paths[2].clone(),
-        PersistedBdkArtifact::Shm => paths[3].clone(),
-        PersistedBdkArtifact::Journal => paths[4].clone(),
-    }
+    artifact.path(paths)
 }
 
 fn hash_wallet_data_entry(relative_path: &Path) -> String {
@@ -934,21 +926,28 @@ impl RestoreMarkerGuard {
         write_marker(&self.marker_path, &self.marker)
     }
 
-    pub(crate) fn commit(mut self) -> Result<(), BackupError> {
+    pub(crate) fn commit(self) -> Result<Vec<String>, BackupError> {
+        self.commit_with(remove_marker)
+    }
+
+    fn commit_with<F>(mut self, remove_marker_fn: F) -> Result<Vec<String>, BackupError>
+    where
+        F: FnOnce(&Path) -> Result<(), BackupError>,
+    {
         // metadata is the durable commit record
         // once it exists, never roll it back merely because marker cleanup is unavailable
         self.metadata_committed = true;
         self.marker.phase = RestoreMarkerPhase::MetadataCommitted;
-        write_marker(&self.marker_path, &self.marker)?;
-
-        match remove_marker(&self.marker_path) {
-            Ok(()) => {
-                self.rolled_back = true;
-                self.lease.take();
-                Ok(())
-            }
-            Err(error) => Err(error),
+        let mut warnings = Vec::new();
+        if let Err(error) = write_marker(&self.marker_path, &self.marker) {
+            warnings.push(format!("restore marker commit record could not be persisted: {error}"));
+        } else if let Err(error) = remove_marker_fn(&self.marker_path) {
+            warnings.push(format!("restore marker cleanup is pending: {error}"));
         }
+
+        self.rolled_back = true;
+        self.lease.take();
+        Ok(warnings)
     }
 
     pub(crate) fn rollback(&mut self) -> Vec<String> {
@@ -1181,6 +1180,17 @@ fn rollback_wallet_data(
     wallet_name: &str,
     failures: &mut Vec<String>,
 ) {
+    let storage_gate = crate::database::wallet_data::wallet_data_storage_gate(id);
+    let _storage_guard = storage_gate.lock();
+    rollback_wallet_data_while_gated(id, initial, wallet_name, failures);
+}
+
+fn rollback_wallet_data_while_gated(
+    id: &WalletId,
+    initial: &RestoreArtifactSnapshot,
+    wallet_name: &str,
+    failures: &mut Vec<String>,
+) {
     crate::database::wallet_data::evict_wallet_data_connections(id);
     let paths = match crate::database::wallet_data::wallet_data_artifact_paths_checked(id) {
         Ok(paths) => paths,
@@ -1237,6 +1247,8 @@ fn remove_markerless_artifacts(
     initial: &RestoreArtifactSnapshot,
 ) -> Result<(), BackupError> {
     let validated = ValidatedRestoreWalletId::validate(id)?;
+    let storage_gate = crate::database::wallet_data::wallet_data_storage_gate(id);
+    let _storage_guard = storage_gate.lock();
     let current = RestoreArtifactSnapshot::capture(&validated)?;
     if &current != initial {
         return Err(BackupError::ImportApprovalStale(id.clone()));
@@ -1460,6 +1472,7 @@ fn metadata_exists(id: &WalletId) -> Result<bool, String> {
         for mode in WalletMode::iter() {
             let wallets =
                 database.wallets.get_all(network, mode).map_err(|error| error.to_string())?;
+
             for wallet in wallets {
                 if wallet.id == *id {
                     exact_match = true;
@@ -1482,6 +1495,8 @@ fn cleanup_owned_marker_artifacts(
     initial: &PersistedArtifactSnapshot,
     cleanup_complete: bool,
 ) -> Result<(), String> {
+    let storage_gate = crate::database::wallet_data::wallet_data_storage_gate(id.as_wallet_id());
+    let _storage_guard = storage_gate.lock();
     let mut initial_snapshot =
         if cleanup_complete { RestoreArtifactSnapshot::default() } else { initial.to_snapshot(id) };
 
@@ -1533,7 +1548,7 @@ fn cleanup_owned_marker_artifacts(
         id.as_wallet_id().as_str(),
         &mut failures,
     );
-    rollback_wallet_data(
+    rollback_wallet_data_while_gated(
         id.as_wallet_id(),
         &initial_snapshot,
         id.as_wallet_id().as_str(),
@@ -1547,6 +1562,9 @@ fn resume_interrupted_cleanup(
     id: &ValidatedRestoreWalletId,
     initial: &PersistedArtifactSnapshot,
 ) -> Result<(), String> {
+    let storage_gate = crate::database::wallet_data::wallet_data_storage_gate(id.as_wallet_id());
+    let _storage_guard = storage_gate.lock();
+    crate::database::wallet_data::evict_wallet_data_connections(id.as_wallet_id());
     let expected = initial.to_snapshot(id);
     let current = match RestoreArtifactSnapshot::capture(id) {
         Ok(current) => current,
@@ -1704,7 +1722,6 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
     }
 
     if matches!(marker.phase, RestoreMarkerPhase::CleanupInProgress) {
-        crate::database::wallet_data::evict_wallet_data_connections(&id);
         resume_interrupted_cleanup(&validated, &marker.initial)
             .map_err(MarkerRecoveryError::Retryable)?;
         remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
@@ -1805,6 +1822,10 @@ mod tests {
         WalletId::from(value.to_string())
     }
 
+    fn recover_restore_markers_for_test() -> Result<(), String> {
+        recover_restore_markers()
+    }
+
     fn write_test_marker(
         wallet_id: &WalletId,
         snapshot: &RestoreArtifactSnapshot,
@@ -1882,6 +1903,45 @@ mod tests {
             display_fingerprint("mnemonic:", &mnemonic),
             value_fingerprint(format!("mnemonic:{mnemonic}").as_bytes())
         );
+    }
+
+    #[test]
+    fn file_fingerprint_covers_the_complete_artifact() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("artifact");
+        let mut bytes = vec![0_u8; 32 * 1024 + 1];
+        let last = bytes.len() - 1;
+        bytes[last] = 1;
+        fs::write(&path, &bytes).unwrap();
+        let initial = fingerprint_path(&path).unwrap().unwrap();
+
+        bytes[last] = 2;
+        fs::write(&path, &bytes).unwrap();
+        let changed = fingerprint_path(&path).unwrap().unwrap();
+
+        assert_ne!(initial.digest, changed.digest);
+    }
+
+    #[test]
+    fn committed_restore_reports_marker_cleanup_warning() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let metadata = WalletMetadata::preview_new();
+        let journal = RestoreMarkerGuard::test_begin_with_snapshot(
+            &metadata,
+            RestoreArtifactSnapshot::default(),
+        );
+        let marker_path = journal.marker_path.clone();
+        let warnings = journal
+            .commit_with(|_| Err(BackupError::Restore("simulated marker removal failure".into())))
+            .unwrap();
+
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("cleanup is pending"));
+        remove_marker(&marker_path).unwrap();
     }
 
     #[test]
@@ -2038,11 +2098,11 @@ mod tests {
         let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
         fs::write(&created, b"created by interrupted restore").unwrap();
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
         assert!(preexisting.exists());
         assert!(!created.exists());
         assert!(!marker_path.exists());
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
 
         fs::remove_file(preexisting).unwrap();
     }
@@ -2064,7 +2124,7 @@ mod tests {
             .set_entries(vec![(secret_key.as_str(), "unreadable encrypted secret")]);
 
         assert!(Keychain::global().get_wallet_secret(&metadata.id).is_err());
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
 
         assert!(!marker_path.exists());
         assert!(!Keychain::global().wallet_items_exist(&metadata.id));
@@ -2096,7 +2156,7 @@ mod tests {
             (secret_key.as_str(), "unreadable encrypted secret"),
         ]);
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
         assert!(!marker_path.exists());
         assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
         assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
@@ -2120,7 +2180,7 @@ mod tests {
         crate::test_support::shared_mock_keychain()
             .set_entries(vec![(secret_key.as_str(), "unreadable encrypted secret")]);
 
-        assert!(recover_restore_markers().is_err());
+        assert!(recover_restore_markers_for_test().is_err());
         assert!(marker_path.exists());
         assert!(Keychain::global().get_wallet_secret(&metadata.id).is_err());
 
@@ -2146,7 +2206,7 @@ mod tests {
         .unwrap();
         Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
 
-        assert!(recover_restore_markers().is_err());
+        assert!(recover_restore_markers_for_test().is_err());
         assert!(marker_path.exists());
         assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
 
@@ -2204,11 +2264,11 @@ mod tests {
             RestoreMarkerPhase::Writing,
         );
 
-        assert!(recover_restore_markers().is_err());
+        assert!(recover_restore_markers_for_test().is_err());
         assert!(marker_path.exists());
 
         fs::remove_dir(&path).unwrap();
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
         assert!(!marker_path.exists());
     }
 
@@ -2229,7 +2289,7 @@ mod tests {
             write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::MetadataCommitted);
         Database::global().wallets.save_restored_wallet_metadata(metadata.clone()).unwrap();
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
         assert!(!marker_path.exists());
         assert!(path.exists());
 
@@ -2274,7 +2334,7 @@ mod tests {
         let marker_path =
             write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::CleanupInProgress);
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
 
         assert!(!path.exists());
         assert!(!marker_path.exists());
@@ -2306,12 +2366,12 @@ mod tests {
             write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::CleanupInProgress);
         crate::test_support::shared_mock_keychain().fail_delete_at(3);
 
-        assert!(recover_restore_markers().is_err());
+        assert!(recover_restore_markers_for_test().is_err());
         assert!(marker_path.exists());
         assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
         assert_eq!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap(), Some(xpub));
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
         assert!(!marker_path.exists());
         assert!(!Keychain::global().wallet_items_exist(&metadata.id));
     }
@@ -2370,7 +2430,7 @@ mod tests {
             std::os::unix::fs::symlink(external.path(), &link).unwrap();
         }
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
 
         assert!(existing.exists());
         assert!(!created.exists());
@@ -2390,20 +2450,20 @@ mod tests {
         let directory = marker_directory();
         fs::create_dir_all(&directory).unwrap();
         let path = directory.join("bad-marker.json");
+        let temporary_path = directory.join(".bad-marker.json.tmp");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&temporary_path);
         fs::write(&path, b"not-json").unwrap();
         #[cfg(unix)]
-        std::os::unix::fs::symlink(
-            directory.join("missing-target"),
-            directory.join(".bad-marker.json.tmp"),
-        )
-        .unwrap();
+        std::os::unix::fs::symlink(directory.join("missing-target"), &temporary_path).unwrap();
 
-        recover_restore_markers().unwrap();
+        recover_restore_markers_for_test().unwrap();
 
         assert!(!path.exists());
         let quarantine = directory.join(QUARANTINE_DIRECTORY_NAME);
         assert!(fs::read_dir(&quarantine).unwrap().next().is_some());
         fs::remove_dir_all(quarantine).unwrap();
+        let _ = fs::remove_file(temporary_path);
     }
 
     #[cfg(unix)]

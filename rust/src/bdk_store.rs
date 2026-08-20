@@ -173,18 +173,6 @@ impl BdkStore {
         Ok(())
     }
 
-    pub fn delete_sqlite_store(wallet_id: &WalletId) -> Result<()> {
-        let sqlite_data_path = sqlite_data_path(wallet_id);
-
-        if sqlite_data_path.exists() {
-            std::fs::remove_file(&sqlite_data_path).context("unable to delete sqlite store")?;
-        }
-
-        remove_sqlite_auxiliary_files(&sqlite_data_path);
-
-        Ok(())
-    }
-
     pub(crate) fn wallet_store_artifact_paths(wallet_id: &WalletId) -> [PathBuf; 5] {
         let sqlite_data_path = sqlite_data_path(wallet_id);
 
