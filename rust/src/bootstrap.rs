@@ -107,10 +107,6 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
             .map_err(|error| AppInitError::DatabaseVerificationFailed(error.to_string()))?;
         crate::backup::recovery::recover_restore_markers()
             .map_err(AppInitError::RecoveryRequired)?;
-        crate::wallet::addressing::recover_address_type_switches(
-            &crate::database::Database::global().wallets,
-        )
-        .map_err(AppInitError::RecoveryRequired)?;
 
         set_step(BootstrapStep::RedbMigrationComplete);
         info!("Bootstrap: storage bootstrapped, attempting BDK migration");
@@ -237,8 +233,7 @@ pub enum AppInitError {
     #[error("Database verification failed: {0}")]
     DatabaseVerificationFailed(String),
 
-    /// Bootstrap found interrupted work (restore or address-type switch) that
-    /// needs recovery
+    /// Bootstrap found an interrupted backup restore that needs recovery
     #[error("Wallet restore recovery is required: {0}")]
     RecoveryRequired(String),
 }

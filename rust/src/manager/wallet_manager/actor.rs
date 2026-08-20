@@ -1,4 +1,3 @@
-use crate::wallet::addressing::AddressTypeSwitch;
 use crate::{
     database::{
         Database,
@@ -663,8 +662,9 @@ impl WalletActor {
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
         let previous_metadata = self.wallet.metadata.clone();
-        let switch = self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
-        self.finish_address_type_switch(switch, address_type, previous_metadata).await
+        let switch_metadata =
+            self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
+        self.finish_address_type_switch(switch_metadata, address_type, previous_metadata).await
     }
 
     pub async fn switch_descriptor_to_new_address_type(
@@ -711,133 +711,34 @@ impl WalletActor {
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
         let previous_metadata = self.wallet.metadata.clone();
-        let switch =
+        let switch_metadata =
             self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
-        self.finish_address_type_switch(switch, address_type, previous_metadata).await
+        self.finish_address_type_switch(switch_metadata, address_type, previous_metadata).await
     }
 
     async fn finish_address_type_switch(
         &mut self,
-        mut switch: AddressTypeSwitch,
+        switch_metadata: AddressTypeSwitchMetadata,
         address_type: WalletAddressType,
         previous_metadata: WalletMetadata,
     ) -> Result<(), Error> {
-        let switch_metadata = switch.metadata();
         let patch = WalletMetadataPatch::AddressType(address_type_patch(
             address_type,
             switch_metadata,
             &previous_metadata,
         ));
 
-        if let Err(error) = switch.mark_metadata_committing() {
-            return match switch.rollback(&mut self.wallet) {
-                Ok(()) => Err(Error::UnableToSwitch(address_type, error.to_string())),
-                Err(rollback_error) => Err(Error::UnableToSwitch(
-                    address_type,
-                    format!("{error}; failed to restore wallet store: {rollback_error}"),
-                )),
-            };
-        }
-
-        if let Err(error) = self.apply_metadata_patch(patch) {
-            if let Err(rollback_error) = switch.rollback(&mut self.wallet) {
-                return Err(Error::UnableToSwitch(
-                    address_type,
-                    format!("{error}; failed to restore wallet store: {rollback_error}"),
-                ));
-            }
-
-            return Err(error);
-        }
-
-        if let Err(error) = switch.mark_metadata_committed() {
-            self.reset_scan_lifecycle_for_address_type_switch();
-            if let Err(rollback_error) =
-                self.rollback_address_type_switch(switch, &previous_metadata)
-            {
-                return Err(Error::UnableToSwitch(
-                    address_type,
-                    format!("{error}; {rollback_error}"),
-                ));
-            }
-
-            return Err(Error::UnableToSwitch(address_type, error.to_string()));
-        }
+        // the store already holds the new descriptors; if this commit fails the
+        // next wallet load heals metadata forward from the store, so no rollback runs
+        self.apply_metadata_patch(patch)
+            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
 
         if let Err(error) = self.restart_scan_after_address_type_switch().await {
+            // the switch itself is committed; only the scan restart failed and
+            // the next wallet open scans the new descriptors
             self.reset_scan_lifecycle_for_address_type_switch();
-            if let Err(rollback_error) =
-                self.rollback_address_type_switch(switch, &previous_metadata)
-            {
-                return Err(Error::UnableToSwitch(
-                    address_type,
-                    format!("{error}; {rollback_error}"),
-                ));
-            }
-
             return Err(Error::UnableToSwitch(address_type, error.to_string()));
         }
-
-        switch.commit().map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
-        Ok(())
-    }
-
-    fn rollback_address_type_switch(
-        &mut self,
-        mut switch: AddressTypeSwitch,
-        previous_metadata: &WalletMetadata,
-    ) -> Result<(), String> {
-        let phase_error = switch.begin_rollback().err();
-        let metadata_error = self.restore_address_type_switch_metadata(previous_metadata).err();
-        let store_error = switch.restore_store(&mut self.wallet).err();
-
-        if phase_error.is_some() || metadata_error.is_some() || store_error.is_some() {
-            let mut failures = Vec::new();
-
-            if let Some(error) = phase_error {
-                failures.push(format!("failed to record wallet rollback: {error}"));
-            }
-
-            if let Some(error) = metadata_error {
-                failures.push(format!("failed to restore wallet metadata: {error}"));
-            }
-
-            if let Some(error) = store_error {
-                failures.push(format!("failed to restore wallet store: {error}"));
-            }
-
-            // keep the durable Rollback journal so bootstrap can retry every failed step
-            return Err(failures.join("; "));
-        }
-
-        switch.complete_rollback().map_err(|error| {
-            format!("failed to finalize wallet rollback; bootstrap will retry: {error}")
-        })
-    }
-
-    fn restore_address_type_switch_metadata(
-        &mut self,
-        previous_metadata: &WalletMetadata,
-    ) -> Result<(), Error> {
-        self.apply_metadata_patch(WalletMetadataPatch::AddressType(WalletAddressTypePatch {
-            address_type: previous_metadata.address_type,
-            discovery_state: previous_metadata.discovery_state.clone(),
-            origin: previous_metadata.origin.clone(),
-            master_fingerprint: previous_metadata.master_fingerprint.clone(),
-        }))?;
-        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-            address_index: Some(previous_metadata.internal.address_index.clone()),
-            last_scan_finished: Some(previous_metadata.internal.last_scan_finished),
-            last_height_fetched: Some(previous_metadata.internal.last_height_fetched),
-            performed_full_scan_at: Some(previous_metadata.internal.performed_full_scan_at),
-        }))?;
-
-        self.last_scan_finished = previous_metadata.internal.last_scan_finished;
-        self.last_height_fetched = previous_metadata
-            .internal
-            .last_height_fetched
-            .as_ref()
-            .map(|height| (height.last_seen, height.block_height as usize));
 
         Ok(())
     }
@@ -3458,14 +3359,13 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn address_type_switch_metadata_failure_restores_old_wallet_store() {
+    async fn address_type_switch_metadata_failure_heals_forward_on_reload() {
         let _guard = address_type_switch_test_lock().lock().await;
 
         crate::database::test_support::init_test_database();
 
         let metadata = WalletMetadata::preview_new();
         let wallet = persisted_preview_wallet(metadata.clone());
-        let expected_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
         let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
         let (addr, _receiver) = spawn_test_wallet_actor(wallet);
 
@@ -3479,141 +3379,75 @@ mod tests {
         )
         .await
         .expect("actor responds");
-        assert!(result.is_err());
+        assert!(result.is_err(), "the switch surfaces the metadata commit failure");
 
-        let actor_metadata =
-            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
-        let actor_address = call!(addr.address_at(0)).await.expect("address loads");
-
-        assert_eq!(actor_metadata.address_type, WalletAddressType::NativeSegwit);
-        assert_eq!(actor_address.to_string(), expected_address.to_string());
-
+        // the store is already switched; restoring the metadata row and reloading
+        // heals the metadata forward to match the store
         crate::database::Database::global()
             .wallets
             .save_new_wallet_metadata(metadata.clone())
             .expect("metadata row is restored for reload");
-        let mut reloaded_wallet = Wallet::try_load_persisted(metadata.id.clone())
-            .expect("wallet reloads after the failed switch");
-        let reloaded_address = reloaded_wallet.bdk.peek_address(KeychainKind::External, 0).address;
-        assert_eq!(reloaded_address.to_string(), expected_address.to_string());
-
-        reloaded_wallet.bdk.reveal_next_address(KeychainKind::External);
-        reloaded_wallet.persist().expect("restored wallet persists to the restored path");
-        drop(reloaded_wallet);
-
-        let persisted_again = Wallet::try_load_persisted(metadata.id.clone())
-            .expect("wallet reloads after persisting through the restored connection");
-        assert_eq!(
-            persisted_again
-                .bdk
-                .list_unused_addresses(KeychainKind::External)
-                .next()
-                .map(|address| address.index),
-            Some(0)
-        );
-
-        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn interrupted_address_type_switch_restores_old_store_during_startup_recovery() {
-        let _guard = address_type_switch_test_lock().lock().await;
-
-        crate::database::test_support::init_test_database();
-
-        let metadata = WalletMetadata::preview_new();
-        let mut wallet = persisted_preview_wallet(metadata.clone());
-        let old_metadata = wallet.metadata.clone();
-        let expected_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
-        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
-
-        let switch = wallet
-            .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
-            .expect("address type store is replaced");
-        let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
-        assert_ne!(replacement_address, expected_address);
-
-        // dropping these values simulates a process stop after store replacement
-        drop(wallet);
-        drop(switch);
-
-        let database = crate::database::Database::global();
-        crate::wallet::addressing::recover_address_type_switches(&database.wallets)
-            .expect("interrupted address switch is recovered");
-
         let reloaded = Wallet::try_load_persisted(metadata.id.clone())
-            .expect("wallet reloads from the restored store");
-        let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
+            .expect("wallet reloads from the switched store");
 
-        assert_eq!(reloaded.metadata, old_metadata);
-        assert_eq!(reloaded_address, expected_address);
+        assert_eq!(reloaded.metadata.address_type, WalletAddressType::Legacy);
+        assert_eq!(reloaded.metadata.internal.performed_full_scan_at, None);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::Legacy,
+            "the healed metadata is persisted"
+        );
 
         drop(reloaded);
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn interrupted_committed_address_type_switch_keeps_new_store_during_startup_recovery() {
+    async fn interrupted_address_type_switch_heals_metadata_on_next_load() {
         let _guard = address_type_switch_test_lock().lock().await;
 
         crate::database::test_support::init_test_database();
 
         let metadata = WalletMetadata::preview_new();
         let mut wallet = persisted_preview_wallet(metadata.clone());
-        let old_metadata = wallet.metadata.clone();
         let original_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
         let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
 
-        let mut switch = wallet
+        let _switch_metadata = wallet
             .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
             .expect("address type store is replaced");
         let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
         assert_ne!(replacement_address, original_address);
 
-        let switch_metadata = switch.metadata();
-        let patch = WalletMetadataPatch::AddressType(address_type_patch(
-            WalletAddressType::Legacy,
-            switch_metadata,
-            &old_metadata,
-        ));
-        let mut target_metadata = old_metadata;
-        patch.apply_to(&mut target_metadata);
-
-        switch.mark_metadata_committing().expect("metadata commit is recorded");
-        crate::database::Database::global()
-            .wallets
-            .replace_wallet_metadata(target_metadata.clone())
-            .expect("target metadata is persisted");
-        switch.mark_metadata_committed().expect("metadata completion is recorded");
-
-        // dropping these values simulates a process stop before journal cleanup
+        // dropping the wallet simulates a process stop before the metadata commit
         drop(wallet);
-        drop(switch);
-
-        let legacy_store_path = BdkStore::wallet_store_artifact_paths(&metadata.id)[0].clone();
-        std::fs::write(&legacy_store_path, b"legacy store artifact")
-            .expect("legacy store artifact is created");
-
-        let database = crate::database::Database::global();
-        crate::wallet::addressing::recover_address_type_switches(&database.wallets)
-            .expect("committed address switch is recovered");
-
-        assert!(legacy_store_path.exists());
 
         let reloaded = Wallet::try_load_persisted(metadata.id.clone())
             .expect("wallet reloads from the replacement store");
         let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
 
-        assert_eq!(reloaded.metadata, target_metadata);
+        assert_eq!(reloaded.metadata.address_type, WalletAddressType::Legacy);
+        assert_eq!(
+            reloaded.metadata.discovery_state,
+            crate::wallet::metadata::DiscoveryState::ChoseAdressType
+        );
+        assert_eq!(reloaded.metadata.internal.performed_full_scan_at, None);
+        assert_eq!(reloaded.metadata.internal.address_index, None);
         assert_eq!(reloaded_address, replacement_address);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::Legacy,
+            "the healed metadata is persisted for the next load"
+        );
 
         drop(reloaded);
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
-    /// Builds a wallet whose address-type switch reached `MetadataCommitted`
-    /// and whose process stopped before journal cleanup
-    async fn interrupted_committed_switch_fixture() -> (WalletMetadata, WalletMetadata) {
+    #[tokio::test(flavor = "current_thread")]
+    async fn completed_address_type_switch_reloads_without_healing() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
         crate::database::test_support::init_test_database();
 
         let metadata = WalletMetadata::preview_new();
@@ -3621,11 +3455,11 @@ mod tests {
         let old_metadata = wallet.metadata.clone();
         let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
 
-        let mut switch = wallet
+        let switch_metadata = wallet
             .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
             .expect("address type store is replaced");
+        let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
 
-        let switch_metadata = switch.metadata();
         let patch = WalletMetadataPatch::AddressType(address_type_patch(
             WalletAddressType::Legacy,
             switch_metadata,
@@ -3633,100 +3467,21 @@ mod tests {
         ));
         let mut target_metadata = old_metadata;
         patch.apply_to(&mut target_metadata);
-
-        switch.mark_metadata_committing().expect("metadata commit is recorded");
         crate::database::Database::global()
             .wallets
             .replace_wallet_metadata(target_metadata.clone())
             .expect("target metadata is persisted");
-        switch.mark_metadata_committed().expect("metadata completion is recorded");
 
-        // dropping these values simulates a process stop before journal cleanup
         drop(wallet);
-        drop(switch);
 
-        (metadata, target_metadata)
-    }
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the replacement store");
+        let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn interrupted_committed_address_type_switch_fails_closed_when_store_inspection_fails() {
-        let _guard = address_type_switch_test_lock().lock().await;
+        assert_eq!(reloaded.metadata, target_metadata, "a completed switch is not healed");
+        assert_eq!(reloaded_address, replacement_address);
 
-        let (metadata, target_metadata) = interrupted_committed_switch_fixture().await;
-
-        // a non-sqlite file at the sqlite path makes persistent-store inspection fail
-        let sqlite_store_path = BdkStore::wallet_store_artifact_paths(&metadata.id)[1].clone();
-        std::fs::write(&sqlite_store_path, b"not a sqlite database")
-            .expect("sqlite store is corrupted");
-
-        let database = crate::database::Database::global();
-        let recovery = crate::wallet::addressing::recover_address_type_switches(&database.wallets);
-
-        let error = recovery.expect_err("recovery fails closed when the store cannot be inspected");
-        assert!(
-            error.contains("failed to inspect wallet store"),
-            "recovery error explains the inspection failure: {error}"
-        );
-
-        // the journal stays with its backup so the next bootstrap can retry
-        let journal_directories =
-            crate::wallet::addressing::test_support::wallet_switch_journal_directories(
-                &metadata.id,
-            )
-            .expect("address switch journal directories are read");
-        assert_eq!(journal_directories.len(), 1, "the address switch journal remains");
-        let journal_path = journal_directories[0].join("journal.json");
-        let journal = std::fs::read_to_string(&journal_path).expect("journal is readable");
-        assert!(
-            journal.contains("metadata_committed"),
-            "recovery does not advance the journal phase: {journal}"
-        );
-        assert!(journal_directories[0].join("sqlite-backup.db").exists());
-
-        // wallet metadata keeps the user-visible target instead of the old state
-        let current_metadata = database
-            .wallets
-            .get(&metadata.id, metadata.network, metadata.wallet_mode)
-            .expect("wallet metadata loads");
-        assert_eq!(current_metadata, Some(target_metadata.clone()));
-
-        // the corrupt store file is untouched, so the backup was not restored over it
-        assert_eq!(
-            std::fs::read(&sqlite_store_path).expect("corrupt sqlite store is readable"),
-            b"not a sqlite database".to_vec()
-        );
-
-        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn database_reinit_does_not_recover_address_type_switch_journals() {
-        let _guard = address_type_switch_test_lock().lock().await;
-
-        let (metadata, _target_metadata) = interrupted_committed_switch_fixture().await;
-
-        // wiping the metadata row makes any recovery attempt on this journal fail;
-        // re-initializing the database must not attempt that recovery
-        crate::database::test_support::delete_database();
-        crate::database::Database::try_reinit()
-            .expect("database reinitializes without address switch recovery");
-
-        assert_eq!(
-            crate::wallet::addressing::test_support::wallet_switch_journal_directories(
-                &metadata.id
-            )
-            .expect("address switch journal directories are read")
-            .len(),
-            1,
-            "database reinit leaves the journal for bootstrap-owned recovery"
-        );
-
-        // bootstrap-owned recovery still reports the interrupted switch
-        let recovery = crate::wallet::addressing::recover_address_type_switches(
-            &crate::database::Database::global().wallets,
-        );
-        assert!(recovery.is_err(), "recovery still fails closed for the leftover journal");
-
+        drop(reloaded);
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 

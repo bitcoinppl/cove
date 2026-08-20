@@ -203,6 +203,10 @@ impl Wallet {
             .get(&id, network, mode)?
             .ok_or(WalletError::WalletNotFound)?;
 
+        // an interrupted address-type switch replaces the store before metadata
+        // commits; the store is the durable truth, so metadata follows it
+        metadata = addressing::healed_metadata_for_store(metadata, &wallet);
+
         // set and save the origin if not set
         // we should be able to remove this because we should always have the origin
         // unless its a xpub only wallet
@@ -327,15 +331,8 @@ impl WalletAddressType {
     }
 }
 
-// delete wallet filestore / sqlite store, wallet data database, and address
-// switch journals owned by the wallet
+// delete the wallet filestore / sqlite store and the wallet data database
 pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
-    crate::wallet::addressing::remove_address_switch_journals(wallet_id)
-        .context("unable to delete address switch recovery data")?;
-    remove_wallet_specific_artifacts(wallet_id)
-}
-
-fn remove_wallet_specific_artifacts(wallet_id: &WalletId) -> eyre::Result<()> {
     BdkStore::delete_wallet_stores(wallet_id)?;
     crate::database::wallet_data::delete_database(wallet_id)
         .context("unable to delete wallet data database")?;

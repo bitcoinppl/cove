@@ -335,16 +335,12 @@ impl WalletActor {
         now: u64,
         status: ReceiveAddressStatus,
     ) -> Result<ReceiveAddressState, Error> {
-        let before_metadata = self.wallet.metadata.clone();
-        let address = self.wallet.get_next_address()?;
+        let (address, address_index_update) = self.wallet.get_next_address()?;
 
-        if before_metadata.internal.address_index != self.wallet.metadata.internal.address_index {
-            let address_index = self.wallet.metadata.internal.address_index.clone();
-            self.wallet.metadata = before_metadata.clone();
-
+        if let Some(address_index) = address_index_update {
             self.apply_metadata_patch(WalletMetadataPatch::Internal(
                 WalletInternalMetadataPatch {
-                    address_index: Some(address_index),
+                    address_index: Some(Some(address_index)),
                     ..Default::default()
                 },
             ))?;

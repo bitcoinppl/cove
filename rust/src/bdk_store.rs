@@ -51,29 +51,6 @@ impl BdkStore {
         Ok(me)
     }
 
-    /// Check a persistent wallet without running legacy-store migration
-    pub(crate) fn persistent_wallet_matches_descriptors(
-        id: &WalletId,
-        external_descriptor: &str,
-        internal_descriptor: &str,
-    ) -> Result<bool> {
-        let sqlite_data_path = sqlite_data_path(id);
-        if !sqlite_data_path.exists() {
-            return Ok(false);
-        }
-
-        let mut conn = open_persistent_connection(&sqlite_data_path)?;
-        let Some(wallet) = Wallet::load()
-            .load_wallet(&mut conn)
-            .context("failed to load wallet while inspecting persistent store")?
-        else {
-            return Ok(false);
-        };
-
-        Ok(wallet.public_descriptor(KeychainKind::External).to_string() == external_descriptor
-            && wallet.public_descriptor(KeychainKind::Internal).to_string() == internal_descriptor)
-    }
-
     /// Open an in-memory BDK wallet store for ephemeral wallet views
     pub fn in_memory(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
         let network = network.into();
@@ -170,7 +147,54 @@ impl BdkStore {
             remove_sqlite_auxiliary_files(&sqlite_data_path);
         }
 
+        let replacement_path = replacement_store_path(&sqlite_data_path);
+        Self::remove_wallet_artifact(&replacement_path)
+            .context("unable to delete replacement store")?;
+        remove_sqlite_auxiliary_files(&replacement_path);
+
         Ok(())
+    }
+
+    /// Build a replacement persistent store at a temporary path
+    ///
+    /// `create` receives the temporary connection and must create the new BDK
+    /// wallet in it. The live store is untouched until
+    /// [`PreparedStoreReplacement::activate`] publishes the file atomically
+    pub(crate) fn prepare_replacement(
+        id: &WalletId,
+        create: impl FnOnce(&mut bdk_wallet::rusqlite::Connection) -> Result<()>,
+    ) -> Result<PreparedStoreReplacement> {
+        crate::bootstrap::ensure_storage_bootstrapped()
+            .map_err(|e| eyre::eyre!("storage bootstrap failed: {e}"))?;
+
+        let final_path = sqlite_data_path(id);
+        let temporary_path = replacement_store_path(&final_path);
+        Self::remove_wallet_artifact(&temporary_path)
+            .context("unable to remove stale replacement store")?;
+        remove_sqlite_auxiliary_files(&temporary_path);
+
+        let prepared = PreparedStoreReplacement {
+            temporary_path,
+            final_path,
+            legacy_store_path: file_store_data_path(id),
+        };
+
+        let build = || -> Result<()> {
+            let mut conn = open_persistent_connection(&prepared.temporary_path)?;
+            create(&mut conn)?;
+            conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .context("unable to checkpoint replacement store")?;
+            drop(conn);
+            sync_path(&prepared.temporary_path).context("unable to sync replacement store")?;
+            Ok(())
+        };
+
+        if let Err(error) = build() {
+            prepared.discard();
+            return Err(error);
+        }
+
+        Ok(prepared)
     }
 
     pub(crate) fn wallet_store_artifact_paths(wallet_id: &WalletId) -> [PathBuf; 5] {
@@ -193,6 +217,53 @@ impl BdkStore {
             Err(error) => Err(error),
         }
     }
+}
+
+/// A fully built replacement store waiting to be published over the live one
+pub(crate) struct PreparedStoreReplacement {
+    temporary_path: PathBuf,
+    final_path: PathBuf,
+    legacy_store_path: PathBuf,
+}
+
+impl PreparedStoreReplacement {
+    /// Atomically publish the replacement over the previous store
+    ///
+    /// The caller must close the previous store's connection first so its WAL
+    /// is checkpointed. A crash before the rename leaves the old store; a crash
+    /// after it leaves the new one — never a missing or partial store
+    pub(crate) fn activate(self) -> Result<()> {
+        // a stale legacy filestore would shadow the sqlite store at the next load
+        BdkStore::remove_wallet_artifact(&self.legacy_store_path)
+            .context("unable to remove legacy wallet filestore")?;
+        // aux files of the old database must not pair with the replacement
+        remove_sqlite_auxiliary_files(&self.final_path);
+
+        std::fs::rename(&self.temporary_path, &self.final_path)
+            .context("unable to publish replacement wallet store")?;
+        sync_path(&self.final_path).context("unable to sync published wallet store")?;
+        if let Some(parent) = self.final_path.parent() {
+            sync_path(parent).context("unable to sync wallet store directory")?;
+        }
+
+        Ok(())
+    }
+
+    /// Remove the temporary store after a failed preparation
+    fn discard(&self) {
+        let _ = BdkStore::remove_wallet_artifact(&self.temporary_path);
+        remove_sqlite_auxiliary_files(&self.temporary_path);
+    }
+}
+
+fn replacement_store_path(final_path: &Path) -> PathBuf {
+    let mut name = final_path.as_os_str().to_os_string();
+    name.push(".switch-tmp");
+    PathBuf::from(name)
+}
+
+fn sync_path(path: &Path) -> std::io::Result<()> {
+    std::fs::File::open(path)?.sync_all()
 }
 
 fn open_persistent_connection(sqlite_data_path: &Path) -> Result<bdk_wallet::rusqlite::Connection> {
