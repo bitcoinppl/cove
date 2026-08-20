@@ -42,7 +42,7 @@ struct VerificationSection: View {
                 onVerify: startVerification
             )
         case .running:
-            CloudBackupVerificationProgressSection()
+            EmptyView()
         case let .verified(report: report, lastVerifiedAt: _):
             if let report {
                 CloudBackupVerifiedSection(
@@ -118,18 +118,6 @@ private struct CloudBackupVerificationStartSection: View {
                 Label("Verify Now", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
-        }
-    }
-}
-
-private struct CloudBackupVerificationProgressSection: View {
-    var body: some View {
-        Section {
-            HStack {
-                ProgressView()
-                    .padding(.trailing, 8)
-                Text("Verifying backup integrity...")
-            }
         }
     }
 }

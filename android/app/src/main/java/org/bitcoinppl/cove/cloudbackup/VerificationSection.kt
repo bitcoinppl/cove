@@ -113,10 +113,7 @@ internal fun VerificationSection(
             }
 
             CloudBackupVerificationState.Running -> {
-                CloudBackupProgressCard(
-                    title = "Verifying backup integrity",
-                    message = "Confirming that wallet backups can be decrypted and restored",
-                )
+                Unit
             }
 
             is CloudBackupVerificationState.Verified -> {

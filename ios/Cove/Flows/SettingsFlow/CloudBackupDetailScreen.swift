@@ -1,5 +1,43 @@
 import SwiftUI
 
+enum CloudBackupDetailProgressPresentation: Equatable {
+    case none
+    case inventoryInline
+    case verificationCard
+    case verificationInline
+}
+
+func cloudBackupDetailProgressPresentation(
+    verificationState: CloudBackupVerificationState?,
+    isInventoryChecking: Bool,
+    hasRetainedDetail: Bool,
+    hasVisibleWalletRows: Bool
+) -> CloudBackupDetailProgressPresentation {
+    if case .running = verificationState {
+        return hasVisibleWalletRows ? .verificationInline : .verificationCard
+    }
+
+    if isInventoryChecking, hasRetainedDetail {
+        return .inventoryInline
+    }
+
+    return .none
+}
+
+func cloudBackupHasVisibleWalletRows(
+    detail: CloudBackupDetail?,
+    cloudOnly: CloudOnlyState
+) -> Bool {
+    guard let detail else { return false }
+
+    if !detail.upToDate.isEmpty || !detail.needsSync.isEmpty {
+        return true
+    }
+
+    guard case let .loaded(wallets) = cloudOnly else { return false }
+    return !wallets.isEmpty
+}
+
 struct CloudBackupDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CloudBackupPresentationCoordinator.self)
@@ -7,11 +45,6 @@ struct CloudBackupDetailScreen: View {
     @State private var manager = CloudBackupManager.shared
     @State private var showRecreateConfirmation = false
     @State private var showReinitializeConfirmation = false
-
-    private var isVerifying: Bool {
-        if case .running = manager.verificationState { return true }
-        return false
-    }
 
     private var hasVerificationResult: Bool {
         switch manager.verificationState {
@@ -36,7 +69,19 @@ struct CloudBackupDetailScreen: View {
     }
 
     private var shouldShowLoadingState: Bool {
-        manager.detail == nil && !isVerifying && !hasVerificationResult && !isCancelled
+        manager.detail == nil && !hasVerificationResult && !isCancelled
+    }
+
+    private var progressPresentation: CloudBackupDetailProgressPresentation {
+        cloudBackupDetailProgressPresentation(
+            verificationState: manager.verificationState,
+            isInventoryChecking: manager.isDetailInventoryChecking,
+            hasRetainedDetail: manager.detail != nil,
+            hasVisibleWalletRows: cloudBackupHasVisibleWalletRows(
+                detail: manager.detail,
+                cloudOnly: manager.cloudOnly
+            )
+        )
     }
 
     private var hasCloudBackupPresentationBlocker: Bool {
@@ -52,12 +97,11 @@ struct CloudBackupDetailScreen: View {
                 isPresented: $showRecreateConfirmation,
                 content: CloudBackupDetailForm(
                     manager: manager,
-                    isVerifying: isVerifying,
-                    hasVerificationResult: hasVerificationResult,
                     isCancelled: isCancelled,
                     isPasskeyMissing: isPasskeyMissing,
                     isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                     shouldShowLoadingState: shouldShowLoadingState,
+                    progressPresentation: progressPresentation,
                     onRecreate: showRecreateDialog,
                     onReinitialize: showReinitializeDialog
                 )
@@ -101,12 +145,11 @@ struct CloudBackupDetailScreen: View {
 
 private struct CloudBackupDetailForm: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let isPasskeyMissing: Bool
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
     let onRecreate: () -> Void
     let onReinitialize: () -> Void
 
@@ -114,12 +157,11 @@ private struct CloudBackupDetailForm: View {
         Form {
             CloudBackupDetailFormContent(
                 manager: manager,
-                isVerifying: isVerifying,
-                hasVerificationResult: hasVerificationResult,
                 isCancelled: isCancelled,
                 isPasskeyMissing: isPasskeyMissing,
                 isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                 shouldShowLoadingState: shouldShowLoadingState,
+                progressPresentation: progressPresentation,
                 onRecreate: onRecreate,
                 onReinitialize: onReinitialize
             )
@@ -183,12 +225,11 @@ private struct CloudBackupReinitializeDialog<Content: View>: View {
 
 struct CloudBackupDetailFormContent: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let isPasskeyMissing: Bool
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
     let onRecreate: () -> Void
     let onReinitialize: () -> Void
 
@@ -206,10 +247,9 @@ struct CloudBackupDetailFormContent: View {
 
             CloudBackupStatusSection(
                 manager: manager,
-                isVerifying: isVerifying,
-                hasVerificationResult: hasVerificationResult,
                 isCancelled: isCancelled,
-                shouldShowLoadingState: shouldShowLoadingState
+                shouldShowLoadingState: shouldShowLoadingState,
+                progressPresentation: progressPresentation
             )
             VerificationSection(
                 manager: manager,
@@ -225,17 +265,20 @@ struct CloudBackupDetailFormContent: View {
 
 struct CloudBackupStatusSection: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
 
     @AccessibilityFocusState private var inventoryErrorFocused: Bool
 
     var body: some View {
         Group {
-            if manager.isDetailInventoryChecking, manager.detail != nil {
+            if progressPresentation == .inventoryInline {
                 CloudBackupInventoryCheckingSection()
+            }
+
+            if progressPresentation == .verificationInline {
+                CloudBackupVerificationInlineSection()
             }
 
             if let error = manager.detailError {
@@ -248,10 +291,9 @@ struct CloudBackupStatusSection: View {
 
             CloudBackupDetailStatusContent(
                 manager: manager,
-                isVerifying: isVerifying,
-                hasVerificationResult: hasVerificationResult,
                 isCancelled: isCancelled,
-                shouldShowLoadingState: shouldShowLoadingState
+                shouldShowLoadingState: shouldShowLoadingState,
+                progressPresentation: progressPresentation
             )
         }
         .onChange(of: manager.detailError, initial: true) { _, error in
@@ -306,14 +348,13 @@ private struct CloudBackupInventoryErrorSection: View {
 
 private struct CloudBackupDetailStatusContent: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
 
     var body: some View {
-        if isVerifying, !hasVerificationResult {
-            CloudBackupVerifyingSection()
+        if progressPresentation == .verificationCard {
+            CloudBackupVerificationCard()
         } else if let detail = manager.detail, !isCancelled {
             DetailFormContent(
                 detail: detail,
@@ -326,7 +367,7 @@ private struct CloudBackupDetailStatusContent: View {
     }
 }
 
-private struct CloudBackupVerifyingSection: View {
+private struct CloudBackupVerificationCard: View {
     var body: some View {
         Section {
             VStack {
@@ -334,6 +375,19 @@ private struct CloudBackupVerifyingSection: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+        }
+    }
+}
+
+private struct CloudBackupVerificationInlineSection: View {
+    var body: some View {
+        Section {
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+
+                Text("Verifying backup integrity...")
+            }
         }
     }
 }

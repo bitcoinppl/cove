@@ -26,6 +26,8 @@ import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationPresentation
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudBackupWalletItem
+import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.DeepVerificationFailure
@@ -152,6 +154,7 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupDetailBodyState(
                 manager = cloudBackupManager(verification = CloudBackupVerificationState.NotVerified),
                 hasDetail = true,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
         assertEquals(
@@ -159,8 +162,89 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupDetailBodyState(
                 manager = cloudBackupManager(verification = CloudBackupVerificationState.NotVerified),
                 hasDetail = false,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
+    }
+
+    @Test
+    fun verificationProgressHasOnePresentationOwner() {
+        assertEquals(
+            CloudBackupDetailProgressPresentation.VERIFICATION_CARD,
+            cloudBackupDetailProgressPresentation(
+                isVerificationRunning = true,
+                isInventoryChecking = true,
+                hasRetainedDetail = true,
+                hasVisibleWalletRows = false,
+            ),
+        )
+        assertEquals(
+            CloudBackupDetailProgressPresentation.VERIFICATION_INLINE,
+            cloudBackupDetailProgressPresentation(
+                isVerificationRunning = true,
+                isInventoryChecking = true,
+                hasRetainedDetail = true,
+                hasVisibleWalletRows = true,
+            ),
+        )
+        assertEquals(
+            CloudBackupDetailProgressPresentation.INVENTORY_INLINE,
+            cloudBackupDetailProgressPresentation(
+                isVerificationRunning = false,
+                isInventoryChecking = true,
+                hasRetainedDetail = true,
+                hasVisibleWalletRows = true,
+            ),
+        )
+    }
+
+    @Test
+    fun inlineVerificationKeepsWalletDetailVisible() {
+        assertEquals(
+            CloudBackupDetailBodyState.DETAIL,
+            cloudBackupDetailBodyState(
+                manager = cloudBackupManager(verification = CloudBackupVerificationState.Running),
+                hasDetail = true,
+                progressPresentation =
+                    CloudBackupDetailProgressPresentation.VERIFICATION_INLINE,
+            ),
+        )
+    }
+
+    @Test
+    fun visibleWalletRowsRequireDetailAndIgnoreCountOnlyState() {
+        val detail =
+            CloudBackupDetail(
+                lastSync = null,
+                upToDate = emptyList(),
+                needsSync = emptyList(),
+                cloudOnlyCount = 1u,
+                otherBackups =
+                    CloudBackupOtherBackupsState.Loaded(
+                        CloudBackupOtherBackupsSummary(
+                            namespaceCount = 0u,
+                            walletCount = 0u,
+                            passkeyHints = emptyList(),
+                        ),
+                    ),
+            )
+        val wallet =
+            CloudBackupWalletItem(
+                name = "Savings",
+                network = null,
+                walletMode = null,
+                walletType = null,
+                fingerprint = null,
+                labelCount = null,
+                backupUpdatedAt = null,
+                syncStatus = CloudBackupWalletStatus.CONFIRMED,
+                restoreFailure = null,
+                recordId = "wallet-record",
+            )
+
+        assertFalse(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.NotFetched))
+        assertFalse(cloudBackupHasVisibleWalletRows(null, CloudOnlyState.Loaded(listOf(wallet))))
+        assertTrue(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.Loaded(listOf(wallet))))
     }
 
     @Test
@@ -170,6 +254,7 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupDetailBodyState(
                 manager = cloudBackupManager(verification = CloudBackupVerificationState.Cancelled),
                 hasDetail = true,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
     }
@@ -190,6 +275,7 @@ class CloudBackupRegressionHelpersTest {
                             ),
                     ),
                 hasDetail = false,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             )
 
         assertNull(bodyState)
@@ -211,7 +297,11 @@ class CloudBackupRegressionHelpersTest {
 
         assertEquals(
             CloudBackupDetailBodyState.INVENTORY_FAILED,
-            cloudBackupDetailBodyState(manager = manager, hasDetail = false),
+            cloudBackupDetailBodyState(
+                manager = manager,
+                hasDetail = false,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
+            ),
         )
         assertEquals("Drive inventory is unavailable", manager.detailError)
         assertFalse(manager.isDetailInventoryComplete)
@@ -288,6 +378,7 @@ class CloudBackupRegressionHelpersTest {
                         verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
                     ),
                 hasDetail = true,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
         assertTrue(
@@ -306,6 +397,7 @@ class CloudBackupRegressionHelpersTest {
             cloudBackupDetailBodyState(
                 manager = cloudBackupManager(verification = CloudBackupVerificationState.Running),
                 hasDetail = true,
+                progressPresentation = CloudBackupDetailProgressPresentation.VERIFICATION_CARD,
             ),
         )
     }
@@ -320,6 +412,7 @@ class CloudBackupRegressionHelpersTest {
                         verification = CloudBackupVerificationState.AwaitingUploadConfirmation,
                     ),
                 hasDetail = false,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
     }
@@ -335,6 +428,7 @@ class CloudBackupRegressionHelpersTest {
                         sync = CloudBackupSyncState.Blocked("authorization required"),
                     ),
                 hasDetail = false,
+                progressPresentation = CloudBackupDetailProgressPresentation.NONE,
             ),
         )
     }

@@ -72,6 +72,75 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         )
     }
 
+    func testCloudBackupProgressPresentationShowsOneVerificationIndicator() {
+        XCTAssertEqual(
+            cloudBackupDetailProgressPresentation(
+                verificationState: .running,
+                isInventoryChecking: true,
+                hasRetainedDetail: true,
+                hasVisibleWalletRows: false
+            ),
+            .verificationCard
+        )
+        XCTAssertEqual(
+            cloudBackupDetailProgressPresentation(
+                verificationState: .running,
+                isInventoryChecking: true,
+                hasRetainedDetail: true,
+                hasVisibleWalletRows: true
+            ),
+            .verificationInline
+        )
+        XCTAssertEqual(
+            cloudBackupDetailProgressPresentation(
+                verificationState: .required,
+                isInventoryChecking: true,
+                hasRetainedDetail: true,
+                hasVisibleWalletRows: true
+            ),
+            .inventoryInline
+        )
+    }
+
+    func testCloudBackupVisibleRowsRequireDetailAndIgnoreCountOnlyState() {
+        let detail = CloudBackupDetail(
+            lastSync: nil,
+            upToDate: [],
+            needsSync: [],
+            cloudOnlyCount: 1,
+            otherBackups: .loaded(summary: CloudBackupOtherBackupsSummary(
+                namespaceCount: 0,
+                walletCount: 0,
+                passkeyHints: []
+            ))
+        )
+        let wallet = CloudBackupWalletItem(
+            name: "Savings",
+            network: .bitcoin,
+            walletMode: nil,
+            walletType: nil,
+            fingerprint: nil,
+            labelCount: nil,
+            backupUpdatedAt: nil,
+            syncStatus: .confirmed,
+            restoreFailure: nil,
+            recordId: "wallet-record"
+        )
+
+        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
+            detail: detail,
+            cloudOnly: .notFetched
+        ))
+        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
+            detail: nil,
+            cloudOnly: .loaded(wallets: [wallet])
+        ))
+        XCTAssertTrue(cloudBackupHasVisibleWalletRows(
+            detail: detail,
+            cloudOnly: .loaded(wallets: [wallet])
+        ))
+    }
+
     func testWalletAccessibilityLabelCombinesIdentityStatusAndAction() {
         let item = CloudBackupWalletItem(
             name: "Savings",
