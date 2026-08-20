@@ -36,6 +36,7 @@ struct BackupImportView: View {
     @State private var importReport: BackupImportReport? = nil
     @State private var importReview: ImportReview? = nil
     @State private var importTask: Task<Void, Never>? = nil
+    @State private var inputGenerations = GenerationTracker()
     @State private var showConfirmation = false
     @State private var showCleanupConfirmation = false
     @State private var backupManager = BackupManager()
@@ -156,6 +157,8 @@ struct BackupImportView: View {
     }
 
     private func invalidateImportReview(clearVerifyReport: Bool, cancelTask: Bool = false) {
+        _ = inputGenerations.advance()
+
         if cancelTask {
             importTask?.cancel()
         }
@@ -230,25 +233,30 @@ struct BackupImportView: View {
 
     private func verifyBackup() {
         guard let fileData else { return }
-        invalidateImportReview(clearVerifyReport: false)
+        invalidateImportReview(clearVerifyReport: false, cancelTask: true)
+        let generation = inputGenerations.capture()
+        let requestedPassword = password
         isVerifying = true
         importTask = Task {
             do {
-                let report = try await backupManager.verifyBackup(data: fileData, password: password)
+                let report = try await backupManager.verifyBackup(
+                    data: fileData,
+                    password: requestedPassword
+                )
                 try Task.checkCancellation()
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isVerifying = false
-                    if !Task.isCancelled {
-                        verifyReport = report
-                    }
+                    verifyReport = report
                 }
             } catch {
                 let isCancelled = Task.isCancelled
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isVerifying = false
-                    if isCancelled {
-                        invalidateImportReview(clearVerifyReport: false)
-                    } else {
+                    if !isCancelled {
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }
@@ -259,15 +267,22 @@ struct BackupImportView: View {
     private func prepareImport() {
         guard let fileData else { return }
         invalidateImportReview(clearVerifyReport: false, cancelTask: true)
+        let generation = inputGenerations.capture()
+        let requestedPassword = password
         isImporting = true
         importTask = Task {
             do {
-                let preparation = try await backupManager.prepareImport(data: fileData, password: password)
+                let preparation = try await backupManager.prepareImport(
+                    data: fileData,
+                    password: requestedPassword
+                )
                 let conflictWalletCount = preparation.markerlessConflictWalletIds().count
                 try Task.checkCancellation()
 
                 if preparation.requiresImportApproval() {
                     await MainActor.run {
+                        guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                         importReview = .awaitingApproval(
                             preparation: preparation,
                             conflictWalletCount: conflictWalletCount
@@ -284,6 +299,8 @@ struct BackupImportView: View {
                 )
 
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     importReport = report
@@ -291,6 +308,8 @@ struct BackupImportView: View {
             } catch {
                 let isCancelled = Task.isCancelled
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     if !isCancelled {
