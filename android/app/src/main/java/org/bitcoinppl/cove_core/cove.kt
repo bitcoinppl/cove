@@ -1759,6 +1759,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_shutdown(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_shutdownblocking(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_shutdown_actors(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
@@ -3024,6 +3026,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_shutdown(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_shutdownblocking(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustwalletmanager_shutdown_actors(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -5008,6 +5012,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_shutdown() != 8138.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_shutdownblocking() != 56869.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_shutdown_actors() != 16080.toShort()) {
@@ -24436,6 +24443,8 @@ public interface RustWalletManagerInterface {
 
     fun `shutdown`()
 
+    fun `shutdownBlocking`()
+
     fun `shutdownActors`()
 
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
@@ -25344,6 +25353,18 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_shutdown(
+        it,
+        _status)
+}
+    }
+
+
+
+    override fun `shutdownBlocking`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_shutdownblocking(
         it,
         _status)
 }
