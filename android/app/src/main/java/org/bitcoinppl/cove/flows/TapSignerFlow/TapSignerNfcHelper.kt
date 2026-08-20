@@ -201,6 +201,7 @@ class TapSignerNfcHelper {
 
 private class TapSignerResponseOwner {
     private val nfcManager = TapCardNfcManager.getInstance()
+    private val operationToken = TapCardNfcManager.OperationToken()
     private val responseStore = TapSignerResponseStore()
     private var pendingSetupResponse: SetupCmdResponse? = null
 
@@ -282,7 +283,7 @@ private class TapSignerResponseOwner {
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         return try {
-            val response = nfcManager.performTapSignerCmd(cmd, callbacks)
+            val response = nfcManager.performTapSignerCmd(operationToken, cmd, callbacks)
             responseStore.acceptResponse(response, operation, generation, responseHandler)
         } finally {
             cmd.destroy()
@@ -296,7 +297,7 @@ private class TapSignerResponseOwner {
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         return try {
-            val response = nfcManager.performTapSignerCmd(cmd, callbacks)
+            val response = nfcManager.performTapSignerCmd(operationToken, cmd, callbacks)
             responseStore.acceptResponse(response, operation = null, generation, responseHandler)
         } finally {
             cmd.destroy()
@@ -310,7 +311,7 @@ private class TapSignerResponseOwner {
         responseHandler: (TapSignerResponse) -> T,
     ): T {
         return try {
-            val response = nfcManager.performTapSignerCmd(prepared.command, callbacks)
+            val response = nfcManager.performTapSignerCmd(operationToken, prepared.command, callbacks)
             responseStore.acceptResponse(
                 response,
                 operation,
@@ -345,7 +346,7 @@ private class TapSignerResponseOwner {
     fun close() {
         releasePendingSetupResponse()
         responseStore.close()
-        nfcManager.cancelActiveOperation()
+        nfcManager.cancelOperation(operationToken)
     }
 
     private fun releasePendingSetupResponse() {

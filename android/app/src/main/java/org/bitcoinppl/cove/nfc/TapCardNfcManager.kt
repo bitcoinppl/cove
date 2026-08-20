@@ -42,7 +42,7 @@ class TapCardNfcManager private constructor(
     private var nfcAdapter: NfcAdapter? = null
     private var activeSession: OperationSession? = null
     private var activeOperationJob: Job? = null
-    private var readerOwner: OperationToken? = null
+    private var readerOwner: NfcSessionToken? = null
     private var pendingDisable: PendingDisable? = null
 
     /** Initialize the manager with the activity that owns reader mode. */
@@ -61,14 +61,36 @@ class TapCardNfcManager private constructor(
         val onTagDetected: (() -> Unit)? = null,
     )
 
+    /** Identifies the helper that owns a sequence of NFC commands. */
+    class OperationToken internal constructor() {
+        private val cancelled = AtomicBoolean(false)
+
+        internal fun cancel() {
+            cancelled.set(true)
+        }
+
+        internal fun ensureActive() {
+            if (cancelled.get()) {
+                throw CancellationException("NFC operation owner was closed")
+            }
+        }
+
+        internal fun isCancelled(): Boolean = cancelled.get()
+    }
+
     /** Perform one command and return its typed response. */
     suspend fun performTapSignerCmd(
+        operationToken: OperationToken,
         cmd: TapSignerCmd,
         callbacks: OperationCallbacks = OperationCallbacks(),
     ): TapSignerResponse =
         operationMutex.withLock {
+            operationToken.ensureActive()
+
             val session =
                 kotlinx.coroutines.withContext(Dispatchers.Main.immediate) {
+                    operationToken.ensureActive()
+
                     val activity =
                         activityRef?.get()
                             ?: throw TapCardNfcException("Activity no longer available")
@@ -81,7 +103,7 @@ class TapCardNfcManager private constructor(
 
                     cancelPendingDisable()
 
-                    val token = operationGate.begin()
+                    val token = operationGate.begin(operationToken)
                     OperationSession(token, activity, adapter, callbacks).also { newSession ->
                         activeSession = newSession
                         activeOperationJob =
@@ -151,22 +173,35 @@ class TapCardNfcManager private constructor(
         }
     }
 
-    /** Cancel the active operation without disabling NFC for a future operation. */
-    fun cancelActiveOperation() {
-        mainHandler.runOnMain {
-            activeOperationJob?.cancel()
-            activeSession?.tagDetected?.cancel(CancellationException("NFC operation cancelled"))
+    /** Cancel active work only when it belongs to the supplied token. */
+    fun cancelOperation(operationToken: OperationToken) {
+        operationToken.cancel()
 
-            activeSession?.let { session ->
-                session.cancel()
-                scheduleReaderDisable(session)
-            }
+        mainHandler.runOnMain {
+            val session = activeSession ?: return@runOnMain
+            if (session.token.owner !== operationToken) return@runOnMain
+            if (!operationGate.cancel(operationToken)) return@runOnMain
+
+            cancelSession(session)
         }
     }
 
     /** Cancel active work and release reader-mode callbacks. */
     fun close() {
-        cancelActiveOperation()
+        mainHandler.runOnMain {
+            val session = activeSession ?: return@runOnMain
+
+            session.token.owner.cancel()
+            operationGate.cancel(session.token.owner)
+            cancelSession(session)
+        }
+    }
+
+    private fun cancelSession(session: OperationSession) {
+        activeOperationJob?.cancel()
+        session.tagDetected.cancel(CancellationException("NFC operation cancelled"))
+        session.cancel()
+        scheduleReaderDisable(session)
     }
 
     private fun enableReaderMode(
@@ -225,10 +260,13 @@ class TapCardNfcManager private constructor(
     }
 
     private fun isCurrent(session: OperationSession): Boolean =
-        activeSession === session && operationGate.isCurrent(session.token) && !session.cancelled.get()
+        activeSession === session &&
+            operationGate.isCurrent(session.token) &&
+            !session.token.owner.isCancelled() &&
+            !session.cancelled.get()
 
     private inner class OperationSession(
-        val token: OperationToken,
+        val token: NfcSessionToken,
         val activity: Activity,
         val adapter: NfcAdapter,
         private val callbacks: OperationCallbacks,
@@ -259,7 +297,7 @@ class TapCardNfcManager private constructor(
     }
 
     private data class PendingDisable(
-        val token: OperationToken,
+        val token: NfcSessionToken,
         val runnable: Runnable,
     )
 
@@ -322,25 +360,36 @@ private fun connectionFailure(logTag: String, error: Throwable): TransportExcept
     )
 }
 
-internal data class OperationToken(val id: Long)
+internal data class NfcSessionToken(
+    val id: Long,
+    val owner: TapCardNfcManager.OperationToken,
+)
 
 /** Small token gate used by the NFC manager and race-focused tests. */
 internal class NfcOperationGate {
     private var nextId = 0L
-    private var current: OperationToken? = null
+    private var current: NfcSessionToken? = null
 
     @Synchronized
-    fun begin(): OperationToken {
-        val token = OperationToken(++nextId)
+    fun begin(owner: TapCardNfcManager.OperationToken): NfcSessionToken {
+        val token = NfcSessionToken(++nextId, owner)
         current = token
         return token
     }
 
     @Synchronized
-    fun isCurrent(token: OperationToken): Boolean = current == token
+    fun isCurrent(token: NfcSessionToken): Boolean = current == token
 
     @Synchronized
-    fun end(token: OperationToken) {
+    fun cancel(owner: TapCardNfcManager.OperationToken): Boolean {
+        if (current?.owner !== owner) return false
+
+        current = null
+        return true
+    }
+
+    @Synchronized
+    fun end(token: NfcSessionToken) {
         if (current == token) current = null
     }
 }
