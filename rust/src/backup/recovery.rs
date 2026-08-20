@@ -68,33 +68,10 @@ impl ValidatedRestoreWalletId {
             )));
         }
 
-        if value == "." || value == ".." {
+        // production wallet ids use Nanoid's URL-safe ASCII alphabet
+        if !value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')) {
             return Err(BackupError::InvalidWalletId(
-                "wallet id is a path traversal component".to_string(),
-            ));
-        }
-
-        if value.chars().any(|character| {
-            character.is_control()
-                || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
-        }) {
-            return Err(BackupError::InvalidWalletId(
-                "wallet id contains a path separator, reserved character, or control character"
-                    .to_string(),
-            ));
-        }
-
-        if value.chars().any(|character| character == '\u{2028}' || character == '\u{2029}') {
-            return Err(BackupError::InvalidWalletId(
-                "wallet id contains an unsafe line separator".to_string(),
-            ));
-        }
-
-        // windows reserves trailing spaces and dots in path components
-        // reject them on every platform so the same backup cannot alias across devices
-        if value.ends_with([' ', '.']) {
-            return Err(BackupError::InvalidWalletId(
-                "wallet id ends with a path-unsafe character".to_string(),
+                "wallet id contains characters outside the Nanoid alphabet".to_string(),
             ));
         }
 
@@ -118,7 +95,7 @@ impl ValidatedRestoreWalletId {
 
 /// Return the canonical key used by every restore-owned artifact root
 pub(crate) fn restore_path_key(value: &str) -> String {
-    value.to_lowercase()
+    value.to_ascii_lowercase()
 }
 
 fn is_windows_reserved_name(value: &str) -> bool {
@@ -1865,6 +1842,15 @@ mod tests {
         assert!(ValidatedRestoreWalletId::validate(&id("CON")).is_err());
         assert!(ValidatedRestoreWalletId::validate(&id("wallet:name")).is_err());
         assert!(ValidatedRestoreWalletId::validate(&id("wallet")).is_ok());
+    }
+
+    #[test]
+    fn restore_ids_reject_non_nanoid_unicode() {
+        for value in ["walleté", "wallete\u{301}", "钱包"] {
+            assert!(ValidatedRestoreWalletId::validate(&id(value)).is_err(), "{value:?}");
+        }
+
+        assert!(ValidatedRestoreWalletId::validate(&id("Wallet_01-test")).is_ok());
     }
 
     #[test]
