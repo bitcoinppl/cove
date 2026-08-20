@@ -121,7 +121,7 @@ fun TapSignerAdvancedChainCode(
                                     ?: if (validChainCode) {
                                         "Decoded bytes: 32"
                                     } else {
-                                        "Decoded bytes: ${decodeHex(chainCode)?.size ?: 0}"
+                                        "Decoded bytes: ${chainCode.length / 2}"
                                     },
                         )
                     },

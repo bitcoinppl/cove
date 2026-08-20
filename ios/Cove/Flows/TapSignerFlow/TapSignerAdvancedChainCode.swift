@@ -22,7 +22,7 @@ struct TapSignerAdvancedChainCode: View {
 
     private var chainCodeError: String? {
         guard !chainCode.isEmpty else { return nil }
-        return tapSignerChainCodeInputError(hex: chainCode)?.errorDescription
+        return tapSignerChainCodeInputError(hex: chainCode)
     }
 
     var body: some View {

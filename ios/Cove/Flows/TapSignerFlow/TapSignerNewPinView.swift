@@ -57,7 +57,7 @@ struct TapSignerNewPinView: View {
             return
         }
 
-        errorMessage = inputError.errorDescription
+        errorMessage = inputError
     }
 
     private func clearSensitiveState() {

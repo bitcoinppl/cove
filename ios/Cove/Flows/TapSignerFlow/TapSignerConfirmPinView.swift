@@ -24,12 +24,12 @@ struct TapSignerConfirmPinView: View {
         guard !isSubmitting else { return }
 
         if let inputError = tapSignerCvcInputError(value: confirmPin) {
-            errorMessage = inputError.errorDescription
+            errorMessage = inputError
             return
         }
 
         if let inputError = tapSignerCvcInputError(value: args.newPin) {
-            errorMessage = inputError.errorDescription
+            errorMessage = inputError
             return
         }
 
@@ -48,12 +48,12 @@ struct TapSignerConfirmPinView: View {
 
     private func setupTapSigner() {
         guard let chainCode = args.chainCode else {
-            errorMessage = TapSignerChainCodeInputError.invalidLength.errorDescription
+            errorMessage = "Enter exactly 64 hexadecimal characters (32 bytes)"
             return
         }
 
         guard let chainCodeBytes = tapSignerChainCodeBytes(hex: chainCode) else {
-            errorMessage = tapSignerChainCodeInputError(hex: chainCode)?.errorDescription
+            errorMessage = tapSignerChainCodeInputError(hex: chainCode)
             return
         }
 

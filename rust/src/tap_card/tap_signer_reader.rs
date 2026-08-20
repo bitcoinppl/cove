@@ -80,6 +80,12 @@ impl TapSignerCvc {
     }
 }
 
+/// User-facing validation message for a CVC input, or None when it is valid
+#[uniffi::export]
+pub fn tap_signer_cvc_validation_message(value: String) -> Option<String> {
+    TapSignerCvc::try_new(value).err().map(|error| error.to_string())
+}
+
 impl From<rust_cktap::CvcError> for TapSignerCvcError {
     fn from(error: rust_cktap::CvcError) -> Self {
         match error {

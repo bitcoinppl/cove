@@ -118,108 +118,24 @@ public extension Data {
     }
 }
 
-/// Errors raised when a TAPSIGNER CVC input is not six to 32 ASCII digits
-public enum TapSignerCvcInputError: Error, Equatable, LocalizedError {
-    case invalidCharacters
-    case invalidLength
-
-    public var errorDescription: String? {
-        switch self {
-        case .invalidCharacters:
-            "Enter the CVC as ASCII digits only."
-        case .invalidLength:
-            "Enter between 6 and 32 ASCII digits."
-        }
-    }
-}
-
-/// Errors raised when a TAPSIGNER chain-code input is not exactly 32 bytes
-public enum TapSignerChainCodeInputError: Error, Equatable, LocalizedError {
-    case invalidHex
-    case invalidLength
-
-    public var errorDescription: String? {
-        switch self {
-        case .invalidHex:
-            "Enter hexadecimal characters only."
-        case .invalidLength:
-            "Enter exactly 64 hexadecimal characters (32 bytes)."
-        }
-    }
-}
-
-private func decodeStrictHex(_ value: String, minBytes: Int, maxBytes: Int) -> Data? {
-    let bytes = Array(value.utf8)
-    guard bytes.count == value.count,
-          bytes.count.isMultiple(of: 2),
-          (minBytes ... maxBytes).contains(bytes.count / 2)
-    else { return nil }
-
-    var decoded = Data(capacity: bytes.count / 2)
-
-    for index in stride(from: 0, to: bytes.count, by: 2) {
-        guard let high = hexNibble(bytes[index]),
-              let low = hexNibble(bytes[index + 1])
-        else { return nil }
-
-        decoded.append((high << 4) | low)
-    }
-
-    return decoded
-}
-
-private func hexNibble(_ value: UInt8) -> UInt8? {
-    switch value {
-    case 48 ... 57: value - 48
-    case 65 ... 70: value - 55
-    case 97 ... 102: value - 87
-    default: nil
-    }
-}
-
-/// Return the user-facing validation error for an invalid TAPSIGNER CVC
-public func tapSignerCvcInputError(value: String) -> TapSignerCvcInputError? {
-    let bytes = Array(value.utf8)
-    guard bytes.allSatisfy({ (48 ... 57).contains($0) }) else {
-        return .invalidCharacters
-    }
-
-    guard (6 ... 32).contains(bytes.count) else { return .invalidLength }
-
-    return nil
+/// Return the user-facing validation message for an invalid TAPSIGNER CVC
+public func tapSignerCvcInputError(value: String) -> String? {
+    tapSignerCvcValidationMessage(value: value)
 }
 
 /// Build an opaque TAPSIGNER CVC after enforcing its six-to-32 ASCII digit format
 public func makeTapSignerCvc(value: String) throws -> TapSignerCvc {
-    if let inputError = tapSignerCvcInputError(value: value) {
-        throw inputError
-    }
-
-    return try TapSignerCvc.tryNew(value: value)
+    try TapSignerCvc.tryNew(value: value)
 }
 
 /// Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data
 public func tapSignerChainCodeBytes(hex: String) -> Data? {
-    decodeStrictHex(hex, minBytes: 32, maxBytes: 32)
+    tapSignerChainCodeFromHex(hex: hex)
 }
 
-/// Return the user-facing validation error for an invalid TAPSIGNER chain code
-public func tapSignerChainCodeInputError(hex: String) -> TapSignerChainCodeInputError? {
-    guard tapSignerChainCodeBytes(hex: hex) == nil else { return nil }
-
-    let length = hex.utf8.count
-    guard length == 64 else { return .invalidLength }
-
-    return .invalidHex
-}
-
-/// Build an exact 32-byte TAPSIGNER chain code or return a user-facing validation error
-public func makeTapSignerChainCode(hex: String) throws -> Data {
-    guard let bytes = tapSignerChainCodeBytes(hex: hex) else {
-        throw tapSignerChainCodeInputError(hex: hex) ?? .invalidHex
-    }
-
-    return bytes
+/// Return the user-facing validation message for an invalid TAPSIGNER chain code
+public func tapSignerChainCodeInputError(hex: String) -> String? {
+    tapSignerChainCodeValidationMessage(hex: hex)
 }
 
 public extension SetupCmdResponse {

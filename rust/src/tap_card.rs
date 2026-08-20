@@ -256,9 +256,23 @@ fn create_transport_error_from_code(code: u16, message: String) -> TransportErro
     }
 }
 
-/// Check whether a hexadecimal chain code decodes to exactly 32 bytes
+/// Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data
 #[uniffi::export]
-pub fn is_valid_chain_code(chain_code: String) -> bool {
-    let Ok(chain_code) = hex::decode(chain_code) else { return false };
-    chain_code.len() == 32
+pub fn tap_signer_chain_code_from_hex(hex: String) -> Option<Vec<u8>> {
+    let decoded = hex::decode(hex).ok()?;
+    (decoded.len() == 32).then_some(decoded)
+}
+
+/// User-facing validation message for a chain-code input, or None when it is valid
+#[uniffi::export]
+pub fn tap_signer_chain_code_validation_message(hex: String) -> Option<String> {
+    if hex.len() != 64 {
+        return Some("Enter exactly 64 hexadecimal characters (32 bytes)".to_string());
+    }
+
+    if hex::decode(&hex).is_err() {
+        return Some("Enter hexadecimal characters only".to_string());
+    }
+
+    None
 }

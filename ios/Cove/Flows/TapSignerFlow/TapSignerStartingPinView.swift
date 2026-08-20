@@ -59,7 +59,7 @@ struct TapSignerStartingPin: View {
             return
         }
 
-        errorMessage = inputError.errorDescription
+        errorMessage = inputError
     }
 
     private func goBack() {
