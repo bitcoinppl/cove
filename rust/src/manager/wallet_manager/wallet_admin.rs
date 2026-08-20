@@ -1,3 +1,5 @@
+use std::{fmt::Display, future::Future};
+
 use crate::{
     app::{
         FfiApp,
@@ -8,8 +10,9 @@ use crate::{
     router::Route,
     wallet::metadata::{WalletMetadata, WalletType},
 };
-use act_zero::call;
+use act_zero::{Actor, Addr, AddrLike as _, call};
 use cove_util::result_ext::ResultExt as _;
+use futures::FutureExt as _;
 use tap::TapFallible as _;
 use tracing::error;
 
@@ -67,10 +70,15 @@ impl RustWalletManager {
 
     async fn shutdown_actors_and_wait(&self) -> Result<(), Error> {
         if let Some(discovery_scanner) = &self.discovery_scanner {
-            call!(discovery_scanner.shutdown()).await.map_err(|_| Error::ActorNotFound)?;
+            shutdown_actor(
+                discovery_scanner,
+                call!(discovery_scanner.shutdown()),
+                "wallet discovery scanner",
+            )
+            .await?;
         }
 
-        call!(self.actor.shutdown()).await.map_err(|_| Error::ActorNotFound)?;
+        shutdown_actor(&self.actor, call!(self.actor.shutdown()), "wallet actor").await?;
 
         Ok(())
     }
@@ -98,5 +106,75 @@ impl RustWalletManager {
     }
     pub(crate) fn wallet_metadata_internal(&self) -> WalletMetadata {
         self.metadata.read().clone()
+    }
+}
+
+async fn shutdown_actor<T, F, E>(
+    actor: &Addr<T>,
+    shutdown: F,
+    actor_name: &str,
+) -> Result<(), Error>
+where
+    T: Actor,
+    F: Future<Output = Result<(), E>>,
+    E: Display,
+{
+    match shutdown.await {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            // a canceled actor call is idempotent only when the actor has already stopped
+            tokio::task::yield_now().await;
+
+            if actor.termination().now_or_never().is_some() {
+                return Ok(());
+            }
+
+            Err(Error::UnknownError(format!("{actor_name} shutdown failed: {error}")))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct FailingActor;
+
+    #[async_trait::async_trait]
+    impl Actor for FailingActor {
+        async fn error(&mut self, _error: act_zero::ActorError) -> bool {
+            false
+        }
+    }
+
+    impl FailingActor {
+        async fn shutdown(&mut self) -> act_zero::ActorResult<()> {
+            Err("nested worker is still running".into())
+        }
+    }
+
+    #[tokio::test]
+    async fn shutdown_actor_accepts_a_detached_actor() {
+        let actor = Addr::<FailingActor>::detached();
+
+        shutdown_actor(&actor, call!(actor.shutdown()), "test actor")
+            .await
+            .expect("detached actors are already stopped");
+    }
+
+    #[tokio::test]
+    async fn shutdown_actor_reports_an_active_shutdown_failure() {
+        crate::test_support::ensure_tokio_runtime();
+
+        let actor = cove_tokio::task::spawn_actor(FailingActor);
+
+        let error = shutdown_actor(&actor, call!(actor.shutdown()), "test actor")
+            .await
+            .expect_err("an active actor failure must not be treated as already stopped");
+
+        assert!(
+            matches!(error, Error::UnknownError(message) if message.contains("test actor shutdown failed"))
+        );
     }
 }
