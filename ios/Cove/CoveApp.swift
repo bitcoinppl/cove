@@ -276,13 +276,7 @@ extension CoveApplicationRoot {
                     Log.error("[STARTUP] wallet restore recovery required at step: \(step)")
                     startupState = .recoveryRequired
                 case let .fatal(message):
-                    if case AppInitError.AlreadyCalled = error {
-                        Log.error("[STARTUP] bootstrap already called at step: \(step)")
-                    } else if case AppInitError.Cancelled = error {
-                        Log.error("[STARTUP] bootstrap cancelled at step: \(step)")
-                    } else {
-                        Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
-                    }
+                    Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
                     startupState = .fatalError(message)
                 }
             }
