@@ -491,7 +491,22 @@ impl Actor for PayjoinActor {
         self.addr = addr.downgrade();
         match &self.session {
             PayjoinSession::PrePost { .. } => send!(addr.start_post()),
-            PayjoinSession::Polling { .. } => send!(addr.begin_poll()),
+
+            PayjoinSession::Polling { .. } => {
+                // publish the stored deadline so the UI can show the countdown on resume
+                if let Some(deadline) = self.poll_deadline {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    let deadline_secs = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs() + remaining.as_secs())
+                        .unwrap_or(0);
+
+                    send!(self.wallet_addr.notify_payjoin_polling_started(deadline_secs));
+                }
+
+                send!(addr.begin_poll());
+            }
+
             _ => {}
         }
         Produces::ok(())
@@ -578,6 +593,13 @@ impl PayjoinActor {
 
         self.poll_deadline = Some(Instant::now() + PAYJOIN_SESSION_TIMEOUT);
         self.session = PayjoinSession::Polling { polling_sender };
+
+        let deadline_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() + PAYJOIN_SESSION_TIMEOUT.as_secs())
+            .unwrap_or(0);
+        send!(self.wallet_addr.notify_payjoin_polling_started(deadline_secs));
+
         self.begin_next_poll();
         Produces::ok(())
     }
