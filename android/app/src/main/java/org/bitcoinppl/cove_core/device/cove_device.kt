@@ -705,6 +705,9 @@ internal interface UniffiCallbackInterfaceKeychainAccessMethod1 : com.sun.jna.Ca
 internal interface UniffiCallbackInterfaceKeychainAccessMethod2 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`key`: RustBuffer.ByValue,`uniffiOutReturn`: ByteByReference,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceKeychainAccessMethod3 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfacePasskeyProviderMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`rpId`: RustBuffer.ByValue,`challenge`: RustBuffer.ByValue,`user`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -807,13 +810,14 @@ internal open class UniffiVTableCallbackInterfaceDeviceAccess(
     }
 
 }
-@Structure.FieldOrder("uniffiFree", "uniffiClone", "save", "get", "delete")
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "save", "get", "delete", "deleteAllWalletItems")
 internal open class UniffiVTableCallbackInterfaceKeychainAccess(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
     @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
     @JvmField internal var `save`: UniffiCallbackInterfaceKeychainAccessMethod0? = null,
     @JvmField internal var `get`: UniffiCallbackInterfaceKeychainAccessMethod1? = null,
     @JvmField internal var `delete`: UniffiCallbackInterfaceKeychainAccessMethod2? = null,
+    @JvmField internal var `deleteAllWalletItems`: UniffiCallbackInterfaceKeychainAccessMethod3? = null,
 ) : Structure() {
     class UniffiByValue(
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -821,7 +825,8 @@ internal open class UniffiVTableCallbackInterfaceKeychainAccess(
         `save`: UniffiCallbackInterfaceKeychainAccessMethod0? = null,
         `get`: UniffiCallbackInterfaceKeychainAccessMethod1? = null,
         `delete`: UniffiCallbackInterfaceKeychainAccessMethod2? = null,
-    ): UniffiVTableCallbackInterfaceKeychainAccess(`uniffiFree`,`uniffiClone`,`save`,`get`,`delete`,), Structure.ByValue
+        `deleteAllWalletItems`: UniffiCallbackInterfaceKeychainAccessMethod3? = null,
+    ): UniffiVTableCallbackInterfaceKeychainAccess(`uniffiFree`,`uniffiClone`,`save`,`get`,`delete`,`deleteAllWalletItems`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceKeychainAccess) {
         `uniffiFree` = other.`uniffiFree`
@@ -829,6 +834,7 @@ internal open class UniffiVTableCallbackInterfaceKeychainAccess(
         `save` = other.`save`
         `get` = other.`get`
         `delete` = other.`delete`
+        `deleteAllWalletItems` = other.`deleteAllWalletItems`
     }
 
 }
@@ -937,6 +943,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_device_checksum_method_keychainaccess_get(
     ): Short
     external fun uniffi_cove_device_checksum_method_keychainaccess_delete(
+    ): Short
+    external fun uniffi_cove_device_checksum_method_keychainaccess_delete_all_wallet_items(
     ): Short
     external fun uniffi_cove_device_checksum_method_passkeyprovider_create_passkey(
     ): Short
@@ -1226,6 +1234,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 35329.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete_all_wallet_items() != 23006.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 8345.toShort()) {
@@ -3317,6 +3328,14 @@ sealed class CloudStorageException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class SyncPending(
+
+        val v1: kotlin.String
+        ) : CloudStorageException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class UploadFailed(
 
         val v1: kotlin.String
@@ -3392,17 +3411,20 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
             3 -> CloudStorageException.Offline(
                 FfiConverterString.read(buf),
                 )
-            4 -> CloudStorageException.UploadFailed(
+            4 -> CloudStorageException.SyncPending(
                 FfiConverterString.read(buf),
                 )
-            5 -> CloudStorageException.DownloadFailed(
+            5 -> CloudStorageException.UploadFailed(
                 FfiConverterString.read(buf),
                 )
-            6 -> CloudStorageException.NotFound(
+            6 -> CloudStorageException.DownloadFailed(
                 FfiConverterString.read(buf),
                 )
-            7 -> CloudStorageException.QuotaExceeded()
-            8 -> CloudStorageException.InvalidNamespace(
+            7 -> CloudStorageException.NotFound(
+                FfiConverterString.read(buf),
+                )
+            8 -> CloudStorageException.QuotaExceeded()
+            9 -> CloudStorageException.InvalidNamespace(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -3422,6 +3444,11 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 + FfiConverterString.allocationSize(value.v1)
             )
             is CloudStorageException.Offline -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is CloudStorageException.SyncPending -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -3470,27 +3497,32 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.UploadFailed -> {
+            is CloudStorageException.SyncPending -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.DownloadFailed -> {
+            is CloudStorageException.UploadFailed -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.NotFound -> {
+            is CloudStorageException.DownloadFailed -> {
                 buf.putInt(6)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.QuotaExceeded -> {
+            is CloudStorageException.NotFound -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudStorageException.QuotaExceeded -> {
+                buf.putInt(8)
                 Unit
             }
             is CloudStorageException.InvalidNamespace -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -4973,6 +5005,15 @@ public interface KeychainAccess {
      */
     fun `delete`(`key`: kotlin.String): kotlin.Boolean
 
+    /**
+     * Deletes every Cove wallet-specific key without requiring wallet IDs
+     *
+     * # Errors
+     *
+     * Returns a `KeychainError` if enumeration or any deletion fails
+     */
+    fun `deleteAllWalletItems`()
+
     companion object
 }
 
@@ -5022,6 +5063,22 @@ internal object uniffiCallbackInterfaceKeychainAccess {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
+    internal object `deleteAllWalletItems`: UniffiCallbackInterfaceKeychainAccessMethod3 {
+        override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeKeychainAccess.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`deleteAllWalletItems`(
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCallWithError(
+                uniffiCallStatus,
+                makeCall,
+                writeReturn,
+                { e: KeychainException -> FfiConverterTypeKeychainError.lower(e) }
+            )
+        }
+    }
 
     internal object uniffiFree: UniffiCallbackInterfaceFree {
         override fun callback(handle: Long) {
@@ -5041,6 +5098,7 @@ internal object uniffiCallbackInterfaceKeychainAccess {
         `save`,
         `get`,
         `delete`,
+        `deleteAllWalletItems`,
     )
 
     // Registers the foreign callback with the Rust side.
