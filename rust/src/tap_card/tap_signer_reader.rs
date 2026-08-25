@@ -2100,16 +2100,14 @@ mod tests {
             card_nonce: [0; 16],
             auth_delay: None,
         };
-        let reader = TapSignerReader {
+        TapSignerReader {
             id: "test-reader".to_string(),
             card_identity,
             reader: Mutex::new(VerifiedTapSigner(card)),
             cmd: RwLock::new(None),
             transport,
             network: Network::Bitcoin,
-        };
-
-        reader
+        }
     }
 
     fn reader_for_pending_transport(started: Arc<AtomicBool>) -> TapSignerReader {

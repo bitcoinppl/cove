@@ -2412,12 +2412,14 @@ mod tests {
         tokio::time::timeout(std::time::Duration::from_secs(2), async {
             loop {
                 let notified = coordinator.changed.notified();
-                let data = coordinator.data.lock();
-                if data.phase == CoordinatorPhase::Available && data.pending_preparation.is_none() {
+                let done = {
+                    let data = coordinator.data.lock();
+                    data.phase == CoordinatorPhase::Available && data.pending_preparation.is_none()
+                };
+                if done {
                     break;
                 }
 
-                drop(data);
                 notified.await;
             }
         })
@@ -2456,15 +2458,17 @@ mod tests {
 
         tokio::time::timeout(Duration::from_secs(1), async {
             loop {
-                let data = coordinator.data.lock();
-                if matches!(
-                    data.actors.get(&registration_id).map(|actors| actors.state),
-                    Some(RegistrationState::DestructiveClosing { .. })
-                ) {
+                let entered_destructive_closing = {
+                    let data = coordinator.data.lock();
+                    matches!(
+                        data.actors.get(&registration_id).map(|actors| actors.state),
+                        Some(RegistrationState::DestructiveClosing { .. })
+                    )
+                };
+                if entered_destructive_closing {
                     break;
                 }
 
-                drop(data);
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         })
@@ -2481,14 +2485,15 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 let notified = coordinator.changed.notified();
-                let data = coordinator.data.lock();
-                if data.phase == CoordinatorPhase::Available
-                    && !data.actors.contains_key(&registration_id)
-                {
+                let done = {
+                    let data = coordinator.data.lock();
+                    data.phase == CoordinatorPhase::Available
+                        && !data.actors.contains_key(&registration_id)
+                };
+                if done {
                     break;
                 }
 
-                drop(data);
                 notified.await;
             }
         })
