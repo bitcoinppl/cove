@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +24,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,24 +67,22 @@ fun TapSignerSetupRetryView(
             verticalArrangement = Arrangement.Center,
         ) {
             Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = "Warning",
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
                 modifier = Modifier.size(100.dp),
-                tint = Color.Yellow,
+                tint = MaterialTheme.colorScheme.primary,
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Setup needs to continue",
+                text = "Setup in Progress",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
 
             Text(
-                text =
-                    (response as? SetupCmdResponse.Retry)?.v1?.message()
-                        ?: "The card setup needs another scan to verify its state.",
+                text = "Your TAPSIGNER saved its setup progress. Continue to finish setup.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp),
@@ -130,7 +127,7 @@ fun TapSignerSetupRetryView(
                 }
             },
             enabled = !isSubmitting,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupRetry.retry"),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupRetry.continue"),
         ) {
             Text(if (isSubmitting) "Working…" else "Continue Setup")
         }

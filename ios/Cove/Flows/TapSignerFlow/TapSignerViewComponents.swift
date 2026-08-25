@@ -304,6 +304,38 @@ struct TapSignerRetryContent: View {
     }
 }
 
+struct TapSignerContinuationContent: View {
+    let usesFlexibleSpacing: Bool
+    let title: String
+    let message: String
+    let isSubmitting: Bool
+    let cancelAction: () -> Void
+    let continueAction: () -> Void
+
+    var body: some View {
+        VStack(spacing: 40) {
+            TapSignerTopActionHeader("Cancel", action: cancelAction)
+
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
+
+            TapSignerResultStatus(
+                systemImage: "arrow.forward.circle.fill",
+                color: .blue,
+                title: title,
+                message: message
+            )
+            .padding(.horizontal)
+
+            TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
+
+            Button(isSubmitting ? "Working…" : "Continue Setup", action: continueAction)
+                .buttonStyle(DarkButtonStyle())
+                .padding(.horizontal)
+                .disabled(isSubmitting)
+        }
+    }
+}
+
 private struct TapSignerRetryStatus: View {
     let title: String
     let message: String
