@@ -30,7 +30,6 @@ struct CoverView: View {
 
 private struct StorageErrorView: View {
     let errorMessage: String
-    @State private var copiedDiagnostics = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -49,29 +48,8 @@ private struct StorageErrorView: View {
                 .foregroundColor(.white.opacity(0.5))
                 .padding(.top, 8)
 
-            HStack(spacing: 12) {
-                Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {
-                    UIPasteboard.general.string = StartupDiagnostics.report(errorMessage: errorMessage)
-                    copiedDiagnostics = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        copiedDiagnostics = false
-                    }
-                }
-                .buttonStyle(.bordered)
-
-                Button("Share Diagnostics") {
-                    ShareSheet.present(
-                        data: StartupDiagnostics.report(errorMessage: errorMessage),
-                        filename: StartupDiagnostics.filename
-                    ) { success in
-                        if !success { Log.warn("Startup diagnostics share cancelled or failed") }
-                    }
-                }
-                .buttonStyle(.bordered)
-            }
-            .font(.caption)
-            .tint(.white)
-            .padding(.top, 12)
+            StartupDiagnosticsActions(errorMessage: errorMessage)
+                .padding(.top, 12)
         }
     }
 }
@@ -102,8 +80,54 @@ struct StartupRecoveryView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.white)
                     .padding(.top, 8)
+
+                Text("If recovery does not finish, contact feedback@covebitcoinwallet.com for help")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+
+                StartupDiagnosticsActions(errorMessage: startupRecoveryContinuationMessage)
+
+                Link(
+                    "Contact Support",
+                    destination: URL(string: "mailto:feedback@covebitcoinwallet.com")!
+                )
+                .buttonStyle(.bordered)
+                .font(.caption)
+                .tint(.white)
             }
         }
+    }
+}
+
+private struct StartupDiagnosticsActions: View {
+    let errorMessage: String
+    @State private var copiedDiagnostics = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {
+                UIPasteboard.general.string = StartupDiagnostics.report(errorMessage: errorMessage)
+                copiedDiagnostics = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    copiedDiagnostics = false
+                }
+            }
+            .buttonStyle(.bordered)
+
+            Button("Share Diagnostics") {
+                ShareSheet.present(
+                    data: StartupDiagnostics.report(errorMessage: errorMessage),
+                    filename: StartupDiagnostics.filename
+                ) { success in
+                    if !success { Log.warn("Startup diagnostics share cancelled or failed") }
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .font(.caption)
+        .tint(.white)
     }
 }
 

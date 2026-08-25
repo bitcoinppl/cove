@@ -261,6 +261,17 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            fun contactStartupSupport() {
+                val intent =
+                    Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("mailto:feedback@covebitcoinwallet.com")
+                        putExtra(Intent.EXTRA_SUBJECT, "Cove startup recovery")
+                    }
+                runCatching { startActivity(intent) }.onFailure { error ->
+                    Log.w(TAG, "[STARTUP] failed to open support email", error)
+                }
+            }
+
             fun checkCloudBackupBeforeCatastrophicReset() {
                 if (!needsCatastrophicRecovery) {
                     return
@@ -454,6 +465,13 @@ class MainActivity : FragmentActivity() {
                             BootstrapRecoveryView(
                                 message = BootstrapFailure.RecoveryRequired.message,
                                 onContinue = { continueBootstrapRecovery() },
+                                onCopyDiagnostics = {
+                                    copyStartupDiagnostics(BootstrapFailure.RecoveryRequired.message)
+                                },
+                                onShareDiagnostics = {
+                                    shareStartupDiagnostics(BootstrapFailure.RecoveryRequired.message)
+                                },
+                                onContactSupport = { contactStartupSupport() },
                             )
                         }
 

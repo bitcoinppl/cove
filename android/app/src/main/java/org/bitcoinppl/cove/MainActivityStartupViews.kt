@@ -196,12 +196,7 @@ internal fun BootstrapErrorView(
                 color = Color.White.copy(alpha = 0.5f),
             )
             Spacer(modifier = Modifier.height(12.dp))
-            TextButton(onClick = onCopyDiagnostics) {
-                Text("Copy Diagnostics", color = Color.White)
-            }
-            TextButton(onClick = onShareDiagnostics) {
-                Text("Share Diagnostics", color = Color.White)
-            }
+            StartupDiagnosticsActions(onCopyDiagnostics, onShareDiagnostics)
         }
     }
 }
@@ -210,6 +205,9 @@ internal fun BootstrapErrorView(
 internal fun BootstrapRecoveryView(
     message: String,
     onContinue: () -> Unit,
+    onCopyDiagnostics: () -> Unit,
+    onShareDiagnostics: () -> Unit,
+    onContactSupport: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
@@ -245,7 +243,32 @@ internal fun BootstrapRecoveryView(
             ) {
                 Text("Continue")
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "If recovery does not finish, contact feedback@covebitcoinwallet.com for help",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            StartupDiagnosticsActions(onCopyDiagnostics, onShareDiagnostics)
+            TextButton(onClick = onContactSupport) {
+                Text("Contact Support", color = Color.White)
+            }
         }
+    }
+}
+
+@Composable
+private fun StartupDiagnosticsActions(
+    onCopyDiagnostics: () -> Unit,
+    onShareDiagnostics: () -> Unit,
+) {
+    TextButton(onClick = onCopyDiagnostics) {
+        Text("Copy Diagnostics", color = Color.White)
+    }
+    TextButton(onClick = onShareDiagnostics) {
+        Text("Share Diagnostics", color = Color.White)
     }
 }
 
