@@ -818,6 +818,57 @@ fn matches_initial_keychain_entry(
     }
 }
 
+fn cleanup_keychain_after_capture_failure(
+    keychain: &Keychain,
+    id: &WalletId,
+    initial: &RestoreArtifactSnapshot,
+) -> Result<(), String> {
+    if !initial.keychain_items {
+        return delete_keychain_items_exact(id)
+            .map_err(|error| format!("exact cleanup failed ({error})"));
+    }
+
+    let cleanup_failures = KeychainArtifactKind::ALL
+        .into_iter()
+        .filter(|kind| !initial.keychain_entries.contains_key(kind.as_str()))
+        .filter(|kind| !delete_keychain_kind(keychain, id, *kind))
+        .map(|kind| format!("failed to delete keychain {} during capture recovery", kind.as_str()))
+        .collect::<Vec<_>>();
+
+    if cleanup_failures.is_empty() {
+        return Ok(());
+    }
+
+    Err(format!("selective cleanup failed: {}", cleanup_failures.join("; ")))
+}
+
+fn capture_keychain_for_rollback(
+    keychain: &Keychain,
+    id: &WalletId,
+    initial: &RestoreArtifactSnapshot,
+) -> Result<BTreeMap<String, ArtifactFingerprint>, String> {
+    let error = match capture_keychain_fingerprints(id) {
+        Ok(entries) => return Ok(entries),
+        Err(error) => error,
+    };
+
+    cleanup_keychain_after_capture_failure(keychain, id, initial).map_err(|cleanup_error| {
+        let entries_remain = keychain.wallet_items_exist(id);
+
+        format!(
+            "keychain fingerprint capture failed ({error}); {cleanup_error}; keychain entries remain={entries_remain}"
+        )
+    })?;
+
+    capture_keychain_fingerprints(id).map_err(|retry_error| {
+        let entries_remain = keychain.wallet_items_exist(id);
+
+        format!(
+            "keychain fingerprint capture failed ({error}); retry failed ({retry_error}); keychain entries remain={entries_remain}"
+        )
+    })
+}
+
 fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures: &mut Vec<String>) {
     let keychain = Keychain::global();
 
@@ -829,58 +880,11 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
         return;
     }
 
-    let current = match capture_keychain_fingerprints(id) {
+    let current = match capture_keychain_for_rollback(keychain, id, initial) {
         Ok(entries) => entries,
         Err(error) => {
-            if !initial.keychain_items {
-                if let Err(cleanup_error) = delete_keychain_items_exact(id) {
-                    let entries_remain = keychain.wallet_items_exist(id);
-                    failures.push(format!(
-                        "keychain fingerprint capture failed ({error}); exact cleanup failed ({cleanup_error}); keychain entries remain={entries_remain}"
-                    ));
-                    return;
-                }
-            } else if initial.keychain_entries.is_empty() {
-                let entries_remain = keychain.wallet_items_exist(id);
-                failures.push(format!(
-                    "keychain fingerprint capture failed with pre-existing entries and no approved fingerprints; selective cleanup skipped: {error}; keychain entries remain={entries_remain}"
-                ));
-                return;
-            } else {
-                let mut cleanup_failures = Vec::new();
-                for kind in KeychainArtifactKind::ALL {
-                    if initial.keychain_entries.contains_key(kind.as_str()) {
-                        continue;
-                    }
-
-                    if !delete_keychain_kind(keychain, id, kind) {
-                        cleanup_failures.push(format!(
-                            "failed to delete keychain {} during capture recovery",
-                            kind.as_str()
-                        ));
-                    }
-                }
-
-                if !cleanup_failures.is_empty() {
-                    let entries_remain = keychain.wallet_items_exist(id);
-                    failures.push(format!(
-                        "keychain fingerprint capture failed ({error}); selective cleanup failed: {}; keychain entries remain={entries_remain}",
-                        cleanup_failures.join("; ")
-                    ));
-                    return;
-                }
-            }
-
-            match capture_keychain_fingerprints(id) {
-                Ok(entries) => entries,
-                Err(retry_error) => {
-                    let entries_remain = keychain.wallet_items_exist(id);
-                    failures.push(format!(
-                        "keychain fingerprint capture failed ({error}); retry failed ({retry_error}); keychain entries remain={entries_remain}"
-                    ));
-                    return;
-                }
-            }
+            failures.push(error);
+            return;
         }
     };
 
@@ -911,6 +915,7 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
             return;
         }
     };
+
     for (kind, fingerprint) in &remaining {
         if reported_kinds.contains(kind) {
             continue;
@@ -921,6 +926,7 @@ fn rollback_keychain(id: &WalletId, initial: &RestoreArtifactSnapshot, failures:
             reported_kinds.insert(kind.clone());
         }
     }
+
     for (kind, expected) in &initial.keychain_entries {
         if reported_kinds.contains(kind) {
             continue;
