@@ -588,7 +588,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: currentURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
     }
+}
 
+extension CloudBackupIOSSafetyHelpersTests {
     @MainActor
     func testBackupReadMapsMetadataStartupAndTimeoutFailures() async throws {
         let startupFixture = makeICloudMetadataFixture(startResults: [false])
@@ -622,9 +624,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         do {
             _ = try await request.value
             XCTFail("expected metadata timeout")
-        } catch CloudStorageError.Offline {
+        } catch CloudStorageError.SyncPending {
         } catch {
-            XCTFail("expected Offline, got \(error)")
+            XCTFail("expected SyncPending, got \(error)")
         }
     }
 
@@ -678,9 +680,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
                 locations: backupLocations()
             )
             XCTFail("expected metadata timeout")
-        } catch CloudStorageError.Offline {
+        } catch CloudStorageError.SyncPending {
         } catch {
-            XCTFail("expected Offline, got \(error)")
+            XCTFail("expected SyncPending, got \(error)")
         }
     }
 
@@ -712,9 +714,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
 
         XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.5)
     }
-}
 
-extension CloudBackupIOSSafetyHelpersTests {
     func testEventuallyConsistentListingMergesLocalAndMetadataViews() throws {
         let names = try ICloudEventuallyConsistentListing.merged(
             local: ["old-1password"],
@@ -768,7 +768,10 @@ extension CloudBackupIOSSafetyHelpersTests {
             retained: loaded
         )
         XCTAssertFalse(failed.isComplete)
-        XCTAssertEqual(failed.inventoryError, "iCloud inventory is unavailable")
+        XCTAssertEqual(
+            failed.inventoryError,
+            "This device is offline. Connect to the internet, then check iCloud Drive again."
+        )
         XCTAssertEqual(failed.retainedDetailState?.detail, detail)
 
         let complete = CloudBackupDetailState.complete(state: loaded)

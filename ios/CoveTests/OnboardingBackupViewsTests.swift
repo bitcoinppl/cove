@@ -27,7 +27,10 @@ final class OnboardingBackupViewsTests: XCTestCase {
         XCTAssertEqual(failed.retainedDetailState?.detail, loaded.detail)
         XCTAssertFalse(failed.isChecking)
         XCTAssertFalse(failed.isComplete)
-        XCTAssertEqual(failed.inventoryError, failure)
+        XCTAssertEqual(
+            failed.inventoryError,
+            "This device is offline. Connect to the internet, then check iCloud Drive again."
+        )
 
         let complete = CloudBackupDetailState.complete(state: loaded)
         XCTAssertEqual(complete.retainedDetailState?.detail, loaded.detail)

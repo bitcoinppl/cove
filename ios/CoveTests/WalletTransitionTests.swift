@@ -26,6 +26,19 @@ final class WalletTransitionTests: XCTestCase {
         }
     }
 
+    @MainActor
+    private func waitUntilWalletLoadStarts(_ loadStarted: @escaping () -> Bool) async {
+        let startedAt = Date()
+        while !loadStarted() {
+            if Date().timeIntervalSince(startedAt) >= 5 {
+                XCTFail("wallet load starts")
+                return
+            }
+
+            await drainMainQueue()
+        }
+    }
+
     func testRecoveryPrioritizesCachedWalletThenDisplayOrder() {
         var plan = WalletTransitionRecoveryPlan()
         plan.recordAttempt("wallet-b")
@@ -147,14 +160,12 @@ final class WalletTransitionTests: XCTestCase {
     @MainActor
     func testConcurrentWalletLoadsShareThePublishedManager() async throws {
         let expectedManager = WalletManager(preview: .only)
-        let loadStarted = expectation(description: "wallet load starts")
         var resumeLoad: CheckedContinuation<Void, Never>?
         var loadCount = 0
         let cache = ManagerCache(
             backgroundScanTaskHandler: BackgroundScanTaskHandler(),
             loadWalletManager: { _, _ in
                 loadCount += 1
-                loadStarted.fulfill()
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     resumeLoad = continuation
                 }
@@ -167,12 +178,12 @@ final class WalletTransitionTests: XCTestCase {
         let firstLoad = Task { @MainActor in
             try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
         }
-        await fulfillment(of: [loadStarted], timeout: 1)
+        await waitUntilWalletLoadStarts { loadCount > 0 }
 
         let secondLoad = Task { @MainActor in
             try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
         }
-        await Task.yield()
+        await drainMainQueue()
         XCTAssertEqual(loadCount, 1)
 
         resumeLoad?.resume()
@@ -189,13 +200,13 @@ final class WalletTransitionTests: XCTestCase {
     @MainActor
     func testStaleWalletLoadClosesWithoutPublishing() async throws {
         let expectedManager = WalletManager(preview: .only)
-        let loadStarted = expectation(description: "wallet load starts")
+        var loadStarted = false
         var resumeLoad: CheckedContinuation<Void, Never>?
         var isCurrent = true
         let cache = ManagerCache(
             backgroundScanTaskHandler: BackgroundScanTaskHandler(),
             loadWalletManager: { _, _ in
-                loadStarted.fulfill()
+                loadStarted = true
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     resumeLoad = continuation
                 }
@@ -212,7 +223,7 @@ final class WalletTransitionTests: XCTestCase {
                 isCurrent: { isCurrent }
             )
         }
-        await fulfillment(of: [loadStarted], timeout: 1)
+        await waitUntilWalletLoadStarts { loadStarted }
 
         isCurrent = false
         resumeLoad?.resume()
@@ -229,7 +240,6 @@ final class WalletTransitionTests: XCTestCase {
     @MainActor
     func testCurrentWalletLoadReceivesWinnerWhenAnotherWaiterIsStale() async throws {
         let expectedManager = WalletManager(preview: .only)
-        let loadStarted = expectation(description: "wallet load starts")
         var resumeLoad: CheckedContinuation<Void, Never>?
         var staleIsCurrent = true
         var loadCount = 0
@@ -237,7 +247,6 @@ final class WalletTransitionTests: XCTestCase {
             backgroundScanTaskHandler: BackgroundScanTaskHandler(),
             loadWalletManager: { _, _ in
                 loadCount += 1
-                loadStarted.fulfill()
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     resumeLoad = continuation
                 }
@@ -254,12 +263,12 @@ final class WalletTransitionTests: XCTestCase {
                 isCurrent: { staleIsCurrent }
             )
         }
-        await fulfillment(of: [loadStarted], timeout: 1)
+        await waitUntilWalletLoadStarts { loadCount > 0 }
 
         let currentLoad = Task { @MainActor in
             try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
         }
-        await Task.yield()
+        await drainMainQueue()
         XCTAssertEqual(loadCount, 1)
 
         staleIsCurrent = false
