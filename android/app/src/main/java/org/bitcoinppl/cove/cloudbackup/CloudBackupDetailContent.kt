@@ -51,11 +51,13 @@ internal enum class CloudBackupDetailBodyState {
 internal fun cloudBackupDetailBodyState(
     manager: CloudBackupManager,
     hasDetail: Boolean,
+    progressPresentation: CloudBackupDetailProgressPresentation,
 ): CloudBackupDetailBodyState? =
     when {
         manager.isUnsupportedPasskeyProvider -> CloudBackupDetailBodyState.UNSUPPORTED_PASSKEY_PROVIDER
         manager.isPasskeyMissing -> CloudBackupDetailBodyState.MISSING_PASSKEY
-        manager.verificationState is CloudBackupVerificationState.Running -> CloudBackupDetailBodyState.VERIFYING
+        progressPresentation == CloudBackupDetailProgressPresentation.VERIFICATION_CARD ->
+            CloudBackupDetailBodyState.VERIFYING
         manager.verificationState is CloudBackupVerificationState.Cancelled -> CloudBackupDetailBodyState.CANCELLED
         hasDetail -> CloudBackupDetailBodyState.DETAIL
         manager.hasPendingUploadVerification && manager.syncState is CloudBackupSyncState.Blocked ->
@@ -87,11 +89,30 @@ internal fun CloudBackupDetailContent(
     onRecreate: () -> Unit,
     onReinitialize: () -> Unit,
 ) {
+    val progressPresentation =
+        cloudBackupDetailProgressPresentation(
+            isVerificationRunning = manager.verificationState is CloudBackupVerificationState.Running,
+            isInventoryChecking = manager.isDetailInventoryChecking,
+            hasRetainedDetail = manager.detail != null,
+            hasVisibleWalletRows =
+                cloudBackupHasVisibleWalletRows(
+                    detail = manager.detail,
+                    cloudOnly = manager.cloudOnly,
+                ),
+        )
     val bodyState =
         cloudBackupDetailBodyState(
             manager = manager,
             hasDetail = manager.detail != null,
+            progressPresentation = progressPresentation,
         )
+    val displayedProgressPresentation =
+        when (bodyState) {
+            CloudBackupDetailBodyState.VERIFYING ->
+                CloudBackupDetailProgressPresentation.VERIFICATION_CARD
+            CloudBackupDetailBodyState.DETAIL -> progressPresentation
+            else -> CloudBackupDetailProgressPresentation.NONE
+        }
     val showFallbackVerificationSection = shouldShowFallbackVerificationSection(bodyState)
 
     Column(
@@ -124,11 +145,26 @@ internal fun CloudBackupDetailContent(
             }
         }
 
-        if (manager.isDetailInventoryChecking && manager.detail != null) {
-            CloudBackupProgressCard(
-                title = "Checking for more cloud backups",
-                message = "Keeping the backups already found visible while the provider finishes checking",
-            )
+        when (displayedProgressPresentation) {
+            CloudBackupDetailProgressPresentation.NONE -> Unit
+            CloudBackupDetailProgressPresentation.INVENTORY_INLINE -> {
+                CloudBackupProgressCard(
+                    title = "Refreshing the wallet backup list",
+                    message = "The backups already found remain available while cloud storage finishes checking",
+                )
+            }
+            CloudBackupDetailProgressPresentation.VERIFICATION_CARD -> {
+                CloudBackupProgressCard(
+                    title = "Verifying cloud backup",
+                    message = "Confirming that your backups can be decrypted and restored",
+                )
+            }
+            CloudBackupDetailProgressPresentation.VERIFICATION_INLINE -> {
+                CloudBackupProgressCard(
+                    title = "Verifying backup integrity",
+                    message = "Confirming that wallet backups can be decrypted and restored",
+                )
+            }
         }
 
         when (bodyState) {
@@ -139,10 +175,7 @@ internal fun CloudBackupDetailContent(
                 MissingPasskeyContent(manager = manager)
             }
             CloudBackupDetailBodyState.VERIFYING -> {
-                CloudBackupProgressCard(
-                    title = "Verifying cloud backup",
-                    message = "Confirming that your backups can be decrypted and restored",
-                )
+                Unit
             }
             CloudBackupDetailBodyState.CANCELLED -> {
                 CancelledVerificationRecoveryContent(manager = manager)
@@ -383,7 +416,14 @@ private fun DetailFormContent(
             CloudOnlySection(manager = manager)
         }
 
-        when (val otherBackups = detail.otherBackups) {
+        when (val otherBackups = manager.otherBackupsState) {
+            is CloudBackupOtherBackupsState.NotChecked ->
+                OtherBackupsNotCheckedSection(
+                    onCheck = {
+                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
+                    },
+                )
+            is CloudBackupOtherBackupsState.Checking -> OtherBackupsCheckingSection()
             is CloudBackupOtherBackupsState.Loaded -> {
                 val summary = otherBackups.summary
                 if (summary.namespaceCount.toInt() > 0) {
@@ -396,7 +436,12 @@ private fun DetailFormContent(
                 }
             }
             is CloudBackupOtherBackupsState.LoadFailed -> {
-                OtherBackupsLoadFailedSection(error = otherBackups.error)
+                OtherBackupsLoadFailedSection(
+                    reason = otherBackups.reason,
+                    onRetry = {
+                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
+                    },
+                )
             }
         }
     }

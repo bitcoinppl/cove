@@ -28,14 +28,14 @@ use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matche
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
     CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupDetail,
-    CloudBackupError, CloudBackupKeychain, CloudBackupOtherBackupsState, CloudBackupRetryAction,
-    CloudBackupStore, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingVerificationCompletion, PendingVerificationUpload,
-    RustCloudBackupManager,
+    CloudBackupError, CloudBackupKeychain, CloudBackupRetryAction, CloudBackupStore,
+    CloudBackupWalletVerificationIssues, DeepVerificationFailure, DeepVerificationReport,
+    DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingVerificationCompletion,
+    PendingVerificationUpload, RustCloudBackupManager,
     actors::CloudBackupUploadedWallet,
     blocking_cloud_error,
     cloud_inventory::{CloudWalletInventory, RemoteWalletTruth},
-    is_connectivity_related_issue, offline_error_for_step,
+    is_connectivity_related_issue, is_provider_wide_interruption, offline_error_for_step,
     wallets::{RemoteWalletBackupSummary, WalletBackupLookup, WalletBackupReader},
 };
 use crate::wallet::metadata::WalletMetadata;
@@ -240,15 +240,14 @@ pub(crate) struct VerificationSession {
     pub(crate) local_master_key: Option<MasterKey>,
     pub(crate) wallet_record_ids: Option<Vec<String>>,
     pub(crate) wallets_missing: bool,
-    pub(crate) other_backups: Option<CloudBackupOtherBackupsState>,
     pub(crate) force_discoverable: bool,
 }
 
 struct WalletBackupReadPass {
     remote_wallet_truth: RemoteWalletTruth,
     verified: u32,
-    failed: u32,
-    unsupported: u32,
+    issues: CloudBackupWalletVerificationIssues,
+    provider_failure: Option<CloudBackupError>,
 }
 
 struct WalletBackupReadOutcome {
@@ -276,7 +275,7 @@ impl WalletBackupReadPass {
             }
             Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                 if is_listed {
-                    self.unsupported += 1;
+                    self.issues.unsupported += 1;
                 }
 
                 if is_local {
@@ -289,13 +288,28 @@ impl WalletBackupReadPass {
             Ok(WalletBackupLookup::NotFound) => {
                 if is_listed {
                     warn!("Verify: failed to download listed wallet backup: not found");
-                    self.failed += 1;
+                    self.issues.missing += 1;
                 }
             }
             Err(error) => {
                 if is_listed {
                     warn!("Verify: failed to download listed wallet backup: {error}");
-                    self.failed += 1;
+                    if is_provider_wide_interruption(&error) {
+                        if self.provider_failure.is_none() {
+                            self.provider_failure = Some(error);
+                        }
+                        return;
+                    }
+
+                    match &error {
+                        CloudBackupError::Crypto(_) => self.issues.decryption_failed += 1,
+                        CloudBackupError::CloudStorage(_)
+                        | CloudBackupError::CloudStorageContext { .. } => {
+                            self.issues.download_failed += 1;
+                        }
+                        CloudBackupError::Internal(_) => self.issues.invalid += 1,
+                        _ => self.issues.unreadable += 1,
+                    }
                 }
 
                 if is_local {
@@ -331,14 +345,12 @@ impl VerificationSession {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: CloudBackupWalletVerificationIssues::default(),
                 detail: None,
             },
             local_master_key,
             wallet_record_ids: None,
             wallets_missing: false,
-            other_backups: None,
             force_discoverable,
         })
     }
@@ -679,16 +691,8 @@ impl VerificationSession {
             "Verification timing: checked wallet backups"
         );
         self.report.wallets_verified = read_pass.verified;
-        self.report.wallets_failed = read_pass.failed;
-        self.report.wallets_unsupported = read_pass.unsupported;
+        self.report.wallet_issues = read_pass.issues;
         self.manager.cleanup_confirmed_pending_blobs(&read_pass.remote_wallet_truth);
-
-        let started = std::time::Instant::now();
-        let other_backups = self.load_other_backup_state().await;
-        debug!(
-            elapsed_ms = started.elapsed().as_millis(),
-            "Verification timing: checked other backup state"
-        );
 
         let inventory_result = CloudWalletInventory::load_with_remote_truth(
             &wallet_record_ids,
@@ -698,7 +702,7 @@ impl VerificationSession {
 
         let unsynced = match inventory_result {
             Ok(inventory) => {
-                let detail = inventory.build_detail(other_backups.clone());
+                let detail = inventory.build_detail();
                 self.report.detail = Some(detail.clone());
                 if inventory.has_unknown_remote_wallets() {
                     return CloudBackupDeepVerificationStep::Complete(
@@ -752,19 +756,11 @@ impl VerificationSession {
             })
             .collect::<Vec<_>>();
 
-        let other_backups = self.load_other_backup_state().await;
-        let updated_ids = match self.cloud.list_wallet_backups(self.namespace.clone()).await {
-            Ok(updated_ids) => updated_ids,
-            Err(error) => {
-                warn!("Deep verify: failed to re-check wallet backups after auto-sync: {error}");
-                return CloudBackupDeepVerificationAutoSyncCompletion::complete(
-                    self.cloud_storage_retry_result(
-                        "failed to re-check wallet backups after auto-sync",
-                        error,
-                    ),
-                );
-            }
-        };
+        let mut updated_ids = self.wallet_record_ids.clone().unwrap_or_default();
+        updated_ids
+            .extend(uploaded.uploaded_wallets().iter().map(|wallet| wallet.record_id().to_owned()));
+        updated_ids.sort();
+        updated_ids.dedup();
 
         let remote_wallet_truth =
             match self.manager.load_remote_wallet_truth(&updated_ids, self.cloud.clone()).await {
@@ -805,7 +801,7 @@ impl VerificationSession {
         let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
         let remaining_unsynced = inventory.upload_candidate_wallets();
 
-        self.report.detail = Some(inventory.build_detail(other_backups));
+        self.report.detail = Some(inventory.build_detail());
         self.wallet_record_ids = Some(updated_ids);
 
         if inventory.has_unknown_remote_wallets() {
@@ -872,8 +868,8 @@ impl VerificationSession {
         let mut read_pass = WalletBackupReadPass {
             remote_wallet_truth: RemoteWalletTruth::default(),
             verified: 0,
-            failed: 0,
-            unsupported: 0,
+            issues: CloudBackupWalletVerificationIssues::default(),
+            provider_failure: None,
         };
 
         let mut lookups = stream::iter(record_ids)
@@ -895,6 +891,10 @@ impl VerificationSession {
             read_pass.record_outcome(outcome);
         }
 
+        if let Some(error) = read_pass.provider_failure {
+            return Err(error);
+        }
+
         Ok(read_pass)
     }
 
@@ -908,18 +908,12 @@ impl VerificationSession {
             .collect())
     }
 
-    async fn load_other_backup_state(&mut self) -> CloudBackupOtherBackupsState {
-        if let Some(other_backups) = self.other_backups.clone() {
-            return other_backups;
-        }
-
-        let other_backups = self.manager.other_backup_state(&self.cloud).await;
-        self.other_backups = Some(other_backups.clone());
-        other_backups
-    }
-
     fn finish_verified(self) -> DeepVerificationResult {
-        DeepVerificationResult::Verified(self.report)
+        if self.report.wallet_issues.is_empty() {
+            DeepVerificationResult::Verified(self.report)
+        } else {
+            DeepVerificationResult::NeedsAttention(self.report)
+        }
     }
 
     fn detail(&self) -> Option<CloudBackupDetail> {

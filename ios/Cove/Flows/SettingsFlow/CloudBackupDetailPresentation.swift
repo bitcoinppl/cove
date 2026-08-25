@@ -15,6 +15,7 @@ enum CloudBackupDetailDialog {
 enum CloudBackupDetailAlert {
     case cloudOnlyDeleteWallet(CloudBackupWalletItem)
     case cloudOnlyUnsupportedRestore(CloudBackupWalletItem)
+    case undecryptableWalletDeletion(UInt32)
     case disableUnavailable(String)
     case disableFinalConfirmation
     case otherBackupsRecoveryResult(OtherBackupsRecoveryResult)
@@ -57,6 +58,14 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         }
 
         return alert
+    }
+
+    private var undecryptableWalletCount: UInt32 {
+        guard case let .needsAttention(report: report, checkedAt: _) = manager.verificationState else {
+            return 0
+        }
+
+        return report.walletIssues.decryptionFailed
     }
 
     private var dialogIsPresented: Binding<Bool> {
@@ -121,12 +130,12 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             Button("Restore to This Device") {
                 restoreCloudOnlyWallet(wallet)
             }
-            .disabled(!manager.isDetailInventoryComplete)
+            .disabled(!manager.isDetailInventoryReady)
 
             Button("Delete from iCloud", role: .destructive) {
                 requestCloudOnlyWalletDeletion(wallet)
             }
-            .disabled(!manager.isDetailInventoryComplete)
+            .disabled(!manager.isDetailInventoryReady)
 
             Button("Cancel", role: .cancel) {}
 
@@ -138,7 +147,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
 
         case .recoverOtherBackups:
             Button("Try Passkey", action: recoverOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isOtherBackupsInventoryReady)
 
             Button("Cancel", role: .cancel) {}
         }
@@ -177,6 +186,8 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             "Delete \(wallet.name)?"
         case let .cloudOnlyUnsupportedRestore(wallet):
             "Can't Restore \(wallet.name)"
+        case let .undecryptableWalletDeletion(count):
+            "Delete \(count) Inaccessible Wallet \(count == 1 ? "Backup" : "Backups")?"
         case .disableUnavailable:
             "Cloud Backup Can't Be Disabled Yet"
         case .disableFinalConfirmation:
@@ -197,12 +208,22 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             Button("Delete Forever", role: .destructive) {
                 deleteCloudOnlyWallet(wallet)
             }
-            .disabled(!manager.isDetailInventoryComplete)
+            .disabled(!manager.isDetailInventoryReady)
 
             Button("Cancel", role: .cancel) {}
 
         case .cloudOnlyUnsupportedRestore, .disableUnavailable:
             Button("OK", role: .cancel) {}
+
+        case .undecryptableWalletDeletion:
+            Button(
+                "Delete Backups",
+                role: .destructive,
+                action: deleteUndecryptableWalletBackups
+            )
+            .disabled(undecryptableWalletCount == 0 || manager.isPerformingDestructiveAction)
+
+            Button("Cancel", role: .cancel) {}
 
         case .disableFinalConfirmation:
             Button("Delete Cloud Backups and Disable", role: .destructive, action: disableCloudBackup)
@@ -216,13 +237,13 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
 
         case .otherBackupsDeleteConfirmation:
             Button("Continue", role: .destructive, action: presentFinalOtherBackupsDeleteConfirmation)
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isOtherBackupsInventoryReady)
 
             Button("Cancel", role: .cancel) {}
 
         case .otherBackupsFinalDeleteConfirmation:
             Button("Delete", role: .destructive, action: deleteOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
+                .disabled(!manager.isOtherBackupsInventoryReady)
 
             Button("Cancel", role: .cancel) {}
         }
@@ -235,6 +256,10 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             Text("This wallet backup will be permanently removed from iCloud")
         case .cloudOnlyUnsupportedRestore:
             Text("This backup uses a newer version of Cove and can't be restored on this device yet")
+        case .undecryptableWalletDeletion:
+            Text(
+                "Cove will check these files again and delete only backups for wallets that are not on this device and still cannot be decrypted. This cannot be undone."
+            )
         case let .disableUnavailable(message):
             Text(message)
         case .disableFinalConfirmation:
@@ -275,7 +300,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     }
 
     private func restoreCloudOnlyWallet(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isDetailInventoryReady else { return }
 
         if wallet.syncStatus == .unsupportedVersion {
             coordinator.transition(to: .alert(.cloudOnlyUnsupportedRestore(wallet)))
@@ -287,7 +312,7 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     }
 
     private func requestCloudOnlyWalletDeletion(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isDetailInventoryReady else { return }
 
         coordinator.transition(to: .alert(.cloudOnlyDeleteWallet(wallet)))
     }
@@ -299,14 +324,14 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     }
 
     private func recoverOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         coordinator.dismissCurrentPresentation()
         manager.dispatch(action: .recoverOtherBackups)
     }
 
     private func deleteCloudOnlyWallet(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isDetailInventoryReady else { return }
 
         coordinator.dismissCurrentPresentation()
         manager.dispatch(action: .deleteCloudWallet(wallet.recordId))
@@ -325,15 +350,22 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     }
 
     private func presentFinalOtherBackupsDeleteConfirmation() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         coordinator.transition(to: .alert(.otherBackupsFinalDeleteConfirmation))
     }
 
     private func deleteOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
         coordinator.dismissCurrentPresentation()
         manager.dispatch(action: .deleteOtherBackups)
+    }
+
+    private func deleteUndecryptableWalletBackups() {
+        guard undecryptableWalletCount > 0, !manager.isPerformingDestructiveAction else { return }
+
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .deleteUndecryptableWalletBackups)
     }
 }

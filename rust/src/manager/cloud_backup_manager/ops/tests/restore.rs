@@ -80,7 +80,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
 
-    let exported = LabelManager::new(metadata.id.clone()).export().await.unwrap();
+    let exported = LabelManager::try_new(metadata.id.clone()).unwrap().export().await.unwrap();
     assert!(exported.contains("\"label\":\"last txn received\""));
     assert!(exported.contains(&format!("\"ref\":\"{locked_output_ref}\"")));
     assert!(exported.contains("\"spendable\":false"));

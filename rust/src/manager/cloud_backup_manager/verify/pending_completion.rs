@@ -71,7 +71,11 @@ impl RustCloudBackupManager {
         match self.finalize_pending_verification(completion.clone()).await {
             Ok(FinalizePendingVerificationResult::Pending) => return,
             Ok(FinalizePendingVerificationResult::Completed(report)) => {
-                self.apply_verified_report(report)
+                if report.wallet_issues.is_empty() {
+                    self.apply_verified_report(report);
+                } else {
+                    self.apply_needs_attention_report(report);
+                }
             }
             Err(failure) => self.apply_failed_verification(*failure),
         }
@@ -121,6 +125,7 @@ impl RustCloudBackupManager {
             let sync_state = sync_states_by_record_id.get(upload.record_id());
             if let Some(PersistedCloudBlobState::Failed(failure)) = sync_state
                 && !failure.retryable
+                && matches!(upload, PendingVerificationUpload::MasterKeyWrapper)
             {
                 return PendingVerificationUploadsReadiness::TerminalFailure(format!(
                     "cloud backup upload could not be confirmed: {}",
@@ -148,6 +153,7 @@ impl RustCloudBackupManager {
                     revision_hash,
                     ..
                 })) => revision_hash.as_str() == upload.target_revision(sync_state),
+                Some(PersistedCloudBlobState::Failed(failure)) if !failure.retryable => true,
 
                 _ => false,
             },
@@ -211,9 +217,11 @@ impl RustCloudBackupManager {
                             return Ok(FinalizePendingVerificationResult::Pending);
                         }
                         PendingWalletVerificationOutcome::Verified => report.wallets_verified += 1,
-                        PendingWalletVerificationOutcome::Failed => report.wallets_failed += 1,
+                        PendingWalletVerificationOutcome::Failed => {
+                            report.wallet_issues.unreadable += 1;
+                        }
                         PendingWalletVerificationOutcome::Unsupported => {
-                            report.wallets_unsupported += 1;
+                            report.wallet_issues.unsupported += 1;
                         }
                     }
                 }
@@ -272,6 +280,13 @@ impl RustCloudBackupManager {
             Ok(WalletBackupLookup::Found(summary))
                 if summary.revision_hash != expected_revision =>
             {
+                if let Some(failure) = terminal_blob_failure(sync_state) {
+                    return Err(Box::new(self.pending_verification_failure(
+                        completion,
+                        format!("cloud backup upload could not be confirmed: {}", failure.error),
+                    )));
+                }
+
                 warn!(
                     "Pending verification: wallet backup is still stale expected_revision={} actual_revision={}",
                     expected_revision, summary.revision_hash
@@ -280,6 +295,13 @@ impl RustCloudBackupManager {
             }
             Ok(WalletBackupLookup::Found(_)) => Ok(PendingWalletVerificationOutcome::Verified),
             Ok(WalletBackupLookup::NotFound) => {
+                if let Some(failure) = terminal_blob_failure(sync_state) {
+                    return Err(Box::new(self.pending_verification_failure(
+                        completion,
+                        format!("cloud backup upload could not be confirmed: {}", failure.error),
+                    )));
+                }
+
                 warn!("Pending verification: wallet backup is not ready yet: not found");
                 Ok(PendingWalletVerificationOutcome::Pending)
             }
@@ -287,6 +309,13 @@ impl RustCloudBackupManager {
                 Ok(PendingWalletVerificationOutcome::Unsupported)
             }
             Err(error) if error.is_cloud_error() => {
+                if let Some(failure) = terminal_blob_failure(sync_state) {
+                    return Err(Box::new(self.pending_verification_failure(
+                        completion,
+                        format!("cloud backup upload could not be confirmed: {}", failure.error),
+                    )));
+                }
+
                 warn!("Pending verification: wallet backup is not ready yet: {error}");
                 Ok(PendingWalletVerificationOutcome::Pending)
             }
@@ -302,7 +331,7 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
     ) -> Option<CloudBackupDetail> {
         match self.refresh_cloud_backup_detail().await {
-            Some(CloudBackupDetailResult::Success(detail)) => Some(detail),
+            Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) => Some(detail),
             Some(CloudBackupDetailResult::AccessError(error)) => {
                 warn!("Pending verification: failed to refresh detail: {error}");
                 completion.report().detail.clone()
@@ -327,9 +356,26 @@ impl RustCloudBackupManager {
         ));
     }
 
+    pub(crate) fn apply_needs_attention_report(&self, report: DeepVerificationReport) {
+        self.persist_verification_result(&DeepVerificationResult::NeedsAttention(report.clone()));
+        let source = self.current_verification_source();
+        self.apply_verification_effect(CloudBackupVerificationCoordinator::needs_attention(
+            source, report,
+        ));
+    }
+
     pub(crate) fn apply_failed_verification(&self, failure: DeepVerificationFailure) {
         self.persist_verification_result(&DeepVerificationResult::Failed(failure.clone()));
         let source = self.current_verification_source();
         self.apply_verification_effect(CloudBackupVerificationCoordinator::fail(source, failure));
+    }
+}
+
+fn terminal_blob_failure(
+    state: Option<&PersistedCloudBlobState>,
+) -> Option<&crate::database::cloud_backup::CloudBlobFailedState> {
+    match state {
+        Some(PersistedCloudBlobState::Failed(failure)) if !failure.retryable => Some(failure),
+        _ => None,
     }
 }

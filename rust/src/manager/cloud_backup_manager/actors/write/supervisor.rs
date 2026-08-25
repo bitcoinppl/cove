@@ -85,12 +85,14 @@ impl<T> CloudBackupWriteCommandResult<T> {
 pub(crate) enum CloudBackupWriteBlocker {
     Disabling { operation_id: u64 },
     DriveAccountSwitch { transition_id: DriveAccountSwitchId },
+    LocalReset { reset_id: u64 },
 }
 
 impl CloudBackupWriteBlocker {
     fn allows(self, context: CloudBackupWriteCommandContext) -> bool {
         match self {
             Self::Disabling { .. } => false,
+            Self::LocalReset { .. } => false,
             Self::DriveAccountSwitch { transition_id } => context
                 .origin()
                 .is_some_and(|origin| origin.drive_account_switch_id() == Some(transition_id)),
@@ -1150,8 +1152,7 @@ mod tests {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             "namespace".into(),

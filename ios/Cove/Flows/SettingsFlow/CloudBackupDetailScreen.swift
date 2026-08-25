@@ -1,5 +1,43 @@
 import SwiftUI
 
+enum CloudBackupDetailProgressPresentation: Equatable {
+    case none
+    case inventoryInline
+    case verificationCard
+    case verificationInline
+}
+
+func cloudBackupDetailProgressPresentation(
+    verificationState: CloudBackupVerificationState?,
+    isInventoryChecking: Bool,
+    hasRetainedDetail: Bool,
+    hasVisibleWalletRows: Bool
+) -> CloudBackupDetailProgressPresentation {
+    if case .running = verificationState {
+        return hasVisibleWalletRows ? .verificationInline : .verificationCard
+    }
+
+    if isInventoryChecking, hasRetainedDetail {
+        return .inventoryInline
+    }
+
+    return .none
+}
+
+func cloudBackupHasVisibleWalletRows(
+    detail: CloudBackupDetail?,
+    cloudOnly: CloudOnlyState
+) -> Bool {
+    guard let detail else { return false }
+
+    if !detail.upToDate.isEmpty || !detail.needsSync.isEmpty {
+        return true
+    }
+
+    guard case let .loaded(wallets) = cloudOnly else { return false }
+    return !wallets.isEmpty
+}
+
 struct CloudBackupDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CloudBackupPresentationCoordinator.self)
@@ -8,14 +46,9 @@ struct CloudBackupDetailScreen: View {
     @State private var presentationCoordinator =
         PresentationTransitionCoordinator<CloudBackupDetailPresentation>()
 
-    private var isVerifying: Bool {
-        if case .running = manager.verificationState { return true }
-        return false
-    }
-
     private var hasVerificationResult: Bool {
         switch manager.verificationState {
-        case .verified, .awaitingUploadConfirmation, .cancelled, .failed: true
+        case .verified, .needsAttention, .awaitingUploadConfirmation, .cancelled, .failed: true
         default: false
         }
     }
@@ -36,7 +69,19 @@ struct CloudBackupDetailScreen: View {
     }
 
     private var shouldShowLoadingState: Bool {
-        manager.detail == nil && !isVerifying && !hasVerificationResult && !isCancelled
+        manager.detail == nil && !hasVerificationResult && !isCancelled
+    }
+
+    private var progressPresentation: CloudBackupDetailProgressPresentation {
+        cloudBackupDetailProgressPresentation(
+            verificationState: manager.verificationState,
+            isInventoryChecking: manager.isDetailInventoryChecking,
+            hasRetainedDetail: manager.detail != nil,
+            hasVisibleWalletRows: cloudBackupHasVisibleWalletRows(
+                detail: manager.detail,
+                cloudOnly: manager.cloudOnly
+            )
+        )
     }
 
     private var hasCloudBackupPresentationBlocker: Bool {
@@ -46,12 +91,11 @@ struct CloudBackupDetailScreen: View {
     var body: some View {
         CloudBackupDetailForm(
             manager: manager,
-            isVerifying: isVerifying,
-            hasVerificationResult: hasVerificationResult,
             isCancelled: isCancelled,
             isPasskeyMissing: isPasskeyMissing,
             isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
             shouldShowLoadingState: shouldShowLoadingState,
+            progressPresentation: progressPresentation,
             presentationCoordinator: presentationCoordinator,
             recreateConfirmationIsPresented: confirmationBinding(for: .recreate),
             reinitializeConfirmationIsPresented: confirmationBinding(for: .reinitialize)

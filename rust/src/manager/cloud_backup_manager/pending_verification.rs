@@ -3,9 +3,10 @@ use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use crate::database::cloud_backup::{
     PersistedCloudBlobState, PersistedDeepVerificationReport,
     PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
+    PersistedWalletVerificationIssues,
 };
 
-use super::{DeepVerificationReport, current_timestamp};
+use super::{CloudBackupWalletVerificationIssues, DeepVerificationReport, current_timestamp};
 
 pub(crate) type PendingVerificationCompletion = PersistedPendingVerificationCompletion;
 pub(crate) type PendingVerificationUpload = PersistedPendingVerificationUpload;
@@ -106,19 +107,42 @@ impl PersistedDeepVerificationReport {
             local_master_key_repaired: report.local_master_key_repaired,
             credential_recovered: report.credential_recovered,
             wallets_verified: report.wallets_verified,
-            wallets_failed: report.wallets_failed,
-            wallets_unsupported: report.wallets_unsupported,
+            wallets_failed: 0,
+            wallets_unsupported: 0,
+            wallet_issues: Some(PersistedWalletVerificationIssues {
+                missing: report.wallet_issues.missing,
+                download_failed: report.wallet_issues.download_failed,
+                invalid: report.wallet_issues.invalid,
+                decryption_failed: report.wallet_issues.decryption_failed,
+                unsupported: report.wallet_issues.unsupported,
+                unreadable: report.wallet_issues.unreadable,
+            }),
         }
     }
 
     fn to_deep_verification_report(&self) -> DeepVerificationReport {
+        let wallet_issues = self.wallet_issues.as_ref().map_or_else(
+            || CloudBackupWalletVerificationIssues {
+                unreadable: self.wallets_failed,
+                unsupported: self.wallets_unsupported,
+                ..Default::default()
+            },
+            |issues| CloudBackupWalletVerificationIssues {
+                missing: issues.missing,
+                download_failed: issues.download_failed,
+                invalid: issues.invalid,
+                decryption_failed: issues.decryption_failed,
+                unsupported: issues.unsupported,
+                unreadable: issues.unreadable,
+            },
+        );
+
         DeepVerificationReport {
             master_key_wrapper_repaired: self.master_key_wrapper_repaired,
             local_master_key_repaired: self.local_master_key_repaired,
             credential_recovered: self.credential_recovered,
             wallets_verified: self.wallets_verified,
-            wallets_failed: self.wallets_failed,
-            wallets_unsupported: self.wallets_unsupported,
+            wallet_issues,
             detail: None,
         }
     }

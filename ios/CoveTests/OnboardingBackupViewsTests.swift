@@ -257,13 +257,9 @@ final class OnboardingBackupViewsTests: XCTestCase {
                 lastSync: nil,
                 upToDate: [],
                 needsSync: [],
-                cloudOnlyCount: 1,
-                otherBackups: .loaded(summary: CloudBackupOtherBackupsSummary(
-                    namespaceCount: 0,
-                    walletCount: 0,
-                    passkeyHints: []
-                ))
+                cloudOnlyCount: 1
             ),
+            inventoryAuthority: .providerConfirmed,
             cloudOnly: .notFetched,
             cloudOnlyOperation: .idle,
             otherBackupsOperation: .idle
