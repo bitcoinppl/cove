@@ -3,6 +3,8 @@ import CoveCore
 import XCTest
 
 final class WalletTransitionTests: XCTestCase {
+    private struct WalletLoadStartTimeout: Error {}
+
     @MainActor
     private func makeSendFlowManager() throws -> (WalletManager, SendFlowManager) {
         let walletManager = WalletManager(preview: .only)
@@ -27,12 +29,15 @@ final class WalletTransitionTests: XCTestCase {
     }
 
     @MainActor
-    private func waitUntilWalletLoadStarts(_ loadStarted: @escaping () -> Bool) async {
+    private func waitUntilWalletLoadStarts(
+        _ loadStarted: @escaping () -> Bool,
+        onTimeout: () -> Void
+    ) async throws {
         let startedAt = Date()
         while !loadStarted() {
             if Date().timeIntervalSince(startedAt) >= 5 {
-                XCTFail("wallet load starts")
-                return
+                onTimeout()
+                throw WalletLoadStartTimeout()
             }
 
             await drainMainQueue()
@@ -178,7 +183,11 @@ final class WalletTransitionTests: XCTestCase {
         let firstLoad = Task { @MainActor in
             try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
         }
-        await waitUntilWalletLoadStarts { loadCount > 0 }
+        try await waitUntilWalletLoadStarts({ loadCount > 0 }) {
+            firstLoad.cancel()
+            resumeLoad?.resume()
+            resumeLoad = nil
+        }
 
         let secondLoad = Task { @MainActor in
             try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
@@ -223,7 +232,11 @@ final class WalletTransitionTests: XCTestCase {
                 isCurrent: { isCurrent }
             )
         }
-        await waitUntilWalletLoadStarts { loadStarted }
+        try await waitUntilWalletLoadStarts({ loadStarted }) {
+            load.cancel()
+            resumeLoad?.resume()
+            resumeLoad = nil
+        }
 
         isCurrent = false
         resumeLoad?.resume()
@@ -263,7 +276,11 @@ final class WalletTransitionTests: XCTestCase {
                 isCurrent: { staleIsCurrent }
             )
         }
-        await waitUntilWalletLoadStarts { loadCount > 0 }
+        try await waitUntilWalletLoadStarts({ loadCount > 0 }) {
+            staleLoad.cancel()
+            resumeLoad?.resume()
+            resumeLoad = nil
+        }
 
         let currentLoad = Task { @MainActor in
             try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
