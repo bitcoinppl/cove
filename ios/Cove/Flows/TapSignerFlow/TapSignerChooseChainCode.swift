@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/19/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerChooseChainCode: View {
@@ -28,11 +29,17 @@ struct TapSignerChooseChainCode: View {
     }
 
     private func cancel() {
+        manager.cancel()
         app.sheetState = .none
     }
 
     private func automaticSetup() {
-        manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: nil))
+        manager.navigate(
+            to: .startingPin(
+                tapSigner: tapSigner,
+                chainCode: generateRandomChainCode()
+            )
+        )
     }
 
     private func advancedSetup() {

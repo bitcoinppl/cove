@@ -15,12 +15,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,21 +32,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove_core.TapSignerNewPinArgs
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.TapSignerRoute
 
-/**
- * starting (factory) PIN entry screen
- * first step in TapSigner setup flow
- */
+/** Enter the factory CVC before setup. */
 @Composable
 fun TapSignerStartingPinView(
     app: AppManager,
@@ -54,28 +52,11 @@ fun TapSignerStartingPinView(
     chainCode: String?,
     modifier: Modifier = Modifier,
 ) {
-    var startingPin by remember { mutableStateOf("") }
+    var factoryCvc by remember { mutableStateOf("") }
+    val validCvc = isValidCvc(factoryCvc)
 
-    // reset PIN when screen appears
-    LaunchedEffect(Unit) {
-        startingPin = ""
-    }
-
-    // navigate to new PIN screen when 6 digits entered
-    LaunchedEffect(startingPin) {
-        if (startingPin.length == 6) {
-            delay(200)
-            manager.navigate(
-                TapSignerRoute.NewPin(
-                    TapSignerNewPinArgs(
-                        tapSigner = tapSigner,
-                        startingPin = startingPin,
-                        chainCode = chainCode,
-                        action = TapSignerPinAction.SETUP,
-                    ),
-                ),
-            )
-        }
+    DisposableEffect(Unit) {
+        onDispose { factoryCvc = "" }
     }
 
     Column(
@@ -84,15 +65,10 @@ fun TapSignerStartingPinView(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
     ) {
-        // header with card image
         Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF3A4254)),
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF3A4254)),
         ) {
             Column {
-                // back button
                 Row(
                     modifier =
                         Modifier
@@ -110,7 +86,6 @@ fun TapSignerStartingPinView(
                     }
                 }
 
-                // TapSigner card image
                 AsyncImage(
                     model =
                         ImageRequest
@@ -118,15 +93,11 @@ fun TapSignerStartingPinView(
                             .data("file:///android_asset/tapsigner_card.svg")
                             .build(),
                     contentDescription = "TapSigner Card",
-                    modifier =
-                        Modifier
-                            .offset(y = 10.dp)
-                            .clip(RectangleShape),
+                    modifier = Modifier.offset(y = 10.dp).clip(RectangleShape),
                 )
             }
         }
 
-        // content
         Column(
             modifier =
                 Modifier
@@ -137,36 +108,47 @@ fun TapSignerStartingPinView(
         ) {
             Spacer(modifier = Modifier.height(30.dp))
 
-            // title
             Text(
-                text = "Enter Starting PIN",
+                text = "Enter Factory CVC",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
 
-            // description
             Text(
                 text =
-                    "The starting PIN is the 6 digit numeric PIN found on the back of your TAPSIGNER",
+                    "The factory CVC is printed on the back of your TAPSIGNER. " +
+                        "Enter the digits exactly as printed.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            TapSignerCvcInput(
+                value = factoryCvc,
+                onValueChange = { factoryCvc = it },
+                label = "Factory CVC",
+                options = TapSignerCvcInputOptions(testTag = "tapSignerStarting.factoryCvc"),
+            )
 
-            // PIN circles
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+            Button(
+                onClick = {
+                    manager.navigate(
+                        TapSignerRoute.NewPin(
+                            TapSignerNewPinArgs(
+                                tapSigner = tapSigner,
+                                startingPin = factoryCvc,
+                                chainCode = chainCode,
+                                action = TapSignerPinAction.SETUP,
+                            ),
+                        ),
+                    )
+                },
+                enabled = validCvc,
+                modifier = Modifier.fillMaxWidth().testTag("tapSignerStarting.continue"),
             ) {
-                PinCirclesView(pinLength = startingPin.length)
+                Text("Continue")
             }
 
-            // hidden text field
-            HiddenPinTextField(
-                value = startingPin,
-                onValueChange = { startingPin = it },
-            )
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }

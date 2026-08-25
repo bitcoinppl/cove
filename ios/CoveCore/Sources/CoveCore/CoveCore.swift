@@ -118,13 +118,31 @@ public extension Data {
     }
 }
 
+/// Return the user-facing validation message for an invalid TAPSIGNER CVC
+public func tapSignerCvcInputError(value: String) -> String? {
+    tapSignerCvcValidationMessage(value: value)
+}
+
+/// Build an opaque TAPSIGNER CVC after enforcing its six-to-32 ASCII digit format
+public func makeTapSignerCvc(value: String) throws -> TapSignerCvc {
+    try TapSignerCvc.tryNew(value: value)
+}
+
+/// Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data
+public func tapSignerChainCodeBytes(hex: String) -> Data? {
+    tapSignerChainCodeFromHex(hex: hex)
+}
+
+/// Return the user-facing validation message for an invalid TAPSIGNER chain code
+public func tapSignerChainCodeInputError(hex: String) -> String? {
+    tapSignerChainCodeValidationMessage(hex: hex)
+}
+
 public extension SetupCmdResponse {
     var error: TapSignerReaderError? {
         switch self {
         case .complete: .none
-        case let .continueFromInit(continueCmd): continueCmd.error
-        case let .continueFromBackup(continueCmd): continueCmd.error
-        case let .continueFromDerive(continueCmd): continueCmd.error
+        case let .retry(continuation): continuation.error()
         }
     }
 }

@@ -1,16 +1,12 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -18,38 +14,36 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.findActivity
-import org.bitcoinppl.cove.nfc.TapCardNfcManager
+import org.bitcoinppl.cove.runCatchingCancellable
+import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.SetupCmdResponse
 import org.bitcoinppl.cove_core.TapSignerConfirmPinArgs
 import org.bitcoinppl.cove_core.TapSignerPinAction
 import org.bitcoinppl.cove_core.TapSignerRoute
 
-/**
- * PIN confirmation screen
- * validates PIN match and triggers setup or change action
- */
+/** Confirm a new CVC and run setup or CVC change. */
 @Composable
 fun TapSignerConfirmPinView(
     app: AppManager,
@@ -57,34 +51,36 @@ fun TapSignerConfirmPinView(
     args: TapSignerConfirmPinArgs,
     modifier: Modifier = Modifier,
 ) {
-    var confirmPin by remember { mutableStateOf("") }
-    val offsetX = remember { Animatable(0f) }
-    val context = LocalContext.current
+    var confirmCvc by remember { mutableStateOf("") }
+    var validationError by remember { mutableStateOf<String?>(null) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    // reset PIN when screen appears
-    LaunchedEffect(Unit) {
-        confirmPin = ""
+    DisposableEffect(Unit) {
+        onDispose { confirmCvc = "" }
     }
 
-    // check PIN when 6 digits entered
-    LaunchedEffect(confirmPin) {
-        if (confirmPin.length == 6) {
-            delay(200)
-            val activity = context.findActivity()
-            if (activity == null) {
-                app.alertState =
-                    TaggedItem(
-                        AppAlertState.General(
-                            title = "Error",
-                            message = "Unable to access NFC. Please try again.",
-                        ),
-                    )
-                confirmPin = ""
-                return@LaunchedEffect
-            }
+    fun submit() {
+        if (isSubmitting || !isValidCvc(confirmCvc)) return
 
-            checkPin(app, manager, args, confirmPin, offsetX, activity) {
-                confirmPin = ""
+        if (confirmCvc != args.newPin) {
+            confirmCvc = ""
+            validationError = "The CVCs do not match"
+            return
+        }
+
+        validationError = null
+        isSubmitting = true
+        scope.launch {
+            try {
+                when (args.action) {
+                    TapSignerPinAction.SETUP -> setupTapSigner(app, manager, args)
+                    TapSignerPinAction.CHANGE -> changeTapSignerPin(app, manager, args)
+                }
+            } finally {
+                manager.endScan()
+                confirmCvc = ""
+                isSubmitting = false
             }
         }
     }
@@ -95,9 +91,8 @@ fun TapSignerConfirmPinView(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(40.dp),
+        verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        // back button
         Row(
             modifier =
                 Modifier
@@ -114,87 +109,55 @@ fun TapSignerConfirmPinView(
             }
         }
 
-        // lock icon
         Icon(
             imageVector = Icons.Default.Lock,
             contentDescription = "Lock",
-            modifier =
-                Modifier
-                    .size(100.dp)
-                    .align(Alignment.CenterHorizontally),
+            modifier = Modifier.size(100.dp).align(Alignment.CenterHorizontally),
             tint = MaterialTheme.colorScheme.primary,
         )
 
-        // title and description
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                text = "Confirm New PIN",
+                text = "Confirm New CVC",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
 
             Text(
                 text =
-                    "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions.",
+                    "Confirm the same 6–32 ASCII digits.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
+
+            TapSignerCvcInput(
+                value = confirmCvc,
+                onValueChange = {
+                    confirmCvc = it
+                    if (validationError != null) validationError = null
+                },
+                label = "Confirm CVC",
+                options =
+                    TapSignerCvcInputOptions(
+                        testTag = "tapSignerConfirm.newCvc",
+                        validationError = validationError,
+                    ),
+            )
         }
 
-        // PIN circles with shake animation
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .offset { IntOffset(offsetX.value.toInt(), 0) },
-            contentAlignment = Alignment.Center,
+        Button(
+            onClick = ::submit,
+            enabled = !isSubmitting && isValidCvc(confirmCvc),
+            modifier = Modifier.fillMaxWidth().testTag("tapSignerConfirm.submit"),
         ) {
-            PinCirclesView(pinLength = confirmPin.length)
+            Text(if (isSubmitting) "Working…" else "Confirm and continue")
         }
 
-        // hidden text field
-        HiddenPinTextField(
-            value = confirmPin,
-            onValueChange = { confirmPin = it },
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
-    }
-}
-
-private suspend fun checkPin(
-    app: AppManager,
-    manager: TapSignerManager,
-    args: TapSignerConfirmPinArgs,
-    confirmPin: String,
-    offsetX: Animatable<Float, *>,
-    activity: android.app.Activity,
-    onPinMismatch: () -> Unit,
-) {
-    if (confirmPin != args.newPin) {
-        // shake animation
-        offsetX.animateTo(
-            30f,
-            animationSpec = tween(70),
-        )
-        offsetX.animateTo(-30f, animationSpec = tween(70))
-        offsetX.animateTo(20f, animationSpec = tween(70))
-        offsetX.animateTo(-20f, animationSpec = tween(70))
-        offsetX.animateTo(10f, animationSpec = tween(70))
-        offsetX.animateTo(-10f, animationSpec = tween(70))
-        offsetX.animateTo(0f, animationSpec = tween(70))
-
-        onPinMismatch()
-        return
-    }
-
-    when (args.action) {
-        TapSignerPinAction.SETUP -> setupTapSigner(app, manager, args, activity)
-        TapSignerPinAction.CHANGE -> changeTapSignerPin(app, manager, args, activity)
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
@@ -202,62 +165,41 @@ private suspend fun setupTapSigner(
     app: AppManager,
     manager: TapSignerManager,
     args: TapSignerConfirmPinArgs,
-    activity: android.app.Activity,
 ) {
-    val nfc = manager.getOrCreateNfc(args.tapSigner)
-
-    // convert hex chain code to bytes if present
     val chainCodeBytes =
-        args.chainCode?.let { hexCode ->
-            try {
-                hexCode.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            } catch (e: Exception) {
-                null
-            }
+        args.chainCode?.let { chainCode ->
+            decodeChainCode(chainCode)
+                ?: run {
+                    app.alertState =
+                        TaggedItem(
+                            AppAlertState.General(
+                                title = "Invalid chain code",
+                                message = "Chain code must be exactly 64 hexadecimal characters (32 bytes)",
+                            ),
+                        )
+                    return
+                }
         }
 
-    // set up message callback for progress updates
-    val nfcManager = TapCardNfcManager.getInstance()
-    nfcManager.onMessageUpdate = { message ->
-        manager.scanMessage = message
-    }
-    nfcManager.onTagDetected = { manager.isTagDetected = true }
+    val nfc = manager.getOrCreateNfc(args.tapSigner)
+    manager.beginScan("Hold your phone near the TapSigner to set up")
 
-    manager.scanMessage = "Hold your phone near the TapSigner to set up"
-    manager.isTagDetected = false
-    manager.isScanning = true
-
-    try {
-        val response = nfc.setupTapSigner(args.startingPin, args.newPin, chainCodeBytes)
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        when (response) {
-            is org.bitcoinppl.cove_core.SetupCmdResponse.Complete -> {
-                manager.resetRoute(TapSignerRoute.SetupSuccess(args.tapSigner, response.v1))
-            }
-            else -> {
-                manager.resetRoute(TapSignerRoute.SetupRetry(args.tapSigner, response))
-            }
+    val result =
+        runCatchingCancellable("TapSignerConfirmPin", "TapSigner setup failed") {
+            nfc.setupTapSigner(
+                factoryCvc = args.startingPin,
+                newCvc = args.newPin,
+                chainCode = chainCodeBytes,
+                callbacks = manager.operationCallbacks(),
+            )
         }
-    } catch (e: Exception) {
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
+    val response = result.getOrNull()
 
-        // check if we can continue from last response
-        val lastResponse = nfc.lastResponse()
-        val setupResponse =
-            (lastResponse as? org.bitcoinppl.cove_core.TapSignerResponse.Setup)?.v1
-
+    if (response == null) {
+        val setupResponse = nfc.lastSetupResponse()
         if (setupResponse != null) {
             manager.resetRoute(TapSignerRoute.SetupRetry(args.tapSigner, setupResponse))
         } else {
-            // failed completely, go back to home
-            Log.e("TapSignerConfirmPin", "Setup failed")
             app.sheetState = null
             app.alertState =
                 TaggedItem(
@@ -266,6 +208,16 @@ private suspend fun setupTapSigner(
                     ),
                 )
         }
+        return
+    }
+
+    when (response) {
+        is SetupCmdResponse.Complete -> {
+            manager.resetRoute(TapSignerRoute.SetupSuccess(args.tapSigner, response.v1))
+        }
+        is SetupCmdResponse.Retry -> {
+            manager.resetRoute(TapSignerRoute.SetupRetry(args.tapSigner, response))
+        }
     }
 }
 
@@ -273,57 +225,57 @@ private suspend fun changeTapSignerPin(
     app: AppManager,
     manager: TapSignerManager,
     args: TapSignerConfirmPinArgs,
-    activity: android.app.Activity,
 ) {
     val nfc = manager.getOrCreateNfc(args.tapSigner)
+    manager.beginScan("Hold your phone near the TapSigner to change its CVC")
 
-    // set up message callback for progress updates
-    val nfcManager = TapCardNfcManager.getInstance()
-    nfcManager.onMessageUpdate = { message ->
-        manager.scanMessage = message
-    }
-    nfcManager.onTagDetected = { manager.isTagDetected = true }
+    val result =
+        runCatchingCancellable("TapSignerConfirmPin", "TapSigner CVC change failed") {
+        nfc.changePin(
+            currentCvc = args.startingPin,
+            newCvc = args.newPin,
+            callbacks = manager.operationCallbacks(),
+        )
+        }
+    val error = result.exceptionOrNull()
 
-    manager.scanMessage = "Hold your phone near the TapSigner to change PIN"
-    manager.isTagDetected = false
-    manager.isScanning = true
-
-    try {
-        nfc.changePin(args.startingPin, args.newPin)
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
+    if (error == null) {
         app.sheetState = null
         app.alertState =
             TaggedItem(
                 AppAlertState.General(
-                    title = "PIN Changed",
-                    message = "Your TAPSIGNER PIN was changed successfully!",
+                    title = "CVC Changed",
+                    message = "Your TAPSIGNER CVC was changed successfully.",
                 ),
             )
-    } catch (e: Exception) {
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
+        return
+    }
 
-        Log.e("TapSignerConfirmPin", "Error changing PIN")
-
-        // check error type and show appropriate alert
-        val errorMessage =
-            if (isAuthError(e)) {
-                "Wrong PIN, please try again"
-            } else {
-                "TapSigner PIN change failed. Please try again."
-            }
-        app.alertState =
-            TaggedItem(
-                AppAlertState.General(
-                    title = "Error",
-                    message = errorMessage,
-                ),
-            )
+    when {
+        error is TapSignerOperationRetryException -> {
+            manager.errorMessage = "The CVC change needs another scan of the same card. Please try again"
+        }
+        isAuthError(error) -> {
+            app.sheetState = null
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.TapSignerWrongPin(
+                        args.tapSigner,
+                        AfterPinAction.Change,
+                    ),
+                )
+        }
+        isNoBackupError(error) -> {
+            app.alertState = TaggedItem(AppAlertState.TapSignerNoBackup(args.tapSigner))
+        }
+        else -> {
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.General(
+                        title = "Error",
+                        message = "TapSigner CVC change failed. Please try again.",
+                    ),
+                )
+        }
     }
 }
