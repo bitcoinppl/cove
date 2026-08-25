@@ -103,6 +103,11 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
 
         // derive encryption key and run redb migrations (idempotent via OnceLock)
         let bdk_count = ensure_storage_bootstrapped_internal(true)?;
+        crate::database::Database::initialize_for_bootstrap()
+            .map_err(|error| AppInitError::DatabaseVerificationFailed(error.to_string()))?;
+        crate::backup::recovery::recover_restore_markers()
+            .map_err(AppInitError::RecoveryRequired)?;
+
         set_step(BootstrapStep::RedbMigrationComplete);
         info!("Bootstrap: storage bootstrapped, attempting BDK migration");
 
@@ -227,6 +232,10 @@ pub enum AppInitError {
 
     #[error("Database verification failed: {0}")]
     DatabaseVerificationFailed(String),
+
+    /// Bootstrap found an interrupted backup restore that needs recovery
+    #[error("Wallet restore recovery is required: {0}")]
+    RecoveryRequired(String),
 }
 
 /// Idempotent storage bootstrap: derives encryption key and runs all pending

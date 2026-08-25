@@ -58,12 +58,44 @@ struct CoveApplicationDependencies {
     }
 }
 
+enum StartupBootstrapFailure: Equatable {
+    case catastrophicRecovery
+    case recoveryRequired
+    case fatal(String)
+}
+
+let startupRecoveryRequiredMessage =
+    "Cove found an interrupted wallet restore. Try Again to recover it safely.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+
+func classifyBootstrapFailure(_ error: Error) -> StartupBootstrapFailure {
+    if case AppInitError.DatabaseKeyMismatch = error {
+        return .catastrophicRecovery
+    }
+
+    if case AppInitError.RecoveryRequired = error {
+        return .recoveryRequired
+    }
+
+    if case AppInitError.AlreadyCalled = error {
+        return .fatal("App initialization error. Please force-quit and restart.")
+    }
+
+    if case AppInitError.Cancelled = error {
+        return .fatal(
+            "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
+        )
+    }
+
+    return .fatal(error.localizedDescription)
+}
+
 struct CoveApplicationRoot: View {
     enum StartupState {
         case loading
         case ready(AppManager, AuthManager)
         case onboarding(AppManager, AuthManager, OnboardingManager)
         case catastrophicError
+        case recoveryRequired
         case fatalError(String)
     }
 
@@ -143,9 +175,21 @@ extension CoveApplicationRoot {
                     resetCatastrophicRecoveryStateAndRebootstrap()
                 }
             )
+        case .recoveryRequired:
+            CoverView(
+                errorMessage: startupRecoveryRequiredMessage,
+                onTryAgain: retryBootstrapRecovery
+            )
         case let .fatalError(message):
             CoverView(errorMessage: message)
         }
+    }
+
+    private func retryBootstrapRecovery() {
+        startupState = .loading
+
+        // preserve local data and markers so the next bootstrap can retry recovery
+        rebootstrap()
     }
 
     private func resetCatastrophicRecoveryStateAndRebootstrap() {
@@ -222,22 +266,19 @@ extension CoveApplicationRoot {
             if step == .complete {
                 Log.warn("[STARTUP] bootstrap completed despite error — treating as success")
                 completeBootstrap()
-            } else if case AppInitError.DatabaseKeyMismatch = error {
-                Log.error("[STARTUP] database encryption key mismatch")
-                startupState = .catastrophicError
-            } else if case AppInitError.AlreadyCalled = error {
-                Log.error("[STARTUP] bootstrap already called at step: \(step)")
-                startupState = .fatalError(
-                    "App initialization error. Please force-quit and restart."
-                )
-            } else if case AppInitError.Cancelled = error {
-                Log.error("[STARTUP] bootstrap cancelled at step: \(step)")
-                startupState = .fatalError(
-                    "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com"
-                )
             } else {
-                Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
-                startupState = .fatalError(error.localizedDescription)
+                let failure = classifyBootstrapFailure(error)
+                switch failure {
+                case .catastrophicRecovery:
+                    Log.error("[STARTUP] database encryption key mismatch")
+                    startupState = .catastrophicError
+                case .recoveryRequired:
+                    Log.error("[STARTUP] wallet restore recovery required at step: \(step)")
+                    startupState = .recoveryRequired
+                case let .fatal(message):
+                    Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
+                    startupState = .fatalError(message)
+                }
             }
         }
     }

@@ -51,6 +51,22 @@ pub enum BackupError {
     #[error("Wallet id is already occupied: {0}")]
     WalletIdOccupied(WalletId),
 
+    /// The backup contains a wallet id that cannot be used as a local path component
+    #[error("Invalid wallet id: {0}")]
+    InvalidWalletId(String),
+
+    /// The local artifact snapshot changed after the import was prepared
+    #[error("Import approval is stale for wallet id: {0}")]
+    ImportApprovalStale(WalletId),
+
+    /// Destructive cleanup requires a one-use import approval
+    #[error("Import approval is required before removing existing wallet artifacts: {0}")]
+    ImportApprovalRequired(WalletId),
+
+    /// An import preparation or approval object was already consumed
+    #[error("Import approval has already been used")]
+    ImportApprovalUsed,
+
     #[error("Failed to decompress: {0}")]
     Decompression(String),
 }

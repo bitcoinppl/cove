@@ -9,4 +9,16 @@ final class WalletDeletionConfirmationPlanTests: XCTestCase {
         XCTAssertEqual(WalletDeletionConfirmationPlan(requiredConfirmations: 3), .threeSteps)
         XCTAssertEqual(WalletDeletionConfirmationPlan(requiredConfirmations: .max), .threeSteps)
     }
+
+    func testCleanupWarningUsesSingularVerbForOneWallet() {
+        let message = backupCleanupWarningMessage(walletCount: 1)
+
+        XCTAssertTrue(message.hasPrefix("1 wallet has "))
+    }
+
+    func testCleanupWarningUsesPluralVerbForMultipleWallets() {
+        let message = backupCleanupWarningMessage(walletCount: 2)
+
+        XCTAssertTrue(message.hasPrefix("2 wallets have "))
+    }
 }
