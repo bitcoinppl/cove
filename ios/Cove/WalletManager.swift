@@ -708,6 +708,98 @@ enum WalletManagerPreview {
         }
     }
 
+    private let rustBridge = DispatchQueue(
+        label: "cove.walletmanager.rustbridge", qos: .userInitiated
+    )
+
+    private func reconcileLoadStateWithLedgerState() {
+        switch loadState {
+        case .loading:
+            break
+        case let .scanning(txns), let .loaded(txns):
+            loadState = loadStateForTransactions(txns)
+        }
+    }
+
+    private func loadStateForTransactions(_ transactions: [CoveCore.Transaction]) -> WalletLoadState {
+        if scanStatus.isActive {
+            return .scanning(transactions)
+        }
+
+        if ledgerState.initialScanComplete {
+            return .loaded(transactions)
+        }
+
+        if transactions.isEmpty {
+            return .loading
+        }
+
+        return .scanning(transactions)
+    }
+
+    private func recomputeLedgerStateForMetadataChange() {
+        ledgerState = if walletMetadata.internal.performedFullScanAt == nil {
+            .initialScanIncomplete(scanStatus.isActive ? .active : .idle)
+        } else {
+            .complete
+        }
+        balancePresentation = withRustOr(balancePresentation) {
+            $0.balancePresentationForState(ledgerState: ledgerState)
+        }
+        reconcileLoadStateWithLedgerState()
+        notifyInitialScanLifecycleChanged()
+    }
+
+    func logReconcile(message: Message) {
+        logger.debug("reconcile \(message)")
+    }
+
+    func logReconcileMany(messages: [Message]) {
+        logger.debug("reconcile_messages: \(messages)")
+    }
+
+    func dispatch(action: Action) {
+        dispatch(action)
+    }
+
+    func dispatch(_ action: Action) {
+        if case .openReceiveAddress = action {
+            receiveAddressError = nil
+        }
+
+        if case .createNewReceiveAddress = action {
+            receiveAddressError = nil
+        }
+
+        rustBridge.async { [weak self] in
+            guard let self, let rust = self.rust else { return }
+
+            self.logger.debug("dispatch: \(action)")
+            try? rust.dispatch(action: action)
+        }
+    }
+
+    /// PREVIEW only
+    convenience init(preview _: WalletManagerPreview, _ walletMetadata: WalletMetadata? = nil) {
+        let rust =
+            if let walletMetadata {
+                RustWalletManager.previewNewWalletWithMetadata(metadata: walletMetadata)
+            } else {
+                RustWalletManager.previewNewWallet()
+            }
+
+        let initialState = rust.initialState()
+
+        self.init(rust: rust, initialState: initialState, delegate: nil)
+    }
+
+    deinit {
+        close()
+        logger.debug("WalletManager deinit called for wallet \(id)")
+    }
+}
+
+extension WalletManager {
     private func applyScanLifecycleMessage(_ message: Message) {
         switch message {
         case let .walletScanStatusChanged(status):
@@ -858,96 +950,6 @@ enum WalletManagerPreview {
         default:
             preconditionFailure("Expected a receive address reconcile message")
         }
-    }
-
-    private let rustBridge = DispatchQueue(
-        label: "cove.walletmanager.rustbridge", qos: .userInitiated
-    )
-
-    private func reconcileLoadStateWithLedgerState() {
-        switch loadState {
-        case .loading:
-            break
-        case let .scanning(txns), let .loaded(txns):
-            loadState = loadStateForTransactions(txns)
-        }
-    }
-
-    private func loadStateForTransactions(_ transactions: [CoveCore.Transaction]) -> WalletLoadState {
-        if scanStatus.isActive {
-            return .scanning(transactions)
-        }
-
-        if ledgerState.initialScanComplete {
-            return .loaded(transactions)
-        }
-
-        if transactions.isEmpty {
-            return .loading
-        }
-
-        return .scanning(transactions)
-    }
-
-    private func recomputeLedgerStateForMetadataChange() {
-        ledgerState = if walletMetadata.internal.performedFullScanAt == nil {
-            .initialScanIncomplete(scanStatus.isActive ? .active : .idle)
-        } else {
-            .complete
-        }
-        balancePresentation = withRustOr(balancePresentation) {
-            $0.balancePresentationForState(ledgerState: ledgerState)
-        }
-        reconcileLoadStateWithLedgerState()
-        notifyInitialScanLifecycleChanged()
-    }
-
-    func logReconcile(message: Message) {
-        logger.debug("reconcile \(message)")
-    }
-
-    func logReconcileMany(messages: [Message]) {
-        logger.debug("reconcile_messages: \(messages)")
-    }
-
-    func dispatch(action: Action) {
-        dispatch(action)
-    }
-
-    func dispatch(_ action: Action) {
-        if case .openReceiveAddress = action {
-            receiveAddressError = nil
-        }
-
-        if case .createNewReceiveAddress = action {
-            receiveAddressError = nil
-        }
-
-        rustBridge.async { [weak self] in
-            guard let self, let rust = self.rust else { return }
-
-            self.logger.debug("dispatch: \(action)")
-            try? rust.dispatch(action: action)
-        }
-    }
-
-    /// PREVIEW only
-    convenience init(preview _: WalletManagerPreview, _ walletMetadata: WalletMetadata? = nil) {
-        let rust =
-            if let walletMetadata {
-                RustWalletManager.previewNewWalletWithMetadata(metadata: walletMetadata)
-            } else {
-                RustWalletManager.previewNewWallet()
-            }
-
-        let initialState = rust.initialState()
-
-        self.init(rust: rust, initialState: initialState, delegate: nil)
-    }
-
-    deinit {
-        close()
-        logger.debug("WalletManager deinit called for wallet \(id)")
     }
 }
 

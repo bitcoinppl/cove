@@ -754,6 +754,17 @@ struct CorruptedWalletDeletionRetry: Equatable {
         }
     }
 
+    public func dispatch(action: AppAction) {
+        logger.debug("dispatch \(action)")
+        do {
+            try rust.dispatch(action: action)
+        } catch {
+            logger.error("Unable to dispatch app action \(action), error: \(error)")
+        }
+    }
+}
+
+extension AppManager {
     @MainActor
     private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
         switch message {
@@ -824,15 +835,6 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
         default:
             preconditionFailure("Expected an app wallet presentation reconcile message")
-        }
-    }
-
-    public func dispatch(action: AppAction) {
-        logger.debug("dispatch \(action)")
-        do {
-            try rust.dispatch(action: action)
-        } catch {
-            logger.error("Unable to dispatch app action \(action), error: \(error)")
         }
     }
 }

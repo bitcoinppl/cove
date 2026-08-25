@@ -321,26 +321,7 @@ private enum SendFlowManagerAccessError: LocalizedError {
             self.presenter.focusField = field
 
         case let .setAlert(alertState):
-            Log.warn("setAlert: \(alertState)")
-            let hadSheet = self.presenter.sheetState != .none
-            let hadAlert = self.presenter.alertState != .none
-            let isDismissingAlert = self.presenter.isDisappearing
-
-            if hadSheet || hadAlert || isDismissingAlert {
-                self.presenter.clearAlert()
-                self.presenter.sheetState = .none
-
-                let workItem = DispatchWorkItem { [weak self] in
-                    guard let self, self.canApplyReconcileMessages else { return }
-
-                    self.presenter.alertState = .init(alertState)
-                }
-                installDelayedAlertWorkItem(workItem)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
-            } else {
-                installDelayedAlertWorkItem(nil)
-                self.presenter.alertState = .init(alertState)
-            }
+            applySetAlert(alertState)
 
         case .clearAlert:
             installDelayedAlertWorkItem(nil)
@@ -354,6 +335,29 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
         case .refreshPresenters:
             self.refreshPresenters()
+        }
+    }
+
+    private func applySetAlert(_ alertState: SendFlowAlertState) {
+        Log.warn("setAlert: \(alertState)")
+        let hadSheet = presenter.sheetState != .none
+        let hadAlert = presenter.alertState != .none
+        let isDismissingAlert = presenter.isDisappearing
+
+        if hadSheet || hadAlert || isDismissingAlert {
+            presenter.clearAlert()
+            presenter.sheetState = .none
+
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self, self.canApplyReconcileMessages else { return }
+
+                self.presenter.alertState = .init(alertState)
+            }
+            installDelayedAlertWorkItem(workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
+        } else {
+            installDelayedAlertWorkItem(nil)
+            presenter.alertState = .init(alertState)
         }
     }
 

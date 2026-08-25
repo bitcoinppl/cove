@@ -285,12 +285,31 @@ private struct CloudBackupWalletIssueRows: View {
     let onDeleteUndecryptable: () -> Void
 
     var body: some View {
-        issue(issues.missing, "wallet backup file(s) are missing from cloud storage")
-        issue(issues.downloadFailed, "wallet backup(s) could not be downloaded")
-        issue(issues.invalid, "wallet backup file(s) contain invalid data")
-        undecryptableIssue()
-        issue(issues.unsupported, "wallet backup(s) use a newer backup format")
-        issue(issues.unreadable, "wallet backup(s) could not be read")
+        CloudBackupWalletIssueLabel(
+            count: issues.missing,
+            message: "wallet backup file(s) are missing from cloud storage"
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.downloadFailed,
+            message: "wallet backup(s) could not be downloaded"
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.invalid,
+            message: "wallet backup file(s) contain invalid data"
+        )
+        CloudBackupUndecryptableWalletIssue(
+            count: issues.decryptionFailed,
+            deletionState: deletionState,
+            onDelete: onDeleteUndecryptable
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.unsupported,
+            message: "wallet backup(s) use a newer backup format"
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.unreadable,
+            message: "wallet backup(s) could not be read"
+        )
 
         if case let .failed(error) = deletionState {
             Label(error, systemImage: "xmark.circle.fill")
@@ -298,11 +317,29 @@ private struct CloudBackupWalletIssueRows: View {
                 .font(.caption)
         }
     }
+}
 
-    @ViewBuilder
-    private func undecryptableIssue() -> some View {
-        if issues.decryptionFailed > 0 {
-            Button(role: .destructive, action: onDeleteUndecryptable) {
+private struct CloudBackupWalletIssueLabel: View {
+    let count: UInt32
+    let message: String
+
+    var body: some View {
+        if count > 0 {
+            Label("\(count) \(message)", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.statusError)
+                .font(.caption)
+        }
+    }
+}
+
+private struct CloudBackupUndecryptableWalletIssue: View {
+    let count: UInt32
+    let deletionState: CloudBackupUndecryptableWalletDeletionState
+    let onDelete: () -> Void
+
+    var body: some View {
+        if count > 0 {
+            Button(role: .destructive, action: onDelete) {
                 HStack {
                     if case .deleting = deletionState {
                         ProgressView()
@@ -310,9 +347,7 @@ private struct CloudBackupWalletIssueRows: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                     }
 
-                    Text(
-                        "\(issues.decryptionFailed) wallet backup(s) could not be decrypted with this backup key"
-                    )
+                    Text("\(count) wallet backup(s) could not be decrypted with this backup key")
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption)
@@ -321,15 +356,6 @@ private struct CloudBackupWalletIssueRows: View {
             .font(.caption)
             .disabled(deletionState == .deleting)
             .accessibilityHint("Opens a confirmation to delete these inaccessible backups")
-        }
-    }
-
-    @ViewBuilder
-    private func issue(_ count: UInt32, _ message: String) -> some View {
-        if count > 0 {
-            Label("\(count) \(message)", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(Color.statusError)
-                .font(.caption)
         }
     }
 }

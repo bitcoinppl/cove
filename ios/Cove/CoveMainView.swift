@@ -269,61 +269,9 @@ private struct CoveLockedContent: View {
         .onChange(of: auth.lockState) { old, new in
             Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
         }
-        .overlay {
-            if auth.wipePresentationState == .running {
-                ZStack {
-                    Color.black.opacity(0.8).ignoresSafeArea()
-                    ProgressView("Removing local wallet data…")
-                        .tint(.white)
-                        .foregroundStyle(.white)
-                }
-            }
-        }
-        .alert(
-            "Wallet Shutdown Is Blocked",
-            isPresented: Binding(
-                get: { blockedAttempt != nil },
-                set: { _ in }
-            )
-        ) {
-            if let attemptId = blockedAttempt {
-                Button("Retry") {
-                    Task { await auth.retryWipe(attemptId) }
-                }
-                Button("Cancel", role: .cancel) {
-                    auth.cancelWipe(attemptId)
-                }
-            }
-        } message: {
-            Text("Cove could not stop all wallet work. Retry or cancel the wipe.")
-        }
-        .alert(
-            "Unable to Remove Local Data",
-            isPresented: Binding(
-                get: {
-                    if case .failed = auth.wipePresentationState { true } else { false }
-                },
-                set: { presented in
-                    if !presented { auth.clearWipeFailure() }
-                }
-            )
-        ) {
-            Button("OK", role: .cancel) { auth.clearWipeFailure() }
-        } message: {
-            if case let .failed(message) = auth.wipePresentationState {
-                Text(message)
-            }
-        }
+        .modifier(CoveWipePresentationModifier(auth: auth))
         .environment(app)
         .environment(auth)
-    }
-
-    private var blockedAttempt: ShutdownAttemptId? {
-        if case let .shutdownBlocked(attemptId) = auth.wipePresentationState {
-            return attemptId
-        }
-
-        return nil
     }
 
     private func isPinCorrect(_ pin: String) async -> Bool {
@@ -334,6 +282,67 @@ private struct CoveLockedContent: View {
         withAnimation {
             showCover = false
         }
+    }
+}
+
+private struct CoveWipePresentationModifier: ViewModifier {
+    @Bindable var auth: AuthManager
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if auth.wipePresentationState == .running {
+                    ZStack {
+                        Color.black.opacity(0.8).ignoresSafeArea()
+                        ProgressView("Removing local wallet data…")
+                            .tint(.white)
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+            .alert(
+                "Wallet Shutdown Is Blocked",
+                isPresented: Binding(
+                    get: { blockedAttempt != nil },
+                    set: { _ in }
+                )
+            ) {
+                if let attemptId = blockedAttempt {
+                    Button("Retry") {
+                        Task { await auth.retryWipe(attemptId) }
+                    }
+                    Button("Cancel", role: .cancel) {
+                        auth.cancelWipe(attemptId)
+                    }
+                }
+            } message: {
+                Text("Cove could not stop all wallet work. Retry or cancel the wipe.")
+            }
+            .alert(
+                "Unable to Remove Local Data",
+                isPresented: Binding(
+                    get: {
+                        if case .failed = auth.wipePresentationState { true } else { false }
+                    },
+                    set: { presented in
+                        if !presented { auth.clearWipeFailure() }
+                    }
+                )
+            ) {
+                Button("OK", role: .cancel) { auth.clearWipeFailure() }
+            } message: {
+                if case let .failed(message) = auth.wipePresentationState {
+                    Text(message)
+                }
+            }
+    }
+
+    private var blockedAttempt: ShutdownAttemptId? {
+        if case let .shutdownBlocked(attemptId) = auth.wipePresentationState {
+            return attemptId
+        }
+
+        return nil
     }
 }
 

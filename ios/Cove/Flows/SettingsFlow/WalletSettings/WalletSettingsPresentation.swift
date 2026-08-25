@@ -168,24 +168,50 @@ private struct WalletSettingsAlertActions: View {
     var body: some View {
         switch presentation {
         case let .secondDeleteConfirmation(plan):
-            Button("Delete", role: .destructive) {
-                context.confirmSecondDelete(plan)
-            }
-            Button("Cancel", role: .cancel) {}
+            WalletSettingsSecondDeleteActions(plan: plan, context: context)
         case .finalDeleteConfirmation:
-            Button(context.finalDeleteButtonTitle, role: .destructive, action: context.deleteWallet)
-            Button("Cancel", role: .cancel) {}
+            WalletSettingsFinalDeleteActions(context: context)
         case let .deletionShutdownBlocked(attemptId):
-            Button("Retry") {
-                context.retryDeleteWallet(attemptId)
-            }
-            Button("Cancel", role: .cancel) {
-                context.cancelDeleteWallet(attemptId)
-            }
+            WalletSettingsBlockedDeleteActions(attemptId: attemptId, context: context)
         case .appLockRequired:
             Button("OK", role: .cancel) {}
         default:
             EmptyView()
+        }
+    }
+}
+
+private struct WalletSettingsSecondDeleteActions: View {
+    let plan: WalletDeletionConfirmationPlan
+    let context: WalletSettingsPresentationContext
+
+    var body: some View {
+        Button("Delete", role: .destructive) {
+            context.confirmSecondDelete(plan)
+        }
+        Button("Cancel", role: .cancel) {}
+    }
+}
+
+private struct WalletSettingsFinalDeleteActions: View {
+    let context: WalletSettingsPresentationContext
+
+    var body: some View {
+        Button(context.finalDeleteButtonTitle, role: .destructive, action: context.deleteWallet)
+        Button("Cancel", role: .cancel) {}
+    }
+}
+
+private struct WalletSettingsBlockedDeleteActions: View {
+    let attemptId: ShutdownAttemptId
+    let context: WalletSettingsPresentationContext
+
+    var body: some View {
+        Button("Retry") {
+            context.retryDeleteWallet(attemptId)
+        }
+        Button("Cancel", role: .cancel) {
+            context.cancelDeleteWallet(attemptId)
         }
     }
 }
