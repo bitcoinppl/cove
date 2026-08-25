@@ -120,6 +120,7 @@ async fn build_wallet_entry(
                     format!("failed to get wallet private key: {error}").into(),
                 )
             })?;
+
             let Some(secret) = secret else {
                 return Err(CloudBackupError::Internal("hot wallet has no private key".into()));
             };
@@ -128,6 +129,7 @@ async fn build_wallet_entry(
                 KeychainWalletSecret::Mnemonic(mnemonic) => {
                     CloudWalletSecret::Mnemonic(mnemonic.to_string())
                 }
+
                 KeychainWalletSecret::Xpriv(xpriv) => {
                     CloudWalletSecret::Xprv(xpriv.expose().to_string())
                 }
@@ -161,6 +163,7 @@ async fn build_wallet_entry(
         &descriptors,
         &xpub,
     )?;
+
     let content_revision_hash = revision_payload.content_revision_hash()?;
     let updated_at = crate::manager::cloud_backup_manager::current_timestamp();
 
@@ -187,6 +190,7 @@ fn backup_descriptors(
     let authoritative = authoritative_public_descriptor_mirror(metadata).map_err(|error| {
         CloudBackupError::Internal(format!("failed to load wallet descriptors: {error}").into())
     })?;
+
     if let Some((external, internal)) = authoritative {
         return Ok(Some(DescriptorPair {
             external: external.to_string(),
@@ -199,6 +203,7 @@ fn backup_descriptors(
             let mnemonic = bip39::Mnemonic::from_str(mnemonic).map_err(|error| {
                 CloudBackupError::Internal(format!("failed to parse mnemonic: {error}").into())
             })?;
+
             let descriptors =
                 mnemonic.into_descriptors(None, metadata.network, metadata.address_type);
 
@@ -207,10 +212,12 @@ fn backup_descriptors(
                 internal: descriptors.internal.extended_descriptor.to_string(),
             }))
         }
+
         CloudWalletSecret::Xprv(value) => {
             let xpriv = WalletXprv::parse(value.as_str()).map_err(|error| {
                 CloudBackupError::Internal(format!("failed to parse xprv: {error}").into())
             })?;
+
             let descriptors = KeychainWalletSecret::Xpriv(xpriv)
                 .into_descriptors(metadata.network, metadata.address_type);
 
@@ -219,6 +226,7 @@ fn backup_descriptors(
                 internal: descriptors.internal.extended_descriptor.to_string(),
             }))
         }
+
         CloudWalletSecret::TapSignerBackup(_) => {
             Err(CloudBackupError::Internal("tap signer wallet has no public descriptors".into()))
         }

@@ -6,6 +6,7 @@ use zeroize::Zeroizing;
 
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret};
 use cove_types::network::Network;
+use cove_util::result_ext::ResultExt as _;
 
 use crate::custom_block_explorer::CustomBlockExplorerTemplate;
 use crate::database::Database;
@@ -44,11 +45,8 @@ impl BackupExporter {
 
         for network in Network::iter() {
             for mode in [WalletMode::Main, WalletMode::Decoy] {
-                let wallets = self
-                    .db
-                    .wallets
-                    .get_all(network, mode)
-                    .map_err(|e| BackupError::Database(e.to_string()))?;
+                let wallets =
+                    self.db.wallets.get_all(network, mode).map_err_str(BackupError::Database)?;
 
                 for metadata in wallets {
                     let id = &metadata.id;
@@ -58,7 +56,7 @@ impl BackupExporter {
                     // serialize metadata to JSON value for forward compatibility
                     let metadata_value =
                         serde_json::to_value(metadata.clone_without_local_scan_state())
-                            .map_err(|e| BackupError::Serialization(e.to_string()))?;
+                            .map_err_str(BackupError::Serialization)?;
 
                     // gather secret material based on wallet type
                     let secret = match metadata.wallet_type {
@@ -223,8 +221,7 @@ pub async fn export_all(password: String) -> Result<BackupResult, BackupError> {
 
     let payload = BackupPayload::try_new(wallets, settings)?;
 
-    let json =
-        serde_json::to_vec(&payload).map_err(|e| BackupError::Serialization(e.to_string()))?;
+    let json = serde_json::to_vec(&payload).map_err_str(BackupError::Serialization)?;
     let json = Zeroizing::new(json);
 
     let compressed = crypto::compress(&json)?;
@@ -254,7 +251,7 @@ async fn export_labels(id: cove_types::WalletId) -> Result<String, BackupError> 
         BackupError::Gather(e.to_string())
     })?;
 
-    manager.export().await.map_err(|e| BackupError::Gather(e.to_string()))
+    manager.export().await.map_err_str(BackupError::Gather)
 }
 
 #[cfg(test)]

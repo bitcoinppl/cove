@@ -295,6 +295,7 @@ impl WalletsTable {
                         source_detail: source.to_string(),
                     }
                 })?;
+
                 inventory.append(&mut wallets);
             }
         }
@@ -309,6 +310,7 @@ impl WalletsTable {
     ) -> Result<(), Error> {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(wallet.id.clone())?;
+
         let network = wallet.network;
         let mode = wallet.wallet_mode;
         let wallet_for_backup = should_backup_to_cloud.then(|| wallet.clone());
@@ -378,6 +380,7 @@ impl WalletsTable {
     ) -> Result<WalletMetadataPatchResult, Error> {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(id.clone())?;
+
         let write_txn = self.db.begin_write()?;
 
         let result = {
@@ -388,6 +391,7 @@ impl WalletsTable {
                 .map_err_str(WalletTableError::ReadError)?
                 .map(|value| value.value())
                 .unwrap_or_default();
+
             let Some(wallet) = wallets.iter_mut().find(|wallet| &wallet.id == id) else {
                 return Err(WalletTableError::WalletNotFound.into());
             };
@@ -437,6 +441,7 @@ impl WalletsTable {
     ) -> Result<WalletMetadata, Error> {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(metadata.id.clone())?;
+
         let network = metadata.network;
         let mode = metadata.wallet_mode;
         let write_txn = self.db.begin_write()?;
@@ -449,6 +454,7 @@ impl WalletsTable {
                 .map_err_str(WalletTableError::ReadError)?
                 .map(|value| value.value())
                 .unwrap_or_default();
+
             let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.id == metadata.id) else {
                 return Err(WalletTableError::WalletNotFound.into());
             };
@@ -519,6 +525,7 @@ impl WalletsTable {
     ) -> Result<Vec<WalletMetadata>, Error> {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_unscoped_persistence_operation()?;
+
         let wallets = self.get_all(network, mode)?;
 
         if wallets.len() != wallet_ids.len() {
@@ -589,6 +596,7 @@ impl WalletsTable {
     ) -> Result<(), Error> {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_unscoped_persistence_operation()?;
+
         let write_txn = self.db.begin_write()?;
 
         {

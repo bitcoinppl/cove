@@ -185,6 +185,7 @@ impl BdkStore {
         let _operation = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(id.clone())
             .map_err(|error| eyre::eyre!(error))?;
+
         crate::bootstrap::ensure_storage_bootstrapped()
             .map_err(|e| eyre::eyre!("storage bootstrap failed: {e}"))?;
 
@@ -192,6 +193,7 @@ impl BdkStore {
         let temporary_path = replacement_store_path(&final_path);
         Self::remove_wallet_artifact(&temporary_path)
             .context("unable to remove stale replacement store")?;
+
         remove_sqlite_auxiliary_files(&temporary_path)
             .context("unable to remove stale replacement sqlite auxiliary files")?;
 
@@ -206,6 +208,7 @@ impl BdkStore {
             create(&mut conn)?;
             conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
                 .context("unable to checkpoint replacement store")?;
+
             drop(conn);
             sync_path(&prepared.temporary_path).context("unable to sync replacement store")?;
             Ok(())
@@ -274,6 +277,7 @@ impl PreparedStoreReplacement {
             // a stale legacy filestore would shadow the sqlite store at the next load
             BdkStore::remove_wallet_artifact(&self.legacy_store_path)
                 .context("unable to remove legacy wallet filestore")?;
+
             // aux files of the old database must not pair with the replacement
             remove_sqlite_auxiliary_files(&self.final_path)
                 .context("unable to remove old sqlite auxiliary files")?;

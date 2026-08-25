@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cove_util::result_ext::ResultExt as _;
 use parking_lot::{Mutex, RwLock};
 
 use crate::{
@@ -130,7 +131,7 @@ impl RustPendingWalletManager {
 
         let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_unscoped_construction()
-            .map_err(|error| PendingWalletManagerError::BdkError(error.to_string()))?;
+            .map_err_str(PendingWalletManagerError::BdkError)?;
         let pending_wallet = self.state.read().wallet.clone();
         let network = pending_wallet.network;
         let mode = Database::global().global_config.wallet_mode();

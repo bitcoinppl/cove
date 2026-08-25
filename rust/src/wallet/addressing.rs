@@ -71,7 +71,7 @@ pub(crate) fn healed_metadata_for_store(
 /// Return the descriptor pair published in the wallet store
 ///
 /// The BDK store is authoritative after an address-type switch. A matching
-/// keychain pair is only a recovery fallback when the store cannot be loaded.
+/// keychain pair is only a recovery fallback when the store cannot be loaded
 pub(crate) fn authoritative_public_descriptors(
     metadata: &WalletMetadata,
 ) -> Result<(ExtendedDescriptor, ExtendedDescriptor), WalletError> {
@@ -84,9 +84,9 @@ pub(crate) fn authoritative_public_descriptors(
 
 /// Return the published descriptor mirror when one can be recovered safely
 ///
-/// A missing store and keychain pair is not an error for backup compatibility.
+/// A missing store and keychain pair is not an error for backup compatibility
 /// A stale keychain pair is an error because using it would publish addresses
-/// that conflict with the wallet metadata.
+/// that conflict with the wallet metadata
 pub(crate) fn authoritative_public_descriptor_mirror(
     metadata: &WalletMetadata,
 ) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, WalletError> {

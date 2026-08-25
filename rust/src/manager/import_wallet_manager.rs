@@ -229,7 +229,7 @@ fn create_new_wallet(
 ) -> Result<WalletMetadata, Error> {
     let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
         .begin_unscoped_construction()
-        .map_err(|error| ImportWalletError::WalletImportError(error.to_string()))?;
+        .map_err_str(ImportWalletError::WalletImportError)?;
     let number_of_wallets = database.wallets.len(network, mode)?;
     let name = default_name.resolve(fingerprint, number_of_wallets);
     let mut metadata = match &secret {
@@ -268,7 +268,7 @@ fn upgrade_existing_wallet(
     let id = metadata.id.clone();
     let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
         .begin_persistence_operation(id.clone())
-        .map_err(|error| ImportWalletError::WalletImportError(error.to_string()))?;
+        .map_err_str(ImportWalletError::WalletImportError)?;
     let existing_secret = match keychain.get_wallet_secret(&id) {
         Ok(secret) => secret,
         Err(error) => {

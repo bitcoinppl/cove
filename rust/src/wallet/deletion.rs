@@ -140,7 +140,7 @@ impl RecoveryCleanup {
     pub(crate) fn prepare_database_unavailable() -> Result<Self, RecoveryCleanupAcquireError> {
         let wallet = WalletLifecycleCoordinator::global().begin_recovery_cleanup()?;
         let cloud_backup = begin_cloud_backup_recovery_cleanup()
-            .map_err(|error| RecoveryCleanupAcquireError::CloudBackup(error.to_string()))?;
+            .map_err_str(RecoveryCleanupAcquireError::CloudBackup)?;
 
         Ok(Self {
             proof: RecoveryCleanupProof::DatabaseUnavailable {
@@ -296,6 +296,7 @@ fn delete_registered_wallet(
             .map_err(|source| {
                 failure(wallet_id, WalletDeletionStage::Metadata, source.to_string())
             })?;
+
         if !removed {
             return Err(failure(
                 wallet_id,

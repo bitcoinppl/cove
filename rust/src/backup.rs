@@ -154,22 +154,27 @@ impl BackupManager {
                 let mut approval_guard = approval.state.lock();
                 let preparation_state =
                     preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+
                 let approval_state =
                     approval_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+
                 import::validate_prepared_import(preparation_state, Some(approval_state))?;
 
                 let state = preparation_guard
                     .take()
                     .expect("preparation was checked as present while holding its mutex");
+
                 let approval = approval_guard
                     .take()
                     .expect("approval was checked as present while holding its mutex");
                 (state, Some(approval))
             }
+
             None => {
                 let mut preparation_guard = preparation.state.lock();
                 let preparation_state =
                     preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+
                 import::validate_prepared_import(preparation_state, None)?;
 
                 let state = preparation_guard

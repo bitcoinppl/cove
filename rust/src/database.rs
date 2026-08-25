@@ -126,6 +126,7 @@ impl Database {
 
             Ok::<_, error::DatabaseError>(ArcSwap::new(Arc::new(db)))
         })?;
+
         let db = db.load();
 
         Ok(Arc::clone(&db))

@@ -728,6 +728,7 @@ pub(crate) async fn delete_wallet_with_tier(
         .prepare_wallet_deletion(wallet_id.clone(), tier, retry.as_ref())
         .await
         .map_err(AppError::WalletLifecycle)?;
+
     let inventory = database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
     let WalletDeletionIntent::Registered(target) =
         crate::wallet::deletion::resolve_intent(&wallet_id, inventory)
@@ -751,9 +752,11 @@ async fn wipe_all_data_with_tier(
         .prepare_full_wipe(tier, retry.as_ref())
         .await
         .map_err(AppError::WalletLifecycle)?;
+
     let cloud_reset = CLOUD_BACKUP_MANAGER.clone().prepare_local_reset().await.map_err(|_| {
         AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
     })?;
+
     let mut prepared = PreparedFullWipe::new(lifecycle, cloud_reset);
     let wipe_result = async {
         let inventory = database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
@@ -764,6 +767,7 @@ async fn wipe_all_data_with_tier(
                 first_failure.get_or_insert(error);
             }
         }
+
         if let Some(error) = first_failure {
             return Err(AppError::WalletDeletion(error));
         }
@@ -771,6 +775,7 @@ async fn wipe_all_data_with_tier(
         prepared
             .delete_all_wallet_items()
             .map_err(|source| local_reset_error(LocalDataResetStage::WalletKeychain, source))?;
+
         prepared
             .purge_orphan_wallet_artifacts()
             .map_err(|source| local_reset_error(LocalDataResetStage::WalletArtifacts, source))?;
@@ -778,16 +783,20 @@ async fn wipe_all_data_with_tier(
         CloudBackupKeychain::global()
             .clear_local_state()
             .map_err(|source| local_reset_error(LocalDataResetStage::CloudBackup, source))?;
+
         prepared.prevent_cloud_resume();
         cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
 
         crate::backup::recovery::remove_all_restore_recovery_state()
             .map_err(|source| local_reset_error(LocalDataResetStage::RestoreState, source))?;
+
         std::fs::File::open(&*cove_common::consts::ROOT_DATA_DIR)
             .and_then(|directory| directory.sync_all())
             .map_err(|source| local_reset_error(LocalDataResetStage::RootDirectorySync, source))?;
+
         crate::diagnostics::clear_diagnostics_logs()
             .map_err(|source| local_reset_error(LocalDataResetStage::Diagnostics, source))?;
+
         database
             .dangerous_reset_all_data()
             .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))?;
@@ -816,6 +825,7 @@ fn failed_wipe_result(
 ) -> Result<(), AppError> {
     match cloud_recovery {
         Ok(_) => Err(wipe_error),
+
         Err(_) => {
             Err(AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired))
         }
@@ -859,7 +869,7 @@ fn purge_wallet_data_root(wallet_data_root: &std::path::Path) -> std::io::Result
                 warn!(
                     path = ?entry.path(),
                     reason = %error,
-                    "Skipping unknown wallet-data entry during destructive cleanup"
+                    "skipping unknown wallet-data entry during destructive cleanup"
                 );
                 continue;
             }
@@ -874,7 +884,7 @@ fn purge_wallet_data_root(wallet_data_root: &std::path::Path) -> std::io::Result
     if retained_unknown_entry {
         warn!(
             path = ?wallet_data_root,
-            "Retaining wallet-data root because it contains unknown entries"
+            "retaining wallet-data root because it contains unknown entries"
         );
     } else {
         std::fs::remove_dir(wallet_data_root)?;
@@ -935,6 +945,7 @@ fn parse_wallet_id(value: &std::ffi::OsStr) -> std::io::Result<WalletId> {
     let value = value.to_str().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, "wallet id is not valid UTF-8")
     })?;
+
     let wallet_id = WalletId::from(value.to_string());
     crate::backup::recovery::ValidatedRestoreWalletId::validate(&wallet_id)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()))?;
@@ -1030,6 +1041,7 @@ impl FfiApp {
             .all_sorted_active()
             .map_err_prefix("unable to get sorted wallets", AppError::WalletSelection)
             .map_err(SelectLatestWalletError::WalletSelection)?;
+
         let latest_wallet = wallets.first().ok_or(SelectLatestWalletError::NoWalletsFound)?;
 
         self.select_wallet(latest_wallet.id.clone(), None)

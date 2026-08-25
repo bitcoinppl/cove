@@ -8,6 +8,7 @@ use bdk_wallet::{bitcoin::bip32::Xpub, descriptor::ExtendedDescriptor};
 use bip39::Mnemonic;
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_types::network::Network;
+use cove_util::result_ext::ResultExt as _;
 use parking_lot::Mutex;
 use sha2::{Digest as _, Sha256};
 use tracing::{error, info, warn};
@@ -124,9 +125,10 @@ pub(crate) async fn import_prepared(
         preparation.payload.take().expect("prepared import payload was checked as present");
     let mut approval = approval;
 
-    let mut report = BackupImportReport::default();
-
-    let mut existing_identities = collect_existing_wallet_identities()?;
+    let mut progress = WalletImportProgress {
+        report: BackupImportReport::default(),
+        existing_identities: collect_existing_wallet_identities()?,
+    };
     let had_wallets = !payload.wallets.is_empty();
     let wallet_backups = std::mem::take(&mut payload.wallets);
 
@@ -140,58 +142,22 @@ pub(crate) async fn import_prepared(
 
         if prepared_wallet.snapshot.has_markerless_conflict() && approval_snapshot.is_none() {
             let error = BackupError::ImportApprovalRequired(prepared_wallet.metadata.id.clone());
-            let name = prepared_name.clone();
-            report.failed_wallet_names.push(name.clone());
-            report.failed_wallet_errors.push(error.to_string());
-            error!("Failed to restore wallet {name}: {error}");
+            progress.record_failure(prepared_name, RestoreError::from(error));
             continue;
         }
 
-        match restore_prepared_wallet(
+        let restore_result = restore_prepared_wallet(
             wallet_backup,
             prepared_wallet,
-            &existing_identities,
+            &progress.existing_identities,
             approval_snapshot.as_ref(),
         )
-        .await
-        {
-            Ok(RestoreResult::Imported {
-                name,
-                labels_imported,
-                labels_failure,
-                duplicate_key,
-                degraded,
-                cleanup_warnings,
-            }) => {
-                report.imported_wallet_names.push(name.clone());
-                if labels_imported {
-                    report.wallets_with_labels_imported += 1;
-                }
-                if let Some((name, error)) = labels_failure {
-                    report.labels_failed_wallet_names.push(name);
-                    report.labels_failed_errors.push(error);
-                }
-                existing_identities.insert(duplicate_key);
-                if degraded {
-                    report.degraded_wallet_names.push(name);
-                }
-                report.cleanup_warnings.extend(cleanup_warnings);
-            }
-            Ok(RestoreResult::Skipped { name }) => {
-                report.skipped_wallet_names.push(name);
-            }
-            Err(RestoreError { error: e, cleanup_warnings }) => {
-                let name = prepared_name;
-                error!("Failed to restore wallet {name}: {e}");
-                for warning in &cleanup_warnings {
-                    error!("Cleanup failure for {name}: {warning}");
-                }
-                report.failed_wallet_names.push(name);
-                report.failed_wallet_errors.push(e.to_string());
-                report.cleanup_warnings.extend(cleanup_warnings);
-            }
-        }
+        .await;
+
+        progress.record_restore_result(prepared_name, restore_result);
     }
+
+    let mut report = progress.report;
 
     if report.imported_wallet_names.is_empty()
         && report.skipped_wallet_names.is_empty()
@@ -208,7 +174,7 @@ pub(crate) async fn import_prepared(
         match restore_settings(&payload.settings) {
             Ok(()) => report.settings_restored = true,
             Err(e) => {
-                warn!("Failed to restore some settings: {e}");
+                warn!("failed to restore some settings: {e}");
                 report.settings_error = Some(e.to_string());
             }
         }
@@ -223,9 +189,11 @@ fn preflight_wallets(payload: &BackupPayload) -> Result<Vec<PreparedImportWallet
 
     for wallet_backup in &payload.wallets {
         let metadata: WalletMetadata = serde_json::from_value(wallet_backup.metadata.clone())
-            .map_err(|error| BackupError::Deserialization(format!("wallet metadata: {error}")))?;
+            .map_err_prefix("wallet metadata", BackupError::Deserialization)?;
+
         let validated_id =
             crate::backup::recovery::ValidatedRestoreWalletId::validate(&metadata.id)?;
+
         let path_key = validated_id.path_key();
 
         if !seen_path_keys.insert(path_key) {
@@ -240,9 +208,11 @@ fn preflight_wallets(payload: &BackupPayload) -> Result<Vec<PreparedImportWallet
             &wallet_backup.secret,
             &metadata.name,
         )?;
+
         let kind = prepare_wallet_kind(&metadata, wallet_backup, validation)?;
-        let identity = identity_key_for_backup(&metadata, wallet_backup)
-            .map_err(|error| BackupError::Restore(error.to_string()))?;
+        let identity =
+            identity_key_for_backup(&metadata, wallet_backup).map_err_str(BackupError::Restore)?;
+
         let snapshot = RestoreArtifactSnapshot::capture(&validated_id)?;
         wallets.push(PreparedImportWallet { metadata, snapshot, identity, kind });
     }
@@ -257,9 +227,11 @@ fn prepare_wallet_kind(
 ) -> Result<PreparedWalletKind, BackupError> {
     let kind = match &backup.secret {
         WalletSecret::Mnemonic(words) => {
-            let mnemonic = Mnemonic::from_str(words).map_err(|error| {
-                BackupError::Restore(format!("invalid mnemonic for {}: {error}", metadata.name))
-            })?;
+            let mnemonic = Mnemonic::from_str(words).map_err_prefix(
+                &format!("invalid mnemonic for {}", metadata.name),
+                BackupError::Restore,
+            )?;
+
             let secret = KeychainWalletSecret::Mnemonic(mnemonic);
             let xpub = secret.xpub(metadata.network);
             let descriptors =
@@ -268,12 +240,11 @@ fn prepare_wallet_kind(
             Ok(PreparedWalletKind::Hot(PreparedHotWallet { secret, xpub, descriptors }))
         }
         WalletSecret::Xprv(value) => {
-            let xprv = WalletXprv::parse(value.as_str()).map_err(|error| {
-                BackupError::Restore(format!(
-                    "invalid extended private key for {}: {error}",
-                    metadata.name
-                ))
-            })?;
+            let xprv = WalletXprv::parse(value.as_str()).map_err_prefix(
+                &format!("invalid extended private key for {}", metadata.name),
+                BackupError::Restore,
+            )?;
+
             let secret = KeychainWalletSecret::Xpriv(xprv);
             let xpub = secret.xpub(metadata.network);
             let descriptors =
@@ -309,7 +280,7 @@ fn validate_prepared_wallet_storage(
     kind: &PreparedWalletKind,
 ) -> Result<(), BackupError> {
     let mut connection = bdk_wallet::rusqlite::Connection::open_in_memory()
-        .map_err(|error| BackupError::Restore(format!("validate BDK wallet: {error}")))?;
+        .map_err_prefix("validate BDK wallet", BackupError::Restore)?;
 
     match kind {
         PreparedWalletKind::Hot(prepared) => {
@@ -319,7 +290,7 @@ fn validate_prepared_wallet_storage(
                 .into_create_params()
                 .network(metadata.network.into())
                 .create_wallet(&mut connection)
-                .map_err(|error| BackupError::Restore(format!("validate BDK wallet: {error}")))?;
+                .map_err_prefix("validate BDK wallet", BackupError::Restore)?;
         }
         PreparedWalletKind::Public(prepared) => {
             let Some((external, internal)) = &prepared.descriptors else {
@@ -329,7 +300,7 @@ fn validate_prepared_wallet_storage(
             bdk_wallet::Wallet::create(external.clone(), internal.clone())
                 .network(metadata.network.into())
                 .create_wallet(&mut connection)
-                .map_err(|error| BackupError::Restore(format!("validate BDK wallet: {error}")))?;
+                .map_err_prefix("validate BDK wallet", BackupError::Restore)?;
         }
     }
 
@@ -344,6 +315,7 @@ fn prepare_public_wallet(
     let xpub = backup.xpub.as_deref().map(Xpub::from_str).transpose().map_err(|error| {
         BackupError::Restore(format!("invalid xpub for {}: {error}", metadata.name))
     })?;
+
     let descriptors = backup
         .descriptors
         .as_ref()
@@ -355,6 +327,7 @@ fn prepare_public_wallet(
                         metadata.name
                     ))
                 })?;
+
             let internal =
                 ExtendedDescriptor::from_str(&descriptors.internal).map_err(|error| {
                     BackupError::Restore(format!(
@@ -362,6 +335,7 @@ fn prepare_public_wallet(
                         metadata.name
                     ))
                 })?;
+
             Ok::<_, BackupError>((external, internal))
         })
         .transpose()?;
@@ -423,6 +397,61 @@ fn validate_approval(
 struct RestoreError {
     error: BackupError,
     cleanup_warnings: Vec<String>,
+}
+
+struct WalletImportProgress {
+    report: BackupImportReport,
+    existing_identities: ExistingWalletIdentitySet,
+}
+
+impl WalletImportProgress {
+    fn record_restore_result(
+        &mut self,
+        prepared_name: String,
+        result: Result<RestoreResult, RestoreError>,
+    ) {
+        match result {
+            Ok(RestoreResult::Imported {
+                name,
+                labels_imported,
+                labels_failure,
+                duplicate_key,
+                degraded,
+                cleanup_warnings,
+            }) => {
+                self.report.imported_wallet_names.push(name.clone());
+                self.report.wallets_with_labels_imported += u32::from(labels_imported);
+
+                if let Some((name, error)) = labels_failure {
+                    self.report.labels_failed_wallet_names.push(name);
+                    self.report.labels_failed_errors.push(error);
+                }
+
+                self.existing_identities.insert(duplicate_key);
+                if degraded {
+                    self.report.degraded_wallet_names.push(name);
+                }
+
+                self.report.cleanup_warnings.extend(cleanup_warnings);
+            }
+
+            Ok(RestoreResult::Skipped { name }) => self.report.skipped_wallet_names.push(name),
+            Err(error) => self.record_failure(prepared_name, error),
+        }
+    }
+
+    fn record_failure(&mut self, name: String, failure: RestoreError) {
+        let error = &failure.error;
+        error!("Failed to restore wallet {name}: {error}");
+
+        for warning in &failure.cleanup_warnings {
+            error!("Cleanup failure for {name}: {warning}");
+        }
+
+        self.report.failed_wallet_names.push(name);
+        self.report.failed_wallet_errors.push(failure.error.to_string());
+        self.report.cleanup_warnings.extend(failure.cleanup_warnings);
+    }
 }
 
 impl From<BackupError> for RestoreError {
@@ -574,7 +603,8 @@ async fn restore_prepared_wallet(
     );
     let labels_imported = labels_outcome.imported;
     if let Some(warning) = labels_outcome.warning {
-        warn!("Failed to import labels for wallet {name}: {}", warning.error);
+        let error = &warning.error;
+        warn!("failed to import labels for wallet {name}: {error}");
         labels_failure = Some((warning.wallet_name, warning.error));
     }
 
@@ -610,6 +640,7 @@ where
     let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
         .begin_construction(metadata.id.clone())
         .map_err(|error| (BackupError::Restore(error.to_string()), Vec::new()))?;
+
     let lease = match cleanup {
         RestoreCleanup::RequireEmpty => WalletRestoreLease::acquire(metadata),
         RestoreCleanup::Approved(snapshot) | RestoreCleanup::Preserve(snapshot) => {
@@ -617,6 +648,7 @@ where
         }
     }
     .map_err(|error| (error, Vec::new()))?;
+
     let mut journal =
         RestoreMarkerGuard::begin(metadata, lease).map_err(|error| (error, Vec::new()))?;
 
@@ -655,6 +687,7 @@ fn cloud_restore_snapshot(
     let existing_xpub = Keychain::global()
         .get_wallet_xpub(&metadata.id)
         .map_err(|error| BackupError::Keychain(format!("cloud restore xpub: {error}")))?;
+
     if existing_xpub.is_some() && existing_xpub != expected_xpub {
         return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
     }
@@ -707,8 +740,9 @@ pub(crate) fn restore_cloud_mnemonic_wallet(
         restore_hot_wallet_inner_prepared(metadata, prepared)
     });
     if let Ok(warnings) = &result {
+        let name = &metadata.name;
         for warning in warnings {
-            warn!("Cloud restore cleanup warning for {}: {warning}", metadata.name);
+            warn!("cloud restore cleanup warning for {name}: {warning}");
         }
     }
     result.map(|_| ())
@@ -729,8 +763,9 @@ pub(crate) fn restore_cloud_xpriv_wallet(
         restore_hot_wallet_inner_prepared(metadata, prepared)
     });
     if let Ok(warnings) = &result {
+        let name = &metadata.name;
         for warning in warnings {
-            warn!("Cloud restore cleanup warning for {}: {warning}", metadata.name);
+            warn!("cloud restore cleanup warning for {name}: {warning}");
         }
     }
     result.map(|_| ())
@@ -785,6 +820,7 @@ pub(crate) fn restore_cloud_descriptor_wallet(
     let prepared =
         prepare_public_wallet(backup, metadata, matches!(&backup.secret, WalletSecret::Unknown))
             .map_err(|error| (error, Vec::new()))?;
+
     let prepared = PreparedPublicWallet {
         tap_signer_backup: match &backup.secret {
             WalletSecret::TapSignerBackup(bytes) => Some(bytes.clone()),
@@ -799,8 +835,9 @@ pub(crate) fn restore_cloud_descriptor_wallet(
         restore_descriptor_wallet_inner_prepared(metadata, prepared)
     });
     if let Ok(warnings) = &result {
+        let name = &metadata.name;
         for warning in warnings {
-            warn!("Cloud restore cleanup warning for {}: {warning}", metadata.name);
+            warn!("cloud restore cleanup warning for {name}: {warning}");
         }
     }
     result.map(|_| ())

@@ -316,7 +316,7 @@ impl Wallet {
     pub fn persist(&mut self) -> Result<(), WalletError> {
         let _operation = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(self.id.clone())
-            .map_err(|error| WalletError::PersistError(error.to_string()))?;
+            .map_err_str(WalletError::PersistError)?;
         self.bdk
             .persist(&mut self.storage.connection().lock())
             .map_err_str(WalletError::PersistError)?;
@@ -378,7 +378,7 @@ impl Wallet {
     pub fn new_from_xpub(xpub: String) -> Result<Self, WalletError> {
         let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_unscoped_construction()
-            .map_err(|error| WalletError::PersistError(error.to_string()))?;
+            .map_err_str(WalletError::PersistError)?;
 
         Self::try_new_persisted_from_xpub(xpub)
     }
@@ -389,7 +389,7 @@ impl Wallet {
     ) -> Result<Self, WalletError> {
         let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_unscoped_construction()
-            .map_err(|error| WalletError::PersistError(error.to_string()))?;
+            .map_err_str(WalletError::PersistError)?;
 
         let export = Arc::unwrap_or_clone(export);
         Self::try_new_persisted_from_pubport(export.into_format())

@@ -394,26 +394,6 @@ impl WalletActor {
         ))
     }
 
-    #[cfg(test)]
-    pub(crate) fn new_with_db(
-        wallet: Wallet,
-        reconciler: Sender<SingleOrMany>,
-        scan_status: Arc<RwLock<WalletScanStatus>>,
-        wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
-        db: WalletDataDb,
-    ) -> Self {
-        let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
-
-        Self::new_with_metadata_and_db(
-            wallet,
-            reconciler,
-            scan_status,
-            wallet_snapshot,
-            db,
-            metadata,
-        )
-    }
-
     pub(crate) fn new_with_metadata_and_db(
         mut wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
@@ -1016,6 +996,7 @@ impl WalletActor {
         let spendable = self.wallet.balance().0.trusted_spendable();
         let locked_outpoints =
             self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
+
         let chain_tip_height = self.wallet.bdk.local_chain().tip().height();
         let locked_amount = self
             .wallet
@@ -1702,6 +1683,43 @@ impl SpendPolicy {
         let mut unspendable = self.locked_outpoints.iter().copied().collect::<Vec<_>>();
         unspendable.extend(self.unconfirmed_external_outpoints.iter().copied());
         tx_builder.unspendable(unspendable);
+    }
+}
+
+#[cfg(test)]
+mod test_support {
+    use std::sync::Arc;
+
+    use flume::Sender;
+    use parking_lot::RwLock;
+
+    use crate::{
+        database::wallet_data::WalletDataDb,
+        manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
+        wallet::Wallet,
+    };
+
+    use super::{SingleOrMany, WalletActor};
+
+    impl WalletActor {
+        pub(crate) fn new_with_db(
+            wallet: Wallet,
+            reconciler: Sender<SingleOrMany>,
+            scan_status: Arc<RwLock<WalletScanStatus>>,
+            wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+            db: WalletDataDb,
+        ) -> Self {
+            let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
+
+            Self::new_with_metadata_and_db(
+                wallet,
+                reconciler,
+                scan_status,
+                wallet_snapshot,
+                db,
+                metadata,
+            )
+        }
     }
 }
 

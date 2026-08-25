@@ -104,7 +104,7 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
         // derive encryption key and run redb migrations (idempotent via OnceLock)
         let bdk_count = ensure_storage_bootstrapped_internal(true)?;
         crate::database::Database::initialize_for_bootstrap()
-            .map_err(|error| AppInitError::DatabaseVerificationFailed(error.to_string()))?;
+            .map_err_str(AppInitError::DatabaseVerificationFailed)?;
         crate::backup::recovery::recover_restore_markers()
             .map_err(AppInitError::RecoveryRequired)?;
 
@@ -293,9 +293,7 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
                     "local encryption key not found but encrypted databases exist".into(),
                 ));
             }
-            keychain
-                .create_local_encryption_key()
-                .map_err(|e| AppInitError::KeyDerivation(e.to_string()))?
+            keychain.create_local_encryption_key().map_err_str(AppInitError::KeyDerivation)?
         }
         Err(e) => {
             // partial keychain state: one entry exists but the other is missing
@@ -307,9 +305,7 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
             // no DB exists, safe to purge partial entries and create fresh
             warn!("Purging partial local encryption key entries: {e}");
             keychain.purge_local_encryption_key();
-            keychain
-                .create_local_encryption_key()
-                .map_err(|e| AppInitError::KeyDerivation(e.to_string()))?
+            keychain.create_local_encryption_key().map_err_str(AppInitError::KeyDerivation)?
         }
     };
     crate::database::encrypted_backend::set_encryption_key(key);

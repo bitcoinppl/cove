@@ -64,7 +64,7 @@ impl PayjoinSessionPersister {
     ///
     /// If the session has no terminal commitment, this selects and persists the
     /// fallback under the quiescence capability. An existing proposal commitment
-    /// is returned unchanged and can never be replaced by the fallback.
+    /// is returned unchanged and can never be replaced by the fallback
     pub(crate) fn terminal_transaction_for_shutdown(
         &self,
         authority: &crate::wallet_lifecycle::TerminalPayjoinPersistenceAuthority,

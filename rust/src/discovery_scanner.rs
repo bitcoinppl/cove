@@ -104,7 +104,7 @@ pub(crate) struct WalletDiscoveryScanner {
     pub responder: Sender<SingleOrMany>,
     pub wallet_actor: Addr<WalletActor>,
     failure_reconciled: bool,
-    /// Cancels every scan task, including its in-flight node connection attempt.
+    /// Cancels every scan task, including its in-flight node connection attempt
     /// The scanner owns it so cancellation does not depend on worker actor health
     cancel: CancellationToken,
 }
@@ -540,6 +540,81 @@ pub struct WalletDiscoveryWorker {
     scan_limit: u32,
 }
 
+struct DiscoveryScanTask {
+    parent: WeakAddr<WalletDiscoveryScanner>,
+    worker: WeakAddr<WalletDiscoveryWorker>,
+    client_builder: NodeClientBuilder,
+    wallet_type: WalletAddressType,
+    current_address: u32,
+    scan_limit: u32,
+    db: WalletDataDb,
+}
+
+impl DiscoveryScanTask {
+    async fn run(self) {
+        let wallet_type = self.wallet_type;
+        let failure_parent = self.parent.clone();
+
+        if let Err(error) = self.scan().await {
+            error!("wallet scan failed: {error}");
+
+            if let Err(report_error) =
+                call!(failure_parent.mark_failed(wallet_type, error.to_string())).await
+            {
+                error!("unable to report wallet discovery scan failure: {report_error}");
+            }
+        }
+    }
+
+    async fn scan(self) -> eyre::Result<()> {
+        let client = self.client_builder.build().await.context("build discovery node client")?;
+        let mut current_address = self.current_address;
+
+        loop {
+            let address = call!(self.worker.address_at(current_address)).await?;
+
+            let found_address =
+                client.check_address_for_txn(address).await.context("could not check address")?;
+
+            if found_address {
+                self.db
+                    .set_scan_state(self.wallet_type, ScanState::Completed)
+                    .context("save scan state")?;
+
+                call!(self.parent.mark_found_txn(self.wallet_type)).await?;
+                return Ok(());
+            }
+
+            current_address += 1;
+            let wallet_type = self.wallet_type;
+            trace!("checked {current_address} addresses for {wallet_type}");
+
+            self.save_progress(current_address);
+
+            if current_address >= self.scan_limit {
+                self.db
+                    .set_scan_state(self.wallet_type, ScanState::Completed)
+                    .context("save completed scan state")?;
+
+                call!(self.parent.mark_limit_reached(self.wallet_type)).await?;
+                return Ok(());
+            }
+        }
+    }
+
+    fn save_progress(&self, current_address: u32) {
+        if !current_address.is_multiple_of(5) {
+            return;
+        }
+
+        let scan_state = ScanningInfo { address_type: self.wallet_type, count: current_address };
+
+        if let Err(error) = self.db.set_scan_state(self.wallet_type, scan_state) {
+            error!("unable to update scan state: {error}");
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl Actor for WalletDiscoveryWorker {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
@@ -604,76 +679,20 @@ impl WalletDiscoveryWorker {
         self.parent = parent;
 
         let wallet_type = self.wallet_type;
-        let client_builder = self.client_builder.clone();
-        let scan_limit = self.scan_limit;
-        let current_address = self.scan_info.count;
-        let parent = self.parent.clone();
-        let failure_parent = parent.clone();
-        let db = self.db.clone();
-        let addr = self.addr.clone();
+        let scan = DiscoveryScanTask {
+            parent: self.parent.clone(),
+            worker: self.addr.clone(),
+            client_builder: self.client_builder.clone(),
+            wallet_type,
+            current_address: self.scan_info.count,
+            scan_limit: self.scan_limit,
+            db: self.db.clone(),
+        };
 
         let join = task::spawn(async move {
-            let scan = async move {
-                let run = async {
-                    let client =
-                        client_builder.build().await.context("build discovery node client")?;
-                    let mut current_address = current_address;
-
-                    loop {
-                        let address = call!(addr.address_at(current_address)).await?;
-
-                        let found_address = client
-                            .check_address_for_txn(address)
-                            .await
-                            .context("could not check address")?;
-
-                        if found_address {
-                            db.set_scan_state(wallet_type, ScanState::Completed)
-                                .context("save scan state")?;
-
-                            call!(parent.mark_found_txn(wallet_type)).await?;
-                            break;
-                        }
-
-                        current_address += 1;
-                        trace!("checked {current_address} addresses for {wallet_type}");
-
-                        // every 5 addresses, save the scan state
-                        if current_address.is_multiple_of(5) {
-                            let scan_state =
-                                ScanningInfo { address_type: wallet_type, count: current_address };
-
-                            if let Err(error) = db.set_scan_state(wallet_type, scan_state) {
-                                error!("unable to update scan state: {error}");
-                            }
-                        }
-
-                        if current_address >= scan_limit {
-                            db.set_scan_state(wallet_type, ScanState::Completed)
-                                .context("save completed scan state")?;
-
-                            call!(parent.mark_limit_reached(wallet_type)).await?;
-                            break;
-                        }
-                    }
-
-                    Ok::<(), eyre::Error>(())
-                };
-
-                if let Err(error) = run.await {
-                    error!("wallet scan failed: {error}");
-
-                    if let Err(report_error) =
-                        call!(failure_parent.mark_failed(wallet_type, error.to_string())).await
-                    {
-                        error!("unable to report wallet discovery scan failure: {report_error}");
-                    }
-                }
-            };
-
             // covers the connection attempt and the failure report, so neither can outlive
             // a shutdown that is waiting on this task
-            if cancel.run_until_cancelled(scan).await.is_none() {
+            if cancel.run_until_cancelled(scan.run()).await.is_none() {
                 debug!("wallet discovery scan for {wallet_type} was canceled");
             }
         });
@@ -731,8 +750,10 @@ impl Wallets {
                 // TODO: remove string round-trip once bdk_wallet updates to miniscript 13
                 let external: ExtendedDescriptor =
                     json.external.to_string().parse().map_err_str(WalletError::BdkError)?;
+
                 let internal: ExtendedDescriptor =
                     json.internal.to_string().parse().map_err_str(WalletError::BdkError)?;
+
                 let params = BdkWallet::create(external, internal).network(network);
 
                 let wallet =

@@ -834,7 +834,7 @@ enum BackupReconciliation {
 ///
 /// The counter is the only evidence of whether the card applied the command. A backup
 /// re-encrypts the card seed under a new key, so replaying it after the card applied one
-/// destroys the bytes the user needs for recovery.
+/// destroys the bytes the user needs for recovery
 fn reconcile_backup_counter(
     num_backups: Option<u32>,
     pre_backup_count: Option<u32>,
@@ -876,7 +876,7 @@ enum ChangeProbe {
     NewCvcApplied,
     /// The old CVC still authenticates, so the change never reached the card
     ///
-    /// Carries the rejection from the new-CVC probe, which is what made the change uncertain.
+    /// Carries the rejection from the new-CVC probe, which is what made the change uncertain
     OldCvcStillValid(TapSignerReaderError),
     /// The probe itself did not complete, so nothing about the card state is known
     Uncertain(TapSignerReaderError),
@@ -1491,7 +1491,7 @@ impl TapSignerReader {
     /// Establish which CVC the card accepts after a `change` whose outcome is unknown
     ///
     /// The new CVC is probed first: if it authenticates the card already applied the change and
-    /// re-sending `change` would lock the card out with a stale current CVC.
+    /// re-sending `change` would lock the card out with a stale current CVC
     async fn probe_change_cvc(
         &self,
         current_cvc: &TapSignerCvc,
@@ -1674,8 +1674,8 @@ impl TapSignerReader {
                 .map_err(Error::from)
                 .map_err(TapSignerReaderError::uncertain_after_mutation)?;
 
-            // Derive changes the card nonce and path. Read status again before xpub so the
-            // authenticated xpub commands use the nonce returned by the card.
+            // derive changes the card nonce and path. Read status again before xpub so the
+            // authenticated xpub commands use the nonce returned by the card
             self.refresh_status().await?;
         }
 

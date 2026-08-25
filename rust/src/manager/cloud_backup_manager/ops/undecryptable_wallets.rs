@@ -27,13 +27,6 @@ pub(crate) struct CloudBackupPreparedUndecryptableWalletDeletion {
     record_ids: Vec<String>,
 }
 
-impl CloudBackupPreparedUndecryptableWalletDeletion {
-    #[cfg(test)]
-    pub(crate) fn record_ids(&self) -> &[String] {
-        &self.record_ids
-    }
-}
-
 impl RustCloudBackupManager {
     pub(crate) fn apply_undecryptable_wallet_deletion_state(
         &self,
@@ -80,6 +73,7 @@ impl RustCloudBackupManager {
                 CloudBackupError::cloud_storage_context("list wallet backups", error),
             )
         })?;
+
         let local_record_ids = self.local_wallet_record_ids_for_undecryptable_deletion()?;
         let reader = WalletBackupReader::new(
             cloud.clone(),
@@ -114,7 +108,7 @@ impl RustCloudBackupManager {
                     }
                     Err(error) => {
                         warn!(
-                            "Skipping inaccessible wallet backup that did not fail decryption: {error}"
+                            "skipping inaccessible wallet backup that did not fail decryption: {error}"
                         );
                     }
                     Ok(
@@ -152,7 +146,7 @@ impl RustCloudBackupManager {
             let local_record_ids = self.local_wallet_record_ids_for_undecryptable_deletion()?;
             if local_record_ids.contains(&record_id) {
                 info!(
-                    "Skipping inaccessible wallet backup deletion because the wallet is now on this device"
+                    "skipping inaccessible wallet backup deletion because the wallet is now on this device"
                 );
                 continue;
             }
@@ -167,7 +161,7 @@ impl RustCloudBackupManager {
                 }
                 Err(error) => {
                     warn!(
-                        "Skipping inaccessible wallet backup that no longer fails decryption: {error}"
+                        "skipping inaccessible wallet backup that no longer fails decryption: {error}"
                     );
                     continue;
                 }
@@ -180,6 +174,7 @@ impl RustCloudBackupManager {
                 .map_err(|error| {
                 blocking_cloud_error(BlockingCloudStep::DeleteUndecryptableWalletBackups, error)
             })?;
+
             deleted = deleted.saturating_add(1);
         }
 
@@ -195,5 +190,16 @@ impl RustCloudBackupManager {
             .into_iter()
             .map(|wallet| cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref()))
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod test_support {
+    use super::CloudBackupPreparedUndecryptableWalletDeletion;
+
+    impl CloudBackupPreparedUndecryptableWalletDeletion {
+        pub(crate) fn record_ids(&self) -> &[String] {
+            &self.record_ids
+        }
     }
 }
