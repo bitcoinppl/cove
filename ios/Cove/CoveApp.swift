@@ -64,8 +64,8 @@ enum StartupBootstrapFailure: Equatable {
     case fatal(String)
 }
 
-let startupRecoveryRequiredMessage =
-    "Cove found an interrupted wallet restore. Try Again to recover it safely.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+let startupRecoveryContinuationMessage =
+    "Cove saved your restore progress. Select Continue to finish the wallet restore."
 
 func classifyBootstrapFailure(_ error: Error) -> StartupBootstrapFailure {
     if case AppInitError.DatabaseKeyMismatch = error {
@@ -176,19 +176,16 @@ extension CoveApplicationRoot {
                 }
             )
         case .recoveryRequired:
-            CoverView(
-                errorMessage: startupRecoveryRequiredMessage,
-                onTryAgain: retryBootstrapRecovery
-            )
+            StartupRecoveryView(onContinue: continueBootstrapRecovery)
         case let .fatalError(message):
             CoverView(errorMessage: message)
         }
     }
 
-    private func retryBootstrapRecovery() {
+    private func continueBootstrapRecovery() {
         startupState = .loading
 
-        // preserve local data and markers so the next bootstrap can retry recovery
+        // preserve local data and markers so the next bootstrap can continue recovery
         rebootstrap()
     }
 

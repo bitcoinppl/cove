@@ -8,15 +8,15 @@ internal enum class StartupMode {
     READY,
 }
 
-internal const val RECOVERY_REQUIRED_MESSAGE =
-    "Cove found an interrupted wallet restore. Try Again to recover it safely.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+internal const val RECOVERY_CONTINUATION_MESSAGE =
+    "Cove saved your restore progress. Select Continue to finish the wallet restore."
 
 internal sealed class BootstrapFailure {
     data object CatastrophicRecovery : BootstrapFailure()
 
     data object RecoveryRequired : BootstrapFailure() {
         val message: String
-            get() = RECOVERY_REQUIRED_MESSAGE
+            get() = RECOVERY_CONTINUATION_MESSAGE
     }
 
     data class Fatal(

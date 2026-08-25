@@ -219,18 +219,18 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            fun retryBootstrapRecovery() {
+            fun continueBootstrapRecovery() {
                 try {
-                    // preserve local data and markers so bootstrap can retry recovery
+                    // preserve local data and markers so bootstrap can continue recovery
                     resetBootstrapForRestore()
                     bootstrapFailure = null
                     needsCatastrophicRecovery = false
                     bootstrapAttempt += 1
                 } catch (e: Exception) {
-                    Log.e(TAG, "[STARTUP] retrying wallet restore recovery failed", e)
+                    Log.e(TAG, "[STARTUP] continuing wallet restore recovery failed", e)
                     bootstrapFailure =
                         BootstrapFailure.Fatal(
-                            "Failed to retry startup recovery. Please force-quit and try again.\n\n" +
+                            "Failed to continue startup recovery. Please force-quit and try again.\n\n" +
                                 "Please contact feedback@covebitcoinwallet.com",
                         )
                 }
@@ -451,13 +451,9 @@ class MainActivity : FragmentActivity() {
                         }
 
                         BootstrapFailure.RecoveryRequired -> {
-                            val message = BootstrapFailure.RecoveryRequired.message
-                            BootstrapErrorView(
-                                errorMessage = message,
-                                onCopyDiagnostics = { copyStartupDiagnostics(message) },
-                                onShareDiagnostics = { shareStartupDiagnostics(message) },
-                                errorTitle = "Restore Recovery Required",
-                                onTryAgain = { retryBootstrapRecovery() },
+                            BootstrapRecoveryView(
+                                message = BootstrapFailure.RecoveryRequired.message,
+                                onContinue = { continueBootstrapRecovery() },
                             )
                         }
 

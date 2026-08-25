@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove_core.CatastrophicCloudRestoreResult
 
@@ -165,8 +169,6 @@ internal fun BootstrapErrorView(
     errorMessage: String,
     onCopyDiagnostics: () -> Unit,
     onShareDiagnostics: () -> Unit,
-    errorTitle: String = "Storage Error",
-    onTryAgain: (() -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black),
@@ -177,7 +179,7 @@ internal fun BootstrapErrorView(
             modifier = Modifier.padding(16.dp),
         ) {
             Text(
-                errorTitle,
+                "Storage Error",
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
             )
@@ -193,21 +195,55 @@ internal fun BootstrapErrorView(
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
             )
-            if (onTryAgain != null) {
-                Spacer(modifier = Modifier.height(12.dp))
-                FilledTonalButton(
-                    onClick = onTryAgain,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Try Again")
-                }
-            }
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(onClick = onCopyDiagnostics) {
                 Text("Copy Diagnostics", color = Color.White)
             }
             TextButton(onClick = onShareDiagnostics) {
                 Text("Share Diagnostics", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun BootstrapRecoveryView(
+    message: String,
+    onContinue: () -> Unit,
+) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Restore in Progress",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            FilledTonalButton(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Continue")
             }
         }
     }

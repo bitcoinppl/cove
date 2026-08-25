@@ -41,7 +41,7 @@ class OnboardingHelpersTest {
     }
 
     @Test
-    fun recoveryRequiredUsesPrivacySafeRetryableStartupFailure() {
+    fun recoveryRequiredUsesPrivacySafeContinuationStartupFailure() {
         val failure =
             classifyBootstrapFailure(
                 AppInitException.RecoveryRequired("wallet path and cleanup details"),
@@ -49,7 +49,7 @@ class OnboardingHelpersTest {
 
         assertEquals(BootstrapFailure.RecoveryRequired, failure)
         val recovery = failure as BootstrapFailure.RecoveryRequired
-        assertTrue(recovery.message.contains("Try Again"))
+        assertTrue(recovery.message.contains("Continue"))
         assertFalse(recovery.message.contains("wallet path"))
     }
 
